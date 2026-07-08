@@ -1,0 +1,9 @@
+@extends('layouts.dashboard')
+@section('page-title', 'Business Analytics')
+@section('page-subtitle', $business->business_name)
+@section('content')
+@php $orders=$business->orders; $products=$business->products; $customers=$business->customers; $expenses=$business->expenses; @endphp
+<div class="tf-card p-4 mb-4"><h2 class="h5">Business Overview</h2><div class="row g-3">@foreach(['Business Name'=>$business->business_name,'Owner'=>$business->owner?->name,'Type'=>$business->business_type,'Plan'=>$business->subscription?->plan?->name ?? '-','Status'=>$business->status] as $k=>$v)<div class="col-md"><div class="border rounded p-3"><small class="tf-muted">{{ $k }}</small><strong class="d-block">{{ $v }}</strong></div></div>@endforeach</div></div>
+<div class="row g-3 mb-4">@foreach([['Monthly Revenue','Rs '.number_format($orders->where('created_at','>=',now()->startOfMonth())->sum('grand_total'))],['Total Orders',$orders->count()],['Customers Count',$customers->count()],['Products Count',$products->count()],['Staff Count',$business->users->count()],['Pending Payments','Rs '.number_format($customers->sum('current_balance'))]] as [$label,$value])<div class="col-md-4"><div class="tf-card p-4"><small class="tf-muted">{{ $label }}</small><div class="h4">{{ $value }}</div></div></div>@endforeach</div>
+<div class="row g-4">@foreach(['Sales'=>'Daily/Monthly/Yearly revenue, completed and cancelled orders','Inventory'=>'Total products, low stock, out of stock, fast moving products','Customers'=>'Total, active, blocked, and top customers','Credit / Khata Risk'=>'Credit given, pending recovery, overdue, high risk customers','Expenses'=>'Monthly expenses, categories, and profit estimate'] as $title=>$text)<div class="col-lg-6"><div class="tf-card p-4"><h2 class="h5">{{ $title }}</h2><p class="tf-muted mb-0">{{ $text }}</p></div></div>@endforeach</div>
+@endsection

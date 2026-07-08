@@ -1,0 +1,8 @@
+@extends('layouts.dashboard')
+@section('page-title', 'Users')
+@section('page-subtitle', 'Search, filter, activate, and suspend users')
+@section('content')
+<form class="row g-2 mb-3"><div class="col-md-4"><input name="search" value="{{ request('search') }}" class="form-control" placeholder="Search name or email"></div><div class="col-md-3"><input name="role" value="{{ request('role') }}" class="form-control" placeholder="Role"></div><div class="col-md-3"><select name="status" class="form-select"><option value="">All statuses</option><option>active</option><option>suspended</option><option>inactive</option></select></div><div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div></form>
+<x-table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Business</th><th>Status</th><th></th></tr></thead><tbody>@forelse($users as $user)<tr><td>{{ $user->name }}</td><td>{{ $user->email }}</td><td>{{ $user->role }}</td><td>{{ $user->business?->business_name ?? '-' }}</td><td>{{ $user->status }}</td><td class="d-flex gap-2"><form method="POST" action="{{ route('admin.users.status',$user) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="{{ $user->status === 'active' ? 'suspended' : 'active' }}"><button class="btn btn-sm btn-outline-primary">{{ $user->status === 'active' ? 'Suspend' : 'Activate' }}</button></form><button class="btn btn-sm btn-outline-secondary" type="button">Reset Password</button></td></tr>@empty<tr><td colspan="6" class="text-center tf-muted py-4">No users.</td></tr>@endforelse</tbody></x-table>
+{{ $users->links() }}
+@endsection
