@@ -594,6 +594,191 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     padding: 36px;
 }
 
+.tf-subscribe-hero {
+    background: linear-gradient(135deg, var(--tf-navy), #123f7a 54%, var(--tf-blue));
+    color: #fff;
+    padding: 150px 0 72px;
+}
+
+.tf-pill {
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 999px;
+    color: #fff;
+    display: inline-flex;
+    font-size: .86rem;
+    font-weight: 700;
+    padding: .45rem .75rem;
+}
+
+.tf-subscribe-mini,
+.tf-selected-plan-card,
+.tf-summary-card,
+.tf-trust-badge,
+.tf-checkout-card {
+    box-shadow: 0 22px 54px rgba(15, 23, 42, .08);
+}
+
+.tf-subscribe-mini {
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 8px;
+    padding: 1.25rem;
+}
+
+.tf-checkout-stepper {
+    background: #fff;
+    border: 1px solid var(--tf-border);
+    border-radius: 8px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    overflow: hidden;
+}
+
+.tf-checkout-step {
+    align-items: center;
+    border-right: 1px solid var(--tf-border);
+    display: flex;
+    gap: .75rem;
+    padding: 1rem;
+}
+
+.tf-checkout-step:last-child { border-right: 0; }
+
+.tf-checkout-step span {
+    align-items: center;
+    background: rgba(37,99,235,.12);
+    border-radius: 50%;
+    color: var(--tf-blue);
+    display: inline-flex;
+    font-weight: 800;
+    height: 34px;
+    justify-content: center;
+    width: 34px;
+}
+
+.tf-checkout-step.active strong { color: var(--tf-navy); }
+
+.tf-step-eyebrow {
+    color: var(--tf-blue);
+    font-size: .78rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.tf-selected-plan-card {
+    background: linear-gradient(135deg, #fff, #f8fbff);
+    border: 1px solid rgba(37,99,235,.18);
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.tf-plan-limit {
+    align-items: center;
+    background: #fff;
+    border: 1px solid var(--tf-border);
+    border-radius: 8px;
+    display: flex;
+    gap: .6rem;
+    min-height: 48px;
+    padding: .7rem;
+}
+
+.tf-plan-limit i { color: var(--tf-blue); }
+
+.tf-billing-toggle {
+    background: #eef4ff;
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+    display: inline-flex;
+    padding: .3rem;
+}
+
+.tf-billing-toggle .btn {
+    border: 0;
+    color: var(--tf-muted);
+    font-weight: 800;
+    min-width: 128px;
+}
+
+.tf-billing-toggle .btn span {
+    color: var(--tf-green);
+    display: block;
+    font-size: .72rem;
+    font-weight: 800;
+}
+
+.tf-billing-toggle .btn-check:checked + .btn {
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(37,99,235,.13);
+    color: var(--tf-blue);
+}
+
+.tf-summary-card {
+    position: sticky;
+    top: 96px;
+}
+
+.tf-summary-row,
+.tf-summary-total {
+    align-items: center;
+    border-bottom: 1px solid var(--tf-border);
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .8rem 0;
+}
+
+.tf-summary-row span { color: var(--tf-muted); }
+
+.tf-summary-total {
+    border-bottom: 0;
+    font-size: 1.15rem;
+    padding-top: 1rem;
+}
+
+.tf-summary-total strong {
+    color: var(--tf-navy);
+    font-size: 1.45rem;
+}
+
+.tf-summary-note,
+.tf-manual-note {
+    background: #f8fbff;
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+    color: var(--tf-muted);
+    padding: .85rem;
+}
+
+.tf-trust-badge {
+    align-items: center;
+    background: #fff;
+    border: 1px solid var(--tf-border);
+    border-radius: 8px;
+    display: flex;
+    gap: .6rem;
+    min-height: 70px;
+    padding: .8rem;
+}
+
+.tf-trust-badge i {
+    color: var(--tf-green);
+    font-size: 1.2rem;
+}
+
+.tf-trust-badge span {
+    font-size: .86rem;
+    font-weight: 800;
+}
+
+.tf-subscribe-success-card {
+    border: 1px solid rgba(16,185,129,.25);
+    border-radius: 8px;
+    box-shadow: 0 22px 54px rgba(15, 23, 42, .08);
+}
+
 @media (max-width: 991.98px) {
     .tf-hero { min-height: auto; padding: 118px 0 70px; }
     .tf-dashboard-shell > .tf-sidebar {
@@ -642,6 +827,19 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
         width: 100%;
     }
     .staff-filter-card {
+        position: static;
+    }
+    .tf-subscribe-hero {
+        padding: 118px 0 56px;
+    }
+    .tf-checkout-stepper {
+        grid-template-columns: 1fr;
+    }
+    .tf-checkout-step {
+        border-bottom: 1px solid var(--tf-border);
+        border-right: 0;
+    }
+    .tf-summary-card {
         position: static;
     }
     .tf-cta-band { align-items: flex-start; flex-direction: column; }

@@ -84,11 +84,51 @@ document.querySelector('[data-tf-forgot-form]')?.addEventListener('submit', (eve
     document.querySelector('[data-tf-reset-message]')?.classList.remove('d-none');
 });
 
-document.querySelector('[data-tf-subscribe-form]')?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    document.querySelector('[data-tf-subscribe-success]')?.classList.remove('d-none');
-    event.currentTarget.reset();
-});
+const subscribeForm = document.querySelector('[data-tf-subscribe-form]');
+if (subscribeForm) {
+    const monthly = Number.parseFloat(subscribeForm.dataset.monthly || '0') || 0;
+    const yearly = Number.parseFloat(subscribeForm.dataset.yearly || '0') || 0;
+    const planName = subscribeForm.dataset.planName || 'Selected Plan';
+    const money = (value) => `Rs ${Math.round(value).toLocaleString()}`;
+
+    const updateSubscribeSummary = () => {
+        const cycle = subscribeForm.querySelector('[data-billing-cycle]:checked')?.value || 'Monthly';
+        const payment = subscribeForm.querySelector('[data-subscribe-payment]')?.value || 'Cash';
+        const yearlyBeforeDiscount = monthly * 12;
+        const subtotal = cycle === 'Yearly' ? yearlyBeforeDiscount : monthly;
+        const discount = cycle === 'Yearly' ? Math.max(0, yearlyBeforeDiscount - yearly) : 0;
+        const total = cycle === 'Yearly' ? yearly : monthly;
+
+        document.querySelector('[data-summary-plan]') && (document.querySelector('[data-summary-plan]').textContent = planName);
+        document.querySelector('[data-summary-cycle]') && (document.querySelector('[data-summary-cycle]').textContent = cycle);
+        document.querySelector('[data-summary-subtotal]') && (document.querySelector('[data-summary-subtotal]').textContent = money(subtotal));
+        document.querySelector('[data-summary-discount]') && (document.querySelector('[data-summary-discount]').textContent = money(discount));
+        document.querySelector('[data-summary-total]') && (document.querySelector('[data-summary-total]').textContent = money(total));
+        document.querySelector('[data-summary-payment]') && (document.querySelector('[data-summary-payment]').textContent = payment);
+    };
+
+    subscribeForm.addEventListener('change', (event) => {
+        if (event.target.matches('[data-billing-cycle], [data-subscribe-payment]')) {
+            updateSubscribeSummary();
+        }
+    });
+
+    subscribeForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const cycle = subscribeForm.querySelector('[data-billing-cycle]:checked')?.value || 'Monthly';
+        const phone = subscribeForm.querySelector('[data-subscribe-phone]')?.value || '-';
+
+        document.querySelector('[data-success-plan]') && (document.querySelector('[data-success-plan]').textContent = planName);
+        document.querySelector('[data-success-cycle]') && (document.querySelector('[data-success-cycle]').textContent = cycle);
+        document.querySelector('[data-success-phone]') && (document.querySelector('[data-success-phone]').textContent = phone);
+        document.querySelector('[data-tf-subscribe-success]')?.classList.remove('d-none');
+        document.querySelector('[data-tf-subscribe-success]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        subscribeForm.reset();
+        updateSubscribeSummary();
+    });
+
+    updateSubscribeSummary();
+}
 
 const wizard = document.querySelector('[data-tf-register-form]');
 if (wizard) {
