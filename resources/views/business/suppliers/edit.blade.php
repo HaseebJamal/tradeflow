@@ -1,0 +1,20 @@
+@extends('layouts.dashboard')
+@section('page-title', 'Edit Supplier')
+@section('page-subtitle', $supplier->supplier_name)
+@section('content')
+@if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
+<div class="tf-card p-4">
+    <form method="POST" action="{{ route('business.suppliers.update', $supplier) }}" class="row g-3">
+        @csrf @method('PUT')
+        <div class="col-md-4"><label class="form-label">Supplier Name</label><input name="supplier_name" value="{{ old('supplier_name', $supplier->supplier_name) }}" class="form-control" required></div>
+        <div class="col-md-4"><label class="form-label">Company Name</label><input name="company_name" value="{{ old('company_name', $supplier->company_name) }}" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label">Phone</label><input name="phone" value="{{ old('phone', $supplier->phone) }}" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label">Email</label><input name="email" type="email" value="{{ old('email', $supplier->email) }}" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label">City</label><input name="city" value="{{ old('city', $supplier->city) }}" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label">Opening Balance</label><input name="opening_balance" type="number" step="0.01" min="0" value="{{ old('opening_balance', $supplier->opening_balance) }}" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label">Status</label><select name="status" class="form-select"><option @selected(old('status', $supplier->status) === 'Active')>Active</option><option @selected(old('status', $supplier->status) === 'Inactive')>Inactive</option></select></div>
+        <div class="col-12"><label class="form-label">Address</label><textarea name="address" class="form-control" rows="3">{{ old('address', $supplier->address) }}</textarea></div>
+        <div class="col-12"><button class="btn btn-tf-primary">Update Supplier</button><a href="{{ route('business.suppliers.show', $supplier) }}" class="btn btn-outline-secondary">Cancel</a></div>
+    </form>
+</div>
+@endsection

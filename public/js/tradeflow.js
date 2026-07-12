@@ -79,10 +79,47 @@ document.querySelectorAll('[data-tf-password-toggle]').forEach((button) => {
     });
 });
 
-document.querySelector('[data-tf-forgot-form]')?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    document.querySelector('[data-tf-reset-message]')?.classList.remove('d-none');
-});
+function initPasswordResetRequestForm(form) {
+    if (!form || form.dataset.passwordResetReady === '1') return;
+    form.dataset.passwordResetReady = '1';
+    const resend = form.querySelector('[data-resend-reset-button]');
+    const countdown = form.querySelector('[data-resend-countdown]');
+    const until = Date.parse(form.dataset.resendUntil || '');
+
+    const updateCountdown = () => {
+        if (!resend || Number.isNaN(until)) return;
+        const remaining = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+        resend.disabled = remaining > 0;
+        if (countdown) countdown.textContent = remaining > 0 ? `(${remaining}s)` : '';
+        if (remaining <= 0) {
+            resend.disabled = false;
+            return;
+        }
+        window.setTimeout(updateCountdown, 250);
+    };
+
+    updateCountdown();
+    form.addEventListener('submit', () => {
+        const buttons = form.querySelectorAll('button[type="submit"]');
+        buttons.forEach((button) => { button.disabled = true; });
+        resend?.replaceChildren(document.createTextNode('Sending...'));
+        form.querySelector('[data-send-reset-label]')?.replaceChildren(document.createTextNode('Sending...'));
+        form.querySelector('[data-send-reset-spinner]')?.classList.remove('d-none');
+    });
+}
+
+function initPasswordResetUpdateForm(form) {
+    if (!form || form.dataset.passwordResetUpdateReady === '1') return;
+    form.dataset.passwordResetUpdateReady = '1';
+    form.addEventListener('submit', () => {
+        form.querySelector('[data-reset-password-submit]')?.setAttribute('disabled', 'disabled');
+        form.querySelector('[data-reset-password-label]')?.replaceChildren(document.createTextNode('Resetting...'));
+        form.querySelector('[data-reset-password-spinner]')?.classList.remove('d-none');
+    });
+}
+
+document.querySelectorAll('[data-password-reset-request-form]').forEach(initPasswordResetRequestForm);
+document.querySelectorAll('[data-password-reset-update-form]').forEach(initPasswordResetUpdateForm);
 
 const subscribeForm = document.querySelector('[data-tf-subscribe-form]');
 if (subscribeForm) {
@@ -130,8 +167,8 @@ if (subscribeForm) {
     updateSubscribeSummary();
 }
 
-const wizard = document.querySelector('[data-tf-register-form]');
-if (wizard) {
+const legacyWizard = document.querySelector('[data-tf-register-form][data-use-legacy-wizard]');
+if (legacyWizard) {
     const draftKey = 'tradeflow.registerBusinessDraft';
     let currentStep = 0;
     const tabs = [...document.querySelectorAll('[data-tf-step-tab]')];
@@ -276,8 +313,9 @@ const TradeFlowPermissions = {
         const children = [...(group?.querySelectorAll('[data-permission-child]') || [])];
         if (!parent || !children.length) return;
 
-        parent.checked = children.every((child) => child.checked);
-        parent.indeterminate = false;
+        const selected = children.filter((child) => child.checked).length;
+        parent.checked = selected === children.length;
+        parent.indeterminate = selected > 0 && selected < children.length;
     },
     syncForm(form) {
         if (!form) return;
@@ -290,8 +328,9 @@ const TradeFlowPermissions = {
         const children = [...form.querySelectorAll('[data-permission-child]')];
         if (!global || !children.length) return;
 
-        global.checked = children.every((child) => child.checked);
-        global.indeterminate = false;
+        const selected = children.filter((child) => child.checked).length;
+        global.checked = selected === children.length;
+        global.indeterminate = selected > 0 && selected < children.length;
     },
 };
 
@@ -326,6 +365,115 @@ document.addEventListener('change', (event) => {
 });
 
 document.querySelectorAll('[data-staff-form]').forEach((form) => TradeFlowPermissions.syncForm(form));
+
+function initStaffPasswordForm(form) {
+    if (!form || form.dataset.staffPasswordReady === '1') return;
+    form.dataset.staffPasswordReady = '1';
+    const password = form.querySelector('[data-staff-password]');
+    const confirmation = form.querySelector('[data-staff-password-confirmation]');
+    const error = form.querySelector('[data-staff-password-match-error]');
+
+    const validate = () => {
+        if (!password || !confirmation) return true;
+        const mismatch = Boolean(confirmation.value) && password.value !== confirmation.value;
+        confirmation.classList.toggle('is-invalid', mismatch);
+        error?.classList.toggle('d-block', mismatch);
+        confirmation.setCustomValidity(mismatch ? 'Password and confirm password do not match.' : '');
+        return !mismatch;
+    };
+
+    password?.addEventListener('input', validate);
+    confirmation?.addEventListener('input', validate);
+    form.addEventListener('submit', (event) => {
+        if (!validate() || !form.checkValidity()) {
+            event.preventDefault();
+            form.reportValidity();
+        }
+    });
+}
+
+document.querySelectorAll('[data-staff-password-form]').forEach(initStaffPasswordForm);
+
+function initStaffDraftForm(form) {
+    if (!form || form.dataset.staffDraftReady === '1') return;
+    form.dataset.staffDraftReady = '1';
+    const key = form.dataset.staffDraftKey;
+    if (!key) return;
+
+    const alert = form.querySelector('[data-staff-draft-alert]');
+    const clear = form.querySelector('[data-clear-staff-draft]');
+    const fields = [...form.querySelectorAll('input, select, textarea')].filter((field) => {
+        return field.name && !['password', 'password_confirmation'].includes(field.name)
+            && !['file', 'hidden', 'submit', 'button'].includes(field.type);
+    });
+    let dirty = false;
+    let submitting = false;
+
+    const save = () => {
+        const values = {};
+        fields.forEach((field) => {
+            if (field.type === 'checkbox') {
+                if (!values[field.name]) values[field.name] = [];
+                if (field.checked) values[field.name].push(field.value || '1');
+            } else if (field.type === 'radio') {
+                if (field.checked) values[field.name] = field.value;
+            } else {
+                values[field.name] = field.value;
+            }
+        });
+        sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), values, scrollY: window.scrollY }));
+    };
+
+    const restore = () => {
+        if (form.dataset.staffDraftCreated === '1') {
+            sessionStorage.removeItem(key);
+            return;
+        }
+        try {
+            const draft = JSON.parse(sessionStorage.getItem(key) || 'null');
+            if (!draft?.values) return;
+            fields.forEach((field) => {
+                if (!(field.name in draft.values)) return;
+                if (field.type === 'checkbox') {
+                    field.checked = Array.isArray(draft.values[field.name]) && draft.values[field.name].includes(field.value || '1');
+                } else if (field.type === 'radio') {
+                    field.checked = draft.values[field.name] === field.value;
+                } else {
+                    field.value = draft.values[field.name];
+                }
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            window.TradeFlowPermissions?.syncForm(form);
+            alert?.classList.remove('d-none');
+            if (Number.isFinite(draft.scrollY)) window.setTimeout(() => window.scrollTo({ top: draft.scrollY, behavior: 'auto' }), 0);
+        } catch (_) {
+            sessionStorage.removeItem(key);
+        }
+    };
+
+    restore();
+    fields.forEach((field) => {
+        field.addEventListener('input', () => { dirty = true; save(); });
+        field.addEventListener('change', () => { dirty = true; save(); });
+    });
+    clear?.addEventListener('click', () => {
+        if (!window.confirm('Are you sure you want to clear this staff draft?')) return;
+        sessionStorage.removeItem(key);
+        form.reset();
+        alert?.classList.add('d-none');
+        window.TradeFlowPermissions?.syncForm(form);
+        form.querySelector('[data-staff-role]')?.dispatchEvent(new Event('change', { bubbles: true }));
+        dirty = false;
+    });
+    form.addEventListener('submit', () => { submitting = true; });
+    window.addEventListener('beforeunload', (event) => {
+        if (!dirty || submitting) return;
+        event.preventDefault();
+        event.returnValue = '';
+    });
+}
+
+document.querySelectorAll('[data-staff-create-form]').forEach(initStaffDraftForm);
 
 function updateOrderPreview() {
     const form = document.querySelector('[data-order-form]');
@@ -500,3 +648,177 @@ document.querySelector('[data-save-quick-customer]')?.addEventListener('click', 
         bootstrap.Modal.getOrCreateInstance(modal).hide();
     }
 });
+
+function updateJournalTotals() {
+    const form = document.querySelector('[data-journal-form]');
+    if (!form) return;
+
+    const debit = [...form.querySelectorAll('[data-journal-debit]')].reduce((sum, input) => sum + (Number.parseFloat(input.value || '0') || 0), 0);
+    const credit = [...form.querySelectorAll('[data-journal-credit]')].reduce((sum, input) => sum + (Number.parseFloat(input.value || '0') || 0), 0);
+    const difference = Math.round((debit - credit) * 100) / 100;
+    const submit = form.querySelector('[data-journal-submit]');
+
+    form.querySelector('[data-journal-total-debit]') && (form.querySelector('[data-journal-total-debit]').textContent = debit.toLocaleString());
+    form.querySelector('[data-journal-total-credit]') && (form.querySelector('[data-journal-total-credit]').textContent = credit.toLocaleString());
+    form.querySelector('[data-journal-difference]') && (form.querySelector('[data-journal-difference]').textContent = difference.toLocaleString());
+    if (submit) submit.disabled = debit <= 0 || credit <= 0 || Math.abs(difference) > 0.009;
+}
+
+document.querySelector('[data-journal-form]')?.addEventListener('input', updateJournalTotals);
+updateJournalTotals();
+
+const bulkTable = document.querySelector('[data-bulk-products]');
+document.querySelector('[data-add-bulk-row]')?.addEventListener('click', () => {
+    if (!bulkTable) return;
+    const tbody = bulkTable.querySelector('tbody');
+    const template = tbody.querySelector('[data-bulk-row]')?.cloneNode(true);
+    if (!template) return;
+    const index = tbody.querySelectorAll('[data-bulk-row]').length;
+    template.querySelectorAll('input, select').forEach((field) => {
+        field.name = field.name.replace(/products\[\d+\]/, `products[${index}]`);
+        if (field.tagName === 'INPUT') field.value = field.type === 'number' && field.name.includes('low_stock_alert_qty') ? '10' : '';
+    });
+    tbody.appendChild(template);
+});
+
+bulkTable?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-remove-bulk-row]');
+    if (!button) return;
+    const rows = bulkTable.querySelectorAll('[data-bulk-row]');
+    if (rows.length <= 1) return;
+    button.closest('[data-bulk-row]')?.remove();
+});
+
+function syncBatchFields() {
+    const toggle = document.querySelector('[data-batch-toggle]');
+    if (!toggle) return;
+    document.querySelectorAll('[data-batch-field]').forEach((field) => {
+        field.classList.toggle('d-none', !toggle.checked);
+    });
+}
+
+document.querySelector('[data-batch-toggle]')?.addEventListener('change', syncBatchFields);
+syncBatchFields();
+
+function initPermissionHierarchy(form) {
+    if (!form || form.dataset.permissionHierarchyReady === '1') return;
+    form.dataset.permissionHierarchyReady = '1';
+
+    const master = form.querySelector('[data-permission-master]');
+    const groups = [...form.querySelectorAll('[data-permission-group]')];
+
+    const syncGroup = (group) => {
+        const parent = group.querySelector('[data-permission-module]');
+        const children = [...group.querySelectorAll('[data-permission-child]')];
+        if (!parent || !children.length) return;
+        const selected = children.filter((child) => child.checked).length;
+        parent.checked = selected === children.length;
+        parent.indeterminate = selected > 0 && selected < children.length;
+    };
+
+    const syncMaster = () => {
+        if (!master) return;
+        const children = [...form.querySelectorAll('[data-permission-child]')];
+        const selected = children.filter((child) => child.checked).length;
+        master.checked = children.length > 0 && selected === children.length;
+        master.indeterminate = selected > 0 && selected < children.length;
+    };
+
+    const syncAll = () => {
+        groups.forEach(syncGroup);
+        syncMaster();
+    };
+
+    master?.addEventListener('change', () => {
+        form.querySelectorAll('[data-permission-child]').forEach((child) => { child.checked = master.checked; });
+        syncAll();
+    });
+
+    groups.forEach((group) => {
+        group.querySelector('[data-permission-module]')?.addEventListener('change', (event) => {
+            group.querySelectorAll('[data-permission-child]').forEach((child) => { child.checked = event.target.checked; });
+            syncAll();
+        });
+        group.querySelectorAll('[data-permission-child]').forEach((child) => child.addEventListener('change', syncAll));
+    });
+
+    syncAll();
+}
+
+document.querySelectorAll('[data-company-permission-form]').forEach(initPermissionHierarchy);
+
+function initCompanyCreateForm(form) {
+    if (!form || form.dataset.companyCreateReady === '1') return;
+    form.dataset.companyCreateReady = '1';
+    const storageKey = 'tradeflow_super_admin_create_company_draft';
+    const password = form.querySelector('[data-company-password]');
+    const confirmation = form.querySelector('[data-company-password-confirmation]');
+    const passwordError = form.querySelector('[data-company-password-error]');
+    const submit = form.querySelector('[data-company-create-submit]');
+    const draftAlert = form.querySelector('[data-company-draft-alert]');
+    const fields = [...form.querySelectorAll('input, select, textarea')].filter((field) => field.name && !['temporary_password', 'temporary_password_confirmation'].includes(field.name) && field.type !== 'file' && field.type !== 'hidden');
+    const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+
+    const saveDraft = () => {
+        const draft = {};
+        fields.forEach((field) => {
+            if (field.type === 'radio') { if (field.checked) draft[field.name] = field.value; }
+            else if (field.type === 'checkbox') draft[field.name] = field.checked;
+            else draft[field.name] = field.value;
+        });
+        localStorage.setItem(storageKey, JSON.stringify({ savedAt: Date.now(), fields: draft }));
+    };
+
+    const restoreDraft = () => {
+        try {
+            const stored = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            if (!stored?.fields) return;
+            fields.forEach((field) => {
+                if (!(field.name in stored.fields)) return;
+                if (field.type === 'radio') field.checked = stored.fields[field.name] === field.value;
+                else if (field.type === 'checkbox') field.checked = Boolean(stored.fields[field.name]);
+                else field.value = stored.fields[field.name];
+            });
+            draftAlert?.classList.remove('d-none');
+        } catch (_) {
+            localStorage.removeItem(storageKey);
+        }
+    };
+
+    const validate = () => {
+        const value = password?.value || '';
+        const matches = value !== '' && value === (confirmation?.value || '');
+        const strong = passwordRule.test(value);
+        const showError = Boolean(confirmation?.value) && !matches;
+        confirmation?.classList.toggle('is-invalid', showError);
+        password?.classList.toggle('is-invalid', Boolean(value) && !strong);
+        passwordError?.classList.toggle('d-block', showError);
+        if (password) password.setCustomValidity(value && !strong ? 'Use a stronger password.' : '');
+        if (confirmation) confirmation.setCustomValidity(showError ? 'Password and confirm password do not match.' : '');
+        if (submit) submit.disabled = !form.checkValidity() || !strong || !matches;
+    };
+
+    restoreDraft();
+    fields.forEach((field) => field.addEventListener('input', () => { saveDraft(); validate(); }));
+    fields.forEach((field) => field.addEventListener('change', () => { saveDraft(); validate(); }));
+    password?.addEventListener('input', validate);
+    confirmation?.addEventListener('input', validate);
+    form.querySelector('[data-clear-company-draft]')?.addEventListener('click', () => {
+        if (window.confirm('Are you sure you want to clear this company draft?')) {
+            localStorage.removeItem(storageKey);
+            form.reset();
+            draftAlert?.classList.add('d-none');
+            validate();
+        }
+    });
+    form.addEventListener('submit', (event) => {
+        validate();
+        if (!form.checkValidity() || submit?.disabled) {
+            event.preventDefault();
+            form.reportValidity();
+        }
+    });
+    validate();
+}
+
+document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreateForm);

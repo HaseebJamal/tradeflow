@@ -3,21 +3,58 @@
 namespace App\Http\Controllers\Business;
 
 use App\Http\Controllers\Controller;
+use App\Models\Account;
 use App\Models\Delivery;
+use App\Models\JournalEntry;
 use App\Models\KhataLedger;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\AccountingService;
 use App\Services\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DeliveryController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting) {}
 
-    public function index()
+    public function index(Request $request)
     {
+        $filters = $request->validate([
+            'delivery_id' => ['nullable', 'integer'],
+            'order_number' => ['nullable', 'string', 'max:100'],
+            'customer_id' => ['nullable', 'integer'],
+            'delivery_staff_id' => ['nullable', 'integer'],
+            'payment_status' => ['nullable', 'string', 'max:50'],
+            'status' => ['nullable', 'string', 'max:50'],
+            'date_type' => ['nullable', 'in:created_at,assigned_at,started_at,delivered_at,failed_at'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'month' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'amount_from' => ['nullable', 'numeric', 'min:0'],
+            'amount_to' => ['nullable', 'numeric', 'min:0', 'gte:amount_from'],
+            'clear' => ['nullable', 'boolean'],
+        ]);
+        $dateColumn = $filters['date_type'] ?? 'created_at';
+        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? now()->startOfMonth()->toDateString());
+        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? now()->toDateString());
+        $hasDateRange = $dateFrom || $dateTo;
+
         $query = $this->deliveryQuery()->with(['order.customer', 'order.payments', 'staff']);
+        $query
+            ->when($filters['delivery_id'] ?? null, fn ($q, $value) => $q->where('id', $value))
+            ->when($filters['order_number'] ?? null, fn ($q, $value) => $q->whereHas('order', fn ($order) => $order->where('order_number', 'like', "%{$value}%")))
+            ->when($filters['customer_id'] ?? null, fn ($q, $value) => $q->where('customer_id', $value))
+            ->when($filters['delivery_staff_id'] ?? null, fn ($q, $value) => $q->where('delivery_staff_id', $value))
+            ->when($filters['payment_status'] ?? null, fn ($q, $value) => $q->whereHas('order', fn ($order) => $order->where('payment_status', $value)))
+            ->when($filters['status'] ?? null, fn ($q, $value) => $q->where('status', $value))
+            ->when($dateFrom, fn ($q, $value) => $q->whereDate($dateColumn, '>=', $value))
+            ->when($dateTo, fn ($q, $value) => $q->whereDate($dateColumn, '<=', $value))
+            ->when(!$hasDateRange && ($filters['month'] ?? null), fn ($q, $value) => $q->whereMonth($dateColumn, $value))
+            ->when(!$hasDateRange && ($filters['year'] ?? null), fn ($q, $value) => $q->whereYear($dateColumn, $value))
+            ->when($filters['amount_from'] ?? null, fn ($q, $value) => $q->where('amount', '>=', $value))
+            ->when($filters['amount_to'] ?? null, fn ($q, $value) => $q->where('amount', '<=', $value));
         $deliveries = $query->latest()->paginate(20);
         $deliveries->getCollection()->transform(function (Delivery $delivery) {
             if ($delivery->order) {
@@ -28,7 +65,7 @@ class DeliveryController extends Controller
         });
         $statsQuery = $this->deliveryQuery();
         $cashToCollect = $this->deliveryQuery()
-            ->whereIn('status', ['Pending', 'Out For Delivery'])
+            ->whereIn('status', ['Pending', 'Assigned', 'Out For Delivery'])
             ->with('order')
             ->get()
             ->sum(fn (Delivery $delivery) => $delivery->order ? (float) $delivery->order->balance : (float) $delivery->amount);
@@ -44,6 +81,10 @@ class DeliveryController extends Controller
                 'cash_to_collect' => $cashToCollect,
             ],
             'staff' => User::where('business_id', auth()->user()->business_id)->where('role', 'delivery_staff')->where('status', 'active')->get(),
+            'customers' => \App\Models\Customer::where('business_id', auth()->user()->business_id)->orderBy('name')->get(),
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
+            'dateType' => $dateColumn,
         ]);
     }
 
@@ -57,6 +98,11 @@ class DeliveryController extends Controller
         return view('business.deliveries.show', [
             'delivery' => $delivery,
             'paidAmount' => $delivery->order?->paid_amount ?? 0,
+            'deliveryStaff' => User::where('business_id', auth()->user()->business_id)
+                ->where('role', 'delivery_staff')
+                ->where('status', 'active')
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 
@@ -67,17 +113,23 @@ class DeliveryController extends Controller
             'delivery_staff_id' => ['nullable', 'exists:users,id'],
             'address' => ['nullable'],
             'amount' => ['nullable', 'numeric', 'min:0'],
-            'status' => ['required', 'in:Pending,Out for Delivery,Out For Delivery,Delivered,Failed'],
+            'status' => ['required', 'in:Pending,Assigned,Picked Up,Out for Delivery,Out For Delivery,Delivered,Failed,Returned,Cancelled'],
             'proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'note' => ['nullable'],
         ]);
 
         if (!empty($data['delivery_staff_id'])) {
+            if (auth()->user()->role === 'delivery_staff' && (int) $data['delivery_staff_id'] !== (int) $delivery->delivery_staff_id) {
+                return back()->withErrors(['delivery_staff_id' => 'Delivery staff cannot reassign a delivery.']);
+            }
             $staff = User::where('business_id', auth()->user()->business_id)->where('role', 'delivery_staff')->where('status', 'active')->findOrFail($data['delivery_staff_id']);
             $data['delivery_staff_id'] = $staff->id;
         }
         if (($data['status'] ?? null) === 'Out for Delivery') {
             $data['status'] = 'Out For Delivery';
+        }
+        if (!$this->canTransition($delivery->status, $data['status'])) {
+            return back()->withErrors(['status' => 'This delivery cannot move from '.$delivery->status.' to '.$data['status'].'.']);
         }
         if (($data['status'] ?? null) === 'Delivered' && (!$delivery->proof_image || !$delivery->receiver_name) && !$request->hasFile('proof_image')) {
             return back()->withErrors(['proof_image' => 'Delivery proof and receiver name are required before marking delivered.']);
@@ -86,9 +138,23 @@ class DeliveryController extends Controller
             $data['proof_image'] = $request->file('proof_image')->store('delivery_proofs', 'public');
         }
 
-        $delivery->update($data);
         if ($delivery->status === 'Delivered') {
+            return back()->withErrors(['status' => 'Delivered delivery cannot be directly edited.']);
+        }
+        if (($data['status'] ?? null) === 'Assigned' && is_null($delivery->assigned_at)) $data['assigned_at'] = now();
+        if (!empty($data['delivery_staff_id']) && (int) $data['delivery_staff_id'] !== (int) $delivery->delivery_staff_id && is_null($delivery->assigned_at)) $data['assigned_at'] = now();
+        if (in_array($data['status'] ?? null, ['Picked Up', 'Out For Delivery'], true) && is_null($delivery->started_at)) $data['started_at'] = now();
+        if (($data['status'] ?? null) === 'Delivered' && is_null($delivery->delivered_at)) $data['delivered_at'] = now();
+        if (($data['status'] ?? null) === 'Failed' && is_null($delivery->failed_at)) $data['failed_at'] = now();
+        if (($data['status'] ?? null) === 'Returned' && is_null($delivery->returned_at)) $data['returned_at'] = now();
+        if (($data['status'] ?? null) === 'Cancelled' && is_null($delivery->cancelled_at)) $data['cancelled_at'] = now();
+        $delivery->update($data);
+        if ($delivery->status === 'Out For Delivery') {
+            $delivery->order?->update(['status' => 'Out For Delivery']);
+        } elseif ($delivery->status === 'Delivered') {
             $delivery->order?->update(['status' => 'Delivered']);
+        } elseif (in_array($delivery->status, ['Failed', 'Returned'], true)) {
+            $delivery->order?->update(['status' => $delivery->status]);
         }
 
         return back()->with('success', 'Delivery updated.');
@@ -97,11 +163,12 @@ class DeliveryController extends Controller
     public function start(Delivery $delivery)
     {
         $delivery = $this->scopedDelivery($delivery);
-        abort_unless($delivery->status === 'Pending', 403);
-        $delivery->update(['status' => 'Out For Delivery', 'started_at' => now()]);
-        $delivery->order?->update(['status' => 'Out For Delivery']);
+        if (!in_array($delivery->status, ['Pending', 'Assigned'], true)) {
+            return back()->withErrors(['status' => 'Only assigned deliveries can be picked up.']);
+        }
+        $delivery->update(['status' => 'Picked Up', 'started_at' => $delivery->started_at ?? now()]);
 
-        return back()->with('success', 'Delivery started.');
+        return back()->with('success', 'Delivery marked as picked up.');
     }
 
     public function deliver(Request $request, Delivery $delivery)
@@ -180,6 +247,7 @@ class DeliveryController extends Controller
                 if ($delivery->order) {
                     $synced = $this->finance->syncOrderPaymentSummary($delivery->order);
                     $payment->update(['status' => $synced->payment_status]);
+                    $this->postPaymentAccounting($payment, $delivery);
                 }
             }
 
@@ -194,11 +262,17 @@ class DeliveryController extends Controller
                 'payment_method' => $data['payment_method'] ?? null,
                 'payment_reference' => $data['payment_reference'] ?? null,
                 'payment_proof_image' => $paymentProofPath,
-                'delivered_at' => now(),
+                'payment_proof' => $paymentProofPath,
+                'received_amount' => $collected ?: null,
+                'received_by' => $collected > 0 ? auth()->id() : null,
+                'received_at' => $collected > 0 ? now() : null,
+                'payment_status' => $collected > 0 ? 'Partial' : null,
+                'delivered_at' => $delivery->delivered_at ?? now(),
             ]);
             if ($delivery->order) {
                 $delivery->order->update(['status' => 'Delivered']);
-                $this->finance->syncOrderPaymentSummary($delivery->order->fresh());
+                $syncedOrder = $this->finance->syncOrderPaymentSummary($delivery->order->fresh());
+                $delivery->update(['payment_status' => $syncedOrder->payment_status]);
             }
         });
 
@@ -210,12 +284,36 @@ class DeliveryController extends Controller
         $delivery = $this->scopedDelivery($delivery);
         abort_unless($delivery->status === 'Out For Delivery', 403);
         $data = $request->validate(['failure_reason' => ['required', 'string'], 'note' => ['nullable', 'string']]);
-        $delivery->update(['status' => 'Failed', 'failure_reason' => $data['failure_reason'], 'note' => $data['note'] ?? $delivery->note]);
+        $delivery->update(['status' => 'Failed', 'failed_at' => $delivery->failed_at ?? now(), 'failure_reason' => $data['failure_reason'], 'note' => $data['note'] ?? $delivery->note]);
         if (in_array($delivery->order?->status, ['Out For Delivery', 'Failed'], true)) {
             $delivery->order?->update(['status' => 'Failed']);
         }
 
         return back()->with('success', 'Delivery marked failed.');
+    }
+
+    public function reopen(Delivery $delivery)
+    {
+        $delivery = $this->scopedDelivery($delivery);
+        abort_unless($delivery->status === 'Failed', 403);
+        $delivery->update(['status' => 'Assigned', 'assigned_at' => $delivery->assigned_at ?? now(), 'failed_at' => null]);
+
+        return back()->with('success', 'Failed delivery reopened.');
+    }
+
+    public function cancel(Delivery $delivery)
+    {
+        $delivery = $this->scopedDelivery($delivery);
+        abort_unless($delivery->status !== 'Delivered', 403);
+        $delivery->update(['status' => 'Cancelled', 'cancelled_at' => $delivery->cancelled_at ?? now()]);
+
+        return back()->with('success', 'Delivery cancelled.');
+    }
+
+    public function sheet(Delivery $delivery)
+    {
+        $delivery = $this->scopedDelivery($delivery)->load(['order.items.product', 'customer', 'staff']);
+        return view('business.deliveries.sheet', compact('delivery'));
     }
 
     private function deliveryQuery()
@@ -239,5 +337,42 @@ class DeliveryController extends Controller
         }
 
         return $delivery;
+    }
+
+    private function canTransition(string $from, string $to): bool
+    {
+        if ($from === $to) {
+            return true;
+        }
+
+        return in_array($to, match ($from) {
+            'Pending' => ['Assigned', 'Picked Up', 'Cancelled'],
+            'Assigned' => ['Picked Up', 'Cancelled'],
+            'Picked Up' => ['Out For Delivery', 'Failed', 'Returned'],
+            'Out For Delivery' => ['Delivered', 'Failed', 'Returned'],
+            'Failed' => ['Assigned', 'Returned', 'Cancelled'],
+            default => [],
+        }, true);
+    }
+
+    private function postPaymentAccounting(Payment $payment, Delivery $delivery): void
+    {
+        if (JournalEntry::where('business_id', $payment->business_id)->where('reference_type', 'payment')->where('reference_id', $payment->id)->exists()) {
+            return;
+        }
+        $this->accounting->ensureDefaultAccounts($payment->business_id);
+        $cashAccount = Account::where('business_id', $payment->business_id)->where('name', str_contains((string) $payment->method, 'Bank') ? 'Bank' : 'Cash')->first();
+        $arAccount = Account::where('business_id', $payment->business_id)->where('name', 'Accounts Receivable')->first();
+        if (!$cashAccount || !$arAccount) return;
+        $this->accounting->post($payment->business_id, [
+            'voucher_number' => 'PAY-JV-'.$payment->id.'-'.now()->format('His'),
+            'entry_date' => now()->toDateString(),
+            'reference_type' => 'payment',
+            'reference_id' => $payment->id,
+            'description' => 'Payment received on delivery #'.$delivery->id,
+        ], [
+            ['account_id' => $cashAccount->id, 'customer_id' => $payment->customer_id, 'debit' => $payment->amount, 'credit' => 0, 'description' => $payment->method],
+            ['account_id' => $arAccount->id, 'customer_id' => $payment->customer_id, 'debit' => 0, 'credit' => $payment->amount, 'description' => $payment->method],
+        ]);
     }
 }

@@ -9,13 +9,13 @@
     <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
         <div>
             <h2 class="h5 mb-1">Welcome, {{ $user->name }}</h2>
-            <p class="tf-muted mb-0">{{ ucwords(str_replace('_', ' ', $user->role)) }} access for your assigned business modules.</p>
+            <p class="tf-muted mb-0">{{ $user->role === 'custom_staff' ? ($user->staffProfile?->custom_role_name ?: 'Custom Staff') : ucwords(str_replace('_', ' ', $user->role)) }} access for your assigned business modules.</p>
         </div>
         <span class="badge text-bg-success">Active</span>
     </div>
 </div>
 
-@if($user->role === 'delivery_staff')
+@if($user->role === 'delivery_staff' && $deliveryStats)
 <div class="row g-3 mb-4">
 @foreach([
     ['Today Deliveries', $deliveryStats['today'] ?? 0, 'bi-calendar-day', 'bg-blue'],
@@ -53,7 +53,7 @@
             <div class="tf-card p-4 text-center">
                 <i class="bi bi-lock fs-2 text-warning"></i>
                 <h2 class="h5 mt-3">No Modules Assigned</h2>
-                <p class="tf-muted mb-0">Ask the business owner to assign permissions to your staff account.</p>
+                <p class="tf-muted mb-0">Your business has been approved, but no operational modules have been assigned to your company yet.</p>
             </div>
         </div>
     @endforelse

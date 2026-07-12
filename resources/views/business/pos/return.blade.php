@@ -1,0 +1,7 @@
+@extends('layouts.dashboard')
+@section('page-title', 'POS Return')
+@section('page-subtitle', $order->order_number)
+@section('content')
+@if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
+<form method="POST" action="{{ route('business.pos.returns.store', $order) }}" class="tf-card p-4">@csrf<h2 class="h5 mb-3">Return Items</h2><x-table><thead><tr><th>Product</th><th>Sold</th><th>Previously Returned</th><th>Return Quantity</th></tr></thead><tbody>@foreach($order->items as $item)@php($returned = $item->posReturnItems->sum('quantity'))<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td>{{ $item->quantity }}</td><td>{{ $returned }}</td><td><input type="hidden" name="items[{{ $loop->index }}][order_item_id]" value="{{ $item->id }}"><input name="items[{{ $loop->index }}][quantity]" type="number" min="0" max="{{ $item->quantity - $returned }}" value="0" class="form-control" style="max-width:130px"></td></tr>@endforeach</tbody></x-table><div class="row g-3 mt-2"><div class="col-md-4"><label class="form-label">Refund Method</label><select name="refund_method" class="form-select"><option>Cash</option><option>Store Credit</option><option>Bank Transfer</option></select></div><div class="col-md-8"><label class="form-label">Return Reason</label><input name="reason" class="form-control" required></div><div class="col-12"><button class="btn btn-tf-primary">Process Return</button><a href="{{ route('business.pos.history') }}" class="btn btn-outline-secondary">Cancel</a></div></div></form>
+@endsection

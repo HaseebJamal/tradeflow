@@ -2,11 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Auth\ForgotPasswordRequest;
+use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Models\User;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
@@ -14,7 +20,73 @@ class AuthController extends Controller
     public function loginForm() { return view('auth.login'); }
     public function registerForm() { return view('auth.register'); }
     public function forgotForm() { return view('auth.forgot-password'); }
+    public function resetForm(Request $request, string $token) { return view('auth.reset-password', ['token' => $token, 'email' => $request->email]); }
     public function otpForm() { return view('auth.otp'); }
+
+    public function sendResetLink(ForgotPasswordRequest $request)
+    {
+        $email = strtolower($request->validated('email'));
+        $key = 'tradeflow-password-reset:'.$email.'|'.$request->ip();
+        $lastSentAt = (int) $request->session()->get('password_reset_last_sent_at', 0);
+        $remainingCooldown = max(0, 60 - (now()->timestamp - $lastSentAt));
+
+        if ($remainingCooldown > 0) {
+            return back()->withErrors(['email' => "A reset link was sent recently. Please wait {$remainingCooldown} seconds before requesting another link."])->onlyInput('email');
+        }
+
+        if (RateLimiter::tooManyAttempts($key, 3)) {
+            $seconds = RateLimiter::availableIn($key);
+            return back()->withErrors(['email' => "Too many reset requests. Please try again in {$seconds} seconds."])->onlyInput('email');
+        }
+
+        try {
+            $status = Password::sendResetLink(['email' => $email]);
+        } catch (\Throwable $exception) {
+            Log::error('TradeFlow password reset email could not be sent.', ['email' => $email, 'exception' => $exception->getMessage()]);
+            return back()->withErrors(['email' => 'We could not send the reset email right now. Please try again shortly.'])->onlyInput('email');
+        }
+
+        if ($status !== Password::RESET_LINK_SENT) {
+            if ($status === Password::RESET_THROTTLED) {
+                return back()->withErrors(['email' => 'A reset link was sent recently. Please wait 60 seconds before requesting another link.'])->onlyInput('email');
+            }
+
+            return back()->withErrors(['email' => __($status)])->onlyInput('email');
+        }
+
+        RateLimiter::hit($key, 600);
+        $request->session()->put('password_reset_last_sent_at', now()->timestamp);
+        $request->session()->put('password_reset_email', $email);
+
+        return back()
+            ->with('status', 'We emailed your password reset link.')
+            ->withInput(['email' => $email]);
+    }
+
+    public function resetPassword(ResetPasswordRequest $request)
+    {
+        $data = $request->validated();
+        $status = Password::reset(
+            ['email' => $data['email'], 'password' => $data['password'], 'password_confirmation' => $request->password_confirmation, 'token' => $data['token']],
+            function (User $user, string $password) {
+                $user->forceFill([
+                    'password' => Hash::make($password),
+                    'remember_token' => Str::random(60),
+                ])->save();
+
+                event(new PasswordReset($user));
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            RateLimiter::clear('tradeflow-password-reset:'.strtolower($data['email']).'|'.$request->ip());
+            $request->session()->forget(['password_reset_last_sent_at', 'password_reset_email']);
+
+            return redirect()->route('login')->with('status', 'Your password has been reset. You can now sign in.');
+        }
+
+        return back()->withErrors(['email' => __($status)])->withInput($request->only('email'));
+    }
 
     public function login(Request $request)
     {

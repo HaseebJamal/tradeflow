@@ -1,25 +1,35 @@
 @extends('layouts.dashboard')
 @section('page-title', isset($product) ? 'Edit Product' : 'Add Product')
-@section('page-subtitle', 'Product form')
+@section('page-subtitle', 'Professional product setup with barcode and optional batch tracking')
 @section('content')
 <div class="tf-card p-4">
     @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
     <form method="POST" action="{{ isset($product) ? route('business.products.update', $product) : route('business.products.store') }}" enctype="multipart/form-data" class="row g-3">
         @csrf
         @isset($product) @method('PUT') @endisset
-        <div class="col-md-6"><label class="form-label">Product name</label><input name="product_name" class="form-control" value="{{ old('product_name', $product->name ?? '') }}"></div>
-        <div class="col-md-6"><label class="form-label">Category</label><input name="category" class="form-control" value="{{ old('category', $product->category?->name ?? '') }}" placeholder="Grocery"></div>
-        @foreach(['sku'=>'SKU','barcode'=>'Barcode','batch_number'=>'Batch number'] as $name=>$label)<div class="col-md-4"><label class="form-label">{{ $label }}</label><input name="{{ $name }}" class="form-control" value="{{ old($name, $product->$name ?? '') }}"></div>@endforeach
-        <div class="col-md-4"><label class="form-label">Expiry date</label><input name="expiry_date" type="date" class="form-control" value="{{ old('expiry_date', (isset($product) && $product->expiry_date) ? $product->expiry_date->format('Y-m-d') : '') }}"></div>
-        <div class="col-md-4"><label class="form-label">Retail price</label><input name="retail_price" type="number" step="0.01" class="form-control" value="{{ old('retail_price', $product->retail_price ?? 0) }}"></div>
-        <div class="col-md-4"><label class="form-label">Wholesale price</label><input name="wholesale_price" type="number" step="0.01" class="form-control" value="{{ old('wholesale_price', $product->wholesale_price ?? 0) }}"></div>
-        <div class="col-md-4"><label class="form-label">Purchase cost</label><input name="purchase_cost" type="number" step="0.01" class="form-control" value="{{ old('purchase_cost', $product->purchase_cost ?? 0) }}"></div>
-        <div class="col-md-4"><label class="form-label">Minimum order quantity</label><input name="minimum_order_quantity" type="number" class="form-control" value="{{ old('minimum_order_quantity', $product->minimum_order_quantity ?? 1) }}"></div>
-        <div class="col-md-4"><label class="form-label">Stock quantity</label><input name="stock_quantity" type="number" class="form-control" value="{{ old('stock_quantity', $product->stock_quantity ?? 0) }}"></div>
-        <div class="col-md-4"><label class="form-label">Low stock alert quantity</label><input name="low_stock_alert_qty" type="number" min="0" class="form-control" value="{{ old('low_stock_alert_qty', $product->low_stock_alert_qty ?? 10) }}"></div>
-        <div class="col-md-4"><label class="form-label">Unit</label><select name="unit" class="form-select">@foreach(['Piece','Carton','KG','Liter'] as $unit)<option @selected(old('unit', $product->unit ?? 'Piece') === $unit)>{{ $unit }}</option>@endforeach</select></div>
-        <div class="col-md-4"><label class="form-label">Status</label><select name="status" class="form-select"><option>Active</option><option>Inactive</option></select></div>
-        <div class="col-md-8"><label class="form-label">Product image</label><input name="product_image" type="file" class="form-control"></div>
+        <div class="col-md-6"><label class="form-label">Product Name *</label><input name="product_name" class="form-control" value="{{ old('product_name', $product->name ?? '') }}" required></div>
+        <div class="col-md-6"><label class="form-label">Category *</label><input name="category" class="form-control" value="{{ old('category', $product->category?->name ?? '') }}" placeholder="Grocery" required></div>
+        <div class="col-md-3"><label class="form-label">Unit *</label><select name="unit" class="form-select">@foreach(['Piece','Carton','KG','Liter'] as $unit)<option @selected(old('unit', $product->unit ?? 'Piece') === $unit)>{{ $unit }}</option>@endforeach</select></div>
+        <div class="col-md-3"><label class="form-label">Purchase Cost *</label><input name="purchase_cost" type="number" step="0.01" min="0" class="form-control" value="{{ old('purchase_cost', $product->purchase_cost ?? 0) }}" required></div>
+        <div class="col-md-3"><label class="form-label">Wholesale Price *</label><input name="wholesale_price" type="number" step="0.01" min="0" class="form-control" value="{{ old('wholesale_price', $product->wholesale_price ?? 0) }}" required></div>
+        <div class="col-md-3"><label class="form-label">Opening Stock *</label><input name="opening_stock" type="number" min="0" class="form-control" value="{{ old('opening_stock', $product->opening_stock ?? $product->stock_quantity ?? 0) }}" required></div>
+        <input type="hidden" name="stock_quantity" value="{{ old('stock_quantity', $product->stock_quantity ?? 0) }}">
+        <div class="col-md-3"><label class="form-label">Retail Price</label><input name="retail_price" type="number" step="0.01" min="0" class="form-control" value="{{ old('retail_price', $product->retail_price ?? 0) }}"></div>
+        <div class="col-md-3"><label class="form-label">Minimum Order Quantity</label><input name="minimum_order_quantity" type="number" min="1" class="form-control" value="{{ old('minimum_order_quantity', $product->minimum_order_quantity ?? 1) }}"></div>
+        <div class="col-md-3"><label class="form-label">Low Stock Alert Quantity</label><input name="low_stock_alert_qty" type="number" min="0" class="form-control" value="{{ old('low_stock_alert_qty', $product->low_stock_alert_qty ?? 10) }}"></div>
+        <div class="col-md-3"><label class="form-label">Status</label><select name="status" class="form-select"><option @selected(old('status', $product->status ?? 'Active') === 'Active')>Active</option><option @selected(old('status', $product->status ?? '') === 'Inactive')>Inactive</option></select></div>
+        <div class="col-md-4"><label class="form-label">SKU</label><input name="sku" class="form-control" value="{{ old('sku', $product->sku ?? '') }}"></div>
+        <div class="col-md-4"><label class="form-label">Barcode</label><div class="input-group"><input id="productBarcode" name="barcode" class="form-control" value="{{ old('barcode', $product->barcode ?? '') }}"><button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('productBarcode')?.focus()">Focus Barcode</button></div></div>
+        <div class="col-md-4"><label class="form-label">Product Image</label><input name="product_image" type="file" class="form-control" accept="image/jpeg,image/png,image/webp"></div>
+        <div class="col-md-4"><label class="form-label">Brand</label><input name="brand" class="form-control" value="{{ old('brand', $product->brand ?? '') }}"></div>
+        <div class="col-md-4"><label class="form-label">Manufacturer</label><input name="manufacturer" class="form-control" value="{{ old('manufacturer', $product->manufacturer ?? '') }}"></div>
+        <div class="col-md-4"><label class="form-label">Warehouse / Location</label><input name="warehouse_location" class="form-control" value="{{ old('warehouse_location', $product->warehouse_location ?? '') }}"></div>
+        <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="has_batch_tracking" value="1" id="batchTracking" @checked(old('has_batch_tracking', $product->has_batch_tracking ?? false)) data-batch-toggle><label class="form-check-label" for="batchTracking">This product has batch or expiry tracking</label></div></div>
+        <div class="col-md-3" data-batch-field><label class="form-label">Batch Number</label><input name="batch_number" class="form-control" value="{{ old('batch_number', $product->batch_number ?? '') }}"></div>
+        <div class="col-md-3" data-batch-field><label class="form-label">Manufacturing Date</label><input name="manufacturing_date" type="date" class="form-control" value="{{ old('manufacturing_date', isset($product) && $product->manufacturing_date ? $product->manufacturing_date->format('Y-m-d') : '') }}"></div>
+        <div class="col-md-3" data-batch-field><label class="form-label">Expiry Date</label><input name="expiry_date" type="date" class="form-control" value="{{ old('expiry_date', isset($product) && $product->expiry_date ? $product->expiry_date->format('Y-m-d') : '') }}"></div>
+        <div class="col-md-3" data-batch-field><label class="form-label">Expiry Alert Days</label><input name="expiry_alert_days" type="number" min="0" class="form-control" value="{{ old('expiry_alert_days', $product->expiry_alert_days ?? '') }}"></div>
+        <div class="col-12"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="3">{{ old('description', $product->description ?? '') }}</textarea></div>
         <div class="col-12"><button class="btn btn-tf-primary">Save Product</button></div>
     </form>
 </div>

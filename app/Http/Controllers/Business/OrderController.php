@@ -3,25 +3,79 @@
 namespace App\Http\Controllers\Business;
 
 use App\Http\Controllers\Controller;
+use App\Models\Account;
 use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Delivery;
 use App\Models\Inventory;
+use App\Models\InventoryMovement;
+use App\Models\Invoice;
+use App\Models\JournalEntry;
 use App\Models\KhataLedger;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\User;
+use App\Services\AccountingService;
 use App\Services\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting) {}
 
-    public function index() { return view('business.orders.index', ['orders' => Order::with('customer')->where('business_id', auth()->user()->business_id)->latest()->paginate(15)]); }
+    public function index(Request $request)
+    {
+        $businessId = auth()->user()->business_id;
+        $filters = $request->validate([
+            'order_number' => ['nullable', 'string', 'max:100'],
+            'customer_id' => ['nullable', 'integer'],
+            'product_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'string', 'max:50'],
+            'payment_status' => ['nullable', 'string', 'max:50'],
+            'payment_type' => ['nullable', 'string', 'max:50'],
+            'created_by' => ['nullable', 'integer'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'month' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'amount_from' => ['nullable', 'numeric', 'min:0'],
+            'amount_to' => ['nullable', 'numeric', 'min:0', 'gte:amount_from'],
+            'clear' => ['nullable', 'boolean'],
+        ]);
+
+        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? now()->startOfMonth()->toDateString());
+        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? now()->toDateString());
+        $hasDateRange = $dateFrom || $dateTo;
+
+        $query = Order::with(['customer', 'creator', 'items.product'])
+            ->where('business_id', $businessId)
+            ->when($filters['order_number'] ?? null, fn ($q, $value) => $q->where('order_number', 'like', "%{$value}%"))
+            ->when($filters['customer_id'] ?? null, fn ($q, $value) => $q->where('customer_id', $value))
+            ->when($filters['product_id'] ?? null, fn ($q, $value) => $q->whereHas('items', fn ($items) => $items->where('product_id', $value)))
+            ->when($filters['status'] ?? null, fn ($q, $value) => $q->where('status', $value))
+            ->when($filters['payment_status'] ?? null, fn ($q, $value) => $q->where('payment_status', $value))
+            ->when($filters['payment_type'] ?? null, fn ($q, $value) => $q->where('payment_type', $value))
+            ->when($filters['created_by'] ?? null, fn ($q, $value) => $q->where('created_by', $value))
+            ->when($dateFrom, fn ($q, $value) => $q->whereDate('order_date', '>=', $value))
+            ->when($dateTo, fn ($q, $value) => $q->whereDate('order_date', '<=', $value))
+            ->when(!$hasDateRange && ($filters['month'] ?? null), fn ($q, $value) => $q->whereMonth('order_date', $value))
+            ->when(!$hasDateRange && ($filters['year'] ?? null), fn ($q, $value) => $q->whereYear('order_date', $value))
+            ->when($filters['amount_from'] ?? null, fn ($q, $value) => $q->where('grand_total', '>=', $value))
+            ->when($filters['amount_to'] ?? null, fn ($q, $value) => $q->where('grand_total', '<=', $value));
+
+        return view('business.orders.index', [
+            'orders' => $query->latest()->paginate(15)->withQueryString(),
+            'customers' => Customer::where('business_id', $businessId)->orderBy('name')->get(),
+            'products' => Product::where('business_id', $businessId)->orderBy('name')->get(),
+            'creators' => User::where('business_id', $businessId)->orderBy('name')->get(),
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
+        ]);
+    }
 
     public function create()
     {
@@ -72,9 +126,9 @@ class OrderController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($data, $businessId, $customer) {
+        DB::transaction(function () use ($data, $businessId, $customer, $request) {
             $discountPercentage = (float) ($data['discount'] ?? 0);
-            $order = Order::create(['order_number' => 'ORD-'.now()->format('ymdHis'), 'business_id' => $businessId, 'customer_id' => $customer?->id, 'created_by' => auth()->id(), 'discount' => $discountPercentage, 'discount_percentage' => $discountPercentage, 'discount_amount' => 0, 'payment_type' => $data['payment_type'] ?? 'Credit', 'status' => 'New']);
+            $order = Order::create(['order_number' => 'ORD-'.now()->format('ymdHis'), 'business_id' => $businessId, 'customer_id' => $customer?->id, 'created_by' => auth()->id(), 'order_date' => now(), 'discount' => $discountPercentage, 'discount_percentage' => $discountPercentage, 'discount_amount' => 0, 'payment_type' => $data['payment_type'] ?? 'Credit', 'status' => 'New']);
             $subtotal = 0;
             $descriptionLines = [];
             $calculationLines = collect();
@@ -88,7 +142,19 @@ class OrderController extends Controller
                 $total = $product->wholesale_price * $line['quantity'];
                 $subtotal += $total;
                 $calculationLines->push(['quantity' => $line['quantity'], 'price' => $product->wholesale_price]);
-                OrderItem::create(['order_id' => $order->id, 'product_id' => $product->id, 'quantity' => $line['quantity'], 'price' => $product->wholesale_price, 'total' => $total]);
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'product_id' => $product->id,
+                    'product_name_snapshot' => $product->name,
+                    'sku_snapshot' => $product->sku,
+                    'quantity' => $line['quantity'],
+                    'unit' => $product->unit,
+                    'unit_price' => $product->wholesale_price,
+                    'purchase_cost_snapshot' => $product->purchase_cost,
+                    'line_total' => $total,
+                    'price' => $product->wholesale_price,
+                    'total' => $total,
+                ]);
                 $product->decrement('stock_quantity', $line['quantity']);
                 $freshProduct = $product->fresh();
                 $inventory = Inventory::firstOrCreate(
@@ -98,6 +164,17 @@ class OrderController extends Controller
                 $inventory->increment('sold_stock', $line['quantity']);
                 $inventory->update(['available_stock' => $freshProduct?->stock_quantity ?? 0, 'low_stock_alert' => $freshProduct?->low_stock_alert_qty ?? 10]);
                 StockMovement::create(['business_id' => $businessId, 'product_id' => $product->id, 'type' => 'sold', 'quantity' => $line['quantity'], 'note' => 'Order '.$order->order_number, 'user_id' => auth()->id(), 'created_by' => auth()->id()]);
+                InventoryMovement::create([
+                    'business_id' => $businessId,
+                    'product_id' => $product->id,
+                    'type' => 'SOLD',
+                    'quantity' => $line['quantity'],
+                    'previous_stock' => (int) $freshProduct->stock_quantity + (int) $line['quantity'],
+                    'new_stock' => (int) $freshProduct->stock_quantity,
+                    'note' => 'Order '.$order->order_number,
+                    'created_by' => auth()->id(),
+                    'movement_date' => now(),
+                ]);
                 $descriptionLines[] = $product->name.' x '.$line['quantity'];
             }
             ['subtotal' => $subtotal, 'discountAmount' => $discountAmount, 'grandTotal' => $grandTotal] = $this->finance->orderAmountsFromLines($calculationLines, $discountPercentage);
@@ -132,6 +209,8 @@ class OrderController extends Controller
                     'entry_date' => now()->toDateString(),
                 ]);
             }
+            $this->postOrderAccounting($order->fresh(['customer']));
+            $this->audit($request, 'Order created '.$order->order_number, 'Orders', $order->id, null, ['status' => $order->status, 'grand_total' => $grandTotal]);
         });
 
         return redirect()->route('business.orders.index')->with('success', 'Order created.');
@@ -143,6 +222,7 @@ class OrderController extends Controller
         $order = $this->finance->syncOrderTotals($order);
         return view('business.orders.show', [
             'order' => $order->load(['customer', 'items.product', 'payments', 'delivery.staff']),
+            'journalEntries' => JournalEntry::with('lines.account')->where('business_id', $order->business_id)->where('reference_type', 'order')->where('reference_id', $order->id)->latest()->get(),
             'deliveryStaff' => User::where('business_id', auth()->user()->business_id)
                 ->where('role', 'delivery_staff')
                 ->where('status', 'active')
@@ -245,7 +325,9 @@ class OrderController extends Controller
 
             $this->syncOrderKhataAmount($order->fresh(['customer', 'items.product']), $oldTotal, $grandTotal, $oldCustomer);
             $order->invoice?->update(['paid_amount' => $paidAmount, 'balance' => $balance]);
-            $this->audit($request, 'Updated order '.$order->order_number);
+            $this->reverseOrderAccounting($order, 'Order edit reversal '.$order->order_number);
+            $this->postOrderAccounting($order->fresh(['customer']));
+            $this->audit($request, 'Updated order '.$order->order_number, 'Orders', $order->id, ['grand_total' => $oldTotal], ['grand_total' => $grandTotal]);
         });
 
         return redirect()->route('business.orders.show', $order)->with('success', 'Order updated successfully.');
@@ -254,7 +336,7 @@ class OrderController extends Controller
     public function updateStatus(Request $request, Order $order)
     {
         abort_unless($order->business_id === auth()->user()->business_id, 403);
-        $data = $request->validate(['status' => ['required', 'in:New,Accepted,Packing,Ready,Out For Delivery,Delivered,Completed,Cancelled']]);
+        $data = $request->validate(['status' => ['required', 'in:New,Accepted,Packing,Ready,Out For Delivery,Delivered,Completed,Cancelled,Void']]);
         if ($data['status'] === 'Out For Delivery' && !$order->delivery()->exists()) {
             return back()->withErrors(['status' => 'Please assign delivery staff before moving order Out For Delivery.']);
         }
@@ -265,7 +347,23 @@ class OrderController extends Controller
     public function assignDelivery(Request $request, Order $order)
     {
         $businessId = auth()->user()->business_id;
-        abort_unless($order->business_id === $businessId, 403);
+        if ($order->business_id !== $businessId) {
+            return redirect()->route('business.orders.index')->withErrors([
+                'order' => 'This order does not belong to your business.',
+            ]);
+        }
+
+        if (!in_array(auth()->user()->role, ['business_owner', 'manager', 'business_admin', 'business_sub_admin'], true)) {
+            return back()->withErrors([
+                'permission' => 'Only an authorized business owner or manager can assign deliveries.',
+            ]);
+        }
+
+        if (!in_array($order->status, ['New', 'Accepted', 'Packing', 'Ready'], true)) {
+            return back()->withErrors([
+                'delivery' => 'Delivery can only be assigned to New, Accepted, Packing, or Ready orders.',
+            ]);
+        }
 
         $data = $request->validate([
             'delivery_staff_id' => ['required', 'exists:users,id'],
@@ -278,22 +376,35 @@ class OrderController extends Controller
             ->where('status', 'active')
             ->findOrFail($data['delivery_staff_id']);
 
-        if ($order->delivery()->exists()) {
-            return back()->withErrors(['delivery' => 'Delivery has already been assigned for this order.']);
-        }
+        DB::transaction(function () use ($order, $staff, $data): void {
+            $lockedOrder = Order::where('business_id', $order->business_id)
+                ->lockForUpdate()
+                ->findOrFail($order->id);
 
-        Delivery::create([
-            'business_id' => $order->business_id,
-            'order_id' => $order->id,
-            'customer_id' => $order->customer_id,
-            'delivery_staff_id' => $staff->id,
-            'address' => $data['address'],
-            'amount' => $order->balance ?? ($order->grand_total ?: $order->total),
-            'status' => 'Pending',
-            'note' => $data['note'] ?? null,
-        ]);
+            if ($lockedOrder->delivery()->exists()) {
+                throw ValidationException::withMessages([
+                    'delivery' => 'Delivery has already been assigned for this order.',
+                ]);
+            }
 
-        $order->update(['status' => 'Out For Delivery']);
+            Delivery::create([
+                'business_id' => $lockedOrder->business_id,
+                'order_id' => $lockedOrder->id,
+                'customer_id' => $lockedOrder->customer_id,
+                'delivery_staff_id' => $staff->id,
+                'address' => $data['address'],
+                'amount' => $lockedOrder->balance ?? ($lockedOrder->grand_total ?: $lockedOrder->total),
+                'payment_status' => $lockedOrder->balance > 0 ? 'Pending' : 'Paid',
+                'status' => 'Assigned',
+                'assigned_at' => now(),
+                'note' => $data['note'] ?? null,
+                'created_by' => auth()->id(),
+            ]);
+
+            // Assignment reserves an active delivery worker. The order moves to
+            // Out For Delivery only when the assigned worker starts the route.
+            $lockedOrder->update(['status' => $lockedOrder->status === 'Packing' ? 'Ready' : $lockedOrder->status]);
+        });
 
         return redirect()->route('business.deliveries')->with('success', 'Delivery assigned successfully.');
     }
@@ -313,7 +424,10 @@ class OrderController extends Controller
         DB::transaction(function () use ($order, $request) {
             $this->restoreOrderStock($order);
             $order->update(['status' => 'Cancelled', 'cancelled_at' => now()]);
-            $this->audit($request, 'Cancelled order '.$order->order_number);
+            $this->reverseOrderAccounting($order, 'Cancelled order '.$order->order_number);
+            Invoice::where('order_id', $order->id)->whereIn('status', ['Draft', 'Issued'])->update(['status' => 'Cancelled']);
+            Delivery::where('order_id', $order->id)->whereNot('status', 'Delivered')->update(['status' => 'Cancelled', 'cancelled_at' => now()]);
+            $this->audit($request, 'Cancelled order '.$order->order_number, 'Orders', $order->id);
         });
 
         return back()->with('success', 'Order cancelled successfully.');
@@ -330,21 +444,26 @@ class OrderController extends Controller
         $hasRelatedRecords = $order->payments()->exists()
             || $order->delivery()->exists()
             || $order->invoice()->exists()
-            || KhataLedger::where('order_id', $order->id)->exists();
+            || KhataLedger::where('order_id', $order->id)->exists()
+            || JournalEntry::where('business_id', $order->business_id)->where('reference_type', 'order')->where('reference_id', $order->id)->exists()
+            || StockMovement::where('business_id', $order->business_id)->where('note', 'like', '%'.$order->order_number.'%')->exists();
 
         DB::transaction(function () use ($order, $hasRelatedRecords, $request) {
             $this->restoreOrderStock($order);
 
             if ($hasRelatedRecords) {
-                $order->update(['status' => 'Cancelled', 'cancelled_at' => now()]);
-                $this->audit($request, 'Voided order '.$order->order_number.' because related records exist');
+                $order->update(['status' => 'Void', 'voided_at' => now(), 'void_reason' => 'Deleted with related transactions']);
+                $this->reverseOrderAccounting($order, 'Voided order '.$order->order_number);
+                Invoice::where('order_id', $order->id)->whereNotIn('status', ['Paid'])->update(['status' => 'Void', 'voided_at' => now(), 'voided_by' => auth()->id(), 'void_reason' => 'Order voided']);
+                Delivery::where('order_id', $order->id)->whereNot('status', 'Delivered')->update(['status' => 'Cancelled', 'cancelled_at' => now()]);
+                $this->audit($request, 'Voided order '.$order->order_number.' because related records exist', 'Orders', $order->id);
                 return;
             }
 
             $orderNumber = $order->order_number;
             $order->items()->delete();
             $order->delete();
-            $this->audit($request, 'Deleted order '.$orderNumber);
+            $this->audit($request, 'Deleted order '.$orderNumber, 'Orders', $order->id);
         });
 
         if ($hasRelatedRecords) {
@@ -354,9 +473,28 @@ class OrderController extends Controller
         return redirect()->route('business.orders.index')->with('success', 'Order deleted successfully.');
     }
 
+    public function void(Request $request, Order $order)
+    {
+        abort_unless($order->business_id === auth()->user()->business_id, 403);
+        $data = $request->validate(['void_reason' => ['required', 'string', 'max:1000']]);
+
+        DB::transaction(function () use ($order, $data, $request) {
+            $this->restoreOrderStock($order);
+            $order->update(['status' => 'Void', 'voided_at' => now(), 'void_reason' => $data['void_reason']]);
+            $this->reverseOrderAccounting($order, 'Voided order '.$order->order_number);
+            Invoice::where('order_id', $order->id)->update(['status' => 'Void', 'voided_by' => auth()->id(), 'voided_at' => now(), 'void_reason' => $data['void_reason']]);
+            Delivery::where('order_id', $order->id)->whereNot('status', 'Delivered')->update(['status' => 'Cancelled', 'cancelled_at' => now()]);
+            $this->audit($request, 'Voided order '.$order->order_number, 'Orders', $order->id, null, ['reason' => $data['void_reason']]);
+        });
+
+        return back()->with('success', 'Order voided safely.');
+    }
+
     private function canManageOrder(Order $order): bool
     {
-        return in_array(auth()->user()->role, ['business_owner', 'manager'], true);
+        $role = auth()->user()->role;
+
+        return in_array($role, ['business_owner', 'business_admin', 'business_sub_admin', 'manager'], true);
     }
 
     private function canEditOrder(Order $order): bool
@@ -366,7 +504,7 @@ class OrderController extends Controller
             return true;
         }
 
-        if ($role === 'manager') {
+        if (in_array($role, ['business_admin', 'business_sub_admin', 'manager'], true)) {
             return $this->userHasPermission('orders.edit');
         }
 
@@ -432,6 +570,8 @@ class OrderController extends Controller
                     'quantity' => $newQuantity,
                     'price' => $item->price,
                     'total' => round($newQuantity * (float) $item->price, 2),
+                    'unit_price' => $item->unit_price ?: $item->price,
+                    'line_total' => round($newQuantity * (float) $item->price, 2),
                 ]);
                 $keptOrAdded++;
                 continue;
@@ -456,7 +596,13 @@ class OrderController extends Controller
             OrderItem::create([
                 'order_id' => $order->id,
                 'product_id' => $product->id,
+                'product_name_snapshot' => $product->name,
+                'sku_snapshot' => $product->sku,
                 'quantity' => $quantity,
+                'unit' => $product->unit,
+                'unit_price' => $product->wholesale_price,
+                'purchase_cost_snapshot' => $product->purchase_cost,
+                'line_total' => round($quantity * (float) $product->wholesale_price, 2),
                 'price' => $product->wholesale_price,
                 'total' => round($quantity * (float) $product->wholesale_price, 2),
             ]);
@@ -498,6 +644,17 @@ class OrderController extends Controller
             'user_id' => auth()->id(),
             'created_by' => auth()->id(),
         ]);
+        InventoryMovement::create([
+            'business_id' => $order->business_id,
+            'product_id' => $product->id,
+            'type' => $delta > 0 ? 'SOLD' : 'RETURNED',
+            'quantity' => abs($delta),
+            'previous_stock' => $delta > 0 ? (int) $freshProduct->stock_quantity + $delta : (int) $freshProduct->stock_quantity - abs($delta),
+            'new_stock' => (int) $freshProduct->stock_quantity,
+            'note' => $note,
+            'created_by' => auth()->id(),
+            'movement_date' => now(),
+        ]);
     }
 
     private function restoreOrderStock(Order $order): void
@@ -531,6 +688,17 @@ class OrderController extends Controller
                 'note' => 'Stock restored after '.$order->order_number.' cancellation',
                 'user_id' => auth()->id(),
                 'created_by' => auth()->id(),
+            ]);
+            InventoryMovement::create([
+                'business_id' => $order->business_id,
+                'product_id' => $item->product_id,
+                'type' => 'RETURNED',
+                'quantity' => (int) $item->quantity,
+                'previous_stock' => (int) $freshProduct->stock_quantity - (int) $item->quantity,
+                'new_stock' => (int) $freshProduct->stock_quantity,
+                'note' => 'Stock restored after '.$order->order_number.' cancellation',
+                'created_by' => auth()->id(),
+                'movement_date' => now(),
             ]);
         }
 
@@ -576,11 +744,59 @@ class OrderController extends Controller
         $ledger ? $ledger->update($ledgerData) : KhataLedger::create($ledgerData);
     }
 
-    private function audit(Request $request, string $action): void
+    private function postOrderAccounting(Order $order): void
+    {
+        if (JournalEntry::where('business_id', $order->business_id)->where('reference_type', 'order')->where('reference_id', $order->id)->where('status', 'posted')->exists()) {
+            return;
+        }
+        $this->accounting->ensureDefaultAccounts($order->business_id);
+        $debitAccount = Account::where('business_id', $order->business_id)->where('name', $order->payment_type === 'Cash' ? 'Cash' : 'Accounts Receivable')->first();
+        $salesAccount = Account::where('business_id', $order->business_id)->where('name', 'Sales Revenue')->first();
+        if (!$debitAccount || !$salesAccount || (float) $order->grand_total <= 0) return;
+
+        $this->accounting->post($order->business_id, [
+            'voucher_number' => 'ORD-JV-'.$order->id.'-'.now()->format('His'),
+            'entry_date' => $order->order_date?->format('Y-m-d') ?? now()->toDateString(),
+            'reference_type' => 'order',
+            'reference_id' => $order->id,
+            'description' => 'Credit sale '.$order->order_number,
+        ], [
+            ['account_id' => $debitAccount->id, 'customer_id' => $order->customer_id, 'debit' => $order->grand_total, 'credit' => 0, 'description' => $order->order_number],
+            ['account_id' => $salesAccount->id, 'customer_id' => $order->customer_id, 'debit' => 0, 'credit' => $order->grand_total, 'description' => $order->order_number],
+        ]);
+    }
+
+    private function reverseOrderAccounting(Order $order, string $description): void
+    {
+        $entries = JournalEntry::with('lines')->where('business_id', $order->business_id)->where('reference_type', 'order')->where('reference_id', $order->id)->where('status', 'posted')->get();
+        foreach ($entries as $entry) {
+            if (JournalEntry::where('business_id', $order->business_id)->where('reference_type', 'order_reversal')->where('reference_id', $entry->id)->exists()) continue;
+            $this->accounting->post($order->business_id, [
+                'voucher_number' => 'REV-'.$entry->id.'-'.now()->format('His'),
+                'entry_date' => now()->toDateString(),
+                'reference_type' => 'order_reversal',
+                'reference_id' => $entry->id,
+                'description' => $description,
+            ], $entry->lines->map(fn ($line) => [
+                'account_id' => $line->account_id,
+                'customer_id' => $line->customer_id,
+                'debit' => $line->credit,
+                'credit' => $line->debit,
+                'description' => 'Reversal '.$entry->voucher_number,
+            ])->all());
+        }
+    }
+
+    private function audit(Request $request, string $action, ?string $module = null, ?int $recordId = null, ?array $old = null, ?array $new = null): void
     {
         AuditLog::create([
             'user_id' => auth()->id(),
+            'business_id' => auth()->user()->business_id,
             'action' => $action,
+            'module' => $module,
+            'record_id' => $recordId,
+            'old_values' => $old,
+            'new_values' => $new,
             'ip_address' => $request->ip(),
         ]);
     }

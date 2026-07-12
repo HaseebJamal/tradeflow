@@ -14,7 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'business.permission' => \App\Http\Middleware\BusinessPermissionMiddleware::class,
+            'company.permission' => \App\Http\Middleware\CompanyPermissionMiddleware::class,
+            'business.action' => \App\Http\Middleware\BusinessActionPermissionMiddleware::class,
             'business.approved' => \App\Http\Middleware\ApprovedBusinessMiddleware::class,
+            'super_admin.context' => \App\Http\Middleware\SuperAdminBusinessContextMiddleware::class,
+            'track.activity' => \App\Http\Middleware\TrackActivity::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

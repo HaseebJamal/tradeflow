@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Auth\RegisterBusinessRequest;
 use App\Models\Business;
 use App\Models\BusinessDocument;
+use App\Models\CompanyApprovalLog;
 use App\Models\User;
-use Illuminate\Http\Request;
+use App\Notifications\CompanyRegistrationNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -14,26 +16,11 @@ class BusinessOnboardingController extends Controller
 {
     public function create() { return view('onboarding.register-business'); }
 
-    public function store(Request $request)
+    public function store(RegisterBusinessRequest $request)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users')],
-            'phone' => ['required', 'string', 'max:30'],
-            'password' => ['required', 'confirmed', 'min:8'],
-            'business_type' => ['required', Rule::in(['Manufacturer', 'Distributor', 'Wholesaler', 'Retail Shop'])],
-            'business_name' => ['required', 'string', 'max:255'],
-            'address' => ['nullable', 'string'],
-            'city' => ['required', 'string', 'max:100'],
-            'category' => ['nullable', 'string', 'max:100'],
-            'registration_number' => ['nullable', 'string', 'max:100'],
-            'tax_number' => ['nullable', 'string', 'max:100'],
-            'cnic_image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:2048'],
-            'business_document' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
-            'shop_image' => ['nullable', 'file', 'mimes:jpg,jpeg,png', 'max:4096'],
-        ]);
+        $data = $request->validated();
 
-        DB::transaction(function () use ($request, $data, &$user) {
+        DB::transaction(function () use ($request, $data, &$user, &$business) {
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -58,6 +45,15 @@ class BusinessOnboardingController extends Controller
 
             $user->update(['business_id' => $business->id]);
 
+            CompanyApprovalLog::create([
+                'company_id' => $business->id,
+                'old_status' => null,
+                'new_status' => 'Pending',
+                'note' => 'Company registered from public onboarding',
+                'changed_by' => null,
+                'changed_at' => now(),
+            ]);
+
             foreach (['cnic_image', 'business_document', 'shop_image'] as $field) {
                 if ($request->hasFile($field)) {
                     BusinessDocument::create([
@@ -68,6 +64,9 @@ class BusinessOnboardingController extends Controller
                 }
             }
         });
+
+        User::where('role', 'super_admin')->where('status', 'active')->get()
+            ->each(fn (User $admin) => $admin->notify(new CompanyRegistrationNotification($business)));
 
         return redirect()->route('register.business')->with('success', 'Your business registration has been submitted for approval.');
     }

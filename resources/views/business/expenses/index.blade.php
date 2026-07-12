@@ -5,7 +5,7 @@
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 
-<div class="tf-card p-4 mb-4">
+@companyCan('expenses.create')<div class="tf-card p-4 mb-4">
     <h2 class="h5">Add Expense</h2>
     <form method="POST" action="{{ route('business.expenses.store') }}" class="row g-3">@csrf
         <div class="col-md-3"><label class="form-label">Title</label><input name="title" class="form-control" placeholder="Title" required></div>
@@ -15,7 +15,7 @@
         <div class="col-md-3"><label class="form-label">Reason / Description</label><input name="description" class="form-control" placeholder="Reason"></div>
         <div class="col-12"><button class="btn btn-tf-primary">Save Expense</button></div>
     </form>
-</div>
+</div>@endcompanyCan
 
 <form class="tf-card p-4 mb-4 row g-3">
     <div class="col-md-3"><label class="form-label">Search</label><input name="search" class="form-control" value="{{ request('search') }}" placeholder="Title or reason"></div>
@@ -35,6 +35,6 @@
     <div class="col-md-8"><div class="tf-card p-4"><h2 class="h6">Monthly Expense Summary</h2><div class="d-flex flex-wrap gap-2">@forelse($monthlySummary ?? [] as $summary)<span class="badge text-bg-light border">{{ \Illuminate\Support\Carbon::create($summary->year, $summary->month, 1)->format('M Y') }}: Rs {{ number_format($summary->total) }}</span>@empty<span class="tf-muted">No monthly expense data yet.</span>@endforelse</div></div></div>
 </div>
 
-<x-table><thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Reason</th><th>Amount</th><th></th></tr></thead><tbody>@forelse($expenses as $expense)<tr><td>{{ ($expense->expense_date ?: $expense->date)?->format('M d, Y') }}</td><td>{{ $expense->title }}</td><td>{{ $expense->category }}</td><td>{{ $expense->description ?: '-' }}</td><td>Rs {{ number_format($expense->amount) }}</td><td><form method="POST" action="{{ route('business.expenses.destroy', $expense) }}">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Delete</button></form></td></tr>@empty<tr><td colspan="6" class="text-center tf-muted py-4">No expenses found.</td></tr>@endforelse</tbody></x-table>
+<x-table><thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Reason</th><th>Amount</th><th></th></tr></thead><tbody>@forelse($expenses as $expense)<tr><td>{{ ($expense->expense_date ?: $expense->date)?->format('M d, Y') }}</td><td>{{ $expense->title }}</td><td>{{ $expense->category }}</td><td>{{ $expense->description ?: '-' }}</td><td>Rs {{ number_format($expense->amount) }}</td><td>@companyCan('expenses.delete')<form method="POST" action="{{ route('business.expenses.destroy', $expense) }}">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Delete</button></form>@endcompanyCan</td></tr>@empty<tr><td colspan="6" class="text-center tf-muted py-4">No expenses found.</td></tr>@endforelse</tbody></x-table>
 @if(method_exists($expenses, 'links'))<div class="mt-3">{{ $expenses->links() }}</div>@endif
 @endsection

@@ -1,0 +1,158 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\UpdateCompanyPermissionsRequest;
+use App\Models\Business;
+use App\Models\CompanyPermission;
+use App\Models\PermissionDefinition;
+use App\Models\PermissionTemplate;
+use App\Notifications\CompanyPermissionsUpdatedNotification;
+use App\Services\CompanyPermissionService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+
+class CompanyPermissionController extends Controller
+{
+    public function modules(Request $request) { return $this->screen($request, 'modules'); }
+    public function features(Request $request) { return $this->screen($request, 'features'); }
+    public function actions(Request $request) { return $this->screen($request, 'actions'); }
+
+    public function update(UpdateCompanyPermissionsRequest $request)
+    {
+        $data = $request->validated();
+        $scopeDefinitions = $this->definitionsForScope($data['scope']);
+        $keys = $scopeDefinitions->pluck('permission_key')->all();
+        $selected = array_map('strtolower', $data['permissions'] ?? []);
+
+        $company = Business::findOrFail($data['company_id']);
+        DB::transaction(function () use ($request, $company, $data, $keys, $selected, $scopeDefinitions) {
+            $definitions = $data['scope'] === 'modules'
+                ? PermissionDefinition::where('status', 'active')->get(['module', 'permission_key'])
+                : $scopeDefinitions;
+            $current = CompanyPermission::where('company_id', $company->id)->whereIn('permission_key', $definitions->pluck('permission_key'))->pluck('allowed', 'permission_key')->map(fn ($value) => (bool) $value)->all();
+            $enabledModules = $scopeDefinitions
+                ->filter(fn (PermissionDefinition $definition) => in_array(strtolower($definition->permission_key), $selected, true))
+                ->pluck('module')
+                ->map(fn ($module) => strtolower($module))
+                ->all();
+
+            foreach ($definitions as $definition) {
+                $key = strtolower($definition->permission_key);
+                $moduleEnabled = in_array(strtolower($definition->module), $enabledModules, true);
+                $newValue = $data['scope'] === 'modules'
+                    ? ($scopeDefinitions->contains('permission_key', $definition->permission_key)
+                        ? $moduleEnabled
+                        : ($moduleEnabled ? ($current[$key] ?? false) : false))
+                    : in_array($key, $selected, true);
+                $oldValue = $current[$key] ?? null;
+                CompanyPermission::updateOrCreate(
+                    ['company_id' => $data['company_id'], 'permission_key' => $definition->permission_key],
+                    ['allowed' => $newValue, 'assigned_by' => auth()->id()]
+                );
+                if ($oldValue !== $newValue) {
+                    \App\Models\AuditLog::create([
+                        'user_id' => auth()->id(), 'actor_id' => auth()->id(), 'actor_role' => auth()->user()?->role,
+                        'business_id' => $company->id, 'module' => 'Permissions', 'action' => $newValue ? 'permission granted' : 'permission revoked',
+                        'description' => $key.' changed for '.$company->business_name,
+                        'old_values' => ['permission_key' => $key, 'allowed' => $oldValue],
+                        'new_values' => ['permission_key' => $key, 'allowed' => $newValue],
+                        'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+                    ]);
+                }
+            }
+            \App\Models\AuditLog::create([
+                'user_id' => auth()->id(), 'actor_id' => auth()->id(), 'actor_role' => auth()->user()?->role,
+                'business_id' => $company->id, 'module' => 'Permissions', 'action' => $data['scope'].' permissions updated',
+                'description' => ucfirst($data['scope']).' permissions updated for '.$company->business_name,
+                'new_values' => ['enabled_permissions' => $selected], 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+            ]);
+            $company->owner?->notify(new CompanyPermissionsUpdatedNotification($company));
+        });
+        app(CompanyPermissionService::class)->clear($company->id);
+
+        return redirect()->route('admin.permissions.'.$data['scope'], ['company_id' => $company->id])
+            ->with('success', 'Permissions updated successfully for '.$company->business_name.'.');
+    }
+
+    public function templates(Request $request)
+    {
+        return view('super-admin.permissions.templates', [
+            'templates' => PermissionTemplate::with('items')->latest()->get(),
+            'definitions' => PermissionDefinition::where('status', 'active')->orderBy('module')->orderBy('label')->get(),
+            'companies' => Business::orderBy('business_name')->get(),
+        ]);
+    }
+
+    public function storeTemplate(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:100', 'unique:permission_templates,name'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'permissions' => ['nullable', 'array'],
+            'permissions.*' => [Rule::exists('permission_definitions', 'permission_key')],
+        ]);
+
+        $template = PermissionTemplate::create(['name' => $data['name'], 'description' => $data['description'] ?? null, 'created_by' => auth()->id(), 'status' => 'active']);
+        $template->items()->createMany(collect($data['permissions'] ?? [])->map(fn ($key) => ['permission_key' => $key, 'allowed' => true])->all());
+
+        $this->audit($request, 'permission template created');
+        return back()->with('success', 'Permission template created.');
+    }
+
+    public function applyTemplate(Request $request, PermissionTemplate $template)
+    {
+        $data = $request->validate(['company_id' => ['required', 'exists:businesses,id']]);
+        $selected = $template->items()->where('allowed', true)->pluck('permission_key')->all();
+        $allKeys = PermissionDefinition::where('status', 'active')->pluck('permission_key')->all();
+
+        foreach ($allKeys as $key) {
+            CompanyPermission::updateOrCreate(
+                ['company_id' => $data['company_id'], 'permission_key' => $key],
+                ['allowed' => in_array($key, $selected, true), 'assigned_by' => auth()->id()]
+            );
+        }
+
+        app(CompanyPermissionService::class)->clear((int) $data['company_id']);
+        $this->audit($request, 'permission template applied to company', (int) $data['company_id']);
+        return back()->with('success', 'Template applied. You can now override individual company permissions.');
+    }
+
+    private function screen(Request $request, string $scope)
+    {
+        $companyId = $request->integer('company_id') ?: null;
+        $definitions = $this->definitionsForScope($scope);
+
+        $selectedCompany = $companyId ? Business::find($companyId) : null;
+        if ($selectedCompany) {
+            $this->audit($request, 'company permissions loaded', $selectedCompany->id);
+        }
+
+        return view('super-admin.permissions.index', [
+            'title' => match ($scope) { 'modules' => 'Company Module Access', 'features' => 'Feature Permissions', default => 'Button / Action Permissions' },
+            'scope' => $scope,
+            'companies' => Business::orderBy('business_name')->get(),
+            'selectedCompany' => $selectedCompany,
+            'definitions' => $definitions,
+            'selectedPermissions' => old('permissions', $companyId ? CompanyPermission::where('company_id', $companyId)->where('allowed', true)->pluck('permission_key')->all() : []),
+        ]);
+    }
+
+    private function definitionsForScope(string $scope)
+    {
+        return PermissionDefinition::where('status', 'active')
+            ->where('permission_type', match ($scope) { 'modules' => 'module', 'features' => 'feature', default => 'action' })
+            ->orderBy('module')->orderBy('label')->get();
+    }
+
+    private function audit(Request $request, string $action, ?int $companyId = null): void
+    {
+        \App\Models\AuditLog::create([
+            'user_id' => auth()->id(), 'actor_id' => auth()->id(), 'actor_role' => auth()->user()?->role,
+            'business_id' => $companyId, 'module' => 'Permissions', 'action' => $action, 'description' => ucfirst($action),
+            'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+        ]);
+    }
+}

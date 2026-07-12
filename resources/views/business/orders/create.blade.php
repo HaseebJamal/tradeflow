@@ -15,9 +15,9 @@
                         <option value="{{ $customer->id }}" @selected(old('customer_id') == $customer->id)>{{ $customer->business_name ?: $customer->name }}</option>
                     @endforeach
                 </select>
-                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#quickCustomerModal">
+                @companyCan('customers.create')<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#quickCustomerModal">
                     <i class="bi bi-person-plus me-1"></i>Add New Customer
-                </button>
+                </button>@endcompanyCan
             </div>
             <div class="small text-success mt-2 d-none" data-quick-customer-selected></div>
         </div>

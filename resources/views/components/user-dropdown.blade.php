@@ -2,11 +2,17 @@
     $user = auth()->user();
     $settingsRoute = route('profile.edit');
     $hasProfileImage = $user?->profile_image && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->profile_image);
+    $hidePasswordOption = in_array($user?->role, ['super_admin', 'business_owner'], true);
+    $showAccountSettings = false;
 
     if ($user?->role === 'super_admin' && \Illuminate\Support\Facades\Route::has('admin.settings')) {
         $settingsRoute = route('admin.settings');
-    } elseif (in_array($user?->role, ['business_owner', 'manager', 'sales_staff', 'inventory_staff', 'accountant', 'delivery_staff'], true) && \Illuminate\Support\Facades\Route::has('business.settings')) {
+        $showAccountSettings = true;
+    } elseif ($user?->role === 'business_owner'
+        && \Illuminate\Support\Facades\Route::has('business.settings')
+        && app(\App\Services\CompanyPermissionService::class)->allowsUser($user, 'settings.view')) {
         $settingsRoute = route('business.settings');
+        $showAccountSettings = true;
     }
 @endphp
 <div class="dropdown">
@@ -29,8 +35,10 @@
             <small class="tf-muted">{{ $user?->role }}</small>
         </div>
         <a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="bi bi-person-gear me-2"></i>View Profile</a>
-        <a class="dropdown-item" href="{{ $settingsRoute }}"><i class="bi bi-gear me-2"></i>Account Settings</a>
-        <a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="bi bi-key me-2"></i>Change Password</a>
+        @if($showAccountSettings)<a class="dropdown-item" href="{{ $settingsRoute }}"><i class="bi bi-gear me-2"></i>Account Settings</a>@endif
+        @unless($hidePasswordOption)
+            <a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="bi bi-key me-2"></i>Change Password</a>
+        @endunless
         <div class="dropdown-divider"></div>
         <form method="POST" action="{{ route('logout') }}">@csrf<button class="dropdown-item"><i class="bi bi-box-arrow-right me-2"></i>Logout</button></form>
     </div>

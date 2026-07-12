@@ -1,67 +1,287 @@
 @extends('layouts.dashboard')
-@section('page-title', 'Khata')
-@section('page-subtitle', 'Customer payable and business receivable ledger')
+@section('page-title', 'Ledger')
+@section('page-subtitle', 'Double-entry bookkeeping, ledgers, and financial summaries')
 @section('content')
+@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-<div class="d-flex justify-content-end mb-3"><button onclick="window.print()" class="btn btn-outline-primary"><i class="bi bi-printer me-1"></i>Print Khata</button></div>
 
-<form class="tf-card p-4 mb-4 row g-3">
-    <div class="col-md-3"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="">All Customers</option>@foreach($customers ?? [] as $customer)<option value="{{ $customer->id }}" @selected((string) request('customer_id') === (string) $customer->id)>{{ $customer->business_name ?: $customer->name }}</option>@endforeach</select></div>
-    <div class="col-md-2"><label class="form-label">Order Number</label><input name="order_number" class="form-control" value="{{ request('order_number') }}" placeholder="ORD-1001"></div>
-    <div class="col-md-3"><label class="form-label">Product / Description</label><input name="description" class="form-control" value="{{ request('description') }}" placeholder="Mobile Phone"></div>
-    <div class="col-md-2"><label class="form-label">Entry Type</label><select name="entry_type" class="form-select"><option value="">All</option><option value="purchase" @selected(request('entry_type') === 'purchase')>Purchase</option><option value="payment" @selected(request('entry_type') === 'payment')>Payment</option></select></div>
-    <div class="col-md-2"><label class="form-label">Date From</label><input name="date_from" type="date" class="form-control" value="{{ request('date_from', now()->format('Y-m-d')) }}"></div>
-    <div class="col-md-2"><label class="form-label">Date To</label><input name="date_to" type="date" class="form-control" value="{{ request('date_to', now()->format('Y-m-d')) }}"></div>
-    <div class="col-md-2"><label class="form-label">Month</label><select name="month" class="form-select"><option value="">All</option>@for($m = 1; $m <= 12; $m++)<option value="{{ $m }}" @selected((string) request('month') === (string) $m)>{{ \Illuminate\Support\Carbon::create()->month($m)->format('M') }}</option>@endfor</select></div>
-    <div class="col-md-2"><label class="form-label">Year</label><input name="year" type="number" class="form-control" min="2000" max="2100" value="{{ request('year', now()->year) }}"></div>
-    <div class="col-md-2 d-flex align-items-end"><button class="btn btn-outline-primary w-100">Apply Filters</button></div>
-    <div class="col-md-2 d-flex align-items-end"><a href="{{ route('business.khata') }}" class="btn btn-outline-secondary w-100">Clear</a></div>
-</form>
+<div class="dashboard-cards mb-4">
+    <x-card label="Total Sales" :value="'Rs '.number_format($totalSales)" icon="bi-graph-up" color="bg-blue" />
+    <x-card label="Accounts Receivable" :value="'Rs '.number_format($accountsReceivable)" icon="bi-wallet2" color="bg-warning" />
+    <x-card label="Cash Received" :value="'Rs '.number_format($cashReceived)" icon="bi-cash-stack" color="bg-success" />
+    <x-card label="Total Expenses" :value="'Rs '.number_format($totalExpenses)" icon="bi-receipt" color="bg-danger" />
+    <x-card label="Net Profit" :value="'Rs '.number_format($netProfit)" icon="bi-bar-chart" color="bg-green" />
+</div>
 
-<div class="row g-3 mb-4">
-    @foreach([
-        ['Total Receivable', $totalReceivable ?? 0, 'bi-wallet2', 'bg-blue'],
-        ['Customer Payable Credit', $customerCredit ?? 0, 'bi-arrow-up-circle', 'bg-amber'],
-        ['Customer Payment Debit', $customerDebit ?? 0, 'bi-arrow-down-circle', 'bg-green'],
-        ['Business Receivable Debit', $businessDebit ?? 0, 'bi-building-check', 'bg-navy'],
-        ['Payments Received', $paymentsReceived ?? 0, 'bi-cash-stack', 'bg-green'],
-        ['Remaining Balance', $remainingBalance ?? 0, 'bi-journal-check', 'bg-blue'],
-    ] as [$title, $value, $icon, $color])
-        <div class="col-md-6 col-xl-4"><div class="tf-card p-4"><div class="d-flex justify-content-between align-items-start"><div><div class="tf-muted">{{ $title }}</div><div class="h3 fw-bold mb-0">Rs {{ number_format($value) }}</div></div><div class="tf-icon-tile {{ $color }} text-white"><i class="bi {{ $icon }}"></i></div></div></div></div>
+<ul class="nav nav-tabs mb-3" role="tablist">
+    @foreach(['general'=>'General Ledger','customer'=>'Customer Ledger','supplier'=>'Supplier Ledger','trial'=>'Trial Balance','profit'=>'Profit & Loss','balance'=>'Balance Sheet','journal'=>'Journal Entries'] as $key => $label)
+        <li class="nav-item"><button class="nav-link {{ $loop->first ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#tab-{{ $key }}" type="button">{{ $label }}</button></li>
     @endforeach
-</div>
+</ul>
 
-<div class="row g-4 mb-4">
-    <div class="col-lg-6">
-        <div class="tf-card p-4 h-100">
-            <h2 class="h5">Customer Payable Account</h2>
-            <div class="row g-3 mt-1">
-                <div class="col-4"><div class="border rounded p-3"><div class="tf-muted">Debit</div><div class="h4 mb-0">Rs {{ number_format($customerDebit ?? 0) }}</div></div></div>
-                <div class="col-4"><div class="border rounded p-3"><div class="tf-muted">Credit</div><div class="h4 mb-0">Rs {{ number_format($customerCredit ?? 0) }}</div></div></div>
-                <div class="col-4"><div class="border rounded p-3"><div class="tf-muted">Balance</div><div class="h4 mb-0">Rs {{ number_format($remainingBalance ?? 0) }}</div></div></div>
-            </div>
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="tab-general">
+        <div class="tf-card p-4 mb-3">
+            <form class="row g-2 align-items-end">
+                <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', now()->startOfMonth()->toDateString()) }}" class="form-control"></div>
+                <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', now()->toDateString()) }}" class="form-control"></div>
+                <div class="col-md-3"><label class="form-label">Account</label><select name="account_id" class="form-select"><option value="">All</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected(request('account_id') == $account->id)>{{ $account->code }} - {{ $account->name }}</option>@endforeach</select></div>
+                <div class="col-md-2"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="">All</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(request('customer_id') == $customer->id)>{{ $customer->business_name ?: $customer->name }}</option>@endforeach</select></div>
+                <div class="col-md-2"><label class="form-label">Supplier</label><select name="supplier_id" class="form-select"><option value="">All</option>@foreach($suppliers as $supplier)<option value="{{ $supplier->id }}" @selected(request('supplier_id') == $supplier->id)>{{ $supplier->company_name ?: $supplier->supplier_name }}</option>@endforeach</select></div>
+                <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option><option value="posted" @selected(request('status') === 'posted')>Posted</option><option value="draft" @selected(request('status') === 'draft')>Draft</option><option value="void" @selected(request('status') === 'void')>Void</option></select></div>
+                <div class="col-md-3"><label class="form-label">Search</label><input name="search" value="{{ request('search') }}" class="form-control" placeholder="Voucher or description"></div>
+                <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+            </form>
+        </div>
+        <x-table>
+            <thead><tr><th>Posted At</th><th>Voucher</th><th>Account</th><th>Description</th><th>Debit</th><th>Credit</th><th>Running Balance</th></tr></thead>
+            <tbody>
+            @php($running = 0)
+            @forelse($ledgerLines as $line)
+                @php($running += $line->debit - $line->credit)
+                <tr>
+                    <td><x-date-time :value="$line->journalEntry?->posted_at ?? $line->journalEntry?->created_at" /></td>
+                    <td>{{ $line->journalEntry?->voucher_number }}</td>
+                    <td>{{ $line->account?->code }} - {{ $line->account?->name }}</td>
+                    <td>{{ $line->description ?: $line->journalEntry?->description }}</td>
+                    <td>Rs {{ number_format($line->debit) }}</td>
+                    <td>Rs {{ number_format($line->credit) }}</td>
+                    <td>Rs {{ number_format($running) }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="7" class="text-center tf-muted py-4">No journal lines yet.</td></tr>
+            @endforelse
+            </tbody>
+        </x-table>
+        <div class="mt-3">{{ $ledgerLines->links() }}</div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-customer">
+        <x-table>
+            <thead><tr><th>Customer</th><th>Total Debits</th><th>Total Credits</th><th>Outstanding</th><th></th></tr></thead>
+            <tbody>@forelse($customerSummaries as $row)<tr><td>{{ $row['customer']->business_name ?: $row['customer']->name }}</td><td>Rs {{ number_format($row['debit']) }}</td><td>Rs {{ number_format($row['credit']) }}</td><td>Rs {{ number_format($row['balance']) }}</td><td><a href="{{ route('business.customers.show', $row['customer']) }}" class="btn btn-sm btn-outline-primary">Profile</a></td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No customer ledger entries.</td></tr>@endforelse</tbody>
+        </x-table>
+    </div>
+
+    <div class="tab-pane fade" id="tab-supplier">
+        <x-table>
+            <thead><tr><th>Supplier</th><th>Total Purchases / Credits</th><th>Total Payments / Debits</th><th>Remaining Payable</th><th></th></tr></thead>
+            <tbody>@forelse($supplierSummaries as $row)<tr><td>{{ $row['supplier']->company_name ?: $row['supplier']->supplier_name }}</td><td>Rs {{ number_format($row['credit']) }}</td><td>Rs {{ number_format($row['debit']) }}</td><td>Rs {{ number_format($row['balance']) }}</td><td><a href="{{ route('business.suppliers.show', $row['supplier']) }}" class="btn btn-sm btn-outline-primary">Profile</a></td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No supplier ledger entries.</td></tr>@endforelse</tbody>
+        </x-table>
+    </div>
+
+    <div class="tab-pane fade" id="tab-trial">
+        <x-table>
+            <thead><tr><th>Account Code</th><th>Account Name</th><th>Account Type</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+            <tbody>@foreach($trialBalance as $row)<tr><td>{{ $row['account']->code }}</td><td>{{ $row['account']->name }}</td><td>{{ $row['account']->account_type }}</td><td>Rs {{ number_format($row['debit']) }}</td><td>Rs {{ number_format($row['credit']) }}</td><td>Rs {{ number_format($row['balance']) }}</td></tr>@endforeach</tbody>
+        </x-table>
+    </div>
+
+    <div class="tab-pane fade" id="tab-profit">
+        <div class="row g-3">
+            <div class="col-md-4"><div class="tf-card p-4"><div class="tf-muted">Sales Revenue</div><div class="h3">Rs {{ number_format($totalSales) }}</div></div></div>
+            <div class="col-md-4"><div class="tf-card p-4"><div class="tf-muted">Expenses</div><div class="h3">Rs {{ number_format($totalExpenses) }}</div></div></div>
+            <div class="col-md-4"><div class="tf-card p-4"><div class="tf-muted">Net Profit</div><div class="h3">Rs {{ number_format($netProfit) }}</div></div></div>
         </div>
     </div>
-    <div class="col-lg-6">
-        <div class="tf-card p-4 h-100">
-            <h2 class="h5">Business Cash / Receivable Account</h2>
-            <div class="row g-3 mt-1">
-                <div class="col-4"><div class="border rounded p-3"><div class="tf-muted">Debit</div><div class="h4 mb-0">Rs {{ number_format($businessDebit ?? 0) }}</div></div></div>
-                <div class="col-4"><div class="border rounded p-3"><div class="tf-muted">Credit</div><div class="h4 mb-0">Rs {{ number_format($businessCredit ?? 0) }}</div></div></div>
-                <div class="col-4"><div class="border rounded p-3"><div class="tf-muted">Balance</div><div class="h4 mb-0">Rs {{ number_format(($businessDebit ?? 0) - ($businessCredit ?? 0)) }}</div></div></div>
-            </div>
+
+    <div class="tab-pane fade" id="tab-balance">
+        <x-table>
+            <thead><tr><th>Account</th><th>Type</th><th>Balance</th></tr></thead>
+            <tbody>@foreach($trialBalance->whereIn('account.account_type', ['Asset','Liability','Equity']) as $row)<tr><td>{{ $row['account']->name }}</td><td>{{ $row['account']->account_type }}</td><td>Rs {{ number_format($row['balance']) }}</td></tr>@endforeach</tbody>
+        </x-table>
+    </div>
+
+    <div class="tab-pane fade" id="tab-journal">
+        <div class="tf-card p-4 mb-4">
+            <h2 class="h5">Add New Journal Entry</h2>
+            <form id="journalEntryForm" method="POST" action="{{ route('business.khata.journal.store') }}" data-journal-form novalidate>
+                @csrf
+                <div class="row g-3">
+                    <div class="col-md-3"><label class="form-label">Entry Date</label><input type="date" name="entry_date" value="{{ now()->toDateString() }}" class="form-control" required></div>
+                    <div class="col-md-3"><label class="form-label">Voucher Number</label><input name="voucher_number" value="{{ $voucherNumber }}" class="form-control" required></div>
+                    <div class="col-md-6"><label class="form-label">Description <span class="text-danger">*</span></label><input name="description" class="form-control" required></div>
+                </div>
+                <div class="table-responsive mt-3"><table class="table" data-journal-lines><thead><tr><th>Account</th><th>Customer</th><th>Supplier</th><th>Debit</th><th>Credit</th><th>Description</th></tr></thead><tbody>
+                    @for($i=0;$i<2;$i++)
+                    <tr>
+                        <td><select name="lines[{{ $i }}][account_id]" class="form-select" required><option value="">Select</option>@foreach($accounts as $account)<option value="{{ $account->id }}">{{ $account->code }} - {{ $account->name }}</option>@endforeach</select></td>
+                        <td><select name="lines[{{ $i }}][customer_id]" class="form-select"><option value="">-</option>@foreach($customers as $customer)<option value="{{ $customer->id }}">{{ $customer->business_name ?: $customer->name }}</option>@endforeach</select></td>
+                        <td><select name="lines[{{ $i }}][supplier_id]" class="form-select"><option value="">-</option>@foreach($suppliers as $supplier)<option value="{{ $supplier->id }}">{{ $supplier->company_name ?: $supplier->supplier_name }}</option>@endforeach</select></td>
+                        <td><input name="lines[{{ $i }}][debit]" type="number" step="0.01" min="0" value="0" class="form-control" data-journal-debit></td>
+                        <td><input name="lines[{{ $i }}][credit]" type="number" step="0.01" min="0" value="0" class="form-control" data-journal-credit></td>
+                        <td><input name="lines[{{ $i }}][description]" class="form-control"></td>
+                    </tr>
+                    @endfor
+                </tbody></table></div>
+                <div class="d-flex flex-wrap gap-3 align-items-center">
+                    <strong>Total Debit: Rs <span data-journal-total-debit>0.00</span></strong>
+                    <strong>Total Credit: Rs <span data-journal-total-credit>0.00</span></strong>
+                    <strong>Difference: Rs <span data-journal-difference>0.00</span></strong>
+                    <button type="submit" class="btn btn-tf-primary ms-auto" data-journal-submit disabled>
+                        Post Journal Entry
+                    </button>
+                </div>
+                <div class="alert alert-warning mt-3 mb-0" data-journal-message>
+                    Add at least two valid lines. Each line must contain either a debit or a credit, and total debit must equal total credit.
+                </div>
+            </form>
         </div>
+        <x-table><thead><tr><th>Posted At</th><th>Voucher</th><th>Description</th><th>Status</th></tr></thead><tbody>@foreach($journalEntries as $entry)<tr><td><x-date-time :value="$entry->posted_at ?? $entry->created_at" /></td><td>{{ $entry->voucher_number }}</td><td>{{ $entry->description }}</td><td>{{ ucfirst($entry->status) }}</td></tr>@endforeach</tbody></x-table>
     </div>
 </div>
 
-<div class="tf-card p-4 mb-4">
-    <h2 class="h5">Customer Summary</h2>
-    <x-table><thead><tr><th>Customer</th><th>Total Purchases</th><th>Total Payments</th><th>Remaining Balance</th><th>Last Transaction Date</th></tr></thead><tbody>@forelse($customerSummaries ?? [] as $row)<tr><td>{{ $row['customer']->business_name ?: $row['customer']->name }}</td><td>Rs {{ number_format($row['purchases']) }}</td><td>Rs {{ number_format($row['payments']) }}</td><td>Rs {{ number_format($row['balance']) }}</td><td>{{ $row['last_transaction'] ? \Illuminate\Support\Carbon::parse($row['last_transaction'])->format('M d, Y') : '-' }}</td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No customer khata activity.</td></tr>@endforelse</tbody></x-table>
-</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.querySelector('[data-journal-form]');
 
-<div class="tf-card p-4">
-    <h2 class="h5">Full Ledger</h2>
-    <x-table><thead><tr><th>Date</th><th>Customer</th><th>Order No</th><th>Product / Description</th><th>Quantity</th><th>Entry Type</th><th>Customer Debit</th><th>Customer Credit</th><th>Business Debit</th><th>Business Credit</th><th>Payment Method</th><th>Balance</th></tr></thead><tbody>@forelse($ledgers ?? [] as $ledger)@php($ledgerDate = $ledger->entry_date ?: $ledger->created_at)<tr><td>{{ $ledgerDate ? \Illuminate\Support\Carbon::parse($ledgerDate)->format('M d, Y') : '-' }}</td><td>{{ $ledger->customer?->business_name ?? $ledger->customer?->name }}</td><td>{{ $ledger->order?->order_number ?? '-' }}</td><td>{{ $ledger->description }}</td><td>{{ $ledger->order?->items?->sum('quantity') ?: '-' }}</td><td><span class="badge {{ $ledger->entry_type === 'purchase' ? 'text-bg-warning' : 'text-bg-success' }}">{{ $ledger->entry_type === 'purchase' ? 'Purchase / Payable' : 'Payment Received' }}</span></td><td>{{ $ledger->customer_debit > 0 ? 'Rs '.number_format($ledger->customer_debit) : '-' }}</td><td>{{ $ledger->customer_credit > 0 ? 'Rs '.number_format($ledger->customer_credit) : '-' }}</td><td>{{ $ledger->business_debit > 0 ? 'Rs '.number_format($ledger->business_debit) : '-' }}</td><td>{{ $ledger->business_credit > 0 ? 'Rs '.number_format($ledger->business_credit) : '-' }}</td><td>{{ $ledger->payment_method ?: '-' }}</td><td>Rs {{ number_format($ledger->balance) }}</td></tr>@empty<tr><td colspan="12" class="text-center tf-muted py-4">No ledger records.</td></tr>@endforelse</tbody></x-table>
-    @if(isset($ledgers) && method_exists($ledgers, 'links'))<div class="mt-3">{{ $ledgers->links() }}</div>@endif
-</div>
+    if (!form) {
+        return;
+    }
+
+    const debitInputs = [...form.querySelectorAll('[data-journal-debit]')];
+    const creditInputs = [...form.querySelectorAll('[data-journal-credit]')];
+    const accountInputs = [...form.querySelectorAll('select[name$="[account_id]"]')];
+
+    const totalDebitElement = form.querySelector('[data-journal-total-debit]');
+    const totalCreditElement = form.querySelector('[data-journal-total-credit]');
+    const differenceElement = form.querySelector('[data-journal-difference]');
+    const submitButton = form.querySelector('[data-journal-submit]');
+    const messageElement = form.querySelector('[data-journal-message]');
+
+    const amount = (value) => {
+        const parsed = Number.parseFloat(value);
+        return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
+    };
+
+    const money = (value) => Number(value).toFixed(2);
+
+    function setFieldState(input, valid) {
+        input.classList.toggle('is-invalid', !valid);
+    }
+
+    function validateJournal() {
+        let totalDebit = 0;
+        let totalCredit = 0;
+        let validLines = 0;
+        let hasMissingAccount = false;
+        let hasInvalidLine = false;
+
+        debitInputs.forEach((debitInput, index) => {
+            const creditInput = creditInputs[index];
+            const accountInput = accountInputs[index];
+
+            const debit = amount(debitInput.value);
+            const credit = amount(creditInput.value);
+            const hasAccount = Boolean(accountInput.value);
+
+            totalDebit += debit;
+            totalCredit += credit;
+
+            const hasOneSideOnly = (debit > 0 && credit === 0) || (credit > 0 && debit === 0);
+            const lineValid = hasAccount && hasOneSideOnly;
+
+            setFieldState(accountInput, hasAccount || (debit === 0 && credit === 0));
+            setFieldState(debitInput, !(debit > 0 && credit > 0));
+            setFieldState(creditInput, !(debit > 0 && credit > 0));
+
+            if (debit > 0 || credit > 0 || hasAccount) {
+                if (!hasAccount) {
+                    hasMissingAccount = true;
+                }
+
+                if (!hasOneSideOnly) {
+                    hasInvalidLine = true;
+                }
+
+                if (lineValid) {
+                    validLines++;
+                }
+            }
+        });
+
+        totalDebit = Math.round((totalDebit + Number.EPSILON) * 100) / 100;
+        totalCredit = Math.round((totalCredit + Number.EPSILON) * 100) / 100;
+        const difference = Math.round((totalDebit - totalCredit + Number.EPSILON) * 100) / 100;
+
+        totalDebitElement.textContent = money(totalDebit);
+        totalCreditElement.textContent = money(totalCredit);
+        differenceElement.textContent = money(Math.abs(difference));
+
+        const descriptionValid = form.querySelector('[name="description"]').value.trim() !== '';
+        const balanced = totalDebit > 0 && totalCredit > 0 && Math.abs(difference) < 0.005;
+        const canPost = validLines >= 2
+            && !hasMissingAccount
+            && !hasInvalidLine
+            && descriptionValid
+            && balanced;
+
+        submitButton.disabled = !canPost;
+
+        messageElement.classList.remove('alert-success', 'alert-warning', 'alert-danger');
+
+        if (!descriptionValid) {
+            messageElement.classList.add('alert-warning');
+            messageElement.textContent = 'Enter a journal description before posting.';
+        } else if (hasMissingAccount) {
+            messageElement.classList.add('alert-danger');
+            messageElement.textContent = 'Select an account for every journal line that contains an amount.';
+        } else if (hasInvalidLine) {
+            messageElement.classList.add('alert-danger');
+            messageElement.textContent = 'Each line must contain either a debit or a credit amount, not both.';
+        } else if (validLines < 2) {
+            messageElement.classList.add('alert-warning');
+            messageElement.textContent = 'Add at least two valid journal lines.';
+        } else if (!balanced) {
+            messageElement.classList.add('alert-danger');
+
+            if (difference > 0) {
+                messageElement.textContent = `Debit exceeds credit by Rs ${money(difference)}.`;
+            } else {
+                messageElement.textContent = `Credit exceeds debit by Rs ${money(Math.abs(difference))}.`;
+            }
+        } else {
+            messageElement.classList.add('alert-success');
+            messageElement.textContent = 'Journal entry is balanced and ready to post.';
+        }
+    }
+
+    debitInputs.forEach((input, index) => {
+        input.addEventListener('input', function () {
+            if (amount(this.value) > 0) {
+                creditInputs[index].value = '0';
+            }
+            validateJournal();
+        });
+    });
+
+    creditInputs.forEach((input, index) => {
+        input.addEventListener('input', function () {
+            if (amount(this.value) > 0) {
+                debitInputs[index].value = '0';
+            }
+            validateJournal();
+        });
+    });
+
+    accountInputs.forEach(input => input.addEventListener('change', validateJournal));
+    form.querySelector('[name="description"]').addEventListener('input', validateJournal);
+
+    form.addEventListener('submit', function (event) {
+        validateJournal();
+
+        if (submitButton.disabled) {
+            event.preventDefault();
+            messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Posting...';
+    });
+
+    validateJournal();
+});
+</script>
+
 @endsection

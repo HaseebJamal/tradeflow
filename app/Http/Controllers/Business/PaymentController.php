@@ -3,17 +3,20 @@
 namespace App\Http\Controllers\Business;
 
 use App\Http\Controllers\Controller;
+use App\Models\Account;
 use App\Models\Customer;
+use App\Models\JournalEntry;
 use App\Models\KhataLedger;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Services\AccountingService;
 use App\Services\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PaymentController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting) {}
 
     public function index()
     {
@@ -33,7 +36,7 @@ class PaymentController extends Controller
         $data = $request->validate([
             'order_id' => ['nullable', 'exists:orders,id'], 'customer_id' => ['required', 'exists:customers,id'],
             'method' => ['required', 'in:Cash,Bank Transfer,JazzCash manual,Easypaisa manual,Cheque,JazzCash,Easypaisa'], 'amount' => ['required', 'numeric', 'min:0'],
-            'transaction_reference' => ['nullable', 'max:255'], 'reference_number' => ['nullable', 'max:255'], 'payment_date' => ['required', 'date'], 'proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'transaction_reference' => ['nullable', 'max:255'], 'reference_number' => ['nullable', 'max:255'], 'payment_date' => ['nullable', 'date'], 'proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'status' => ['required', 'in:Paid,Partial,Pending'],
         ]);
         $businessId = auth()->user()->business_id;
@@ -55,6 +58,7 @@ class PaymentController extends Controller
 
         if ($request->hasFile('proof_image')) $data['proof_image'] = $request->file('proof_image')->store('payments', 'public');
         $data['business_id'] = $businessId;
+        $data['payment_date'] = $data['payment_date'] ?? now()->toDateString();
         $data['reference_number'] = $data['reference_number'] ?? $data['transaction_reference'] ?? null;
         $payment = null;
         DB::transaction(function () use ($data, $customer, $order, &$payment) {
@@ -84,7 +88,36 @@ class PaymentController extends Controller
                 $synced = $this->finance->syncOrderPaymentSummary($order);
                 $payment->update(['status' => $synced->payment_status]);
             }
+            $this->postPaymentAccounting($payment);
         });
         return back()->with('success', 'Manual payment recorded.');
+    }
+
+    private function postPaymentAccounting(Payment $payment): void
+    {
+        if (JournalEntry::where('business_id', $payment->business_id)->where('reference_type', 'payment')->where('reference_id', $payment->id)->exists()) {
+            return;
+        }
+
+        $this->accounting->ensureDefaultAccounts($payment->business_id);
+        $cashAccount = Account::where('business_id', $payment->business_id)
+            ->where('name', str_contains((string) $payment->method, 'Bank') ? 'Bank' : 'Cash')
+            ->first();
+        $receivableAccount = Account::where('business_id', $payment->business_id)->where('name', 'Accounts Receivable')->first();
+
+        if (!$cashAccount || !$receivableAccount || (float) $payment->amount <= 0) {
+            return;
+        }
+
+        $this->accounting->post($payment->business_id, [
+            'voucher_number' => 'PAY-JV-'.$payment->id.'-'.now()->format('His'),
+            'entry_date' => $payment->payment_date ?? now()->toDateString(),
+            'reference_type' => 'payment',
+            'reference_id' => $payment->id,
+            'description' => 'Payment received via '.$payment->method,
+        ], [
+            ['account_id' => $cashAccount->id, 'customer_id' => $payment->customer_id, 'debit' => $payment->amount, 'credit' => 0, 'description' => $payment->method],
+            ['account_id' => $receivableAccount->id, 'customer_id' => $payment->customer_id, 'debit' => 0, 'credit' => $payment->amount, 'description' => $payment->method],
+        ]);
     }
 }

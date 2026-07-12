@@ -1,8 +1,58 @@
 @extends('layouts.dashboard')
 @section('page-title', 'Orders')
-@section('page-subtitle', 'Wholesale order tracking')
+@section('page-subtitle', 'Wholesale order tracking and full order filters')
 @section('content')
-<div class="d-flex justify-content-end mb-3"><a href="{{ route('business.orders.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>Create Order</a></div>
-<x-table><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>@forelse($orders ?? [] as $order)<tr><td>{{ $order->order_number }}</td><td>{{ $order->customer?->business_name ?? $order->customer?->name }}</td><td>{{ $order->created_at->format('M d, Y') }}</td><td>Rs {{ number_format($order->grand_total ?: $order->total) }}</td><td>{{ $order->status }}</td><td><a href="{{ route('business.orders.show', $order) }}" class="btn btn-sm btn-outline-primary">View</a></td></tr>@empty<tr><td colspan="6" class="text-center tf-muted py-4">No orders yet.</td></tr>@endforelse</tbody></x-table>
+@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
+@if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <div>
+        <h2 class="h5 mb-1">Order Directory</h2>
+        <p class="tf-muted mb-0">Search, filter, and manage wholesale orders.</p>
+    </div>
+    @companyCan('orders.create')
+        <a href="{{ route('business.orders.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>Create Order</a>
+    @endcompanyCan
+</div>
+<form class="tf-card p-4 mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-2"><label class="form-label">Order Number</label><input name="order_number" value="{{ request('order_number') }}" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="">All</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(request('customer_id') == $customer->id)>{{ $customer->business_name ?: $customer->name }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">Product</label><select name="product_id" class="form-select"><option value="">All</option>@foreach($products as $product)<option value="{{ $product->id }}" @selected(request('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option>@foreach(['New','Accepted','Packing','Ready','Out For Delivery','Delivered','Completed','Cancelled','Void'] as $status)<option @selected(request('status')===$status)>{{ $status }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">Payment Status</label><select name="payment_status" class="form-select"><option value="">All</option>@foreach(['Pending','Partial','Paid'] as $status)<option @selected(request('payment_status')===$status)>{{ $status }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">Payment Type</label><select name="payment_type" class="form-select"><option value="">All</option>@foreach(['Cash','Credit','Partial'] as $type)<option @selected(request('payment_type')===$type)>{{ $type }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">Created By</label><select name="created_by" class="form-select"><option value="">All</option>@foreach($creators as $creator)<option value="{{ $creator->id }}" @selected(request('created_by') == $creator->id)>{{ $creator->name }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', $dateFrom) }}" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', $dateTo) }}" class="form-control"></div>
+        <div class="col-md-1"><label class="form-label">Month</label><input type="number" min="1" max="12" name="month" value="{{ request('month') }}" class="form-control"></div>
+        <div class="col-md-1"><label class="form-label">Year</label><input type="number" min="2000" max="2100" name="year" value="{{ request('year') }}" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Amount From</label><input type="number" name="amount_from" value="{{ request('amount_from') }}" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Amount To</label><input type="number" name="amount_to" value="{{ request('amount_to') }}" class="form-control"></div>
+        <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+        <div class="col-md-2"><a href="{{ route('business.orders.index', ['clear' => 1]) }}" class="btn btn-outline-secondary w-100">Clear Filters</a></div>
+    </div>
+</form>
+<x-table>
+    <thead><tr><th>Order Number</th><th>Customer</th><th>Product Summary</th><th>Status</th><th>Payment Status</th><th>Payment Type</th><th>Created By</th><th>Order Date and Time</th><th>Updated At</th><th>Total</th><th>Actions</th></tr></thead>
+    <tbody>
+    @forelse($orders ?? [] as $order)
+        <tr>
+            <td>{{ $order->order_number }}</td>
+            <td>{{ $order->customer?->business_name ?? $order->customer?->name ?? 'Walk-in' }}</td>
+            <td>{{ $order->items->map(fn($item) => ($item->product_name_snapshot ?: $item->product?->name ?: 'Deleted Product').' x '.$item->quantity)->implode(', ') }}</td>
+            <td>{{ $order->status }}</td>
+            <td>{{ $order->payment_status }}</td>
+            <td>{{ $order->payment_type }}</td>
+            <td>{{ $order->creator?->name ?? '-' }}</td>
+            <td><x-date-time :value="$order->order_date ?: $order->created_at" /></td>
+            <td><x-date-time :value="$order->updated_at" /></td>
+            <td>Rs {{ number_format($order->grand_total ?: $order->total) }}</td>
+            <td><a href="{{ route('business.orders.show', $order) }}" class="btn btn-sm btn-outline-primary">View</a></td>
+        </tr>
+    @empty
+        <tr><td colspan="11" class="text-center tf-muted py-4">No orders yet.</td></tr>
+    @endforelse
+    </tbody>
+</x-table>
 @if(isset($orders) && method_exists($orders, 'links'))<div class="mt-3">{{ $orders->links() }}</div>@endif
 @endsection

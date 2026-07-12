@@ -9,6 +9,7 @@
                     <a href="{{ route('public.home') }}" class="tf-brand d-flex align-items-center mb-4"><span class="tf-brand-mark"><i class="bi bi-box-seam"></i></span>TradeFlow</a>
                     <h1 class="h3 fw-bold">Sign In</h1>
                     <p class="tf-muted">Access your wholesale dashboard securely.</p>
+                    @if(session('status'))<div class="alert alert-success">{{ session('status') }}</div>@endif
                     @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
                     <form method="POST" action="{{ route('login.store') }}" class="d-grid gap-3">@csrf
                         <div><label class="form-label">Email</label><input name="email" type="email" class="form-control form-control-lg" placeholder="admin@tradeflow.com" value="{{ old('email') }}"></div>

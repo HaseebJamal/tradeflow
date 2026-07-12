@@ -9,26 +9,73 @@
     <link href="{{ asset('css/tradeflow.css') }}?v={{ filemtime(public_path('css/tradeflow.css')) }}" rel="stylesheet">
 </head>
 <body>
-<div class="tf-dashboard-shell">
+<div class="tf-dashboard-shell dashboard-wrapper">
     <aside class="tf-sidebar sidebar" data-tf-sidebar>
         @include('components.sidebar')
     </aside>
     <div class="sidebar-overlay" data-tf-sidebar-overlay></div>
     <div class="tf-dashboard-main main-content">
-        <div class="tf-dashboard-topbar px-3 px-lg-4 py-3 d-flex align-items-center justify-content-between sticky-top">
-            <div class="d-flex align-items-center gap-3">
+        @if(request()->is('business/*') && auth()->check() && auth()->user()->role === 'super_admin' && session('super_admin_business_context_id'))
+            <div class="alert alert-warning rounded-0 border-0 mb-0 d-flex flex-wrap align-items-center justify-content-between gap-2 px-3 px-lg-4 py-2">
+                <span><i class="bi bi-person-workspace me-1"></i>You are currently viewing the dashboard of: <strong>{{ session('super_admin_business_context_name') }}</strong>.</span>
+                <form method="POST" action="{{ route('admin.company-context.return') }}">@csrf<button class="btn btn-sm btn-dark">Return to Super Admin Dashboard</button></form>
+            </div>
+        @endif
+        <div class="tf-dashboard-topbar dashboard-header px-3 px-lg-4 py-3 sticky-top">
+            <div class="d-flex align-items-center gap-3 min-w-0">
                 <button class="btn btn-outline-secondary tf-sidebar-toggle d-lg-none" data-tf-sidebar-toggle aria-label="Open sidebar" title="Open sidebar"><i class="bi bi-list"></i></button>
-                <div>
+                <div class="min-w-0">
                     <h1 class="h4 mb-0">@yield('page-title', 'Dashboard')</h1>
                     <small class="tf-muted">@yield('page-subtitle', 'TradeFlow workspace')</small>
                 </div>
             </div>
             @include('components.user-dropdown')
         </div>
-        <main class="p-3 p-lg-4">@yield('content')</main>
+        <main class="dashboard-page">@yield('content')</main>
     </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ asset('js/tradeflow.js') }}?v={{ filemtime(public_path('js/tradeflow.js')) }}"></script>
+@stack('scripts')
+@auth
+<script>
+setInterval(() => {
+    fetch('{{ route('activity.heartbeat') }}', {
+        method: 'POST',
+        headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json'}
+    }).catch(() => {});
+}, 60000);
+</script>
+@endauth
+<script>
+(() => {
+    const key = 'tradeflow_super_admin_sidebar_open';
+    const toggles = [...document.querySelectorAll('[data-super-sidebar-toggle]')];
+    if (!toggles.length) return;
+
+    const setOpen = (id) => {
+        toggles.forEach((button) => {
+            const open = button.dataset.superSidebarToggle === id;
+            button.classList.toggle('is-open', open);
+            button.setAttribute('aria-expanded', String(open));
+            document.getElementById(button.dataset.superSidebarToggle)?.classList.toggle('is-open', open);
+        });
+
+        if (id) localStorage.setItem(key, id);
+        else localStorage.removeItem(key);
+    };
+
+    const active = toggles.find((button) => button.classList.contains('is-open'))?.dataset.superSidebarToggle;
+    if (active) setOpen(active);
+    else {
+        const stored = localStorage.getItem(key);
+        if (stored && document.getElementById(stored)) setOpen(stored);
+    }
+
+    toggles.forEach((button) => button.addEventListener('click', () => {
+        setOpen(button.classList.contains('is-open') ? '' : button.dataset.superSidebarToggle);
+    }));
+})();
+</script>
 </body>
 </html>

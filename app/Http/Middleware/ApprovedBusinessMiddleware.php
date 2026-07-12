@@ -13,6 +13,10 @@ class ApprovedBusinessMiddleware
         $user = $request->user();
         abort_unless($user && $user->business, 403);
 
+        if ($user->role === 'super_admin' && $request->session()->has('super_admin_business_context_id')) {
+            return $next($request);
+        }
+
         if (!in_array($user->business->status, ['Approved', 'approved'], true)) {
             auth()->logout();
             return redirect()->route('login')->withErrors(['email' => 'Your business is not approved for dashboard access.']);

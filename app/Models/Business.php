@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Business extends Model
 {
-    protected $fillable = ['owner_id', 'business_name', 'business_type', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo', 'status'];
+    protected $fillable = ['owner_id', 'created_by', 'business_name', 'business_type', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo', 'status', 'archived_at', 'archived_by', 'archived_status'];
+
+    protected $casts = ['archived_at' => 'datetime'];
 
     public function owner() { return $this->belongsTo(User::class, 'owner_id'); }
     public function users() { return $this->hasMany(User::class); }
@@ -17,4 +19,11 @@ class Business extends Model
     public function expenses() { return $this->hasMany(Expense::class); }
     public function subscription() { return $this->hasOne(Subscription::class); }
     public function reports() { return $this->hasMany(BusinessReport::class); }
+    public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function assignments() { return $this->hasMany(BusinessUserAssignment::class); }
+    public function portfolioAdmins() { return $this->belongsToMany(User::class, 'business_user_assignments')->wherePivot('status', 'Active'); }
+    public function companyPermissions() { return $this->hasMany(CompanyPermission::class, 'company_id'); }
+    public function approvalLogs() { return $this->hasMany(CompanyApprovalLog::class, 'company_id')->latest('changed_at'); }
+    public function approvalHistory() { return $this->approvalLogs(); }
+    public function archivedBy() { return $this->belongsTo(User::class, 'archived_by'); }
 }

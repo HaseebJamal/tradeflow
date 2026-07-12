@@ -1,9 +1,73 @@
 @extends('layouts.dashboard')
 @section('page-title', 'Customers')
-@section('page-subtitle', 'Customer and dealer CRUD')
+@section('page-subtitle', 'Customer, dealer, credit, and statement management')
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-<div class="tf-card p-4 mb-4"><h2 class="h5">Add Customer</h2><form method="POST" action="{{ route('business.customers.store') }}" class="row g-3">@csrf<div class="col-md-3"><input name="name" class="form-control" placeholder="Owner name"></div><div class="col-md-3"><input name="shop_name" class="form-control" placeholder="Shop name"></div><div class="col-md-2"><input name="phone" class="form-control" placeholder="Phone"></div><div class="col-md-2"><input name="city" class="form-control" placeholder="City"></div><div class="col-md-2"><select name="customer_type" class="form-select"><option>Retailer</option><option>Dealer</option><option>Wholesaler</option></select></div><div class="col-md-3"><input name="credit_limit" type="number" class="form-control" placeholder="Credit limit"></div><div class="col-md-7"><input name="address" class="form-control" placeholder="Address"></div><div class="col-md-2"><select name="status" class="form-select"><option>Active</option><option>Blocked</option></select></div><div class="col-12"><button class="btn btn-tf-primary">Save Customer</button></div></form></div>
-<x-table><thead><tr><th>Name</th><th>Type</th><th>City</th><th>Credit Balance</th><th>Status</th><th></th></tr></thead><tbody>@forelse($customers ?? [] as $customer)<tr><td>{{ $customer->business_name ?: $customer->name }}</td><td>{{ $customer->customer_type }}</td><td>{{ $customer->city }}</td><td>Rs {{ number_format($customer->current_balance) }}</td><td>{{ $customer->status }}</td><td><a class="btn btn-sm btn-outline-primary" href="{{ route('business.customers.show', $customer) }}">Profile</a></td></tr>@empty<tr><td colspan="6" class="text-center tf-muted py-4">No customers yet.</td></tr>@endforelse</tbody></x-table>
+@if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
+@companyCan('customers.create')<div class="tf-card p-4 mb-4">
+    <h2 class="h5">Add Customer</h2>
+    <form method="POST" action="{{ route('business.customers.store') }}" class="row g-3">
+        @csrf
+        <div class="col-md-3"><label class="form-label">Owner Name *</label><input name="name" class="form-control" required></div>
+        <div class="col-md-3"><label class="form-label">Shop Name</label><input name="shop_name" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Phone</label><input name="phone" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Email</label><input name="email" type="email" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Type</label><select name="customer_type" class="form-select"><option>Retailer</option><option>Dealer</option><option>Distributor</option><option>Walk-in Customer</option><option>Other</option></select></div>
+        <div class="col-md-2"><label class="form-label">City</label><input name="city" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Province</label><input name="province" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Credit Limit</label><input name="credit_limit" type="number" min="0" step="0.01" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Opening Balance</label><input name="opening_balance" type="number" min="0" step="0.01" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option>Active</option><option>Blocked</option></select></div>
+        <div class="col-md-10"><label class="form-label">Address</label><input name="address" class="form-control"></div>
+        <div class="col-12"><button class="btn btn-tf-primary">Save Customer</button></div>
+    </form>
+</div>@endcompanyCan
+<form class="tf-card p-4 mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3"><label class="form-label">Search</label><input name="search" value="{{ request('search') }}" class="form-control" placeholder="Name, shop, phone, email"></div>
+        <div class="col-md-2"><label class="form-label">Type</label><select name="customer_type" class="form-select"><option value="">All</option>@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option @selected(request('customer_type')===$type)>{{ $type }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">City</label><input name="city" value="{{ request('city') }}" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option><option>Active</option><option>Blocked</option><option>Inactive</option></select></div>
+        <div class="col-md-1"><div class="form-check"><input type="checkbox" name="archived" value="1" class="form-check-input" @checked(request('archived'))><label class="form-check-label">Archived</label></div></div>
+        <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+    </div>
+</form>
+<x-table>
+    <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Type</th><th>City</th><th>Credit Balance</th><th>Status</th><th>Created By</th><th></th></tr></thead>
+    <tbody>
+    @forelse($customers ?? [] as $customer)
+        <tr>
+            <td><strong>{{ $customer->business_name ?: $customer->name }}</strong><div class="small tf-muted">{{ $customer->name }}</div></td>
+            <td>{{ $customer->phone }}</td>
+            <td>{{ $customer->email ?: '-' }}</td>
+            <td>{{ $customer->customer_type }}</td>
+            <td>{{ $customer->city }}</td>
+            <td>Rs {{ number_format($customer->current_balance) }}</td>
+            <td><span class="tf-badge {{ $customer->status === 'Active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $customer->deleted_at ? 'Archived' : $customer->status }}</span></td>
+            <td>{{ $customer->creator?->name ?? '-' }}</td>
+            <td class="text-end">
+                @if($customer->trashed() && app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'customers.restore'))
+                    <form method="POST" action="{{ route('business.customers.restore', $customer->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-success">Restore</button></form>
+                @else
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Actions</button>
+                        <div class="dropdown-menu dropdown-menu-end">
+                            <a class="dropdown-item" href="{{ route('business.customers.show', $customer) }}">View / Edit</a>
+                            @companyCan('customers.edit')
+                                @if($customer->status !== 'Active')<form method="POST" action="{{ route('business.customers.status', $customer) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="Active"><button class="dropdown-item text-success">Activate</button></form>@endif
+                                @if($customer->status !== 'Inactive')<form method="POST" action="{{ route('business.customers.status', $customer) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="Inactive"><button class="dropdown-item">Deactivate</button></form>@endif
+                            @endcompanyCan
+                            @companyCan('customers.archive')<form method="POST" action="{{ route('business.customers.archive', $customer) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning">Archive</button></form>@endcompanyCan
+                            @companyCan('customers.archive')<form method="POST" action="{{ route('business.customers.destroy', $customer) }}" onsubmit="return confirm('Delete this customer when safe? Customers with history are archived.')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>@endcompanyCan
+                        </div>
+                    </div>
+                @endif
+            </td>
+        </tr>
+    @empty
+        <tr><td colspan="9" class="text-center tf-muted py-4">No customers yet.</td></tr>
+    @endforelse
+    </tbody>
+</x-table>
 @if(isset($customers) && method_exists($customers, 'links'))<div class="mt-3">{{ $customers->links() }}</div>@endif
 @endsection

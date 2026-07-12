@@ -11,7 +11,7 @@
 @php($remaining = $order?->balance ?? max(0, $total - ($paidAmount ?? 0)))
 
 <div class="row g-4 mb-4">
-    <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Order Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Order Number</div><div class="col-6">{{ $order?->order_number }}</div><div class="col-6 tf-muted">Order Date</div><div class="col-6">{{ $order?->created_at?->format('M d, Y') }}</div><div class="col-6 tf-muted">Order Status</div><div class="col-6">{{ $order?->status }}</div><div class="col-6 tf-muted">Total Amount</div><div class="col-6">Rs {{ number_format($total) }}</div></div></div></div>
+    <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Order Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Order Number</div><div class="col-6">{{ $order?->order_number }}</div><div class="col-6 tf-muted">Order Date</div><div class="col-6"><x-date-time :value="$order?->order_date ?: $order?->created_at" /></div><div class="col-6 tf-muted">Order Status</div><div class="col-6">{{ $order?->status }}</div><div class="col-6 tf-muted">Total Amount</div><div class="col-6">Rs {{ number_format($total) }}</div></div></div></div>
     <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Customer Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Customer Name</div><div class="col-6">{{ $customer?->name ?? '-' }}</div><div class="col-6 tf-muted">Phone</div><div class="col-6">{{ $customer?->phone ?? '-' }}</div><div class="col-6 tf-muted">Shop Name</div><div class="col-6">{{ $customer?->business_name ?? '-' }}</div><div class="col-6 tf-muted">Address</div><div class="col-6">{{ $customer?->address ?? $delivery->address ?? '-' }}</div><div class="col-6 tf-muted">City</div><div class="col-6">{{ $customer?->city ?? '-' }}</div></div></div></div>
 </div>
 
@@ -22,16 +22,44 @@
 
 <div class="row g-4 mb-4">
     <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Payment Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Payment Type</div><div class="col-6">{{ $order?->payment_type ?? '-' }}</div><div class="col-6 tf-muted">Paid Amount</div><div class="col-6">Rs {{ number_format($paidAmount ?? 0) }}</div><div class="col-6 tf-muted">Remaining Balance</div><div class="col-6">Rs {{ number_format($remaining) }}</div><div class="col-6 tf-muted">Collection Required</div><div class="col-6">{{ $remaining > 0 ? 'Yes' : 'No' }}</div></div></div></div>
-    <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Delivery Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Assigned Staff</div><div class="col-6">{{ $delivery->staff?->name ?? '-' }}</div><div class="col-6 tf-muted">Delivery Status</div><div class="col-6">{{ $delivery->status }}</div><div class="col-6 tf-muted">Assigned Date</div><div class="col-6">{{ $delivery->created_at?->format('M d, Y') }}</div><div class="col-6 tf-muted">Started At</div><div class="col-6">{{ $delivery->started_at?->format('M d, Y h:i A') ?? '-' }}</div><div class="col-6 tf-muted">Delivered At</div><div class="col-6">{{ $delivery->delivered_at?->format('M d, Y h:i A') ?? '-' }}</div><div class="col-6 tf-muted">Note</div><div class="col-6">{{ $delivery->note ?? '-' }}</div></div></div></div>
+    <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Delivery Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Assigned Staff</div><div class="col-6">{{ $delivery->staff?->name ?? '-' }}</div><div class="col-6 tf-muted">Delivery Status</div><div class="col-6">{{ $delivery->status }}</div><div class="col-6 tf-muted">Assigned Date</div><div class="col-6"><x-date-time :value="$delivery->assigned_at" /></div><div class="col-6 tf-muted">Started At</div><div class="col-6"><x-date-time :value="$delivery->started_at" /></div><div class="col-6 tf-muted">Delivered At</div><div class="col-6"><x-date-time :value="$delivery->delivered_at" /></div><div class="col-6 tf-muted">Failed At</div><div class="col-6"><x-date-time :value="$delivery->failed_at" /></div><div class="col-6 tf-muted">Note</div><div class="col-6">{{ $delivery->note ?? '-' }}</div></div></div></div>
 </div>
 
-@if($delivery->status === 'Pending')
-    <form method="POST" action="{{ route('business.deliveries.start', $delivery) }}" class="mb-4">@csrf @method('PATCH')<button class="btn btn-tf-primary"><i class="bi bi-truck me-1"></i>Start Delivery</button></form>
+<div class="d-flex flex-wrap gap-2 mb-4">
+    <a href="{{ route('business.deliveries.sheet', $delivery) }}" target="_blank" class="btn btn-outline-primary"><i class="bi bi-printer me-1"></i>Print Delivery Sheet</a>
+    @companyCan('deliveries.update_status')
+    @if($delivery->status === 'Failed')
+        <form method="POST" action="{{ route('business.deliveries.reopen', $delivery) }}">@csrf @method('PATCH')<button class="btn btn-outline-success">Reopen Failed Delivery</button></form>
+    @endif
+    @if(!in_array($delivery->status, ['Delivered','Cancelled'], true))
+        <form method="POST" action="{{ route('business.deliveries.cancel', $delivery) }}">@csrf @method('PATCH')<button class="btn btn-outline-danger">Cancel Delivery</button></form>
+    @endif
+    @endcompanyCan
+</div>
+
+@if($delivery->status !== 'Delivered' && app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.update_status'))
+<div class="tf-card p-4 mb-4">
+    <h2 class="h5">Edit Delivery</h2>
+    <form method="POST" action="{{ route('business.deliveries.update', $delivery) }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PATCH')
+        <div class="col-md-4"><label class="form-label">Status</label><select name="status" class="form-select">@foreach(['Assigned','Picked Up','Out For Delivery','Failed','Returned','Cancelled'] as $status)<option @selected($delivery->status === $status)>{{ $status }}</option>@endforeach</select></div>
+        @if(auth()->user()->role !== 'delivery_staff')
+            <div class="col-md-4"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select"><option value="">Keep current staff</option>@foreach($deliveryStaff ?? [] as $member)<option value="{{ $member->id }}" @selected($delivery->delivery_staff_id === $member->id)>{{ $member->name }}</option>@endforeach</select></div>
+        @endif
+        <div class="col-md-8"><label class="form-label">Address</label><input name="address" value="{{ $delivery->address }}" class="form-control"></div>
+        <div class="col-12"><label class="form-label">Note</label><textarea name="note" class="form-control">{{ $delivery->note }}</textarea></div>
+        <div class="col-12"><button class="btn btn-outline-primary">Save Delivery Changes</button></div>
+    </form>
+</div>
 @endif
 
-@if($delivery->status === 'Out For Delivery')
+@if(in_array($delivery->status, ['Pending','Assigned'], true) && app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.update_status'))
+    <form method="POST" action="{{ route('business.deliveries.start', $delivery) }}" class="mb-4">@csrf @method('PATCH')<button class="btn btn-tf-primary"><i class="bi bi-box-seam me-1"></i>Mark Picked Up</button></form>
+@endif
+
+@if($delivery->status === 'Out For Delivery' && app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.update_status'))
 <div class="row g-4">
-    <div class="col-lg-7">
+        @companyCan('deliveries.upload_proof')
+        <div class="col-lg-7">
         <div class="tf-card p-4" id="deliver">
             <h2 class="h5">Mark Delivered</h2>
             <form method="POST" action="{{ route('business.deliveries.deliver', $delivery) }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PATCH')
@@ -47,6 +75,7 @@
                 <div class="col-12"><button class="btn btn-tf-primary">Mark Delivered</button></div>
             </form>
         </div>
+        @endcompanyCan
     </div>
     <div class="col-lg-5">
         <div class="tf-card p-4" id="fail">

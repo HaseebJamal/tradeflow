@@ -21,8 +21,8 @@
     <table>
         <thead><tr><th>Product</th><th>Quantity</th><th>Price</th><th>Total</th></tr></thead>
         <tbody>
-        @foreach($order->items as $item)
-            <tr><td>{{ $item->product?->name }}</td><td>{{ $item->quantity }}</td><td>Rs {{ number_format($item->price) }}</td><td>Rs {{ number_format($item->total) }}</td></tr>
+        @foreach($invoice->items->isNotEmpty() ? $invoice->items : $order->items as $item)
+            <tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td>{{ $item->quantity }} {{ $item->unit ?? '' }}</td><td>Rs {{ number_format($item->unit_price ?? $item->price) }}</td><td>Rs {{ number_format($item->line_total ?? $item->total) }}</td></tr>
         @endforeach
         </tbody>
     </table>

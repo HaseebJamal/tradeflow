@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
+use App\Models\ActivityLog;
 use App\Models\AuditLog;
 use App\Models\Business;
 use App\Models\BusinessReport;
+use App\Models\BusinessUserAssignment;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\Payment;
@@ -14,10 +16,14 @@ use App\Models\PlatformSetting;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\SupportTicket;
+use App\Models\TicketMessage;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
@@ -37,18 +43,197 @@ class AdminController extends Controller
             'rejectedBusinesses' => Business::whereIn('status', ['Rejected', 'rejected'])->count(),
             'suspendedBusinesses' => Business::whereIn('status', ['Suspended', 'suspended'])->count(),
             'totalUsers' => User::count(),
-            'ordersCount' => Order::count(),
             'activeSubscriptions' => Subscription::where('status', 'Active')->count(),
             'expiredSubscriptions' => Subscription::where('status', 'Expired')->count(),
             'monthlyRevenue' => $monthlyRevenue,
             'ticketsCount' => SupportTicket::where('status', 'Open')->count(),
-            'businesses' => Business::with('owner')->latest()->take(8)->get(),
+            'securityAlerts' => ActivityLog::where('module', 'Security')->whereDate('occurred_at', '>=', today()->subDays(7))->count(),
         ]);
+    }
+
+    public function platformAdmins(Request $request)
+    {
+        $query = User::withCount(['children', 'businessAssignments'])
+            ->with('creator')
+            ->where('role', 'platform_admin');
+
+        $this->applyAdminFilters($query, $request);
+
+        return view('super-admin.administration.platform-admins', [
+            'admins' => $query->latest()->paginate(20)->withQueryString(),
+            'permissions' => $this->platformPermissions(),
+        ]);
+    }
+
+    public function platformSubAdmins(Request $request)
+    {
+        $query = User::with(['parent', 'creator'])->withCount('businessAssignments')->where('role', 'platform_sub_admin');
+        $this->applyAdminFilters($query, $request);
+
+        return view('super-admin.administration.platform-sub-admins', [
+            'subAdmins' => $query->latest()->paginate(20)->withQueryString(),
+            'platformAdmins' => User::where('role', 'platform_admin')->where('status', 'active')->orderBy('name')->get(),
+            'permissions' => $this->platformPermissions(),
+        ]);
+    }
+
+    public function storePlatformUser(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'role' => ['required', Rule::in(['platform_admin', 'platform_sub_admin'])],
+            'parent_user_id' => ['nullable', 'exists:users,id'],
+            'password' => ['required', 'confirmed', 'min:8'],
+            'status' => ['required', 'in:active,inactive,suspended'],
+            'permissions' => ['nullable', 'array'],
+        ]);
+
+        if ($data['role'] === 'platform_admin') {
+            $data['parent_user_id'] = auth()->id();
+        } else {
+            $parent = User::where('role', 'platform_admin')->findOrFail($data['parent_user_id']);
+            $data['parent_user_id'] = $parent->id;
+        }
+
+        $user = User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'phone' => $data['phone'] ?? null,
+            'role' => $data['role'],
+            'status' => $data['status'],
+            'parent_user_id' => $data['parent_user_id'],
+            'created_by' => auth()->id(),
+            'password' => Hash::make($data['password']),
+            'permissions' => $data['permissions'] ?? [],
+        ]);
+
+        $this->audit('Created '.$data['role'].' '.$user->email, $request, 'Administration', $user->id, null, $user->only(['name', 'email', 'role', 'status']));
+        $this->activity($request, 'Administration', 'create', 'Created '.$data['role'].' '.$user->email, $user);
+
+        return back()->with('success', 'Platform user created.');
+    }
+
+    public function updatePlatformUser(Request $request, User $user)
+    {
+        abort_unless(in_array($user->role, ['platform_admin', 'platform_sub_admin'], true), 404);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'status' => ['required', 'in:active,inactive,suspended'],
+            'parent_user_id' => ['nullable', 'exists:users,id'],
+            'permissions' => ['nullable', 'array'],
+            'password' => ['nullable', 'confirmed', 'min:8'],
+        ]);
+
+        if ($user->role === 'platform_sub_admin' && !empty($data['parent_user_id'])) {
+            User::where('role', 'platform_admin')->findOrFail($data['parent_user_id']);
+        } else {
+            unset($data['parent_user_id']);
+        }
+
+        $old = $user->only(['name', 'phone', 'status', 'parent_user_id', 'permissions']);
+        if (!empty($data['password'])) {
+            $data['password'] = Hash::make($data['password']);
+        } else {
+            unset($data['password']);
+        }
+        $user->update($data + ['permissions' => $data['permissions'] ?? []]);
+
+        $this->audit('Updated platform user '.$user->email, $request, 'Administration', $user->id, $old, $user->fresh()->only(['name', 'phone', 'status', 'parent_user_id', 'permissions']));
+
+        return back()->with('success', 'Platform user updated.');
+    }
+
+    public function businessAssignments(Request $request)
+    {
+        return view('super-admin.administration.business-assignments', [
+            'assignments' => BusinessUserAssignment::with(['business.owner', 'user', 'assigner'])->where('status', 'Active')->latest()->paginate(25),
+            'businesses' => Business::orderBy('business_name')->get(),
+            'admins' => User::whereIn('role', ['platform_admin', 'platform_sub_admin', 'business_owner'])->orderBy('name')->get(),
+        ]);
+    }
+
+    public function storeBusinessAssignment(Request $request)
+    {
+        $data = $request->validate([
+            'business_id' => ['required', 'exists:businesses,id'],
+            'user_id' => ['required', 'exists:users,id'],
+            'assignment_role' => ['required', Rule::in(['portfolio_admin', 'portfolio_sub_admin', 'business_owner', 'business_manager', 'support_manager', 'read_only_auditor'])],
+        ]);
+
+        $user = User::findOrFail($data['user_id']);
+        if ($user->role === 'platform_sub_admin') {
+            $parentBusinessIds = BusinessUserAssignment::where('user_id', $user->parent_user_id)->where('status', 'Active')->pluck('business_id');
+            if ($parentBusinessIds->isNotEmpty() && !$parentBusinessIds->contains((int) $data['business_id'])) {
+                return back()->withErrors(['business_id' => 'This business is outside the parent admin portfolio.']);
+            }
+        }
+
+        BusinessUserAssignment::updateOrCreate(
+            ['business_id' => $data['business_id'], 'user_id' => $data['user_id'], 'assignment_role' => $data['assignment_role']],
+            ['assigned_by' => auth()->id(), 'assigned_at' => now(), 'revoked_at' => null, 'status' => 'Active']
+        );
+
+        $this->audit('Assigned business #'.$data['business_id'].' to user #'.$data['user_id'], $request, 'Business Assignments');
+        return back()->with('success', 'Business assignment saved.');
+    }
+
+    public function revokeBusinessAssignment(Request $request, BusinessUserAssignment $assignment)
+    {
+        $assignment->update(['status' => 'Revoked', 'revoked_at' => now()]);
+        $this->audit('Revoked business assignment #'.$assignment->id, $request, 'Business Assignments');
+        return back()->with('success', 'Assignment revoked.');
+    }
+
+    public function adminPermissions()
+    {
+        return view('super-admin.administration.admin-permissions', [
+            'users' => User::whereIn('role', ['platform_admin', 'platform_sub_admin'])->orderBy('name')->get(),
+            'permissions' => $this->platformPermissions(),
+        ]);
+    }
+
+    public function adminActivity(Request $request)
+    {
+        return view('super-admin.administration.admin-activity', [
+            'activities' => ActivityLog::with(['actor', 'business'])->whereIn('actor_role', ['super_admin', 'platform_admin', 'platform_sub_admin'])->latest('occurred_at')->paginate(30)->withQueryString(),
+        ]);
+    }
+
+    public function liveActivity(Request $request)
+    {
+        $query = ActivityLog::with(['actor', 'business', 'admin', 'subAdmin'])
+            ->when($request->role, fn ($q, $value) => $q->where('actor_role', $value))
+            ->when($request->module, fn ($q, $value) => $q->where('module', $value))
+            ->when($request->action, fn ($q, $value) => $q->where('action', $value))
+            ->when($request->business_id, fn ($q, $value) => $q->where('business_id', $value))
+            ->when($request->search, fn ($q, $value) => $q->where('description', 'like', "%{$value}%"))
+            ->when($request->date_from, fn ($q, $value) => $q->whereDate('occurred_at', '>=', $value))
+            ->when($request->date_to, fn ($q, $value) => $q->whereDate('occurred_at', '<=', $value));
+
+        return view('super-admin.live-activity', [
+            'activities' => $query->latest('occurred_at')->paginate(40)->withQueryString(),
+            'businesses' => Business::orderBy('business_name')->get(),
+        ]);
+    }
+
+    public function heartbeat(Request $request)
+    {
+        $request->user()->forceFill(['last_seen_at' => now(), 'last_activity_at' => now()])->save();
+        return response()->json(['ok' => true, 'seen_at' => now()->toIso8601String()]);
     }
 
     public function businesses()
     {
-        return view('super-admin.businesses', ['businesses' => Business::with(['owner', 'documents', 'subscription.plan'])->latest()->paginate(15)]);
+        return view('super-admin.businesses', [
+            'businesses' => Business::with(['owner', 'documents', 'subscription.plan', 'assignments.user'])
+                ->withCount(['users', 'customers', 'orders'])
+                ->latest()
+                ->paginate(15),
+        ]);
     }
 
     public function businessShow(Business $business)
@@ -83,6 +268,9 @@ class AdminController extends Controller
     public function updateUserStatus(Request $request, User $user)
     {
         $data = $request->validate(['status' => ['required', 'in:active,suspended,inactive']]);
+        if ($user->role === 'super_admin' && ($user->id === auth()->id() || User::where('role', 'super_admin')->where('status', 'active')->count() <= 1)) {
+            return back()->withErrors(['status' => 'The primary Super Admin cannot be suspended or deactivated from normal admin screens.']);
+        }
         $user->update($data);
         $this->audit('User '.$data['status'].': '.$user->email, $request);
         return back()->with('success', 'User status updated.');
@@ -123,14 +311,82 @@ class AdminController extends Controller
         return back()->with('success', 'Subscription updated.');
     }
 
+    public function updateSubscription(Request $request, Subscription $subscription)
+    {
+        $data = $request->validate([
+            'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
+            'amount' => ['nullable', 'numeric', 'min:0'],
+            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
+            'starts_at' => ['nullable', 'date'],
+            'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
+            'status' => ['required', 'in:Active,Expired,Cancelled'],
+        ]);
+
+        $old = $subscription->only(['subscription_plan_id', 'amount', 'payment_method', 'starts_at', 'ends_at', 'status']);
+        $subscription->update($data);
+        $this->audit('Subscription updated for business #'.$subscription->business_id, $request, 'Subscriptions', $subscription->id, $old, $subscription->fresh()->only(array_keys($old)));
+
+        return back()->with('success', 'Subscription updated.');
+    }
+
+    public function cancelSubscription(Request $request, Subscription $subscription)
+    {
+        if ($subscription->status === 'Cancelled') {
+            return back()->with('success', 'This subscription is already cancelled.');
+        }
+
+        $old = $subscription->only(['status', 'ends_at']);
+        $subscription->update(['status' => 'Cancelled', 'ends_at' => $subscription->ends_at ?? now()->toDateString()]);
+        $this->audit('Subscription cancelled for business #'.$subscription->business_id, $request, 'Subscriptions', $subscription->id, $old, $subscription->fresh()->only(array_keys($old)));
+
+        return back()->with('success', 'Subscription cancelled. The historical record was retained.');
+    }
+
     public function supportTickets()
     {
-        return view('super-admin.support-tickets', ['tickets' => SupportTicket::with(['business', 'user'])->latest()->paginate(20)]);
+        return view('super-admin.support-tickets', [
+            'tickets' => SupportTicket::with(['business', 'user', 'assignedAdmin', 'assignedSubAdmin', 'messages.sender'])->latest()->paginate(20),
+        ]);
     }
 
     public function updateTicket(Request $request, SupportTicket $ticket)
     {
-        $ticket->update($request->validate(['admin_reply' => ['nullable'], 'status' => ['required', 'in:Open,Pending,Closed']]));
+        $data = $request->validate([
+            'message' => ['nullable', 'string'],
+            'admin_reply' => ['nullable'],
+            'status' => ['required', 'in:Open,Assigned,In Progress,Waiting for User,Escalated,Resolved,Closed,Reopened,Pending'],
+            'priority' => ['nullable', 'in:Low,Medium,High,Urgent'],
+            'resolution' => ['nullable', 'string'],
+            'internal_note' => ['nullable', 'boolean'],
+        ]);
+
+        if (!$ticket->ticket_number) {
+            $ticket->ticket_number = 'TF-TKT-'.now()->format('Ymd').'-'.str_pad((string) $ticket->id, 4, '0', STR_PAD_LEFT);
+        }
+
+        $old = $ticket->only(['status', 'priority', 'assigned_admin_id', 'assigned_sub_admin_id']);
+        $ticket->fill([
+            'admin_reply' => $data['admin_reply'] ?? $ticket->admin_reply,
+            'status' => $data['status'],
+            'priority' => $data['priority'] ?? $ticket->priority,
+            'assigned_admin_id' => $ticket->assigned_admin_id ?? auth()->id(),
+            'assigned_sub_admin_id' => null,
+            'resolution' => $data['resolution'] ?? $ticket->resolution,
+        ]);
+        if (in_array($ticket->status, ['Resolved'], true) && !$ticket->resolved_at) $ticket->resolved_at = now();
+        if (in_array($ticket->status, ['Closed'], true) && !$ticket->closed_at) $ticket->closed_at = now();
+        if (!empty($data['message']) && !$ticket->first_response_at) $ticket->first_response_at = now();
+        $ticket->save();
+
+        if (!empty($data['message'])) {
+            $ticket->messages()->create([
+                'sender_id' => auth()->id(),
+                'message' => $data['message'],
+                'internal_note' => $request->boolean('internal_note'),
+            ]);
+        }
+
+        $this->audit('Updated ticket '.$ticket->ticket_number, $request, 'Complaints & Support', $ticket->id, $old, $ticket->fresh()->only(['status', 'priority', 'assigned_admin_id', 'assigned_sub_admin_id']));
         return back()->with('success', 'Ticket updated.');
     }
 
@@ -161,9 +417,36 @@ class AdminController extends Controller
         return back()->with('success', 'Announcement saved.');
     }
 
-    public function auditLogs()
+    public function auditLogs(Request $request)
     {
-        return view('super-admin.audit-logs', ['logs' => AuditLog::with('user')->latest()->paginate(30)]);
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'module' => ['nullable', 'string', 'max:100'],
+            'user_id' => ['nullable', 'exists:users,id'],
+            'business_id' => ['nullable', 'exists:businesses,id'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+        ]);
+
+        $logs = AuditLog::with('user')
+            ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($nested) => $nested
+                ->where('action', 'like', "%{$value}%")
+                ->orWhere('description', 'like', "%{$value}%")))
+            ->when($filters['module'] ?? null, fn ($query, $value) => $query->where('module', $value))
+            ->when($filters['user_id'] ?? null, fn ($query, $value) => $query->where('user_id', $value))
+            ->when($filters['business_id'] ?? null, fn ($query, $value) => $query->where('business_id', $value))
+            ->when($filters['date_from'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '>=', $value))
+            ->when($filters['date_to'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '<=', $value))
+            ->latest()
+            ->paginate(30)
+            ->withQueryString();
+
+        return view('super-admin.audit-logs', [
+            'logs' => $logs,
+            'modules' => AuditLog::query()->whereNotNull('module')->distinct()->orderBy('module')->pluck('module'),
+            'users' => User::orderBy('name')->get(['id', 'name']),
+            'businesses' => Business::orderBy('business_name')->get(['id', 'business_name']),
+        ]);
     }
 
     public function settings()
@@ -221,11 +504,68 @@ class AdminController extends Controller
 
     public function reportPdf(BusinessReport $report)
     {
-        return Pdf::loadView('super-admin.business-reports.pdf', ['report' => $report->load('business.owner')])->download('business-report-'.$report->id.'.pdf');
+        return Pdf::loadView('super-admin.business-reports.pdf', ['report' => $report->load('business.owner')])
+            ->stream('business-report-'.$report->id.'.pdf');
     }
 
-    private function audit(string $action, Request $request): void
+    private function applyAdminFilters($query, Request $request): void
     {
-        AuditLog::create(['user_id' => auth()->id(), 'action' => $action, 'ip_address' => $request->ip()]);
+        $query
+            ->when($request->name, fn ($q, $value) => $q->where('name', 'like', "%{$value}%"))
+            ->when($request->email, fn ($q, $value) => $q->where('email', 'like', "%{$value}%"))
+            ->when($request->status, fn ($q, $value) => $q->where('status', $value))
+            ->when($request->created_by, fn ($q, $value) => $q->where('created_by', $value))
+            ->when($request->date_from, fn ($q, $value) => $q->whereDate('created_at', '>=', $value))
+            ->when($request->date_to, fn ($q, $value) => $q->whereDate('created_at', '<=', $value));
+    }
+
+    private function platformPermissions(): array
+    {
+        return [
+            'admins.view', 'admins.create', 'admins.update', 'admins.suspend', 'admins.permissions',
+            'sub_admins.view', 'sub_admins.create', 'sub_admins.update', 'sub_admins.assign_business',
+            'businesses.view', 'businesses.create', 'businesses.update', 'businesses.assign', 'businesses.transfer', 'businesses.suspend',
+            'subscriptions.view', 'subscriptions.manage',
+            'tickets.view', 'tickets.assign', 'tickets.reply', 'tickets.close',
+            'notifications.send', 'activity.view', 'activity.export', 'audit.view', 'reports.view', 'reports.export',
+        ];
+    }
+
+    private function audit(string $action, Request $request, string $module = 'Admin', ?int $recordId = null, ?array $old = null, ?array $new = null): void
+    {
+        AuditLog::create([
+            'user_id' => auth()->id(),
+            'actor_id' => auth()->id(),
+            'actor_role' => auth()->user()?->role,
+            'action' => $action,
+            'description' => $action,
+            'module' => $module,
+            'record_id' => $recordId,
+            'old_values' => $old,
+            'new_values' => $new,
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+        ]);
+    }
+
+    private function activity(Request $request, string $module, string $action, string $description, $subject = null): void
+    {
+        ActivityLog::create([
+            'actor_id' => auth()->id(),
+            'actor_role' => auth()->user()?->role,
+            'actor_name_snapshot' => auth()->user()?->name,
+            'business_id' => auth()->user()?->business_id,
+            'module' => $module,
+            'action' => $action,
+            'route_name' => $request->route()?->getName(),
+            'method' => $request->method(),
+            'description' => $description,
+            'subject_type' => $subject ? get_class($subject) : null,
+            'subject_id' => $subject?->id,
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+            'session_id' => $request->session()->getId(),
+            'occurred_at' => now(),
+        ]);
     }
 }

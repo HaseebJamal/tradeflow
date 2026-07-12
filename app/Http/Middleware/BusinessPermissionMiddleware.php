@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\CompanyPermissionService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -13,16 +14,16 @@ class BusinessPermissionMiddleware
         $user = $request->user();
         abort_unless($user && $user->business_id, 403);
 
-        if ($user->role === 'business_owner') {
-            return $next($request);
+        $permissions = app(CompanyPermissionService::class);
+        $modulePermission = $permissions->normalise($permission.'.view');
+
+        if (!$permissions->allows($user, $modulePermission)) {
+            return redirect()
+                ->back()
+                ->withErrors(['company_permission' => 'This feature is not enabled for your company. Please contact TradeFlow support.']);
         }
 
-        $module = strtolower($permission);
-        $permissions = collect($user->permissions ?? [])->map(fn ($value) => strtolower($value))->all();
-        $permissionAllowsModule = in_array($module, $permissions, true)
-            || collect($permissions)->contains(fn ($value) => str_starts_with($value, $module.'.'));
-
-        if (!$permissionAllowsModule) {
+        if (!$permissions->allowsUser($user, $modulePermission)) {
             $message = 'You do not have permission to access this module. Please contact your business owner.';
 
             if ($request->expectsJson()) {
@@ -30,7 +31,7 @@ class BusinessPermissionMiddleware
             }
 
             return redirect()
-                ->route(in_array($user->role, ['manager', 'sales_staff', 'inventory_staff', 'accountant', 'delivery_staff'], true) ? 'staff.dashboard' : 'business.dashboard')
+                ->route(in_array($user->role, \App\Support\BusinessStaffRoles::DASHBOARD_ROLES, true) ? 'staff.dashboard' : 'business.dashboard')
                 ->withErrors(['permission' => $message]);
         }
 

@@ -22,7 +22,14 @@ class RoleMiddleware
             return redirect()->route('login')->withErrors(['email' => 'Your account is inactive. Please contact your business owner.']);
         }
 
-        abort_unless(in_array(auth()->user()->role, $roles, true), 403);
+        $user = auth()->user();
+        if ($user->role === 'super_admin' && in_array('super_admin', $roles, true) && $request->is('business/*')) {
+            abort_unless($request->session()->has('super_admin_business_context_id'), 403);
+
+            return $next($request);
+        }
+
+        abort_unless(in_array($user->role, $roles, true), 403);
 
         return $next($request);
     }

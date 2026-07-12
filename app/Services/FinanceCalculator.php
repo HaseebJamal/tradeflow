@@ -65,8 +65,11 @@ class FinanceCalculator
         $order->loadMissing('items', 'payments');
         $subtotal = $this->calculateOrderSubtotal($order->items);
         $discountPercentage = (float) ($order->discount_percentage ?? $order->discount ?? 0);
-        $discountAmount = $this->calculateDiscountAmount($subtotal, $discountPercentage);
-        $grandTotal = $this->calculateGrandTotal($subtotal, $discountAmount);
+        $discountAmount = $discountPercentage > 0
+            ? $this->calculateDiscountAmount($subtotal, $discountPercentage)
+            : round((float) ($order->discount_amount ?? 0), 2);
+        $taxAmount = round((float) ($order->tax_amount ?? 0), 2);
+        $grandTotal = round($this->calculateGrandTotal($subtotal, $discountAmount) + $taxAmount, 2);
         $paidAmount = $this->calculatePaidAmount($order);
         $balance = $this->calculateBalance($grandTotal, $paidAmount);
 
@@ -100,6 +103,7 @@ class FinanceCalculator
         Invoice::where('order_id', $order->id)->update([
             'paid_amount' => $paidAmount,
             'balance' => $balance,
+            'payment_status' => $this->paymentStatus($grandTotal, $paidAmount),
         ]);
 
         return $order->fresh();
