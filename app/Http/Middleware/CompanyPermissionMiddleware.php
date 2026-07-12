@@ -13,10 +13,6 @@ class CompanyPermissionMiddleware
     {
         $user = $request->user();
 
-        if ($user?->role === 'super_admin') {
-            return $next($request);
-        }
-
         if (!$user || !$user->business_id || !app(CompanyPermissionService::class)->allows($user, $permission)) {
             $message = 'This feature is not enabled for your company. Please contact TradeFlow support.';
 

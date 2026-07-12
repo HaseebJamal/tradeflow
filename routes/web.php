@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\CompanyPermissionController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Business\BusinessDashboardController;
+use App\Http\Controllers\Business\BusinessContextController;
 use App\Http\Controllers\Business\AuditLogController;
 use App\Http\Controllers\Business\CustomerController;
 use App\Http\Controllers\Business\DeliveryController;
@@ -148,6 +149,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
 
 Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.context', 'role:super_admin,business_owner,business_admin,business_sub_admin,manager,sales_staff,inventory_staff,accountant,delivery_staff,cashier,support_staff,custom_staff', 'business.approved', 'business.action', 'track.activity'])->group(function () {
     Route::get('/dashboard', BusinessDashboardController::class)->name('dashboard');
+    Route::get('/context-profile', [BusinessContextController::class, 'profile'])->name('context.profile');
+    Route::get('/context-notifications', [BusinessContextController::class, 'notifications'])->name('context.notifications');
     Route::patch('/products/{product}/low-stock-alert', [ProductController::class, 'updateLowStockAlert'])->name('products.low-stock-alert')->middleware('business.permission:Products');
     Route::get('/products-bulk', [ProductController::class, 'bulk'])->name('products.bulk')->middleware('business.permission:Products');
     Route::post('/products-bulk', [ProductController::class, 'bulkStore'])->name('products.bulk.store')->middleware('business.permission:Products');

@@ -58,9 +58,13 @@
         ? ['Dashboard', 'bi-speedometer2', in_array($role, \App\Support\BusinessStaffRoles::DASHBOARD_ROLES, true) ? route('staff.dashboard') : route('business.dashboard')]
         : null;
 
+    $superAdminBusinessContext = $area === 'business'
+        && $role === 'super_admin'
+        && request()->attributes->get('super_admin_business_context');
+
     $basicBusinessItems = $area === 'business' ? [
-        ['Profile', 'bi-person-circle', route('profile.edit')],
-        ['Notifications', 'bi-bell', route('notifications.index')],
+        ['Profile', 'bi-person-circle', $superAdminBusinessContext ? route('business.context.profile') : route('profile.edit')],
+        ['Notifications', 'bi-bell', $superAdminBusinessContext ? route('business.context.notifications') : route('notifications.index')],
         ['Support', 'bi-life-preserver', route('business.support')],
     ] : [];
 

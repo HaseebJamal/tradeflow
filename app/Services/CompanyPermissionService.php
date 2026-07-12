@@ -16,7 +16,11 @@ class CompanyPermissionService
             return false;
         }
 
-        if ($user->role === 'super_admin') {
+        // A Super Admin has unrestricted platform access.  Once they open a
+        // company dashboard, SuperAdminBusinessContextMiddleware attaches that
+        // company to the user; from that point the company's enabled modules
+        // and features must remain the ceiling for the preview as well.
+        if ($user->role === 'super_admin' && !$business && !$user->business_id) {
             return true;
         }
 
