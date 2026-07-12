@@ -652,6 +652,10 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     .admin-company-table .dropdown-menu {
         z-index: 1080;
     }
+
+    .admin-company-table .dropdown {
+        position: relative;
+    }
 }
 
 .btn:hover {

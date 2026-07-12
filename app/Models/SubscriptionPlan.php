@@ -7,4 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class SubscriptionPlan extends Model
 {
     protected $fillable = ['name', 'price', 'product_limit', 'staff_limit', 'order_limit', 'status'];
+
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
+    }
 }

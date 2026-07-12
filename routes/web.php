@@ -123,9 +123,12 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
     Route::patch('/users/{user}/status', [AdminController::class, 'updateUserStatus'])->name('users.status');
     Route::get('/subscriptions', [AdminController::class, 'subscriptions'])->name('subscriptions');
     Route::post('/subscription-plans', [AdminController::class, 'storePlan'])->name('subscription-plans.store');
+    Route::patch('/subscription-plans/{plan}', [AdminController::class, 'updatePlan'])->name('subscription-plans.update');
+    Route::delete('/subscription-plans/{plan}', [AdminController::class, 'destroyPlan'])->name('subscription-plans.destroy');
     Route::post('/subscriptions', [AdminController::class, 'activateSubscription'])->name('subscriptions.activate');
     Route::patch('/subscriptions/{subscription}', [AdminController::class, 'updateSubscription'])->name('subscriptions.update');
     Route::patch('/subscriptions/{subscription}/cancel', [AdminController::class, 'cancelSubscription'])->name('subscriptions.cancel');
+    Route::delete('/subscriptions/{subscription}', [AdminController::class, 'destroySubscription'])->name('subscriptions.destroy');
     Route::get('/support-tickets', [AdminController::class, 'supportTickets'])->name('support-tickets');
     Route::patch('/support-tickets/{ticket}', [AdminController::class, 'updateTicket'])->name('support-tickets.update');
     Route::get('/categories', [AdminController::class, 'categories'])->name('categories');

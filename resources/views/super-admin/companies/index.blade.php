@@ -27,8 +27,8 @@
             <td><x-date-time :value="$company->created_at" /></td>
             <td><x-date-time :value="\App\Models\ActivityLog::where('business_id', $company->id)->latest('occurred_at')->value('occurred_at')" /></td>
             <td>
-                <div class="dropdown position-static position-md-relative">
-                    <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false">Actions</button>
+                <div class="dropdown">
+                    <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">Actions</button>
                     <div class="dropdown-menu dropdown-menu-end shadow">
                         <a class="dropdown-item" href="{{ route('admin.companies.show', $company) }}"><i class="bi bi-eye me-2"></i>View Company</a>
                         <a class="dropdown-item" href="{{ route('admin.companies.edit', $company) }}"><i class="bi bi-pencil me-2"></i>Edit Company</a>
