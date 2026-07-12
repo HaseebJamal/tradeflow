@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\CompanyPermissionController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Business\BusinessDashboardController;
+use App\Http\Controllers\Business\AuditLogController;
 use App\Http\Controllers\Business\CustomerController;
 use App\Http\Controllers\Business\DeliveryController;
 use App\Http\Controllers\Business\ExpenseController;
@@ -213,6 +214,10 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy')->middleware('business.permission:Expenses');
     Route::get('/reports', [ReportController::class, 'index'])->name('reports')->middleware('business.permission:Reports');
     Route::get('/reports/{type}/pdf', [ReportController::class, 'pdf'])->name('reports.pdf')->middleware('business.permission:Reports');
+    Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index')->middleware('business.permission:Audit Logs');
+    Route::get('/audit-logs/live', [AuditLogController::class, 'live'])->name('audit-logs.live')->middleware('business.permission:Audit Logs');
+    Route::get('/audit-logs/export/csv', [AuditLogController::class, 'exportCsv'])->name('audit-logs.export.csv')->middleware('business.permission:Audit Logs');
+    Route::get('/audit-logs/export/pdf', [AuditLogController::class, 'exportPdf'])->name('audit-logs.export.pdf')->middleware('business.permission:Audit Logs');
     Route::get('/staff', [StaffController::class, 'index'])->name('staff')->middleware('role:super_admin,business_owner,business_admin');
     Route::post('/staff', [StaffController::class, 'store'])->name('staff.store')->middleware('role:super_admin,business_owner,business_admin');
     Route::get('/staff/{staff}', [StaffController::class, 'show'])->name('staff.show')->middleware('role:super_admin,business_owner,business_admin');

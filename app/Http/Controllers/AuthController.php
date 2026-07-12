@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
@@ -103,6 +104,19 @@ class AuthController extends Controller
 
             $request->session()->regenerate();
             auth()->user()->forceFill(['last_login_at' => now()])->save();
+            if (auth()->user()->business_id) {
+                AuditLog::create([
+                    'business_id' => auth()->user()->business_id,
+                    'user_id' => auth()->id(),
+                    'user_name' => auth()->user()->name,
+                    'role' => auth()->user()->role,
+                    'module' => 'Authentication',
+                    'action' => 'login',
+                    'description' => auth()->user()->name.' signed in.',
+                    'route' => 'login.store',
+                    'occurred_at' => now(),
+                ]);
+            }
             Log::info('TradeFlow staff login permissions loaded', [
                 'user_id' => auth()->id(),
                 'role' => auth()->user()->role,
@@ -142,6 +156,20 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        $user = $request->user();
+        if ($user?->business_id) {
+            AuditLog::create([
+                'business_id' => $user->business_id,
+                'user_id' => $user->id,
+                'user_name' => $user->name,
+                'role' => $user->role,
+                'module' => 'Authentication',
+                'action' => 'logout',
+                'description' => $user->name.' signed out.',
+                'route' => 'logout',
+                'occurred_at' => now(),
+            ]);
+        }
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

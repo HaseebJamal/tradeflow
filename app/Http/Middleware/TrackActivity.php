@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\ActivityLog;
+use App\Models\AuditLog;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,7 +20,7 @@ class TrackActivity
         }
 
         $routeName = $request->route()->getName();
-        if (!$routeName || str_contains($routeName, 'heartbeat')) {
+        if (!$routeName || str_contains($routeName, 'heartbeat') || str_contains($routeName, 'audit-logs.live')) {
             return $response;
         }
 
@@ -51,6 +52,22 @@ class TrackActivity
                 'session_id' => $sessionId,
                 'occurred_at' => now(),
             ]);
+
+            if ($user->business_id) {
+                AuditLog::create([
+                    'business_id' => $user->business_id,
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'role' => $user->role,
+                    'module' => str($routeName)->replace(['business.', 'staff.'], '')->before('.')->replace('-', ' ')->title()->toString(),
+                    'action' => 'page_visit',
+                    'description' => $user->name.' opened '.$routeName,
+                    'route' => $routeName,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+                    'occurred_at' => now(),
+                ]);
+            }
         }
 
         return $response;

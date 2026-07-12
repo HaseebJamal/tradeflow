@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\CompanyPermissionService;
+use App\Models\AuditLog;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -31,6 +32,20 @@ class BusinessActionPermissionMiddleware
 
     private function deny(Request $request, string $message): Response
     {
+        if ($request->user()?->business_id) {
+            AuditLog::create([
+                'business_id' => $request->user()->business_id,
+                'user_id' => $request->user()->id,
+                'user_name' => $request->user()->name,
+                'role' => $request->user()->role,
+                'module' => 'Security',
+                'action' => 'unauthorized_access',
+                'description' => $message,
+                'route' => $request->route()?->getName(),
+                'occurred_at' => now(),
+            ]);
+        }
+
         if ($request->expectsJson()) {
             abort(403, $message);
         }
@@ -68,6 +83,8 @@ class BusinessActionPermissionMiddleware
             'business.invoices.update', 'business.invoices.issue', 'business.invoices.reissue', 'business.invoices.credit-notes.store' => 'invoices.create', 'business.invoices.void' => 'invoices.void',
             'business.expenses.index' => 'expenses.view', 'business.expenses.store' => 'expenses.create', 'business.expenses.destroy' => 'expenses.delete',
             'business.reports' => 'reports.view', 'business.reports.pdf' => 'reports.export',
+            'business.audit-logs.index', 'business.audit-logs.live' => 'audit_logs.view',
+            'business.audit-logs.export.csv', 'business.audit-logs.export.pdf' => 'audit_logs.export',
             'business.staff', 'business.staff.show' => 'staff.view', 'business.staff.store' => 'staff.create',
             'business.staff.edit', 'business.staff.update', 'business.staff.status', 'business.staff.archive', 'business.staff.restore', 'business.staff.reset-password', 'business.staff.destroy' => 'staff.edit',
             'business.settings' => 'settings.view', 'business.settings.business' => 'settings.update',

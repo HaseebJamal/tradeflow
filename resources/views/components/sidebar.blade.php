@@ -30,6 +30,7 @@
                 ['Invoices', 'bi-file-earmark-text', route('business.invoices.index'), 'invoices'],
                 ['Expenses', 'bi-receipt-cutoff', route('business.expenses.index'), 'expenses'],
                 ['Reports', 'bi-graph-up', route('business.reports'), 'reports'],
+                ['Audit Logs', 'bi-activity', route('business.audit-logs.index'), 'audit_logs'],
                 ['Staff', 'bi-person-badge', route('business.staff'), 'staff'],
             ]);
 
