@@ -71,6 +71,47 @@ function togglePassword(inputId, iconId) {
 
 window.togglePassword = togglePassword;
 
+// Forms opt in to a predictable keyboard sequence. This works for both auth
+// forms and multi-step onboarding, while excluding hidden/disabled fields.
+function applyTradeFlowTabOrder(form, focusFirst = false) {
+    if (!form) return;
+
+    const fields = [...form.querySelectorAll('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])')]
+        .filter((field) => field.tabIndex !== -1 && field.offsetParent !== null);
+
+    fields.forEach((field, index) => { field.tabIndex = index + 1; });
+
+    if (focusFirst && fields.length && (!document.activeElement || document.activeElement === document.body)) {
+        fields[0].focus();
+    }
+}
+
+window.applyTradeFlowTabOrder = applyTradeFlowTabOrder;
+document.querySelectorAll('form[data-tf-tab-order]').forEach((form) => applyTradeFlowTabOrder(form, true));
+
+// Flash confirmations are temporary. Validation errors remain visible so users
+// can correct their input; information alerts opt in with data-tf-auto-dismiss.
+function scheduleAutoDismissAlert(alert) {
+    if (!alert.matches('.alert-success, [data-tf-auto-dismiss]') || alert.dataset.tfAutoDismissTimer || alert.classList.contains('d-none')) return;
+    alert.dataset.tfAutoDismissTimer = '1';
+
+    window.setTimeout(() => {
+        alert.classList.add('fade');
+        window.setTimeout(() => alert.remove(), 180);
+    }, 3000);
+}
+
+function scanAutoDismissAlerts(node = document) {
+    if (node instanceof Element && node.matches?.('.alert-success, [data-tf-auto-dismiss]')) scheduleAutoDismissAlert(node);
+    node.querySelectorAll?.('.alert-success, [data-tf-auto-dismiss]').forEach(scheduleAutoDismissAlert);
+}
+
+scanAutoDismissAlerts();
+new MutationObserver((changes) => changes.forEach((change) => {
+    if (change.type === 'attributes') scheduleAutoDismissAlert(change.target);
+    change.addedNodes.forEach(scanAutoDismissAlerts);
+})).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+
 document.querySelectorAll('[data-tf-password-toggle]').forEach((button) => {
     button.addEventListener('click', () => {
         const inputSelector = button.dataset.tfPasswordToggle;
@@ -498,9 +539,28 @@ function updateOrderPreview() {
     form.querySelector('[data-order-grand-total]') && (form.querySelector('[data-order-grand-total]').textContent = formatMoney(grandTotal));
 }
 
+function validateOrderStock(input) {
+    if (!input) return true;
+    const available = Number.parseInt(input.max || '0', 10);
+    const requested = Number.parseInt(input.value || '0', 10);
+    const insufficient = Number.isFinite(available) && Number.isFinite(requested) && requested > available;
+    input.setCustomValidity(insufficient ? `Insufficient stock. Only ${available} units are available.` : '');
+    input.classList.toggle('is-invalid', insufficient);
+    return !insufficient;
+}
+
 document.querySelector('[data-order-form]')?.addEventListener('input', (event) => {
     if (event.target.matches('[data-order-qty], [data-order-discount]')) {
+        if (event.target.matches('[data-order-qty]')) validateOrderStock(event.target);
         updateOrderPreview();
+    }
+});
+
+document.querySelector('[data-order-form]')?.addEventListener('submit', (event) => {
+    const inputs = [...event.currentTarget.querySelectorAll('[data-order-qty]')];
+    if (!inputs.every(validateOrderStock)) {
+        event.preventDefault();
+        event.currentTarget.querySelector('[data-order-qty].is-invalid')?.focus();
     }
 });
 updateOrderPreview();
@@ -756,7 +816,7 @@ function initCompanyCreateForm(form) {
     const passwordError = form.querySelector('[data-company-password-error]');
     const submit = form.querySelector('[data-company-create-submit]');
     const draftAlert = form.querySelector('[data-company-draft-alert]');
-    const fields = [...form.querySelectorAll('input, select, textarea')].filter((field) => field.name && !['temporary_password', 'temporary_password_confirmation'].includes(field.name) && field.type !== 'file' && field.type !== 'hidden');
+    const fields = [...form.querySelectorAll('input, select, textarea')].filter((field) => field.name && !['temporary_password', 'temporary_password_confirmation', 'permissions[]'].includes(field.name) && field.type !== 'file' && field.type !== 'hidden');
     const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 
     const saveDraft = () => {

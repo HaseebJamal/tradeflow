@@ -28,6 +28,16 @@
             <div class="mb-3"><div class="d-flex justify-content-between"><span>{{ $name }}</span><strong>{{ $count }}</strong></div><div class="progress"><div class="progress-bar {{ $bar }}" style="width: {{ $width }}%"></div></div></div>
         @endforeach
     </div></div>
-    <div class="col-xl-6"><div class="tf-card p-4 h-100"><h2 class="h5">Operational Shortcuts</h2><div class="d-grid gap-3"><a href="{{ route('admin.companies.pending') }}" class="p-3 border rounded d-flex justify-content-between text-decoration-none"><span>Businesses awaiting approval</span><strong>{{ $pendingApprovals }}</strong></a><a href="{{ route('admin.support-tickets') }}" class="p-3 border rounded d-flex justify-content-between text-decoration-none"><span>Open complaints/tickets</span><strong>{{ $ticketsCount }}</strong></a><a href="{{ route('admin.subscriptions') }}" class="p-3 border rounded d-flex justify-content-between text-decoration-none"><span>Expired subscriptions</span><strong>{{ $expiredSubscriptions }}</strong></a><a href="{{ route('admin.audit-logs') }}" class="p-3 border rounded d-flex justify-content-between text-decoration-none"><span>Security alerts</span><strong>{{ $securityAlerts }}</strong></a></div></div></div>
+    <div class="col-xl-6"><div class="tf-card p-4 h-100"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Platform Operations</h2><small class="tf-muted">Managed from the dashboard</small></div><div class="row g-2">@foreach([
+        ['Companies & Approvals', 'admin.companies.index', 'bi-buildings', $pendingApprovals.' pending'],
+        ['Subscriptions', 'admin.subscriptions', 'bi-credit-card', $expiredSubscriptions.' expired'],
+        ['Complaints & Support', 'admin.support-tickets', 'bi-life-preserver', $ticketsCount.' open'],
+        ['Audit Logs', 'admin.audit-logs', 'bi-activity', $securityAlerts.' alerts'],
+        ['Payments', 'admin.payments', 'bi-cash-stack', 'Payment records'],
+        ['Business Reports', 'admin.business-reports', 'bi-graph-up', 'Review reports'],
+        ['Categories', 'admin.categories', 'bi-tags', 'Catalog categories'],
+        ['Platform Users', 'admin.users', 'bi-people', 'Manage accounts'],
+    ] as [$label, $route, $icon, $note])<div class="col-md-6"><a href="{{ route($route) }}" class="p-3 border rounded h-100 d-flex align-items-center gap-2 text-decoration-none"><i class="bi {{ $icon }} fs-5"></i><span><strong class="d-block">{{ $label }}</strong><small class="tf-muted">{{ $note }}</small></span></a></div>@endforeach</div></div></div>
 </div>
+
 @endsection

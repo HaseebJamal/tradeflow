@@ -15,6 +15,7 @@ class AuditLog extends Model
 
     public function user() { return $this->belongsTo(User::class); }
     public function actor() { return $this->belongsTo(User::class, 'actor_id'); }
+    public function business() { return $this->belongsTo(Business::class); }
 
     protected static function booted(): void
     {

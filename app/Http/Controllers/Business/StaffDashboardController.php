@@ -16,14 +16,17 @@ class StaffDashboardController extends Controller
             ['inventory', 'Inventory', 'bi-clipboard-data', route('business.inventory'), 'Track stock and inventory movements.'],
             ['customers', 'Customers', 'bi-person-lines-fill', route('business.customers.index'), 'View and manage customer records.'],
             ['suppliers', 'Suppliers', 'bi-building-add', route('business.suppliers.index'), 'Manage assigned supplier records.'],
-            ['orders', 'Orders', 'bi-bag-check', route('business.orders.index'), 'Create and process customer orders.'],
+            ['purchases', 'Purchases', 'bi-cart-plus', route('business.purchases.index'), 'Receive stock, supplier invoices, payments, and returns.'],
+            ['sales', 'Sales', 'bi-bag-check', route('business.orders.index'), 'Create sales orders and manage customer balances.'],
             ['pos', 'Point of Sale', 'bi-upc-scan', route('business.pos.index'), 'Process counter sales and print receipts.'],
-            ['payments', 'Payments', 'bi-cash-stack', route('business.payments'), 'Record manual customer payments.'],
             ['accounting', 'Accounting / Ledger', 'bi-journal-text', route('business.khata'), 'Review customer and business ledger work.'],
             ['deliveries', 'Deliveries', 'bi-truck', route('business.deliveries'), 'View and update deliveries.'],
             ['invoices', 'Invoices', 'bi-file-earmark-text', route('business.invoices.index'), 'View and print invoices.'],
             ['expenses', 'Expenses', 'bi-receipt-cutoff', route('business.expenses.index'), 'Record business expenses.'],
             ['reports', 'Reports', 'bi-graph-up', route('business.reports'), 'View assigned business reports.'],
+            ['staff', 'Staff', 'bi-person-badge', route('business.staff'), 'Manage business team access and assignments.'],
+            ['audit_logs', 'Audit Logs', 'bi-activity', route('business.audit-logs.index'), 'Review activity across the business workspace.'],
+            ['settings', 'Settings', 'bi-gear', route('business.settings'), 'Manage business configuration.'],
         ])->filter(function ($module) use ($companyPermissions, $user) {
             $moduleKey = $module[0];
             return $companyPermissions->allowsUser($user, $moduleKey.'.view');

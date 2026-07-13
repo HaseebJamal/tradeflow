@@ -10,33 +10,47 @@ use App\Models\Business;
 use App\Models\BusinessReport;
 use App\Models\BusinessUserAssignment;
 use App\Models\Category;
+use App\Models\Customer;
+use App\Models\Delivery;
+use App\Models\Expense;
+use App\Models\Invoice;
+use App\Models\OrderItem;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PlatformSetting;
+use App\Models\Product;
+use App\Models\Purchase;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
+use App\Models\Supplier;
 use App\Models\SupportTicket;
 use App\Models\TicketMessage;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminController extends Controller
 {
     public function dashboard()
     {
+        return view('super-admin.dashboard', $this->platformDashboardData());
+    }
+
+    private function platformDashboardData(): array
+    {
         $monthlyRevenue = Schema::hasColumn('subscriptions', 'amount')
             ? Subscription::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('amount')
-            : Subscription::whereMonth('created_at', now()->month)
-                ->whereYear('created_at', now()->year)
-                ->join('subscription_plans', 'subscriptions.subscription_plan_id', '=', 'subscription_plans.id')
-                ->sum('subscription_plans.price');
+            : Subscription::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)
+                ->join('subscription_plans', 'subscriptions.subscription_plan_id', '=', 'subscription_plans.id')->sum('subscription_plans.price');
 
-        return view('super-admin.dashboard', [
+        return [
             'totalBusinesses' => Business::count(),
             'pendingApprovals' => Business::whereIn('status', ['Pending', 'pending'])->count(),
             'activeBusinesses' => Business::whereIn('status', ['Approved', 'approved'])->count(),
@@ -48,7 +62,7 @@ class AdminController extends Controller
             'monthlyRevenue' => $monthlyRevenue,
             'ticketsCount' => SupportTicket::where('status', 'Open')->count(),
             'securityAlerts' => ActivityLog::where('module', 'Security')->whereDate('occurred_at', '>=', today()->subDays(7))->count(),
-        ]);
+        ];
     }
 
     public function platformAdmins(Request $request)
@@ -256,13 +270,32 @@ class AdminController extends Controller
         return $this->updateStatus($request, $business);
     }
 
-    public function users()
+    public function users(Request $request)
     {
         $query = User::with('business');
-        if ($request = request('search')) $query->where(fn($q) => $q->where('name','like',"%$request%")->orWhere('email','like',"%$request%"));
-        if (request('role')) $query->where('role', request('role'));
-        if (request('status')) $query->where('status', request('status'));
-        return view('super-admin.users', ['users' => $query->latest()->paginate(20)->withQueryString()]);
+        if ($search = $request->string('search')->trim()->value()) {
+            $query->where(fn ($builder) => $builder
+                ->where('name', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%")
+                ->orWhere('phone', 'like', "%{$search}%"));
+        }
+
+        $query
+            ->when($request->filled('role'), fn ($builder) => $builder->where('role', $request->input('role')))
+            ->when($request->filled('status'), fn ($builder) => $builder->where('status', $request->input('status')))
+            ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
+
+        return view('super-admin.users', [
+            'users' => $query->latest()->paginate(20)->withQueryString(),
+            'businesses' => Business::orderBy('business_name')->get(['id', 'business_name']),
+            'roles' => User::query()->select('role')->distinct()->orderBy('role')->pluck('role'),
+            'counts' => [
+                'total' => User::count(),
+                'active' => User::where('status', 'active')->count(),
+                'suspended' => User::where('status', 'suspended')->count(),
+                'business_owners' => User::where('role', 'business_owner')->count(),
+            ],
+        ]);
     }
 
     public function updateUserStatus(Request $request, User $user)
@@ -274,6 +307,23 @@ class AdminController extends Controller
         $user->update($data);
         $this->audit('User '.$data['status'].': '.$user->email, $request);
         return back()->with('success', 'User status updated.');
+    }
+
+    public function resetUserPassword(Request $request, User $user)
+    {
+        if ($user->id === auth()->id()) {
+            return back()->withErrors(['password' => 'Use your profile security settings to change your own password.']);
+        }
+
+        $data = $request->validate([
+            'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
+        ]);
+
+        $user->update(['password' => Hash::make($data['password'])]);
+        $this->audit('Password reset for user: '.$user->email, $request, 'Users', $user->id);
+        $this->activity($request, 'Users', 'password_reset', 'Password reset for '.$user->email, $user);
+
+        return back()->with('success', 'Password reset for '.$user->name.'.');
     }
 
     public function subscriptions(Request $request)
@@ -300,10 +350,26 @@ class AdminController extends Controller
             ->paginate(20)
             ->withQueryString();
 
+        $selectedBusinessId = $filters['business_id'] ?? null;
+        $assignableBusinesses = Business::query()
+            ->where(function ($query) use ($selectedBusinessId) {
+                $query->whereIn('status', ['Approved', 'approved']);
+
+                // A Super Admin may open subscription management from any
+                // company row. Keep that target available even if its current
+                // approval state is not Approved.
+                if ($selectedBusinessId) {
+                    $query->orWhere('id', $selectedBusinessId);
+                }
+            })
+            ->orderBy('business_name')
+            ->get();
+
         return view('super-admin.subscriptions', [
             'plans' => SubscriptionPlan::withCount('subscriptions')->orderBy('price')->get(),
-            'businesses' => Business::whereIn('status', ['Approved', 'approved'])->orderBy('business_name')->get(),
+            'businesses' => $assignableBusinesses,
             'subscriptions' => $subscriptions,
+            'selectedBusinessId' => $selectedBusinessId,
             'stats' => [
                 'active' => Subscription::where('status', 'Active')->count(),
                 'expired' => Subscription::where('status', 'Expired')->count(),
@@ -520,34 +586,61 @@ class AdminController extends Controller
 
     public function auditLogs(Request $request)
     {
-        $filters = $request->validate([
-            'search' => ['nullable', 'string', 'max:255'],
-            'module' => ['nullable', 'string', 'max:100'],
-            'user_id' => ['nullable', 'exists:users,id'],
-            'business_id' => ['nullable', 'exists:businesses,id'],
-            'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
-        ]);
-
-        $logs = AuditLog::with('user')
-            ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($nested) => $nested
-                ->where('action', 'like', "%{$value}%")
-                ->orWhere('description', 'like', "%{$value}%")))
-            ->when($filters['module'] ?? null, fn ($query, $value) => $query->where('module', $value))
-            ->when($filters['user_id'] ?? null, fn ($query, $value) => $query->where('user_id', $value))
-            ->when($filters['business_id'] ?? null, fn ($query, $value) => $query->where('business_id', $value))
-            ->when($filters['date_from'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '>=', $value))
-            ->when($filters['date_to'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '<=', $value))
-            ->latest()
-            ->paginate(30)
-            ->withQueryString();
+        [$filters, $query] = $this->filteredAuditLogQuery($request);
 
         return view('super-admin.audit-logs', [
-            'logs' => $logs,
+            'logs' => $query->latest('occurred_at')->paginate(30)->withQueryString(),
             'modules' => AuditLog::query()->whereNotNull('module')->distinct()->orderBy('module')->pluck('module'),
             'users' => User::orderBy('name')->get(['id', 'name']),
             'businesses' => Business::orderBy('business_name')->get(['id', 'business_name']),
+            'actions' => AuditLog::query()->whereNotNull('action')->distinct()->orderBy('action')->pluck('action'),
+            'roles' => AuditLog::query()->whereNotNull('role')->distinct()->orderBy('role')->pluck('role'),
+            'filters' => $filters,
         ]);
+    }
+
+    public function liveAuditLogs(Request $request)
+    {
+        $validated = $request->validate(['after_id' => ['nullable', 'integer', 'min:0']]);
+        $afterId = max(0, (int) ($validated['after_id'] ?? 0));
+        [, $query] = $this->filteredAuditLogQuery($request);
+        $logs = $query->where('id', '>', $afterId)->latest('id')->take(50)->get()
+            ->sortBy('id')->values()->map(fn (AuditLog $log) => $this->auditLogPayload($log));
+
+        return response()->json(['logs' => $logs, 'last_id' => $logs->last()['id'] ?? $afterId]);
+    }
+
+    public function exportAuditLogsCsv(Request $request): StreamedResponse
+    {
+        [, $query] = $this->filteredAuditLogQuery($request);
+
+        return response()->streamDownload(function () use ($query): void {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Date & Time', 'Company', 'User', 'Role', 'Module', 'Action', 'Description', 'Route', 'IP Address', 'Record']);
+            $query->latest('occurred_at')->chunkById(250, function ($logs) use ($out): void {
+                foreach ($logs as $log) {
+                    fputcsv($out, [
+                        $this->auditLogDate($log), $log->business?->business_name ?: 'Platform', $log->user_name ?: $log->user?->name ?: 'System',
+                        $log->role ?: $log->actor_role, $log->module, $log->action, $log->description, $log->route, $log->ip_address,
+                        trim(($log->record_type ?: '').' #'.($log->record_id ?: '')),
+                    ]);
+                }
+            });
+            fclose($out);
+        }, 'tradeflow-platform-audit-logs-'.now()->format('Ymd-His').'.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    public function exportAuditLogsPdf(Request $request)
+    {
+        [, $query] = $this->filteredAuditLogQuery($request);
+        // Dompdf keeps the complete table layout in memory. A large audit trail
+        // can otherwise exceed PHP's memory limit before a response is sent.
+        // CSV remains available for complete, unbounded exports.
+        $pdfRowLimit = 200;
+        $logs = $query->latest('occurred_at')->limit($pdfRowLimit)->get();
+
+        return Pdf::loadView('super-admin.audit-logs-pdf', compact('logs', 'pdfRowLimit'))->setPaper('a4', 'landscape')
+            ->stream('tradeflow-platform-audit-logs-'.now()->format('Ymd-His').'.pdf');
     }
 
     public function settings()
@@ -564,23 +657,54 @@ class AdminController extends Controller
         return back()->with('success', 'Settings updated.');
     }
 
-    public function businessReports()
+    public function businessReports(Request $request)
     {
         $query = BusinessReport::with('business');
         foreach (['business_id', 'report_type', 'month', 'year', 'status'] as $filter) {
-            if (request($filter)) $query->where($filter, request($filter));
+            if ($request->filled($filter)) $query->where($filter, $request->input($filter));
         }
+        $sales = Order::whereNotIn('status', ['Cancelled', 'Void', 'Returned'])
+            ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')))
+            ->when($request->filled('date_from'), fn ($builder) => $builder->whereDate('order_date', '>=', $request->date_from))
+            ->when($request->filled('date_to'), fn ($builder) => $builder->whereDate('order_date', '<=', $request->date_to))
+            ->when($request->filled('month'), fn ($builder) => $builder->whereMonth('order_date', $request->integer('month')))
+            ->when($request->filled('year'), fn ($builder) => $builder->whereYear('order_date', $request->integer('year')));
+        $expenses = Expense::query()
+            ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')))
+            ->when($request->filled('date_from'), fn ($builder) => $builder->whereDate('expense_date', '>=', $request->date_from))
+            ->when($request->filled('date_to'), fn ($builder) => $builder->whereDate('expense_date', '<=', $request->date_to))
+            ->when($request->filled('month'), fn ($builder) => $builder->whereMonth('expense_date', $request->integer('month')))
+            ->when($request->filled('year'), fn ($builder) => $builder->whereYear('expense_date', $request->integer('year')));
+        $period = fn ($builder, string $column) => $builder
+            ->when($request->filled('date_from'), fn ($q) => $q->whereDate($column, '>=', $request->date_from))
+            ->when($request->filled('date_to'), fn ($q) => $q->whereDate($column, '<=', $request->date_to))
+            ->when($request->filled('month'), fn ($q) => $q->whereMonth($column, $request->integer('month')))
+            ->when($request->filled('year'), fn ($q) => $q->whereYear($column, $request->integer('year')));
+        $companySummaries = Business::when($request->filled('business_id'), fn ($builder) => $builder->whereKey($request->integer('business_id')))
+            ->withSum(['orders as sales_total' => fn ($builder) => $period($builder->whereNotIn('status', ['Cancelled', 'Void', 'Returned']), 'order_date')], 'grand_total')
+            ->withSum(['expenses as expense_total' => fn ($builder) => $period($builder, 'expense_date')], 'amount')
+            ->orderByDesc('sales_total')->get();
+        $purchases = Purchase::query()
+            ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
+        $period($purchases, 'purchase_date');
+
         return view('super-admin.business-reports.index', [
             'reports' => $query->latest()->paginate(20)->withQueryString(),
             'businesses' => Business::all(),
             'totalBusinesses' => Business::count(),
             'activeBusinesses' => Business::whereIn('status', ['Approved', 'approved'])->count(),
-            'platformSales' => Order::sum('grand_total'),
+            'platformSales' => (clone $sales)->sum('grand_total'),
             'monthlyTransactions' => Payment::whereMonth('payment_date', now()->month)->sum('amount'),
             'pendingReports' => BusinessReport::where('status', 'Pending Review')->count(),
             'flaggedBusinesses' => Business::whereIn('status', ['Suspended', 'Rejected'])->count(),
             'highCreditBusinesses' => Business::whereHas('customers', fn($q) => $q->where('current_balance', '>', 100000))->count(),
             'inactiveBusinesses' => Business::whereNotIn('status', ['Approved', 'approved'])->count(),
+            'platformSummary' => [
+                'sales' => (clone $sales)->sum('grand_total'), 'sales_count' => (clone $sales)->count(),
+                'expenses' => (clone $expenses)->sum('amount'), 'purchases' => $purchases->sum('grand_total'),
+                'receivables' => (clone $sales)->sum('balance'), 'payables' => Purchase::when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')))->sum('balance'),
+            ],
+            'companySummaries' => $companySummaries,
         ]);
     }
 
@@ -630,6 +754,50 @@ class AdminController extends Controller
             'tickets.view', 'tickets.assign', 'tickets.reply', 'tickets.close',
             'notifications.send', 'activity.view', 'activity.export', 'audit.view', 'reports.view', 'reports.export',
         ];
+    }
+
+    private function filteredAuditLogQuery(Request $request): array
+    {
+        $filters = $request->validate([
+            'user_id' => ['nullable', 'integer', 'exists:users,id'], 'business_id' => ['nullable', 'integer', 'exists:businesses,id'],
+            'role' => ['nullable', 'string', 'max:100'], 'module' => ['nullable', 'string', 'max:100'], 'action' => ['nullable', 'string', 'max:255'],
+            'date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'search' => ['nullable', 'string', 'max:255'], 'ip_address' => ['nullable', 'ip'],
+        ]);
+
+        $query = AuditLog::with(['user', 'business'])
+            ->when($filters['user_id'] ?? null, fn ($q, $value) => $q->where('user_id', $value))
+            ->when($filters['business_id'] ?? null, fn ($q, $value) => $q->where('business_id', $value))
+            ->when($filters['role'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner->where('role', $value)->orWhere('actor_role', $value)))
+            ->when($filters['module'] ?? null, fn ($q, $value) => $q->where('module', $value))
+            ->when($filters['action'] ?? null, fn ($q, $value) => $q->where('action', $value))
+            ->when($filters['date_from'] ?? null, fn ($q, $value) => $q->whereDate('occurred_at', '>=', $value))
+            ->when($filters['date_to'] ?? null, fn ($q, $value) => $q->whereDate('occurred_at', '<=', $value))
+            ->when($filters['ip_address'] ?? null, fn ($q, $value) => $q->where('ip_address', $value))
+            ->when($filters['search'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner
+                ->where('description', 'like', "%{$value}%")
+                ->orWhere('route', 'like', "%{$value}%")
+                ->orWhere('action', 'like', "%{$value}%")));
+
+        return [$filters, $query];
+    }
+
+    private function auditLogPayload(AuditLog $log): array
+    {
+        return [
+            'id' => $log->id, 'occurred_at' => $this->auditLogDate($log), 'company' => $log->business?->business_name ?: 'Platform',
+            'user' => $log->user_name ?: $log->user?->name ?: 'System', 'role' => $log->role ?: $log->actor_role ?: 'system',
+            'module' => $log->module ?: 'General', 'action' => $log->action, 'description' => $log->description ?: $log->action,
+            'ip_address' => $log->ip_address ?: '—', 'route' => $log->route, 'record_type' => $log->record_type, 'record_id' => $log->record_id,
+            'old_values' => $log->old_values, 'new_values' => $log->new_values, 'user_agent' => $log->user_agent,
+        ];
+    }
+
+    private function auditLogDate(AuditLog $log): string
+    {
+        $date = $log->occurred_at ?? $log->created_at;
+
+        return $date ? Carbon::parse($date)->timezone(config('app.timezone'))->format('d M, Y h:i A') : '—';
     }
 
     private function audit(string $action, Request $request, string $module = 'Admin', ?int $recordId = null, ?array $old = null, ?array $new = null): void

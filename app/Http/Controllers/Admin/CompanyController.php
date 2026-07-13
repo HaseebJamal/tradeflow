@@ -19,12 +19,12 @@ use App\Models\Product;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\PermissionDefinition;
-use App\Models\PermissionTemplate;
 use App\Notifications\CompanyRegistrationNotification;
 use App\Services\AccountingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
@@ -32,29 +32,56 @@ class CompanyController extends Controller
 {
     public function index(Request $request, ?string $status = null)
     {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'business_type' => ['nullable', 'string', 'max:100'],
+            'city' => ['nullable', 'string', 'max:100'],
+            'plan_id' => ['nullable', 'integer', 'exists:subscription_plans,id'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'sort' => ['nullable', Rule::in(['newest', 'oldest', 'name_asc', 'name_desc'])],
+        ]);
         $query = Business::with(['owner', 'subscription.plan', 'assignments.user'])
-            ->withCount(['users', 'customers', 'orders']);
+            ->withCount(['users', 'orders', 'companyPermissions as permissions_count' => fn ($permission) => $permission->where('allowed', true)]);
 
         $status ??= $request->string('status')->lower()->value();
         if ($status) {
             $query->whereRaw('LOWER(status) = ?', [strtolower($status)]);
         }
 
-        if ($request->filled('search')) {
-            $search = $request->search;
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
             $query->where(fn ($q) => $q->where('business_name', 'like', "%{$search}%")
-                ->orWhereHas('owner', fn ($owner) => $owner->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%")));
+                ->orWhere('phone', 'like', "%{$search}%")
+                ->orWhere('city', 'like', "%{$search}%")
+                ->orWhereHas('owner', fn ($owner) => $owner->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%")->orWhere('phone', 'like', "%{$search}%")));
         }
+        $query
+            ->when($filters['business_type'] ?? null, fn ($q, $value) => $q->where('business_type', $value))
+            ->when($filters['city'] ?? null, fn ($q, $value) => $q->where('city', 'like', "%{$value}%"))
+            ->when($filters['plan_id'] ?? null, fn ($q, $value) => $q->whereHas('subscription', fn ($subscription) => $subscription->where('subscription_plan_id', $value)))
+            ->when($filters['date_from'] ?? null, fn ($q, $value) => $q->whereDate('created_at', '>=', $value))
+            ->when($filters['date_to'] ?? null, fn ($q, $value) => $q->whereDate('created_at', '<=', $value));
+
+        match ($filters['sort'] ?? 'newest') {
+            'oldest' => $query->oldest(),
+            'name_asc' => $query->orderBy('business_name'),
+            'name_desc' => $query->orderByDesc('business_name'),
+            default => $query->latest(),
+        };
 
         return view('super-admin.companies.index', [
-            'companies' => $query->latest()->paginate(20)->withQueryString(),
+            'companies' => $query->paginate(20)->withQueryString(),
             'statusFilter' => $status,
+            'businessTypes' => Business::query()->whereNotNull('business_type')->distinct()->orderBy('business_type')->pluck('business_type'),
+            'plans' => \App\Models\SubscriptionPlan::orderBy('name')->get(['id', 'name']),
+            'filters' => $filters,
         ]);
     }
 
     public function create()
     {
-        return view('super-admin.companies.create', ['templates' => PermissionTemplate::where('status', 'active')->orderBy('name')->get()]);
+        return view('super-admin.companies.create', ['definitions' => PermissionDefinition::where('status', 'active')->orderBy('module')->orderBy('label')->get()]);
     }
 
     public function approvalHistory(Request $request)
@@ -65,6 +92,14 @@ class CompanyController extends Controller
             'changed_by' => ['nullable', 'exists:users,id'], 'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'], 'search' => ['nullable', 'string', 'max:255'],
         ]);
+        // Approval history opens on the current day, matching the other
+        // operational logs. A one-sided custom date filter is preserved.
+        $filters += ['date_from' => null, 'date_to' => null];
+        if (!$filters['date_from'] && !$filters['date_to']) {
+            $filters['date_from'] = now()->toDateString();
+            $filters['date_to'] = now()->toDateString();
+        }
+
         $query = CompanyApprovalLog::with(['company.owner', 'changedBy'])
             ->when($filters['company_id'] ?? null, fn ($q, $value) => $q->where('company_id', $value))
             ->when($filters['owner_id'] ?? null, fn ($q, $value) => $q->whereHas('company', fn ($company) => $company->where('owner_id', $value)))
@@ -80,6 +115,7 @@ class CompanyController extends Controller
             'companies' => Business::with('owner')->orderBy('business_name')->get(),
             'owners' => User::where('role', 'business_owner')->orderBy('name')->get(),
             'admins' => User::whereIn('role', ['super_admin', 'platform_admin', 'platform_sub_admin'])->orderBy('name')->get(),
+            'filters' => $filters,
         ]);
     }
 
@@ -114,7 +150,7 @@ class CompanyController extends Controller
                 'city' => $data['city'],
                 'registration_number' => $data['registration_number'] ?? null,
                 'tax_number' => $data['tax_number'] ?? null,
-                'status' => $data['initial_status'],
+                'status' => 'Approved',
             ]);
 
             $owner->update(['business_id' => $company->id]);
@@ -127,8 +163,8 @@ class CompanyController extends Controller
             }
 
             app(AccountingService::class)->ensureDefaultAccounts($company->id);
-            $this->applyInitialTemplate($company, $data['permission_template_id'] ?? null);
-            $this->recordApprovalLog($company, null, $data['initial_status'], 'Company created by Super Admin');
+            $this->applyInitialPermissions($company, $data['permissions'] ?? []);
+            $this->recordApprovalLog($company, null, 'Approved', 'Company created and approved by Super Admin');
 
             User::where('role', 'super_admin')->where('status', 'active')->get()
                 ->each(fn (User $admin) => $admin->notify(new CompanyRegistrationNotification($company)));
@@ -159,9 +195,9 @@ class CompanyController extends Controller
         $data = $request->validate([
             'destination' => ['nullable', Rule::in([
                 'business.dashboard', 'business.products.index', 'business.inventory', 'business.customers.index',
-                'business.suppliers.index', 'business.orders.index', 'business.payments', 'business.khata',
+                'business.suppliers.index', 'business.purchases.index', 'business.orders.index', 'business.payments', 'business.khata',
                 'business.deliveries', 'business.invoices.index', 'business.expenses.index', 'business.reports',
-                'business.staff', 'business.settings', 'business.pos.index',
+                'business.staff', 'business.audit-logs.index', 'business.settings', 'business.pos.index',
             ])],
         ]);
 
@@ -225,15 +261,29 @@ class CompanyController extends Controller
     public function update(UpdateCompanyRequest $request, Business $company)
     {
         $data = $request->validated();
-        $old = $company->only(['business_name', 'business_type', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number']);
+        $old = $company->only(['business_name', 'business_type', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo']);
 
-        DB::transaction(function () use ($company, $data) {
+        DB::transaction(function () use ($request, $company, $data) {
             $company->update(collect($data)->only(['business_name', 'business_type', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number'])->all());
-            $company->owner?->update([
+            $ownerData = [
                 'name' => $data['owner_name'],
                 'email' => $data['owner_email'],
-                'phone' => $data['owner_phone'] ?? $company->owner->phone,
-            ]);
+                'phone' => $data['owner_phone'],
+            ];
+            if (!empty($data['owner_password'])) $ownerData['password'] = Hash::make($data['owner_password']);
+            $company->owner?->update($ownerData);
+
+            if ($request->boolean('remove_company_logo') && $company->logo) {
+                Storage::disk('public')->delete($company->logo);
+                $company->update(['logo' => null]);
+            }
+            if ($request->hasFile('company_logo')) {
+                if ($company->logo) Storage::disk('public')->delete($company->logo);
+                $company->update(['logo' => $request->file('company_logo')->store('business-logos', 'public')]);
+            }
+            if ($request->hasFile('business_document')) {
+                BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public')]);
+            }
         });
 
         $this->audit($request, 'company updated', $company, $old, $company->fresh()->only(array_keys($old)));
@@ -261,7 +311,7 @@ class CompanyController extends Controller
 
         $this->audit($request, 'company status changed', $company, ['status' => $oldStatus], ['status' => $newStatus, 'note' => $data['admin_note'] ?? null]);
 
-        return redirect()->route('admin.companies.show', $company)->with('success', 'Company status updated.');
+        return back()->with('success', 'Company status updated.');
     }
 
     public function archive(Request $request, Business $company)
@@ -344,17 +394,21 @@ class CompanyController extends Controller
         ]);
     }
 
-    private function applyInitialTemplate(Business $company, ?int $templateId): void
+    private function applyInitialPermissions(Business $company, array $permissions): void
     {
-        if (!$templateId) {
-            return;
-        }
+        $selected = collect($permissions)->map(fn ($key) => strtolower((string) $key))->all();
+        $definitions = PermissionDefinition::where('status', 'active')->get(['module', 'permission_key']);
+        $enabledModules = $definitions
+            ->filter(fn (PermissionDefinition $definition) => $definition->permission_key === strtolower($definition->module).'.view')
+            ->filter(fn (PermissionDefinition $definition) => in_array(strtolower($definition->permission_key), $selected, true))
+            ->pluck('module')->map(fn ($module) => strtolower($module))->all();
 
-        $allowed = PermissionTemplate::findOrFail($templateId)->items()->where('allowed', true)->pluck('permission_key')->all();
-        foreach (PermissionDefinition::where('status', 'active')->pluck('permission_key') as $key) {
+        foreach ($definitions as $definition) {
+            $key = strtolower($definition->permission_key);
+            $isModule = $key === strtolower($definition->module).'.view';
             CompanyPermission::updateOrCreate(
-                ['company_id' => $company->id, 'permission_key' => $key],
-                ['allowed' => in_array($key, $allowed, true), 'assigned_by' => auth()->id()]
+                ['company_id' => $company->id, 'permission_key' => $definition->permission_key],
+                ['allowed' => $isModule ? in_array($key, $selected, true) : (in_array(strtolower($definition->module), $enabledModules, true) && in_array($key, $selected, true)), 'assigned_by' => auth()->id()]
             );
         }
     }

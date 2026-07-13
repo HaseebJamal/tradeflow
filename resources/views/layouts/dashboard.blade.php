@@ -46,6 +46,16 @@ setInterval(() => {
     }).catch(() => {});
 }, 60000);
 </script>
+@if((auth()->user()->role === 'super_admin' && request()->is('admin/*')) || request()->is('business/*'))
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const fields = [...document.querySelectorAll('.dashboard-page form input:not([type="hidden"]):not([disabled]), .dashboard-page form select:not([disabled]), .dashboard-page form textarea:not([disabled])')]
+        .filter((field) => field.offsetParent !== null);
+    fields.forEach((field, index) => field.tabIndex = index + 1);
+    if (!document.activeElement || document.activeElement === document.body) fields[0]?.focus();
+});
+</script>
+@endif
 @endauth
 <script>
 (() => {

@@ -43,11 +43,11 @@
     </div>
 </div>
 
-<div class="tf-card p-4 mt-4">
-    <h2 class="h5 mb-3">Assign Subscription</h2>
+<div id="assign-subscription" class="tf-card p-4 mt-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">Assign Subscription</h2>@if($selectedBusinessId)<small class="tf-muted">The business selected from the company actions menu is prefilled below.</small>@endif</div>@if($selectedBusinessId)<a href="{{ route('admin.subscriptions') }}#assign-subscription" class="btn btn-sm btn-outline-secondary">Clear selected business</a>@endif</div>
     <form method="POST" action="{{ route('admin.subscriptions.activate') }}" class="row g-3">
         @csrf
-        <div class="col-md-3"><label class="form-label">Business</label><select name="business_id" class="form-select" required><option value="">Select business</option>@foreach($businesses as $business)<option value="{{ $business->id }}" @selected(old('business_id') == $business->id)>{{ $business->business_name }}</option>@endforeach</select></div>
+        <div class="col-md-3"><label class="form-label">Business</label><select name="business_id" class="form-select" required autofocus><option value="">Select business</option>@foreach($businesses as $business)<option value="{{ $business->id }}" @selected((string) old('business_id', $selectedBusinessId) === (string) $business->id)>{{ $business->business_name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Plan</label><select name="subscription_plan_id" class="form-select" required><option value="">Select plan</option>@foreach($plans->where('status', 'Active') as $plan)<option value="{{ $plan->id }}" @selected(old('subscription_plan_id') == $plan->id)>{{ $plan->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Amount</label><input name="amount" type="number" min="0" step="0.01" class="form-control" value="{{ old('amount') }}" placeholder="Uses plan price"></div>
         <div class="col-md-2"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select">@foreach(['Cash','Bank Transfer','JazzCash Manual','Easypaisa Manual'] as $method)<option value="{{ $method }}" @selected(old('payment_method', 'Cash') === $method)>{{ $method }}</option>@endforeach</select></div>

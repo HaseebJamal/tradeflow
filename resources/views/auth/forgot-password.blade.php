@@ -8,7 +8,7 @@
         <h1 class="h3 fw-bold">Forgot Password</h1>
         <p class="tf-muted">Enter the email address for your TradeFlow account and we will send a secure reset link.</p>
         @if(session('status'))<div class="alert alert-success">{{ session('status') }}</div>@endif
-        <form method="POST" action="{{ route('password.email') }}" class="d-grid gap-3" data-password-reset-request-form data-resend-until="{{ $resendUntil }}">
+        <form method="POST" action="{{ route('password.email') }}" class="d-grid gap-3" data-password-reset-request-form data-resend-until="{{ $resendUntil }}" data-tf-tab-order>
             @csrf
             <div>
                 <label class="form-label" for="resetEmail">Email</label>

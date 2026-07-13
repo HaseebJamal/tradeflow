@@ -11,7 +11,7 @@
                     <p class="tf-muted">Access your wholesale dashboard securely.</p>
                     @if(session('status'))<div class="alert alert-success">{{ session('status') }}</div>@endif
                     @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-                    <form method="POST" action="{{ route('login.store') }}" class="d-grid gap-3">@csrf
+                    <form method="POST" action="{{ route('login.store') }}" class="d-grid gap-3" data-tf-tab-order>@csrf
                         <div><label class="form-label">Email</label><input name="email" type="email" class="form-control form-control-lg" placeholder="admin@tradeflow.com" value="{{ old('email') }}"></div>
                         <div>
                             <label class="form-label">Password</label>

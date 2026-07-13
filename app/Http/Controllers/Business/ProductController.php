@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Business;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Business\BulkStoreProductRequest;
+use App\Http\Requests\Business\StoreOrUpdateProductRequest;
 use App\Models\Category;
 use App\Models\Inventory;
 use App\Models\InventoryMovement;
@@ -11,7 +13,6 @@ use App\Models\Product;
 use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
@@ -60,42 +61,15 @@ class ProductController extends Controller
         return view('business.products.create', ['categories' => Category::where('business_id', auth()->user()->business_id)->orWhereNull('business_id')->get()]);
     }
 
-    public function store(Request $request)
+    public function store(StoreOrUpdateProductRequest $request)
     {
-        $data = $request->validate([
-            'product_name' => ['required_without:name', 'max:255'],
-            'name' => ['required_without:product_name', 'max:255'],
-            'category' => ['required_without:category_id', 'max:255'],
-            'category_id' => ['nullable', 'exists:categories,id'],
-            'product_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'sku' => ['nullable', 'max:100'],
-            'barcode' => ['nullable', 'max:100', Rule::unique('products', 'barcode')->where('business_id', auth()->user()->business_id)->whereNull('deleted_at')],
-            'batch_number' => ['nullable', 'max:100'],
-            'manufacturing_date' => ['nullable', 'date'],
-            'expiry_date' => ['nullable', 'date'],
-            'expiry_alert_days' => ['nullable', 'integer', 'min:0'],
-            'retail_price' => ['required', 'numeric', 'min:0'],
-            'wholesale_price' => ['required', 'numeric', 'min:0'],
-            'purchase_cost' => ['required', 'numeric', 'min:0'],
-            'opening_stock' => ['nullable', 'integer', 'min:0'],
-            'minimum_order_quantity' => ['nullable', 'integer', 'min:1'],
-            'stock_quantity' => ['required_without:opening_stock', 'integer', 'min:0'],
-            'low_stock_alert_qty' => ['nullable', 'integer', 'min:0'],
-            'unit' => ['required', 'in:Piece,Carton,KG,Liter'],
-            'status' => ['required', 'in:Active,Inactive'],
-            'description' => ['nullable', 'string'],
-            'brand' => ['nullable', 'max:100'],
-            'manufacturer' => ['nullable', 'max:100'],
-            'warehouse_location' => ['nullable', 'max:150'],
-            'has_batch_tracking' => ['nullable', 'boolean'],
-        ]);
+        $data = $request->validated();
 
         $data['business_id'] = auth()->user()->business_id;
         $data['name'] = $data['product_name'] ?? $data['name'];
-        $data['opening_stock'] = $data['opening_stock'] ?? $data['stock_quantity'] ?? 0;
-        $data['stock_quantity'] = $data['opening_stock'];
-        $data['current_stock'] = $data['stock_quantity'];
+        $data['opening_stock'] = 0;
+        $data['stock_quantity'] = 0;
+        $data['current_stock'] = 0;
         $data['minimum_order_quantity'] = $data['minimum_order_quantity'] ?? 1;
         $data['low_stock_alert_qty'] = $data['low_stock_alert_qty'] ?? 10;
         $data['has_batch_tracking'] = $request->boolean('has_batch_tracking');
@@ -117,8 +91,6 @@ class ProductController extends Controller
             'available_stock' => $product->stock_quantity,
             'low_stock_alert' => $product->low_stock_alert_qty,
         ]);
-        StockMovement::create(['business_id' => $data['business_id'], 'product_id' => $product->id, 'type' => 'added', 'quantity' => $product->stock_quantity, 'reason' => 'Opening Stock', 'note' => 'Opening Stock', 'user_id' => auth()->id(), 'created_by' => auth()->id()]);
-        InventoryMovement::create(['business_id' => $data['business_id'], 'product_id' => $product->id, 'type' => 'ADD_STOCK', 'quantity' => $product->stock_quantity, 'previous_stock' => 0, 'new_stock' => $product->stock_quantity, 'note' => 'Opening Stock', 'created_by' => auth()->id(), 'movement_date' => now()]);
 
         return redirect()->route('business.products.show', $product)->with('success', 'Product created.');
     }
@@ -135,38 +107,11 @@ class ProductController extends Controller
         return view('business.products.create', ['product' => $product, 'categories' => Category::where('business_id', auth()->user()->business_id)->orWhereNull('business_id')->get()]);
     }
 
-    public function update(Request $request, Product $product)
+    public function update(StoreOrUpdateProductRequest $request, Product $product)
     {
         $this->authorizeBusiness($product->business_id);
-        $previousStock = (int) $product->stock_quantity;
-        $data = $request->validate([
-            'product_name' => ['required_without:name', 'max:255'],
-            'name' => ['required_without:product_name', 'max:255'],
-            'category' => ['required_without:category_id', 'max:255'],
-            'category_id' => ['nullable', 'exists:categories,id'],
-            'sku' => ['nullable', 'max:100'],
-            'barcode' => ['nullable', 'max:100', Rule::unique('products', 'barcode')->where('business_id', auth()->user()->business_id)->whereNull('deleted_at')->ignore($product->id)],
-            'batch_number' => ['nullable', 'max:100'],
-            'manufacturing_date' => ['nullable', 'date'],
-            'expiry_date' => ['nullable', 'date'],
-            'expiry_alert_days' => ['nullable', 'integer', 'min:0'],
-            'retail_price' => ['required', 'numeric', 'min:0'],
-            'wholesale_price' => ['required', 'numeric', 'min:0'],
-            'purchase_cost' => ['required', 'numeric', 'min:0'],
-            'opening_stock' => ['nullable', 'integer', 'min:0'],
-            'minimum_order_quantity' => ['nullable', 'integer', 'min:1'],
-            'stock_quantity' => ['required', 'integer', 'min:0'],
-            'low_stock_alert_qty' => ['nullable', 'integer', 'min:0'],
-            'unit' => ['required', 'in:Piece,Carton,KG,Liter'],
-            'status' => ['required', 'in:Active,Inactive'],
-            'description' => ['nullable', 'string'],
-            'brand' => ['nullable', 'max:100'],
-            'manufacturer' => ['nullable', 'max:100'],
-            'warehouse_location' => ['nullable', 'max:150'],
-            'has_batch_tracking' => ['nullable', 'boolean'],
-        ]);
+        $data = $request->validated();
         $data['name'] = $data['product_name'] ?? $data['name'];
-        $data['current_stock'] = $data['stock_quantity'];
         $data['minimum_order_quantity'] = $data['minimum_order_quantity'] ?? 1;
         $data['low_stock_alert_qty'] = $data['low_stock_alert_qty'] ?? 10;
         $data['has_batch_tracking'] = $request->boolean('has_batch_tracking');
@@ -175,41 +120,6 @@ class ProductController extends Controller
         }
         unset($data['product_name'], $data['category']);
         $product->update($data);
-        $inventory = $product->inventory()->firstOrCreate(
-            ['business_id' => auth()->user()->business_id],
-            [
-                'available_stock' => $product->stock_quantity,
-                'low_stock_alert' => $product->low_stock_alert_qty,
-            ]
-        );
-        $inventory->update(['available_stock' => $product->stock_quantity]);
-
-        $newStock = (int) $product->stock_quantity;
-        if ($newStock !== $previousStock) {
-            $change = abs($newStock - $previousStock);
-            InventoryMovement::create([
-                'business_id' => auth()->user()->business_id,
-                'product_id' => $product->id,
-                'type' => 'ADJUSTMENT',
-                'quantity' => $change,
-                'previous_stock' => $previousStock,
-                'new_stock' => $newStock,
-                'note' => 'Stock updated from product edit',
-                'created_by' => auth()->id(),
-                'movement_date' => now(),
-            ]);
-            StockMovement::create([
-                'business_id' => auth()->user()->business_id,
-                'product_id' => $product->id,
-                'type' => 'adjustment',
-                'quantity' => $change,
-                'reason' => 'Product stock edit',
-                'note' => 'Stock changed from '.$previousStock.' to '.$newStock,
-                'user_id' => auth()->id(),
-                'created_by' => auth()->id(),
-            ]);
-        }
-
         return redirect()->route('business.products.show', $product)->with('success', 'Product updated.');
     }
 
@@ -274,23 +184,9 @@ class ProductController extends Controller
         ]);
     }
 
-    public function bulkStore(Request $request)
+    public function bulkStore(BulkStoreProductRequest $request)
     {
-        $rows = $request->validate([
-            'products' => ['required', 'array', 'min:1'],
-            'products.*.name' => ['required', 'max:255'],
-            'products.*.category' => ['required', 'max:255'],
-            'products.*.unit' => ['required', 'in:Piece,Carton,KG,Liter'],
-            'products.*.purchase_cost' => ['required', 'numeric', 'min:0'],
-            'products.*.wholesale_price' => ['required', 'numeric', 'min:0'],
-            'products.*.retail_price' => ['nullable', 'numeric', 'min:0'],
-            'products.*.opening_stock' => ['required', 'integer', 'min:0'],
-            'products.*.sku' => ['nullable', 'max:100'],
-            'products.*.barcode' => ['nullable', 'max:100'],
-            'products.*.batch_number' => ['nullable', 'max:100'],
-            'products.*.expiry_date' => ['nullable', 'date'],
-            'products.*.low_stock_alert_qty' => ['nullable', 'integer', 'min:0'],
-        ])['products'];
+        $rows = $request->validated('products');
 
         DB::transaction(function () use ($rows) {
             foreach ($rows as $index => $row) {
@@ -307,9 +203,9 @@ class ProductController extends Controller
                     'purchase_cost' => $row['purchase_cost'],
                     'wholesale_price' => $row['wholesale_price'],
                     'retail_price' => $row['retail_price'] ?? 0,
-                    'opening_stock' => $row['opening_stock'],
-                    'current_stock' => $row['opening_stock'],
-                    'stock_quantity' => $row['opening_stock'],
+                    'opening_stock' => 0,
+                    'current_stock' => 0,
+                    'stock_quantity' => 0,
                     'sku' => $row['sku'] ?? null,
                     'barcode' => $row['barcode'] ?? null,
                     'batch_number' => $row['batch_number'] ?? null,
@@ -327,8 +223,6 @@ class ProductController extends Controller
                     'available_stock' => $product->stock_quantity,
                     'low_stock_alert' => $product->low_stock_alert_qty,
                 ]);
-                StockMovement::create(['business_id' => auth()->user()->business_id, 'product_id' => $product->id, 'type' => 'added', 'quantity' => $product->stock_quantity, 'reason' => 'Opening Stock', 'note' => 'Bulk opening stock', 'user_id' => auth()->id(), 'created_by' => auth()->id()]);
-                InventoryMovement::create(['business_id' => auth()->user()->business_id, 'product_id' => $product->id, 'type' => 'ADD_STOCK', 'quantity' => $product->stock_quantity, 'previous_stock' => 0, 'new_stock' => $product->stock_quantity, 'note' => 'Bulk opening stock', 'created_by' => auth()->id(), 'movement_date' => now()]);
             }
         });
 
@@ -337,7 +231,7 @@ class ProductController extends Controller
 
     public function csvTemplate()
     {
-        return response("Product Name,Category,Unit,Purchase Cost,Wholesale Price,Retail Price,Opening Stock,SKU,Barcode,Batch Number,Expiry Date,Low Stock Alert\n", 200, [
+        return response("Product Name,Category,Unit,Purchase Cost,Wholesale Price,Retail Price,SKU,Barcode,Batch Number,Expiry Date,Low Stock Alert\n", 200, [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename=tradeflow-products-template.csv',
         ]);

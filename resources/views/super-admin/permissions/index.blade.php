@@ -1,7 +1,7 @@
 @extends('layouts.dashboard')
 
 @section('page-title', $title)
-@section('page-subtitle', 'Control company-level module, feature, and action access')
+@section('page-subtitle', 'Manage each company\'s complete module and action access in one place')
 
 @section('content')
     @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
@@ -19,6 +19,7 @@
                 </select>
             </div>
             <div class="col-md-auto"><button class="btn btn-outline-primary">Load Permissions</button></div>
+            <div class="col-md-auto"><a href="{{ route('admin.permissions.templates') }}" class="btn btn-outline-secondary">Permission Templates</a></div>
         </form>
     </div>
 
@@ -31,13 +32,13 @@
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <div>
                     <h2 class="h5 mb-1">{{ $selectedCompany->business_name }}</h2>
-                    <p class="tf-muted mb-0">Disabled modules are hidden from the company and blocked by middleware.</p>
+                    <p class="tf-muted mb-0">Select a module to enable it, then choose the features and actions available beneath it.</p>
                 </div>
                 <button class="btn btn-tf-primary">Save Permissions</button>
             </div>
             <label class="form-check border rounded p-3 mb-3 fw-semibold" for="permissionMaster">
                 <input id="permissionMaster" class="form-check-input me-2" type="checkbox" data-permission-master>
-                Select All {{ $scope === 'modules' ? 'Modules' : ($scope === 'features' ? 'Features' : 'Permissions') }}
+                Select All Permissions
             </label>
             <div class="row g-3">
                 @foreach($definitions->groupBy('module') as $module => $permissions)
@@ -48,6 +49,6 @@
             </div>
         </form>
     @else
-        <div class="tf-card p-5 text-center tf-muted">Choose a company to manage its {{ strtolower($title) }}.</div>
+        <div class="tf-card p-5 text-center tf-muted">Choose a company to manage its complete permission tree.</div>
     @endif
 @endsection

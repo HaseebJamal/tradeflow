@@ -20,18 +20,19 @@
             : [
                 ['Products', 'bi-box', route('business.products.index'), 'products'],
                 ['Inventory', 'bi-clipboard-data', route('business.inventory'), 'inventory'],
-                ['Customers', 'bi-person-lines-fill', route('business.customers.index'), 'customers'],
                 ['Suppliers', 'bi-building-add', route('business.suppliers.index'), 'suppliers'],
-                ['Orders', 'bi-bag-check', route('business.orders.index'), 'orders'],
+                ['Purchases', 'bi-cart-plus', route('business.purchases.index'), 'purchases'],
+                ['Customers', 'bi-person-lines-fill', route('business.customers.index'), 'customers'],
+                ['Sales', 'bi-bag-check', route('business.orders.index'), 'sales'],
                 ['POS', 'bi-upc-scan', route('business.pos.index'), 'pos'],
-                ['Payments', 'bi-cash-stack', route('business.payments'), 'payments'],
-                ['Accounting / Ledger', 'bi-journal-text', route('business.khata'), 'khata'],
                 ['Deliveries', 'bi-truck', route('business.deliveries'), 'deliveries'],
                 ['Invoices', 'bi-file-earmark-text', route('business.invoices.index'), 'invoices'],
+                ['Accounting / Ledger', 'bi-journal-text', route('business.khata'), 'accounting'],
                 ['Expenses', 'bi-receipt-cutoff', route('business.expenses.index'), 'expenses'],
                 ['Reports', 'bi-graph-up', route('business.reports'), 'reports'],
-                ['Audit Logs', 'bi-activity', route('business.audit-logs.index'), 'audit_logs'],
                 ['Staff', 'bi-person-badge', route('business.staff'), 'staff'],
+                ['Audit Logs', 'bi-activity', route('business.audit-logs.index'), 'audit_logs'],
+                ['Settings', 'bi-gear', route('business.settings'), 'settings'],
             ]);
 
     if ($area === 'business') {
@@ -46,10 +47,6 @@
                 return true;
             }
 
-            if ($item[3] === 'settings') {
-                return false;
-            }
-
             return $item[3] === null || $companyPermissions->allowsUser(auth()->user(), $item[3].'.view');
         }));
     }
@@ -62,15 +59,7 @@
         && $role === 'super_admin'
         && request()->attributes->get('super_admin_business_context');
 
-    $basicBusinessItems = $area === 'business' ? [
-        ['Profile', 'bi-person-circle', $superAdminBusinessContext ? route('business.context.profile') : route('profile.edit')],
-        ['Notifications', 'bi-bell', $superAdminBusinessContext ? route('business.context.notifications') : route('notifications.index')],
-        ['Support', 'bi-life-preserver', route('business.support')],
-    ] : [];
-
-    if ($area === 'business' && in_array($role, ['super_admin', 'business_owner'], true) && $companyPermissions->allowsUser(auth()->user(), 'settings.view')) {
-        $basicBusinessItems[] = ['Settings', 'bi-gear', route('business.settings')];
-    }
+    $basicBusinessItems = [];
 @endphp
 @if($area === 'admin')
     @include('components.super-admin-sidebar')

@@ -9,6 +9,7 @@ use App\Models\Invoice;
 use App\Models\JournalEntry;
 use App\Models\Order;
 use App\Services\AccountingService;
+use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity) {}
 
     public function index()
     {
@@ -64,6 +65,7 @@ class InvoiceController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
         $invoice->update($data);
+        $this->activity->record($invoice->business_id, 'Invoices', 'Draft invoice updated: '.$invoice->invoice_number, $invoice->id, null, $data);
 
         return back()->with('success', 'Draft invoice updated.');
     }
@@ -75,6 +77,7 @@ class InvoiceController extends Controller
             return back()->withErrors(['status' => 'Only draft invoices can be issued.']);
         }
         $invoice->update(['status' => $invoice->balance <= 0 ? 'Paid' : 'Issued', 'issued_by' => auth()->id(), 'issued_at' => now()]);
+        $this->activity->record($invoice->business_id, 'Invoices', 'Invoice issued: '.$invoice->invoice_number, $invoice->id, null, ['status' => $invoice->status]);
 
         return back()->with('success', 'Invoice issued.');
     }
@@ -84,6 +87,7 @@ class InvoiceController extends Controller
         abort_unless($invoice->business_id === auth()->user()->business_id, 403);
         $data = $request->validate(['void_reason' => ['required', 'string', 'max:1000']]);
         $invoice->update(['status' => 'Void', 'voided_by' => auth()->id(), 'voided_at' => now(), 'void_reason' => $data['void_reason']]);
+        $this->activity->record($invoice->business_id, 'Invoices', 'Invoice voided: '.$invoice->invoice_number, $invoice->id, null, ['reason' => $data['void_reason']]);
 
         return back()->with('success', 'Invoice voided.');
     }
@@ -112,6 +116,7 @@ class InvoiceController extends Controller
             'voided_at' => null,
             'void_reason' => null,
         ]);
+        $this->activity->record($invoice->business_id, 'Invoices', 'Invoice reissued: '.$invoice->invoice_number, $invoice->id, null, ['status' => $invoice->status]);
 
         return back()->with('success', 'Invoice reissued using the current order totals.');
     }
@@ -153,6 +158,7 @@ class InvoiceController extends Controller
                 ]);
             }
         });
+        $this->activity->record($invoice->business_id, 'Invoices', 'Credit note posted for '.$invoice->invoice_number, $invoice->id, null, ['amount' => $data['amount'], 'reason' => $data['reason']]);
 
         return back()->with('success', 'Credit note posted.');
     }

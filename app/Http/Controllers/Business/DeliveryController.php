@@ -10,13 +10,14 @@ use App\Models\KhataLedger;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DeliveryController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity) {}
 
     public function index(Request $request)
     {
@@ -156,6 +157,7 @@ class DeliveryController extends Controller
         } elseif (in_array($delivery->status, ['Failed', 'Returned'], true)) {
             $delivery->order?->update(['status' => $delivery->status]);
         }
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery updated to '.$delivery->status, $delivery->id, null, ['order_id' => $delivery->order_id, 'status' => $delivery->status]);
 
         return back()->with('success', 'Delivery updated.');
     }
@@ -167,6 +169,7 @@ class DeliveryController extends Controller
             return back()->withErrors(['status' => 'Only assigned deliveries can be picked up.']);
         }
         $delivery->update(['status' => 'Picked Up', 'started_at' => $delivery->started_at ?? now()]);
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery picked up', $delivery->id, null, ['order_id' => $delivery->order_id]);
 
         return back()->with('success', 'Delivery marked as picked up.');
     }
@@ -275,6 +278,8 @@ class DeliveryController extends Controller
                 $delivery->update(['payment_status' => $syncedOrder->payment_status]);
             }
         });
+        $delivery->refresh();
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery completed', $delivery->id, null, ['order_id' => $delivery->order_id, 'collected_amount' => $delivery->collected_amount]);
 
         return redirect()->route('business.deliveries.show', $delivery)->with('success', 'Delivery marked delivered.');
     }
@@ -288,6 +293,7 @@ class DeliveryController extends Controller
         if (in_array($delivery->order?->status, ['Out For Delivery', 'Failed'], true)) {
             $delivery->order?->update(['status' => 'Failed']);
         }
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery marked failed', $delivery->id, null, ['order_id' => $delivery->order_id, 'reason' => $data['failure_reason']]);
 
         return back()->with('success', 'Delivery marked failed.');
     }
@@ -297,6 +303,7 @@ class DeliveryController extends Controller
         $delivery = $this->scopedDelivery($delivery);
         abort_unless($delivery->status === 'Failed', 403);
         $delivery->update(['status' => 'Assigned', 'assigned_at' => $delivery->assigned_at ?? now(), 'failed_at' => null]);
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Failed delivery reopened', $delivery->id, null, ['order_id' => $delivery->order_id]);
 
         return back()->with('success', 'Failed delivery reopened.');
     }
@@ -306,6 +313,7 @@ class DeliveryController extends Controller
         $delivery = $this->scopedDelivery($delivery);
         abort_unless($delivery->status !== 'Delivered', 403);
         $delivery->update(['status' => 'Cancelled', 'cancelled_at' => $delivery->cancelled_at ?? now()]);
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery cancelled', $delivery->id, null, ['order_id' => $delivery->order_id]);
 
         return back()->with('success', 'Delivery cancelled.');
     }

@@ -11,8 +11,8 @@
         <div class="col-md-2"><label class="form-label">Old Status</label><select name="old_status" class="form-select"><option value="">All</option>@foreach(['Pending','Approved','Rejected','Suspended','Archived'] as $status)<option @selected(strtolower(request('old_status', '')) === strtolower($status))>{{ $status }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">New Status</label><select name="new_status" class="form-select"><option value="">All</option>@foreach(['Pending','Approved','Rejected','Suspended','Archived'] as $status)<option @selected(strtolower(request('new_status', '')) === strtolower($status))>{{ $status }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Changed By</label><select name="changed_by" class="form-select"><option value="">All admins</option>@foreach($admins as $admin)<option value="{{ $admin->id }}" @selected(request('changed_by') == $admin->id)>{{ $admin->name }}</option>@endforeach</select></div>
-        <div class="col-md-3"><label class="form-label">Date From</label><input name="date_from" type="date" class="form-control" value="{{ request('date_from') }}"></div>
-        <div class="col-md-3"><label class="form-label">Date To</label><input name="date_to" type="date" class="form-control" value="{{ request('date_to') }}"></div>
+        <div class="col-md-3"><label class="form-label">Date From</label><input name="date_from" type="date" class="form-control" value="{{ $filters['date_from'] }}"></div>
+        <div class="col-md-3"><label class="form-label">Date To</label><input name="date_to" type="date" class="form-control" value="{{ $filters['date_to'] }}"></div>
         <div class="col-md-4"><label class="form-label">Search Note</label><input name="search" class="form-control" value="{{ request('search') }}" placeholder="Decision note"></div>
         <div class="col-md-2 d-flex gap-2 align-items-end"><button class="btn btn-tf-primary flex-fill">Filter</button><a href="{{ route('admin.approvals.history') }}" class="btn btn-outline-secondary">Clear</a></div>
     </form>

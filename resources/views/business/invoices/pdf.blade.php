@@ -14,7 +14,7 @@
 <body>
 <div class="invoice">
     <div class="header">
-        <div><h1>TradeFlow Invoice</h1><p>{{ $order->business?->business_name }}</p></div>
+        <div><h1>TradeFlow Invoice</h1><p>{{ $order->business?->business_name }}@if($order->business?->phone)<br>{{ $order->business->phone }}@endif</p></div>
         <div><h3>{{ $invoice->invoice_number }}</h3><p>{{ $invoice->created_at->format('M d, Y') }}</p></div>
     </div>
     <p><strong>Customer:</strong> {{ $order->customer?->business_name ?? $order->customer?->name }}</p>

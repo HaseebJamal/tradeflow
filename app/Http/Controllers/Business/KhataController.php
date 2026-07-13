@@ -106,6 +106,8 @@ class KhataController extends Controller
 
     public function storeJournal(Request $request, AccountingService $accounting)
     {
+        return back()->withErrors(['journal' => 'Journal entries are generated automatically from purchases, sales, payments, returns, and expenses.']);
+
         $data = $request->validate([
             'entry_date' => ['required', 'date'],
             'voucher_number' => ['required', 'string', 'max:100'],

@@ -7,12 +7,15 @@ use App\Models\Inventory;
 use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\StockMovement;
+use App\Services\BusinessActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class InventoryController extends Controller
 {
+    public function __construct(private BusinessActivityService $activity) {}
+
     public function index()
     {
         $businessId = auth()->user()->business_id;
@@ -79,7 +82,7 @@ class InventoryController extends Controller
 
             if ($decreasesStock && $quantity > $previousStock) {
                 throw ValidationException::withMessages([
-                    'quantity' => 'Only '.$previousStock.' '.$product->unit.' is available for this stock movement.',
+                    'quantity' => 'Insufficient stock. Only '.$previousStock.' units are available.',
                 ]);
             }
 
@@ -133,5 +136,11 @@ class InventoryController extends Controller
                 'created_by' => auth()->id(),
             ]);
         });
+
+        $this->activity->record($businessId, 'Inventory', $isTransfer ? 'Stock transfer recorded' : 'Inventory adjustment recorded', null, null, [
+            'product_id' => (int) $data['product_id'],
+            'type' => $data['type'],
+            'quantity' => (int) $data['quantity'],
+        ]);
     }
 }

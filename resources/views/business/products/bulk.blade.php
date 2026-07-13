@@ -8,21 +8,20 @@
         @companyCan('products.export')<a href="{{ route('business.products.template') }}" class="btn btn-outline-primary"><i class="bi bi-download me-1"></i>Download CSV Template</a>@endcompanyCan
         <a href="{{ route('business.products.index') }}" class="btn btn-outline-secondary">Back to Products</a>
     </div>
-    <form method="POST" action="{{ route('business.products.bulk.store') }}">
+    <form method="POST" action="{{ route('business.products.bulk.store') }}" data-bulk-product-price-form>
         @csrf
         <div class="table-responsive">
             <table class="table" data-bulk-products>
-                <thead><tr><th>Product Name</th><th>Category</th><th>Unit</th><th>Purchase Cost</th><th>Wholesale Price</th><th>Retail Price</th><th>Opening Stock</th><th>SKU</th><th>Barcode</th><th>Batch</th><th>Expiry</th><th>Low Stock</th><th></th></tr></thead>
+                <thead><tr><th>Product Name</th><th>Category</th><th>Unit</th><th>Purchase Cost</th><th>Wholesale Price</th><th>Retail Price</th><th>SKU</th><th>Barcode</th><th>Batch</th><th>Expiry</th><th>Low Stock</th><th></th></tr></thead>
                 <tbody>
                     @for($i=0;$i<3;$i++)
                         <tr data-bulk-row>
                             <td><input name="products[{{ $i }}][name]" class="form-control" required></td>
                             <td><input name="products[{{ $i }}][category]" class="form-control" required></td>
                             <td><select name="products[{{ $i }}][unit]" class="form-select">@foreach(['Piece','Carton','KG','Liter'] as $unit)<option>{{ $unit }}</option>@endforeach</select></td>
-                            <td><input name="products[{{ $i }}][purchase_cost]" type="number" step="0.01" min="0" class="form-control" required></td>
-                            <td><input name="products[{{ $i }}][wholesale_price]" type="number" step="0.01" min="0" class="form-control" required></td>
+                            <td><input name="products[{{ $i }}][purchase_cost]" type="number" step="0.01" min="0" class="form-control" required data-purchase-price></td>
+                            <td><input name="products[{{ $i }}][wholesale_price]" type="number" step="0.01" min="0" class="form-control" required data-selling-price></td>
                             <td><input name="products[{{ $i }}][retail_price]" type="number" step="0.01" min="0" class="form-control"></td>
-                            <td><input name="products[{{ $i }}][opening_stock]" type="number" min="0" class="form-control" required></td>
                             <td><input name="products[{{ $i }}][sku]" class="form-control"></td>
                             <td><input name="products[{{ $i }}][barcode]" class="form-control"></td>
                             <td><input name="products[{{ $i }}][batch_number]" class="form-control"></td>
@@ -39,3 +38,4 @@
     </form>
 </div>
 @endsection
+@push('scripts')<script>document.addEventListener('DOMContentLoaded',()=>{const form=document.querySelector('[data-bulk-product-price-form]');if(!form)return;const message='Selling Price must be greater than Purchase Price.',validateRow=row=>{const cost=row.querySelector('[data-purchase-price]'),sell=row.querySelector('[data-selling-price]');if(!cost||!sell)return true;const invalid=Number.isFinite(Number(cost.value))&&Number.isFinite(Number(sell.value))&&Number(sell.value)<=Number(cost.value);sell.classList.toggle('is-invalid',invalid);sell.setCustomValidity(invalid?message:'');return !invalid},validate=()=>[...form.querySelectorAll('[data-bulk-row]')].every(validateRow);form.addEventListener('input',event=>{if(event.target.matches('[data-purchase-price],[data-selling-price]'))validateRow(event.target.closest('[data-bulk-row]'))});form.addEventListener('submit',event=>{if(!validate()){event.preventDefault();const bad=form.querySelector('.is-invalid');bad?.focus()}})});</script>@endpush

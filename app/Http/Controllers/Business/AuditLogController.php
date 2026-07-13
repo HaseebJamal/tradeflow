@@ -19,8 +19,8 @@ class AuditLogController extends Controller
         return view('business.audit-logs.index', [
             'logs' => $query->latest('occurred_at')->paginate(30)->withQueryString(),
             'users' => User::where('business_id', $this->businessId())->orderBy('name')->get(['id', 'name', 'role']),
-            'modules' => AuditLog::where('business_id', $this->businessId())->whereNotNull('module')->distinct()->orderBy('module')->pluck('module'),
-            'actions' => AuditLog::where('business_id', $this->businessId())->whereNotNull('action')->distinct()->orderBy('action')->pluck('action'),
+            'modules' => $this->businessLogs()->whereNotNull('module')->distinct()->orderBy('module')->pluck('module'),
+            'actions' => $this->businessLogs()->whereNotNull('action')->distinct()->orderBy('action')->pluck('action'),
             'filters' => $filters,
         ]);
     }
@@ -30,7 +30,7 @@ class AuditLogController extends Controller
         $validated = $request->validate(['after_id' => ['nullable', 'integer', 'min:0']]);
         $afterId = max(0, (int) ($validated['after_id'] ?? 0));
         $canViewDetails = app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'audit_logs.view_details');
-        $logs = AuditLog::where('business_id', $this->businessId())
+        $logs = $this->businessLogs()
             ->where('id', '>', $afterId)
             ->latest('id')
             ->take(50)
@@ -89,7 +89,12 @@ class AuditLogController extends Controller
             'action' => ['nullable', 'string', 'max:255'], 'date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'search' => ['nullable', 'string', 'max:255'], 'ip_address' => ['nullable', 'ip'],
         ]);
-        $query = AuditLog::with('user')->where('business_id', $this->businessId())
+        $filters += ['date_from' => null, 'date_to' => null];
+        if (!$filters['date_from'] && !$filters['date_to']) {
+            $filters['date_from'] = now()->toDateString();
+            $filters['date_to'] = now()->toDateString();
+        }
+        $query = $this->businessLogs()->with('user')
             ->when($filters['user_id'] ?? null, fn ($q, $value) => $q->where('user_id', $value))
             ->when($filters['role'] ?? null, fn ($q, $value) => $q->where('role', $value))
             ->when($filters['module'] ?? null, fn ($q, $value) => $q->where('module', $value))
@@ -100,6 +105,16 @@ class AuditLogController extends Controller
             ->when($filters['search'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner->where('description', 'like', "%{$value}%")->orWhere('route', 'like', "%{$value}%")->orWhere('action', 'like', "%{$value}%")));
 
         return [$filters, $query];
+    }
+
+    private function businessLogs()
+    {
+        $platformRoles = ['super_admin', 'platform_admin', 'platform_sub_admin'];
+
+        return AuditLog::query()
+            ->where('business_id', $this->businessId())
+            ->where(fn ($query) => $query->whereNull('role')->orWhereNotIn('role', $platformRoles))
+            ->where(fn ($query) => $query->whereNull('actor_role')->orWhereNotIn('actor_role', $platformRoles));
     }
 
     private function payload(AuditLog $log, bool $includeDetails = true): array

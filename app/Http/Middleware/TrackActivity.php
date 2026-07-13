@@ -53,7 +53,7 @@ class TrackActivity
                 'occurred_at' => now(),
             ]);
 
-            if ($user->business_id) {
+            if ($user->business_id && !in_array($user->role, ['super_admin', 'platform_admin', 'platform_sub_admin'], true)) {
                 AuditLog::create([
                     'business_id' => $user->business_id,
                     'user_id' => $user->id,

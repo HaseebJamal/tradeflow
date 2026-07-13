@@ -318,7 +318,7 @@ class StaffController extends Controller
             ->groupBy('module')
             ->map(fn ($items) => $items->mapWithKeys(fn (PermissionDefinition $definition) => [$definition->permission_key => $definition->label])->all());
 
-        $order = ['dashboard', 'products', 'inventory', 'customers', 'suppliers', 'orders', 'pos', 'payments', 'accounting', 'deliveries', 'invoices', 'expenses', 'reports', 'audit_logs', 'staff', 'settings'];
+        $order = ['products', 'inventory', 'suppliers', 'purchases', 'customers', 'sales', 'pos', 'deliveries', 'invoices', 'accounting', 'expenses', 'reports', 'staff', 'audit_logs', 'settings'];
 
         return collect($order)
             ->filter(fn (string $module) => $grouped->has($module))

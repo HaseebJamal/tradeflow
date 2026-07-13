@@ -216,6 +216,7 @@
     const draft = restoreDraft();
     const serverStep = Math.max(1, Math.min(4, Number(wizard.dataset.registrationStep || 1))) - 1;
     showStep(hasServerErrors ? serverStep : draft.step, false);
+    window.applyTradeFlowTabOrder?.(wizard, true);
     syncOwnerName();
     refreshBusinessTypes();
 

@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\CompanyPermissionService;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
 
@@ -21,6 +22,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Dashboard pages use Bootstrap; Laravel's Tailwind paginator leaves
+        // unstyled SVG navigation arrows when rendered here.
+        Paginator::useBootstrapFive();
         Blade::if('companyCan', fn (string $permission) => app(CompanyPermissionService::class)->allowsUser(auth()->user(), $permission));
         Blade::if('businessCan', fn (string $permission) => app(CompanyPermissionService::class)->allowsUser(auth()->user(), $permission));
     }

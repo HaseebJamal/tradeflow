@@ -30,12 +30,12 @@
                         @if (session('success'))
                             <div class="alert alert-success" data-tf-registration-complete>{{ session('success') }}</div>
                         @endif
-                        <div class="alert alert-info d-none" data-tf-register-restored>
+                        <div class="alert alert-info d-none" data-tf-register-restored data-tf-auto-dismiss>
                             Your saved registration draft has been restored. For security, please re-enter your password and select the verification files again.
                         </div>
 
                         <form method="POST" action="{{ route('register.business.store') }}" enctype="multipart/form-data"
-                            data-tf-register-form data-registration-step="{{ session('registration_step', 1) }}" novalidate>
+                            data-tf-register-form data-registration-step="{{ session('registration_step', 1) }}" data-tf-tab-order novalidate>
                             @csrf
 
                             <div class="tf-step-panel" data-tf-step-panel="0">

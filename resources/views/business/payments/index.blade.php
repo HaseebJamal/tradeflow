@@ -1,9 +1,9 @@
 @extends('layouts.dashboard')
-@section('page-title', 'Payments')
-@section('page-subtitle', 'Manual payment records')
+@section('page-title', 'Customer Payments')
+@section('page-subtitle', 'Sales collections and customer payment records')
 @section('content')
-@companyCan('payments.create')<div class="tf-card p-4 mb-4">
-    <h2 class="h5">Record Payment</h2>
+@companyCan('sales.payments')<div class="tf-card p-4 mb-4">
+    <h2 class="h5">Record Customer Payment</h2>
     <form method="POST" action="{{ route('business.payments.store') }}" enctype="multipart/form-data" class="row g-3">@csrf
         <div class="col-md-3"><select name="customer_id" class="form-select">@foreach($customers ?? [] as $customer)<option value="{{ $customer->id }}">{{ $customer->business_name ?: $customer->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><select name="method" class="form-select">@foreach(['Cash','Bank Transfer','JazzCash manual','Easypaisa manual','Cheque'] as $method)<option>{{ $method }}</option>@endforeach</select></div>

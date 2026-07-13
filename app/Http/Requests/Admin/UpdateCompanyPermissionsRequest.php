@@ -13,7 +13,7 @@ class UpdateCompanyPermissionsRequest extends FormRequest
     {
         return [
             'company_id' => ['required', 'exists:businesses,id'],
-            'scope' => ['required', Rule::in(['modules', 'features', 'actions'])],
+            'scope' => ['required', Rule::in(['all', 'modules', 'features', 'actions'])],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['string', Rule::exists('permission_definitions', 'permission_key')],
         ];

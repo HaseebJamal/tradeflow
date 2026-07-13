@@ -10,13 +10,14 @@ use App\Models\KhataLedger;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\AccountingService;
+use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PaymentController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity) {}
 
     public function index()
     {
@@ -90,6 +91,12 @@ class PaymentController extends Controller
             }
             $this->postPaymentAccounting($payment);
         });
+        $this->activity->record($businessId, 'Sales', 'Customer payment recorded', $payment->id, null, [
+            'customer_id' => $customer->id,
+            'order_id' => $order?->id,
+            'amount' => $payment->amount,
+            'method' => $payment->method,
+        ]);
         return back()->with('success', 'Manual payment recorded.');
     }
 

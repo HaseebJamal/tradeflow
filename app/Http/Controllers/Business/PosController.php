@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Business;
 
 use App\Http\Controllers\Controller;
 use App\Models\Account;
-use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Inventory;
 use App\Models\InventoryMovement;
@@ -19,6 +18,7 @@ use App\Models\PosReturn;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Services\AccountingService;
+use App\Services\BusinessActivityService;
 use App\Services\CompanyPermissionService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -27,7 +27,7 @@ use Illuminate\Validation\ValidationException;
 
 class PosController extends Controller
 {
-    public function __construct(private AccountingService $accounting, private CompanyPermissionService $permissions) {}
+    public function __construct(private AccountingService $accounting, private CompanyPermissionService $permissions, private BusinessActivityService $activity) {}
 
     public function index()
     {
@@ -137,7 +137,7 @@ class PosController extends Controller
             foreach ($lines as $line) {
                 $product = Product::where('business_id', $businessId)->lockForUpdate()->findOrFail($line['product_id']);
                 if ($product->stock_quantity < $line['quantity']) {
-                    throw ValidationException::withMessages(['items' => $product->name.' has only '.$product->stock_quantity.' '.$product->unit.' available.']);
+                    throw ValidationException::withMessages(['items' => 'Insufficient stock. Only '.$product->stock_quantity.' units are available.']);
                 }
 
                 $price = $line['price'] === null ? (float) $product->retail_price : (float) $line['price'];
@@ -234,7 +234,16 @@ class PosController extends Controller
             return $order;
         });
 
-        return redirect()->route('business.pos.receipt', $order)->with('success', 'POS sale completed successfully.');
+        return redirect()->route('business.pos.sales.completed', $order)->with('success', 'POS sale saved successfully.');
+    }
+
+    public function completed(Order $order)
+    {
+        $this->scopedPosOrder($order);
+
+        return view('business.pos.completed', [
+            'order' => $order->load(['business', 'customer', 'items.product', 'posPayments', 'invoice']),
+        ]);
     }
 
     public function history(Request $request)
@@ -454,6 +463,6 @@ class PosController extends Controller
 
     private function audit(string $action, int $recordId, array $newValues = []): void
     {
-        AuditLog::create(['user_id' => auth()->id(), 'actor_id' => auth()->id(), 'actor_role' => auth()->user()->role, 'business_id' => $this->businessId(), 'module' => 'POS', 'action' => $action, 'record_id' => $recordId, 'description' => $action, 'new_values' => $newValues, 'ip_address' => request()->ip(), 'user_agent' => substr((string) request()->userAgent(), 0, 1000)]);
+        $this->activity->record($this->businessId(), 'POS', $action, $recordId, null, $newValues);
     }
 }

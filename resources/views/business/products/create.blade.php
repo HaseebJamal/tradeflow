@@ -4,17 +4,16 @@
 @section('content')
 <div class="tf-card p-4">
     @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-    <form method="POST" action="{{ isset($product) ? route('business.products.update', $product) : route('business.products.store') }}" enctype="multipart/form-data" class="row g-3">
+    <form method="POST" action="{{ isset($product) ? route('business.products.update', $product) : route('business.products.store') }}" enctype="multipart/form-data" class="row g-3" data-product-price-form>
         @csrf
         @isset($product) @method('PUT') @endisset
         <div class="col-md-6"><label class="form-label">Product Name *</label><input name="product_name" class="form-control" value="{{ old('product_name', $product->name ?? '') }}" required></div>
         <div class="col-md-6"><label class="form-label">Category *</label><input name="category" class="form-control" value="{{ old('category', $product->category?->name ?? '') }}" placeholder="Grocery" required></div>
         <div class="col-md-3"><label class="form-label">Unit *</label><select name="unit" class="form-select">@foreach(['Piece','Carton','KG','Liter'] as $unit)<option @selected(old('unit', $product->unit ?? 'Piece') === $unit)>{{ $unit }}</option>@endforeach</select></div>
-        <div class="col-md-3"><label class="form-label">Purchase Cost *</label><input name="purchase_cost" type="number" step="0.01" min="0" class="form-control" value="{{ old('purchase_cost', $product->purchase_cost ?? 0) }}" required></div>
-        <div class="col-md-3"><label class="form-label">Wholesale Price *</label><input name="wholesale_price" type="number" step="0.01" min="0" class="form-control" value="{{ old('wholesale_price', $product->wholesale_price ?? 0) }}" required></div>
-        <div class="col-md-3"><label class="form-label">Opening Stock *</label><input name="opening_stock" type="number" min="0" class="form-control" value="{{ old('opening_stock', $product->opening_stock ?? $product->stock_quantity ?? 0) }}" required></div>
-        <input type="hidden" name="stock_quantity" value="{{ old('stock_quantity', $product->stock_quantity ?? 0) }}">
-        <div class="col-md-3"><label class="form-label">Retail Price</label><input name="retail_price" type="number" step="0.01" min="0" class="form-control" value="{{ old('retail_price', $product->retail_price ?? 0) }}"></div>
+        <div class="col-md-3"><label class="form-label">Purchase Cost *</label><input name="purchase_cost" type="number" step="0.01" min="0" class="form-control" value="{{ old('purchase_cost', $product->purchase_cost ?? 0) }}" required data-purchase-price></div>
+        <div class="col-md-3"><label class="form-label">Wholesale / Selling Price *</label><input name="wholesale_price" type="number" step="0.01" min="0" class="form-control @error('wholesale_price') is-invalid @enderror" value="{{ old('wholesale_price', $product->wholesale_price ?? 0) }}" required data-selling-price><div class="invalid-feedback" data-price-error>@error('wholesale_price'){{ $message }}@enderror</div></div>
+        <div class="col-md-3"><label class="form-label">Stock Management</label><div class="form-control bg-light text-muted">Use Inventory adjustments or Purchases after saving.</div></div>
+        <div class="col-md-3"><label class="form-label">Retail Price</label><input name="retail_price" type="number" step="0.01" min="0" class="form-control @error('retail_price') is-invalid @enderror" value="{{ old('retail_price', $product->retail_price ?? 0) }}" data-retail-price><div class="invalid-feedback">@error('retail_price'){{ $message }}@enderror</div></div>
         <div class="col-md-3"><label class="form-label">Minimum Order Quantity</label><input name="minimum_order_quantity" type="number" min="1" class="form-control" value="{{ old('minimum_order_quantity', $product->minimum_order_quantity ?? 1) }}"></div>
         <div class="col-md-3"><label class="form-label">Low Stock Alert Quantity</label><input name="low_stock_alert_qty" type="number" min="0" class="form-control" value="{{ old('low_stock_alert_qty', $product->low_stock_alert_qty ?? 10) }}"></div>
         <div class="col-md-3"><label class="form-label">Status</label><select name="status" class="form-select"><option @selected(old('status', $product->status ?? 'Active') === 'Active')>Active</option><option @selected(old('status', $product->status ?? '') === 'Inactive')>Inactive</option></select></div>
@@ -34,3 +33,4 @@
     </form>
 </div>
 @endsection
+@push('scripts')<script>document.addEventListener('DOMContentLoaded',()=>{const form=document.querySelector('[data-product-price-form]');if(!form)return;const cost=form.querySelector('[data-purchase-price]'),sell=form.querySelector('[data-selling-price]'),retail=form.querySelector('[data-retail-price]'),message='Selling Price must be greater than Purchase Price.',validate=()=>{const purchase=Number(cost.value),selling=Number(sell.value),retailPrice=Number(retail.value),invalid=Number.isFinite(purchase)&&Number.isFinite(selling)&&selling<=purchase;sell.classList.toggle('is-invalid',invalid);form.querySelector('[data-price-error]').textContent=invalid?message:'';retail.classList.toggle('is-invalid',retail.value!==''&&retailPrice>0&&retailPrice<=purchase);return !invalid};[cost,sell,retail].forEach(input=>input.addEventListener('input',validate));form.addEventListener('submit',event=>{if(!validate()){event.preventDefault();sell.focus()}})});</script>@endpush

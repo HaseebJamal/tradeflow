@@ -1,17 +1,25 @@
 @extends('layouts.dashboard')
-@section('page-title', 'Orders')
-@section('page-subtitle', 'Wholesale order tracking and full order filters')
+@section('page-title', 'Sales')
+@section('page-subtitle', 'Sales orders, invoices, customer payments, and sales history')
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div>
-        <h2 class="h5 mb-1">Order Directory</h2>
-        <p class="tf-muted mb-0">Search, filter, and manage wholesale orders.</p>
+        <h2 class="h5 mb-1">Sales Directory</h2>
+        <p class="tf-muted mb-0">Search, filter, and manage sales orders, invoices, and customer balances.</p>
     </div>
-    @companyCan('orders.create')
-        <a href="{{ route('business.orders.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>Create Order</a>
-    @endcompanyCan
+    <div class="d-flex flex-wrap gap-2">
+        @companyCan('sales.quotations')
+            <a href="{{ route('business.sales.quotations.index') }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-text me-1"></i>Quotations</a>
+        @endcompanyCan
+        @companyCan('sales.payments')
+            <a href="{{ route('business.payments') }}" class="btn btn-outline-primary"><i class="bi bi-cash-stack me-1"></i>Customer Payments</a>
+        @endcompanyCan
+        @companyCan('sales.create')
+            <a href="{{ route('business.orders.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>Create Sale</a>
+        @endcompanyCan
+    </div>
 </div>
 <form class="tf-card p-4 mb-3">
     <div class="row g-2 align-items-end">

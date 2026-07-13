@@ -45,22 +45,18 @@
             <td>Rs {{ number_format($customer->current_balance) }}</td>
             <td><span class="tf-badge {{ $customer->status === 'Active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $customer->deleted_at ? 'Archived' : $customer->status }}</span></td>
             <td>{{ $customer->creator?->name ?? '-' }}</td>
-            <td class="text-end">
+            <td class="text-end text-nowrap">
                 @if($customer->trashed() && app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'customers.restore'))
                     <form method="POST" action="{{ route('business.customers.restore', $customer->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-success">Restore</button></form>
                 @else
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Actions</button>
-                        <div class="dropdown-menu dropdown-menu-end">
-                            <a class="dropdown-item" href="{{ route('business.customers.show', $customer) }}">View / Edit</a>
-                            @companyCan('customers.edit')
-                                @if($customer->status !== 'Active')<form method="POST" action="{{ route('business.customers.status', $customer) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="Active"><button class="dropdown-item text-success">Activate</button></form>@endif
-                                @if($customer->status !== 'Inactive')<form method="POST" action="{{ route('business.customers.status', $customer) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="Inactive"><button class="dropdown-item">Deactivate</button></form>@endif
-                            @endcompanyCan
-                            @companyCan('customers.archive')<form method="POST" action="{{ route('business.customers.archive', $customer) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning">Archive</button></form>@endcompanyCan
-                            @companyCan('customers.archive')<form method="POST" action="{{ route('business.customers.destroy', $customer) }}" onsubmit="return confirm('Delete this customer when safe? Customers with history are archived.')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>@endcompanyCan
-                        </div>
-                    </div>
+                    <a class="btn btn-sm btn-outline-primary" href="{{ route('business.customers.show', $customer) }}">View / Edit</a>
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ route('business.customers.statement', $customer) }}">Statement</a>
+                    @companyCan('customers.edit')
+                        @if($customer->status !== 'Active')<form class="d-inline" method="POST" action="{{ route('business.customers.status', $customer) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="Active"><button class="btn btn-sm btn-outline-success">Activate</button></form>@endif
+                        @if($customer->status !== 'Inactive')<form class="d-inline" method="POST" action="{{ route('business.customers.status', $customer) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="Inactive"><button class="btn btn-sm btn-outline-secondary">Deactivate</button></form>@endif
+                    @endcompanyCan
+                    @companyCan('customers.archive')<form class="d-inline" method="POST" action="{{ route('business.customers.archive', $customer) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-warning">Archive</button></form>@endcompanyCan
+                    @companyCan('customers.archive')<form class="d-inline" method="POST" action="{{ route('business.customers.destroy', $customer) }}" onsubmit="return confirm('Delete this customer when safe? Customers with history are archived.')">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Delete</button></form>@endcompanyCan
                 @endif
             </td>
         </tr>

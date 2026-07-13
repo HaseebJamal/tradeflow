@@ -6,7 +6,7 @@
         <a href="{{ route('public.home') }}" class="tf-brand d-flex align-items-center mb-4"><span class="tf-brand-mark"><i class="bi bi-box-seam"></i></span>TradeFlow</a>
         <h1 class="h3 fw-bold">Reset Password</h1>
         <p class="tf-muted">Choose a new secure password for your account.</p>
-        <form method="POST" action="{{ route('password.update') }}" class="d-grid gap-3" data-password-reset-update-form>
+        <form method="POST" action="{{ route('password.update') }}" class="d-grid gap-3" data-password-reset-update-form data-tf-tab-order>
             @csrf
             <input type="hidden" name="token" value="{{ $token }}">
             <div><label class="form-label" for="resetPasswordEmail">Email</label><input id="resetPasswordEmail" name="email" type="email" class="form-control form-control-lg @error('email') is-invalid @enderror" value="{{ old('email', $email) }}" autocomplete="email" required>@error('email')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>

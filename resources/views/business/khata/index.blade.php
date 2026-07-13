@@ -94,38 +94,8 @@
 
     <div class="tab-pane fade" id="tab-journal">
         <div class="tf-card p-4 mb-4">
-            <h2 class="h5">Add New Journal Entry</h2>
-            <form id="journalEntryForm" method="POST" action="{{ route('business.khata.journal.store') }}" data-journal-form novalidate>
-                @csrf
-                <div class="row g-3">
-                    <div class="col-md-3"><label class="form-label">Entry Date</label><input type="date" name="entry_date" value="{{ now()->toDateString() }}" class="form-control" required></div>
-                    <div class="col-md-3"><label class="form-label">Voucher Number</label><input name="voucher_number" value="{{ $voucherNumber }}" class="form-control" required></div>
-                    <div class="col-md-6"><label class="form-label">Description <span class="text-danger">*</span></label><input name="description" class="form-control" required></div>
-                </div>
-                <div class="table-responsive mt-3"><table class="table" data-journal-lines><thead><tr><th>Account</th><th>Customer</th><th>Supplier</th><th>Debit</th><th>Credit</th><th>Description</th></tr></thead><tbody>
-                    @for($i=0;$i<2;$i++)
-                    <tr>
-                        <td><select name="lines[{{ $i }}][account_id]" class="form-select" required><option value="">Select</option>@foreach($accounts as $account)<option value="{{ $account->id }}">{{ $account->code }} - {{ $account->name }}</option>@endforeach</select></td>
-                        <td><select name="lines[{{ $i }}][customer_id]" class="form-select"><option value="">-</option>@foreach($customers as $customer)<option value="{{ $customer->id }}">{{ $customer->business_name ?: $customer->name }}</option>@endforeach</select></td>
-                        <td><select name="lines[{{ $i }}][supplier_id]" class="form-select"><option value="">-</option>@foreach($suppliers as $supplier)<option value="{{ $supplier->id }}">{{ $supplier->company_name ?: $supplier->supplier_name }}</option>@endforeach</select></td>
-                        <td><input name="lines[{{ $i }}][debit]" type="number" step="0.01" min="0" value="0" class="form-control" data-journal-debit></td>
-                        <td><input name="lines[{{ $i }}][credit]" type="number" step="0.01" min="0" value="0" class="form-control" data-journal-credit></td>
-                        <td><input name="lines[{{ $i }}][description]" class="form-control"></td>
-                    </tr>
-                    @endfor
-                </tbody></table></div>
-                <div class="d-flex flex-wrap gap-3 align-items-center">
-                    <strong>Total Debit: Rs <span data-journal-total-debit>0.00</span></strong>
-                    <strong>Total Credit: Rs <span data-journal-total-credit>0.00</span></strong>
-                    <strong>Difference: Rs <span data-journal-difference>0.00</span></strong>
-                    <button type="submit" class="btn btn-tf-primary ms-auto" data-journal-submit disabled>
-                        Post Journal Entry
-                    </button>
-                </div>
-                <div class="alert alert-warning mt-3 mb-0" data-journal-message>
-                    Add at least two valid lines. Each line must contain either a debit or a credit, and total debit must equal total credit.
-                </div>
-            </form>
+            <h2 class="h5">Automatic Journal Entries</h2>
+            <p class="tf-muted mb-0">Journal entries are posted automatically from purchases, sales, payments, returns, deliveries, and expenses. Manual entries are disabled to prevent duplicate accounting.</p>
         </div>
         <x-table><thead><tr><th>Posted At</th><th>Voucher</th><th>Description</th><th>Status</th></tr></thead><tbody>@foreach($journalEntries as $entry)<tr><td><x-date-time :value="$entry->posted_at ?? $entry->created_at" /></td><td>{{ $entry->voucher_number }}</td><td>{{ $entry->description }}</td><td>{{ ucfirst($entry->status) }}</td></tr>@endforeach</tbody></x-table>
     </div>

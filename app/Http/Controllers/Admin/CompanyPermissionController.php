@@ -16,24 +16,25 @@ use Illuminate\Validation\Rule;
 
 class CompanyPermissionController extends Controller
 {
-    public function modules(Request $request) { return $this->screen($request, 'modules'); }
-    public function features(Request $request) { return $this->screen($request, 'features'); }
-    public function actions(Request $request) { return $this->screen($request, 'actions'); }
+    public function index(Request $request) { return $this->screen($request, 'all'); }
+    public function modules(Request $request) { return redirect()->route('admin.permissions.index', $request->only('company_id')); }
+    public function features(Request $request) { return redirect()->route('admin.permissions.index', $request->only('company_id')); }
+    public function actions(Request $request) { return redirect()->route('admin.permissions.index', $request->only('company_id')); }
 
     public function update(UpdateCompanyPermissionsRequest $request)
     {
         $data = $request->validated();
         $scopeDefinitions = $this->definitionsForScope($data['scope']);
-        $keys = $scopeDefinitions->pluck('permission_key')->all();
         $selected = array_map('strtolower', $data['permissions'] ?? []);
 
         $company = Business::findOrFail($data['company_id']);
-        DB::transaction(function () use ($request, $company, $data, $keys, $selected, $scopeDefinitions) {
-            $definitions = $data['scope'] === 'modules'
+        DB::transaction(function () use ($request, $company, $data, $selected, $scopeDefinitions) {
+            $definitions = in_array($data['scope'], ['modules', 'all'], true)
                 ? PermissionDefinition::where('status', 'active')->get(['module', 'permission_key'])
                 : $scopeDefinitions;
             $current = CompanyPermission::where('company_id', $company->id)->whereIn('permission_key', $definitions->pluck('permission_key'))->pluck('allowed', 'permission_key')->map(fn ($value) => (bool) $value)->all();
-            $enabledModules = $scopeDefinitions
+            $moduleDefinitions = $definitions->filter(fn (PermissionDefinition $definition) => $definition->permission_key === strtolower($definition->module).'.view');
+            $enabledModules = $moduleDefinitions
                 ->filter(fn (PermissionDefinition $definition) => in_array(strtolower($definition->permission_key), $selected, true))
                 ->pluck('module')
                 ->map(fn ($module) => strtolower($module))
@@ -42,10 +43,10 @@ class CompanyPermissionController extends Controller
             foreach ($definitions as $definition) {
                 $key = strtolower($definition->permission_key);
                 $moduleEnabled = in_array(strtolower($definition->module), $enabledModules, true);
-                $newValue = $data['scope'] === 'modules'
-                    ? ($scopeDefinitions->contains('permission_key', $definition->permission_key)
+                $newValue = in_array($data['scope'], ['modules', 'all'], true)
+                    ? ($moduleDefinitions->contains('permission_key', $definition->permission_key)
                         ? $moduleEnabled
-                        : ($moduleEnabled ? ($current[$key] ?? false) : false))
+                        : ($moduleEnabled && in_array($key, $selected, true)))
                     : in_array($key, $selected, true);
                 $oldValue = $current[$key] ?? null;
                 CompanyPermission::updateOrCreate(
@@ -65,15 +66,15 @@ class CompanyPermissionController extends Controller
             }
             \App\Models\AuditLog::create([
                 'user_id' => auth()->id(), 'actor_id' => auth()->id(), 'actor_role' => auth()->user()?->role,
-                'business_id' => $company->id, 'module' => 'Permissions', 'action' => $data['scope'].' permissions updated',
-                'description' => ucfirst($data['scope']).' permissions updated for '.$company->business_name,
+                'business_id' => $company->id, 'module' => 'Permissions', 'action' => 'company permissions updated',
+                'description' => 'Company permissions updated for '.$company->business_name,
                 'new_values' => ['enabled_permissions' => $selected], 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
             ]);
             $company->owner?->notify(new CompanyPermissionsUpdatedNotification($company));
         });
         app(CompanyPermissionService::class)->clear($company->id);
 
-        return redirect()->route('admin.permissions.'.$data['scope'], ['company_id' => $company->id])
+        return redirect()->route('admin.permissions.index', ['company_id' => $company->id])
             ->with('success', 'Permissions updated successfully for '.$company->business_name.'.');
     }
 
@@ -131,7 +132,7 @@ class CompanyPermissionController extends Controller
         }
 
         return view('super-admin.permissions.index', [
-            'title' => match ($scope) { 'modules' => 'Company Module Access', 'features' => 'Feature Permissions', default => 'Button / Action Permissions' },
+            'title' => 'Company Permissions',
             'scope' => $scope,
             'companies' => Business::orderBy('business_name')->get(),
             'selectedCompany' => $selectedCompany,
@@ -143,7 +144,7 @@ class CompanyPermissionController extends Controller
     private function definitionsForScope(string $scope)
     {
         return PermissionDefinition::where('status', 'active')
-            ->where('permission_type', match ($scope) { 'modules' => 'module', 'features' => 'feature', default => 'action' })
+            ->when($scope !== 'all', fn ($query) => $query->where('permission_type', match ($scope) { 'modules' => 'module', 'features' => 'feature', default => 'action' }))
             ->orderBy('module')->orderBy('label')->get();
     }
 

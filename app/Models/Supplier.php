@@ -29,4 +29,6 @@ class Supplier extends Model
     public function business() { return $this->belongsTo(Business::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
     public function journalLines() { return $this->hasMany(JournalEntryLine::class); }
+    public function purchases() { return $this->hasMany(Purchase::class); }
+    public function payments() { return $this->hasMany(SupplierPayment::class); }
 }

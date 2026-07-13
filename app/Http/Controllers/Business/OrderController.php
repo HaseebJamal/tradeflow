@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Business;
 
 use App\Http\Controllers\Controller;
 use App\Models\Account;
-use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Delivery;
 use App\Models\Inventory;
@@ -18,6 +17,7 @@ use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +25,7 @@ use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity) {}
 
     public function index(Request $request)
     {
@@ -133,10 +133,10 @@ class OrderController extends Controller
             $descriptionLines = [];
             $calculationLines = collect();
             foreach ($data['products'] as $line) {
-                $product = Product::where('business_id', $businessId)->findOrFail($line['id']);
+                $product = Product::where('business_id', $businessId)->lockForUpdate()->findOrFail($line['id']);
                 if ($product->stock_quantity < (int) $line['quantity']) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
-                        'products' => $product->name.' has only '.$product->stock_quantity.' '.$product->unit.' available.',
+                        'products' => 'Insufficient stock. Only '.$product->stock_quantity.' units are available.',
                     ]);
                 }
                 $total = $product->wholesale_price * $line['quantity'];
@@ -210,7 +210,7 @@ class OrderController extends Controller
                 ]);
             }
             $this->postOrderAccounting($order->fresh(['customer']));
-            $this->audit($request, 'Order created '.$order->order_number, 'Orders', $order->id, null, ['status' => $order->status, 'grand_total' => $grandTotal]);
+            $this->audit($request, 'Sale created '.$order->order_number, 'Sales', $order->id, null, ['status' => $order->status, 'grand_total' => $grandTotal]);
         });
 
         return redirect()->route('business.orders.index')->with('success', 'Order created.');
@@ -327,7 +327,7 @@ class OrderController extends Controller
             $order->invoice?->update(['paid_amount' => $paidAmount, 'balance' => $balance]);
             $this->reverseOrderAccounting($order, 'Order edit reversal '.$order->order_number);
             $this->postOrderAccounting($order->fresh(['customer']));
-            $this->audit($request, 'Updated order '.$order->order_number, 'Orders', $order->id, ['grand_total' => $oldTotal], ['grand_total' => $grandTotal]);
+            $this->audit($request, 'Updated sale '.$order->order_number, 'Sales', $order->id, ['grand_total' => $oldTotal], ['grand_total' => $grandTotal]);
         });
 
         return redirect()->route('business.orders.show', $order)->with('success', 'Order updated successfully.');
@@ -427,7 +427,7 @@ class OrderController extends Controller
             $this->reverseOrderAccounting($order, 'Cancelled order '.$order->order_number);
             Invoice::where('order_id', $order->id)->whereIn('status', ['Draft', 'Issued'])->update(['status' => 'Cancelled']);
             Delivery::where('order_id', $order->id)->whereNot('status', 'Delivered')->update(['status' => 'Cancelled', 'cancelled_at' => now()]);
-            $this->audit($request, 'Cancelled order '.$order->order_number, 'Orders', $order->id);
+            $this->audit($request, 'Cancelled sale '.$order->order_number, 'Sales', $order->id);
         });
 
         return back()->with('success', 'Order cancelled successfully.');
@@ -456,7 +456,7 @@ class OrderController extends Controller
                 $this->reverseOrderAccounting($order, 'Voided order '.$order->order_number);
                 Invoice::where('order_id', $order->id)->whereNotIn('status', ['Paid'])->update(['status' => 'Void', 'voided_at' => now(), 'voided_by' => auth()->id(), 'void_reason' => 'Order voided']);
                 Delivery::where('order_id', $order->id)->whereNot('status', 'Delivered')->update(['status' => 'Cancelled', 'cancelled_at' => now()]);
-                $this->audit($request, 'Voided order '.$order->order_number.' because related records exist', 'Orders', $order->id);
+                $this->audit($request, 'Voided sale '.$order->order_number.' because related records exist', 'Sales', $order->id);
                 return;
             }
 
@@ -484,7 +484,7 @@ class OrderController extends Controller
             $this->reverseOrderAccounting($order, 'Voided order '.$order->order_number);
             Invoice::where('order_id', $order->id)->update(['status' => 'Void', 'voided_by' => auth()->id(), 'voided_at' => now(), 'void_reason' => $data['void_reason']]);
             Delivery::where('order_id', $order->id)->whereNot('status', 'Delivered')->update(['status' => 'Cancelled', 'cancelled_at' => now()]);
-            $this->audit($request, 'Voided order '.$order->order_number, 'Orders', $order->id, null, ['reason' => $data['void_reason']]);
+            $this->audit($request, 'Voided sale '.$order->order_number, 'Sales', $order->id, null, ['reason' => $data['void_reason']]);
         });
 
         return back()->with('success', 'Order voided safely.');
@@ -543,7 +543,7 @@ class OrderController extends Controller
             }
 
             if ($item) {
-                $product = Product::where('business_id', $businessId)->findOrFail($item->product_id);
+                $product = Product::where('business_id', $businessId)->lockForUpdate()->findOrFail($item->product_id);
                 if ($remove) {
                     $this->adjustProductStock($order, $product, -1 * (int) $item->quantity, 'order_item_removed', 'Removed from '.$order->order_number);
                     $item->delete();
@@ -558,7 +558,7 @@ class OrderController extends Controller
                 $delta = $newQuantity - (int) $item->quantity;
                 if ($delta > 0 && $product->stock_quantity < $delta) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
-                        'items' => $product->name.' has only '.$product->stock_quantity.' available for this increase.',
+                        'items' => 'Insufficient stock. Only '.$product->stock_quantity.' units are available.',
                     ]);
                 }
 
@@ -581,14 +581,14 @@ class OrderController extends Controller
                 continue;
             }
 
-            $product = Product::where('business_id', $businessId)->findOrFail($row['product_id']);
+            $product = Product::where('business_id', $businessId)->lockForUpdate()->findOrFail($row['product_id']);
             $quantity = (int) $row['quantity'];
             if ($quantity < 1) {
                 throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Product quantities must be at least 1.']);
             }
             if ($product->stock_quantity < $quantity) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'items' => $product->name.' has only '.$product->stock_quantity.' available.',
+                    'items' => 'Insufficient stock. Only '.$product->stock_quantity.' units are available.',
                 ]);
             }
 
@@ -754,16 +754,25 @@ class OrderController extends Controller
         $salesAccount = Account::where('business_id', $order->business_id)->where('name', 'Sales Revenue')->first();
         if (!$debitAccount || !$salesAccount || (float) $order->grand_total <= 0) return;
 
+        $costOfGoodsSold = (float) $order->items()->sum(DB::raw('quantity * purchase_cost_snapshot'));
+        $cogsAccount = $costOfGoodsSold > 0 ? Account::where('business_id', $order->business_id)->where('name', 'Cost of Goods Sold')->first() : null;
+        $inventoryAccount = $costOfGoodsSold > 0 ? Account::where('business_id', $order->business_id)->where('name', 'Inventory')->first() : null;
+        $lines = [
+            ['account_id' => $debitAccount->id, 'customer_id' => $order->customer_id, 'debit' => $order->grand_total, 'credit' => 0, 'description' => $order->order_number],
+            ['account_id' => $salesAccount->id, 'customer_id' => $order->customer_id, 'debit' => 0, 'credit' => $order->grand_total, 'description' => $order->order_number],
+        ];
+        if ($cogsAccount && $inventoryAccount) {
+            $lines[] = ['account_id' => $cogsAccount->id, 'debit' => $costOfGoodsSold, 'credit' => 0, 'description' => 'Cost of goods sold '.$order->order_number];
+            $lines[] = ['account_id' => $inventoryAccount->id, 'debit' => 0, 'credit' => $costOfGoodsSold, 'description' => 'Inventory issued '.$order->order_number];
+        }
+
         $this->accounting->post($order->business_id, [
             'voucher_number' => 'ORD-JV-'.$order->id.'-'.now()->format('His'),
             'entry_date' => $order->order_date?->format('Y-m-d') ?? now()->toDateString(),
             'reference_type' => 'order',
             'reference_id' => $order->id,
             'description' => 'Credit sale '.$order->order_number,
-        ], [
-            ['account_id' => $debitAccount->id, 'customer_id' => $order->customer_id, 'debit' => $order->grand_total, 'credit' => 0, 'description' => $order->order_number],
-            ['account_id' => $salesAccount->id, 'customer_id' => $order->customer_id, 'debit' => 0, 'credit' => $order->grand_total, 'description' => $order->order_number],
-        ]);
+        ], $lines);
     }
 
     private function reverseOrderAccounting(Order $order, string $description): void
@@ -789,15 +798,6 @@ class OrderController extends Controller
 
     private function audit(Request $request, string $action, ?string $module = null, ?int $recordId = null, ?array $old = null, ?array $new = null): void
     {
-        AuditLog::create([
-            'user_id' => auth()->id(),
-            'business_id' => auth()->user()->business_id,
-            'action' => $action,
-            'module' => $module,
-            'record_id' => $recordId,
-            'old_values' => $old,
-            'new_values' => $new,
-            'ip_address' => $request->ip(),
-        ]);
+        $this->activity->record((int) auth()->user()->business_id, $module ?? 'Sales', $action, $recordId, $old, $new);
     }
 }
