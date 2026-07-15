@@ -63,7 +63,7 @@
                 @endphp
                 <tr>
                     <td><strong>{{ $order->order_number }}</strong></td>
-                    <td>{{ $order->customer?->business_name ?: $order->customer?->name ?: 'Walk-in Customer' }}</td>
+                    <td>{{ $order->customer?->display_name ?? 'Walk-in Customer' }}</td>
                     <td><x-date-time :value="$order->order_date" /></td>
                     <td>Rs {{ number_format($order->grand_total, 2) }}</td>
                     <td>Rs {{ number_format($order->paid_amount, 2) }}</td>
@@ -78,7 +78,7 @@
                             @endcompanyCan
 
                             @if(in_array($order->status, ['New', 'Accepted'], true))
-                                <a class="btn btn-sm btn-outline-warning" href="{{ route('business.orders.edit', $order) }}">Edit Draft</a>
+                                <a class="btn btn-sm btn-outline-warning" href="{{ route('business.sales.edit', $order) }}">Edit Draft</a>
 
                                 @companyCan('pos.void_sale')
                                     <form method="POST" action="{{ route('business.pos.void', $order) }}" onsubmit="return confirm('Void this unpaid POS draft and restore stock?')">
@@ -90,7 +90,7 @@
                             @endif
 
                             @if(!in_array($order->status, ['Void', 'Cancelled'], true))
-                                @companyCan('pos.returns')
+                                @companyCan('sales_returns.process')
                                     <a class="btn btn-sm btn-outline-warning" href="{{ route('business.pos.returns', $order) }}">Return</a>
                                 @endcompanyCan
                             @endif

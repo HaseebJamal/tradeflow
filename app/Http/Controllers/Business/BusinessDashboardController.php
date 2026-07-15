@@ -19,8 +19,13 @@ class BusinessDashboardController extends Controller
     public function __invoke(CompanyPermissionService $companyPermissions)
     {
         $businessId = auth()->user()->business_id;
-        $hasOperationalAccess = collect(['products.view', 'inventory.view', 'customers.view', 'suppliers.view', 'purchases.view', 'sales.view', 'pos.view', 'accounting.view', 'deliveries.view', 'invoices.view', 'expenses.view', 'reports.view', 'staff.view', 'audit_logs.view', 'settings.view'])
-            ->contains(fn ($permission) => $companyPermissions->allowsUser(auth()->user(), $permission));
+        // Dashboard access is a core workspace capability. Operational cards
+        // are shown only when at least one operational module is enabled.
+        $hasOperationalAccess = collect([
+            'products', 'inventory', 'suppliers', 'purchases', 'purchase_returns', 'customers',
+            'sales', 'sales_returns', 'pos', 'deliveries', 'accounting',
+            'expenses', 'reports', 'staff', 'audit_logs', 'settings',
+        ])->contains(fn (string $module) => $companyPermissions->allowsUser(auth()->user(), $module.'.view'));
 
         if (!$hasOperationalAccess) {
             return view('business.dashboard', ['hasOperationalAccess' => false]);

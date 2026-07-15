@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\CompanyPermissionService;
+use App\Services\BusinessWorkspaceAccessService;
 use App\Models\AuditLog;
 use Closure;
 use Illuminate\Http\Request;
@@ -20,9 +21,7 @@ class BusinessPermissionMiddleware
 
         if (!$permissions->allows($user, $modulePermission)) {
             $this->logDenied($request, 'This feature is not enabled for your company.');
-            return redirect()
-                ->back()
-                ->withErrors(['company_permission' => 'This feature is not enabled for your company. Please contact TradeFlow support.']);
+            return $this->deny($request, 'This feature is not enabled for your company. Please contact TradeFlow support.');
         }
 
         if (!$permissions->allowsUser($user, $modulePermission)) {
@@ -33,9 +32,7 @@ class BusinessPermissionMiddleware
                 abort(403, $message);
             }
 
-            return redirect()
-                ->route(in_array($user->role, \App\Support\BusinessStaffRoles::DASHBOARD_ROLES, true) ? 'staff.dashboard' : 'business.dashboard')
-                ->withErrors(['permission' => $message]);
+            return $this->deny($request, $message, 'permission');
         }
 
         return $next($request);
@@ -57,5 +54,17 @@ class BusinessPermissionMiddleware
             'route' => $request->route()?->getName(),
             'occurred_at' => now(),
         ]);
+    }
+
+    private function deny(Request $request, string $message, string $key = 'company_permission'): Response
+    {
+        if ($request->expectsJson()) {
+            abort(403, $message);
+        }
+
+        $user = $request->user();
+        $destination = app(BusinessWorkspaceAccessService::class)->firstEnabledRoute($user);
+
+        return redirect()->route($destination ?? 'business.access-denied')->withErrors([$key => $message]);
     }
 }

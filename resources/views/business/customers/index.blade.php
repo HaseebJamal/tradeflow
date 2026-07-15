@@ -37,7 +37,7 @@
     <tbody>
     @forelse($customers ?? [] as $customer)
         <tr>
-            <td><strong>{{ $customer->business_name ?: $customer->name }}</strong><div class="small tf-muted">{{ $customer->name }}</div></td>
+            <td><strong>{{ $customer->display_name }}</strong>@if($customer->business_name)<div class="small tf-muted">Shop: {{ $customer->business_name }}</div>@endif</td>
             <td>{{ $customer->phone }}</td>
             <td>{{ $customer->email ?: '-' }}</td>
             <td>{{ $customer->customer_type }}</td>

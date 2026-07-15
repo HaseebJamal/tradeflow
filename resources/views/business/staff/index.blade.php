@@ -1,25 +1,25 @@
 @extends('layouts.dashboard')
-@section('page-title', 'Staff Management')
-@section('page-subtitle', 'Manage employees, roles, permissions, and account access')
+@section('page-title', 'Roles & Users')
+@section('page-subtitle', 'Manage users, custom roles, permissions, and account access')
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
 <div class="row g-3 mb-4">
 @foreach([
-    ['Total Staff', $stats['total'], 'bi-people', 'bg-blue'],
-    ['Active Staff', $stats['active'], 'bi-person-check', 'bg-green'],
-    ['Inactive Staff', $stats['inactive'], 'bi-person-dash', 'bg-amber'],
-    ['Managers', $stats['managers'], 'bi-person-badge', 'bg-navy'],
-    ['Sales Team', $stats['sales'], 'bi-bag-check', 'bg-blue'],
-    ['Delivery Team', $stats['delivery'], 'bi-truck', 'bg-green'],
+    ['Total Users', $stats['total'], 'bi-people', 'bg-blue'],
+    ['Active Users', $stats['active'], 'bi-person-check', 'bg-green'],
+    ['Inactive Users', $stats['inactive'], 'bi-person-dash', 'bg-amber'],
+    ['Custom Roles', $stats['roles'], 'bi-person-badge', 'bg-navy'],
+    ['With Permissions', $stats['with_permissions'], 'bi-shield-check', 'bg-blue'],
+    ['Suspended', $stats['suspended'], 'bi-person-slash', 'bg-green'],
 ] as [$label, $value, $icon, $color])
     <div class="col-md-6 col-xl-2">@include('components.card', ['label' => $label, 'value' => $value, 'icon' => $icon, 'color' => $color, 'note' => ''])</div>
 @endforeach
 </div>
 
 @companyCan('staff.create')<div class="tf-card p-4 mb-4">
-    <h2 class="h5 mb-3">Create Staff Account</h2>
+    <h2 class="h5 mb-3">Create User Account</h2>
     @include('business.staff._form', ['staffMember' => null])
 </div>@endcompanyCan
 
@@ -27,14 +27,14 @@
 <div class="tf-card p-4 mb-4 staff-filter-card">
     <form method="GET" action="{{ route('business.staff') }}#staff-results" class="row g-3 align-items-end">
         <div class="col-md-4"><label class="form-label">Search</label><input name="search" class="form-control" value="{{ request('search') }}" placeholder="Name, email, phone, employee ID"></div>
-        <div class="col-md-3"><label class="form-label">Role</label><select name="role" class="form-select"><option value="">All Roles</option>@foreach($roles as $value => $label)<option value="{{ $value }}" @selected(request('role') === $value)>{{ $label }}</option>@endforeach</select></div>
+        <div class="col-md-3"><label class="form-label">Custom Role</label><select name="role" class="form-select"><option value="">All Custom Roles</option>@foreach($customRoleNames as $roleName)<option value="{{ $roleName }}" @selected(request('role') === $roleName)>{{ $roleName }}</option>@endforeach</select></div>
         <div class="col-md-3"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">Active Staff</option>@foreach(['active'=>'Active','inactive'=>'Inactive','suspended'=>'Suspended','archived'=>'Archived'] as $value=>$label)<option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>@endforeach</select></div>
         <div class="col-md-2"><button class="btn btn-tf-primary w-100">Filter</button></div>
     </form>
 </div>
 
 <x-table class="staff-table-wrap">
-    <thead><tr><th>Staff</th><th>Employee ID</th><th>Role</th><th>Phone</th><th>Email</th><th>Joining Date</th><th>Status</th><th>Actions</th></tr></thead>
+    <thead><tr><th>User</th><th>Employee ID</th><th>Role</th><th>Phone</th><th>Email</th><th>Joining Date</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody>
     @forelse($staff as $member)
         @php($hasImage = $member->profile_image && \Illuminate\Support\Facades\Storage::disk('public')->exists($member->profile_image))
@@ -48,7 +48,7 @@
             <td><span class="badge {{ $member->status === 'active' ? 'text-bg-success' : ($member->status === 'suspended' ? 'text-bg-danger' : ($member->status === 'archived' ? 'text-bg-secondary' : 'text-bg-warning')) }}">{{ ucfirst($member->status) }}</span></td>
             <td>
                 <div class="dropdown">
-                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false">Actions</button>
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false">Actions</button>
                     <div class="dropdown-menu dropdown-menu-end">
                         <a class="dropdown-item" href="{{ route('business.staff.show', $member) }}">View</a>
                         <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}">Edit</a>
@@ -74,7 +74,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="8" class="text-center tf-muted py-4">No staff accounts.</td></tr>
+        <tr><td colspan="8" class="text-center tf-muted py-4">No user accounts.</td></tr>
     @endforelse
     </tbody>
 </x-table>

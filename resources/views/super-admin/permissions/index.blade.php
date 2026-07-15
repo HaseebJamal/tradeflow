@@ -38,12 +38,12 @@
             </div>
             <label class="form-check border rounded p-3 mb-3 fw-semibold" for="permissionMaster">
                 <input id="permissionMaster" class="form-check-input me-2" type="checkbox" data-permission-master>
-                Select All Permissions
+                Select All Permissions <span class="tf-muted" data-permission-total-selected></span>
             </label>
             <div class="row g-3">
                 @foreach($definitions->groupBy('module') as $module => $permissions)
                     <div class="col-md-6 col-xl-4">
-                        <x-admin.permission-group :module="$module" :label="ucwords(str_replace('_', ' ', $module))" :permissions="$permissions" :selected-permissions="$selectedPermissions" />
+                        <x-admin.permission-group :module="$module" :label="$module === 'staff' ? 'Roles & Users' : ucwords(str_replace('_', ' ', $module))" :permissions="$permissions" :selected-permissions="$selectedPermissions" />
                     </div>
                 @endforeach
             </div>

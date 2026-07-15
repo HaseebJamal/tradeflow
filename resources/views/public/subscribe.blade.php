@@ -136,7 +136,7 @@
                         <div class="col-md-6"><label class="form-label">Phone Number</label><input name="phone" class="form-control form-control-lg" required data-subscribe-phone></div>
                         <div class="col-md-6"><label class="form-label">Email Address</label><input name="email" type="email" class="form-control form-control-lg" required></div>
                         <div class="col-md-6"><label class="form-label">City</label><input name="city" class="form-control form-control-lg" required></div>
-                        <div class="col-md-6"><label class="form-label">Business Type</label><select name="business_type" class="form-select form-select-lg" required><option value="">Select type</option><option>Manufacturer</option><option>Distributor</option><option>Wholesaler</option><option>Retail Shop</option></select></div>
+                        <div class="col-md-6"><label class="form-label">Business Type</label><select name="business_type" class="form-select form-select-lg js-select2" required><option value="">Select type</option><option>Manufacturer</option><option>Distributor</option><option>Wholesaler</option><option>Retail Shop</option><option>Other</option></select></div>
                         <div class="col-md-6"><label class="form-label">Selected Plan</label><input class="form-control form-control-lg" value="{{ $selected['name'] }}" readonly></div>
                         <div class="col-md-6"><label class="form-label">Preferred Payment Method</label><select name="payment_method" class="form-select form-select-lg" data-subscribe-payment><option>Cash</option><option>Bank Transfer</option><option>JazzCash Manual</option><option>Easypaisa Manual</option></select></div>
                         <div class="col-12">

@@ -103,6 +103,7 @@ class AuthController extends Controller
             }
 
             $request->session()->regenerate();
+            $request->session()->forget('url.intended');
             auth()->user()->forceFill(['last_login_at' => now()])->save();
             if (auth()->user()->business_id) {
                 AuditLog::create([
@@ -124,7 +125,7 @@ class AuthController extends Controller
                 'permissions' => auth()->user()->permissions ?? [],
             ]);
 
-            return redirect()->intended(route('dashboard.redirect'));
+            return redirect()->route($this->dashboardRoute(auth()->user()));
         }
 
         return back()->withErrors(['email' => 'Invalid login details.'])->onlyInput('email');
@@ -133,9 +134,9 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')],
-            'phone' => ['nullable', 'string', 'max:30'],
+            'phone' => ['nullable', 'regex:/^\d{11}$/'],
             'password' => ['required', 'confirmed', 'min:8'],
             'role' => ['nullable', Rule::in(['retailer', 'business_owner'])],
         ]);
@@ -151,7 +152,7 @@ class AuthController extends Controller
 
         Auth::login($user);
 
-        return redirect()->route('dashboard.redirect');
+        return redirect()->route($this->dashboardRoute($user));
     }
 
     public function logout(Request $request)
@@ -175,5 +176,15 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login');
+    }
+
+    private function dashboardRoute(User $user): string
+    {
+        return match ($user->role) {
+            'super_admin' => 'admin.dashboard',
+            'retailer' => 'retailer.dashboard',
+            'custom_staff' => 'staff.dashboard',
+            default => 'business.dashboard',
+        };
     }
 }

@@ -22,15 +22,16 @@
                 ['Inventory', 'bi-clipboard-data', route('business.inventory'), 'inventory'],
                 ['Suppliers', 'bi-building-add', route('business.suppliers.index'), 'suppliers'],
                 ['Purchases', 'bi-cart-plus', route('business.purchases.index'), 'purchases'],
+                ['Purchase Returns', 'bi-arrow-return-left', route('business.purchase-returns.index'), 'purchase_returns'],
                 ['Customers', 'bi-person-lines-fill', route('business.customers.index'), 'customers'],
-                ['Sales', 'bi-bag-check', route('business.orders.index'), 'sales'],
+                ['Sales', 'bi-bag-check', route('business.sales.index'), 'sales'],
+                ['Sales Returns', 'bi-arrow-return-right', route('business.sales.returns.index'), 'sales_returns'],
                 ['POS', 'bi-upc-scan', route('business.pos.index'), 'pos'],
                 ['Deliveries', 'bi-truck', route('business.deliveries'), 'deliveries'],
-                ['Invoices', 'bi-file-earmark-text', route('business.invoices.index'), 'invoices'],
                 ['Accounting / Ledger', 'bi-journal-text', route('business.khata'), 'accounting'],
                 ['Expenses', 'bi-receipt-cutoff', route('business.expenses.index'), 'expenses'],
                 ['Reports', 'bi-graph-up', route('business.reports'), 'reports'],
-                ['Staff', 'bi-person-badge', route('business.staff'), 'staff'],
+                ['Roles & Users', 'bi-person-badge', route('business.staff'), 'staff'],
                 ['Audit Logs', 'bi-activity', route('business.audit-logs.index'), 'audit_logs'],
                 ['Settings', 'bi-gear', route('business.settings'), 'settings'],
             ]);
@@ -39,6 +40,15 @@
         $companyPermissions = app(\App\Services\CompanyPermissionService::class);
         $items = array_values(array_filter($items, function ($item) use ($companyPermissions, $role) {
             $module = $item[3] ?? null;
+            if ($role === 'custom_staff' && $module === 'staff') {
+                return false;
+            }
+            if ($module === 'purchase_returns' && !$companyPermissions->allowsUser(auth()->user(), 'purchases.view')) {
+                return false;
+            }
+            if ($module === 'sales_returns' && !$companyPermissions->allowsUser(auth()->user(), 'sales.view')) {
+                return false;
+            }
             if ($module && !$companyPermissions->allowsUser(auth()->user(), $module.'.view')) {
                 return false;
             }
@@ -51,7 +61,7 @@
         }));
     }
 
-    $businessDashboardItem = $area === 'business'
+    $businessDashboardItem = $area === 'business' && $companyPermissions->allowsUser(auth()->user(), 'dashboard.view')
         ? ['Dashboard', 'bi-speedometer2', in_array($role, \App\Support\BusinessStaffRoles::DASHBOARD_ROLES, true) ? route('staff.dashboard') : route('business.dashboard')]
         : null;
 
@@ -59,7 +69,9 @@
         && $role === 'super_admin'
         && request()->attributes->get('super_admin_business_context');
 
-    $basicBusinessItems = [];
+    $purchaseReturnItem = collect($items)->first(fn ($item) => ($item[3] ?? null) === 'purchase_returns');
+    $salesReturnItem = collect($items)->first(fn ($item) => ($item[3] ?? null) === 'sales_returns');
+
 @endphp
 @if($area === 'admin')
     @include('components.super-admin-sidebar')
@@ -80,11 +92,22 @@
         @endif
         @foreach($items as $item)
             @php([$label, $icon, $url] = $item)
-            <a href="{{ $url }}" class="{{ url()->current() === $url ? 'active' : '' }}" title="{{ $label }}"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">{{ $label }}</span></a>
-        @endforeach
-        @foreach($basicBusinessItems as $item)
-            @php([$label, $icon, $url] = $item)
-            <a href="{{ $url }}" class="{{ url()->current() === $url ? 'active' : '' }}" title="{{ $label }}"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">{{ $label }}</span></a>
+            @if($label === 'Purchase Returns' || $label === 'Sales Returns')
+                @continue
+            @endif
+            @if($label === 'Purchases')
+                <div class="tf-sidebar-module" data-tf-sidebar-module>
+                    <a href="{{ $url }}" class="{{ request()->routeIs('business.purchases.*', 'business.purchase-returns.*') ? 'active' : '' }}" title="Purchases"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">Purchases</span></a>
+                    @if($purchaseReturnItem)<div id="purchase-sidebar-submenu" class="tf-sidebar-submenu {{ request()->routeIs('business.purchases.*', 'business.purchase-returns.*') ? 'is-open' : '' }}"><a href="{{ $purchaseReturnItem[2] }}" class="{{ request()->routeIs('business.purchase-returns.*') ? 'active' : '' }}" title="Purchase Returns"><i class="bi bi-arrow-return-left"></i><span class="tf-sidebar-text">Purchase Returns</span></a></div>@endif
+                </div>
+            @elseif($label === 'Sales')
+                <div class="tf-sidebar-module" data-tf-sidebar-module>
+                    <a href="{{ $url }}" class="{{ request()->routeIs('business.sales.*') ? 'active' : '' }}" title="Sales"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">Sales</span></a>
+                    @if($salesReturnItem)<div id="sales-sidebar-submenu" class="tf-sidebar-submenu {{ request()->routeIs('business.sales.*') ? 'is-open' : '' }}"><a href="{{ $salesReturnItem[2] }}" class="{{ request()->routeIs('business.sales.returns.*') ? 'active' : '' }}" title="Sales Returns"><i class="bi bi-arrow-return-right"></i><span class="tf-sidebar-text">Sales Returns</span></a></div>@endif
+                </div>
+            @else
+                <a href="{{ $url }}" class="{{ url()->current() === $url ? 'active' : '' }}" title="{{ $label }}"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">{{ $label }}</span></a>
+            @endif
         @endforeach
     </nav>
 </div>

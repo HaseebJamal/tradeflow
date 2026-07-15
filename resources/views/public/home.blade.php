@@ -34,7 +34,7 @@
     <div class="container">
         <div class="text-center mb-5"><h2 class="fw-bold">Trusted By Every Trade Role</h2><p class="tf-muted">Designed for the complete wholesale supply chain.</p></div>
         <div class="row g-4">
-            @foreach([['Manufacturer','bi-gear-wide-connected'],['Distributor','bi-diagram-3'],['Wholesaler','bi-boxes'],['Retail Shop','bi-shop'],['Delivery Staff','bi-truck'],['Accountant','bi-calculator']] as [$type,$icon])
+            @foreach([['Manufacturer','bi-gear-wide-connected'],['Distributor','bi-diagram-3'],['Wholesaler','bi-boxes'],['Retail Shop','bi-shop'],['Other','bi-grid-3x3-gap']] as [$type,$icon])
             <div class="col-sm-6 col-lg-4"><div class="tf-card tf-feature-card p-4 h-100"><div class="tf-icon-tile bg-blue text-white mb-3"><i class="bi {{ $icon }}"></i></div><h3 class="h5 mb-1">{{ $type }}</h3><p class="tf-muted mb-0">Role-ready workflows, clean dashboards, and secure access.</p></div></div>
             @endforeach
         </div>
@@ -94,7 +94,7 @@
                         'Does TradeFlow connect directly with JazzCash or Easypaisa?' => 'No. In this MVP, JazzCash and Easypaisa are recorded manually. Businesses can save payment method, amount, date, reference number, and proof image without using paid APIs.',
                         'Can multiple businesses use the same TradeFlow platform?' => 'Yes. TradeFlow is designed as a multi-business SaaS platform where each approved business can manage its own products, orders, customers, payments, and reports separately.',
                         'Can Super Admin see business reports?' => 'Yes. Super Admin can review business-level reports for monitoring, verification, and support, but cannot directly change business products, orders, inventory, or khata records.',
-                        'Can staff have limited access?' => 'Yes. Business owners can create staff accounts and assign roles such as manager, sales staff, inventory staff, accountant, and delivery staff.',
+                        'Can staff have limited access?' => 'Yes. Business owners can create custom roles and choose the exact business permissions each staff member receives.',
                         'Is business approval manual?' => 'Yes. New businesses submit their details and documents. Super Admin reviews them and approves, rejects, or suspends access.',
                         'Can invoices and reports be exported?' => 'Yes. TradeFlow can generate printable invoices and PDF reports using DomPDF without using any paid PDF service.',
                         'Does TradeFlow require external paid APIs?' => 'No. The MVP works with Laravel, MySQL, Blade, Bootstrap, and local/manual records only.',

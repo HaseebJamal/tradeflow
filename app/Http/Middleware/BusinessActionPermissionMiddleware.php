@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\CompanyPermissionService;
+use App\Services\BusinessWorkspaceAccessService;
 use App\Models\AuditLog;
 use Closure;
 use Illuminate\Http\Request;
@@ -50,7 +51,18 @@ class BusinessActionPermissionMiddleware
             abort(403, $message);
         }
 
-        return redirect()->back()->withErrors(['permission' => $message]);
+        $previousPath = parse_url(url()->previous(), PHP_URL_PATH);
+        $currentPath = $request->path() === '/' ? '/' : '/'.$request->path();
+
+        // Redirecting back to a denied route produces an infinite browser
+        // redirect loop. Fall back only to an enabled company module.
+        if ($previousPath && rtrim($previousPath, '/') !== rtrim($currentPath, '/')) {
+            return redirect()->to(url()->previous())->withErrors(['permission' => $message]);
+        }
+
+        $destination = app(BusinessWorkspaceAccessService::class)->firstEnabledRoute($request->user());
+
+        return redirect()->route($destination ?? 'business.access-denied')->withErrors(['permission' => $message]);
     }
 
     private function permissionFor(?string $route): ?string
@@ -70,27 +82,36 @@ class BusinessActionPermissionMiddleware
             'business.suppliers.index', 'business.suppliers.show' => 'suppliers.view',
             'business.suppliers.create', 'business.suppliers.store' => 'suppliers.create', 'business.suppliers.edit', 'business.suppliers.update' => 'suppliers.edit', 'business.suppliers.destroy' => 'suppliers.archive',
             'business.purchases.index', 'business.purchases.show' => 'purchases.view', 'business.purchases.create', 'business.purchases.store' => 'purchases.create',
-            'business.purchases.receive' => 'purchases.receive', 'business.purchases.pay' => 'purchases.pay', 'business.purchases.return' => 'purchases.return',
+            'business.purchases.receive' => 'purchases.receive', 'business.purchases.pay' => 'purchases.pay', 'business.purchases.return' => 'purchase_returns.process',
+            'business.purchase-returns.index', 'business.purchase-returns.create', 'business.purchase-returns.show', 'business.purchase-returns.edit' => 'purchase_returns.view',
+            'business.purchase-returns.start' => 'purchase_returns.process',
             'business.sales.quotations.index', 'business.sales.quotations.create', 'business.sales.quotations.store' => 'sales.quotations',
-            'business.orders.index', 'business.orders.show' => 'sales.view', 'business.orders.create', 'business.orders.store' => 'sales.create',
-            'business.orders.edit', 'business.orders.update' => 'sales.create', 'business.orders.status' => 'sales.update_status',
-            'business.orders.cancel', 'business.orders.destroy', 'business.orders.void' => 'sales.update_status', 'business.orders.assignDelivery' => 'sales.update_status',
+            'business.sales.index', 'business.sales.show', 'business.orders.index', 'business.orders.show' => 'sales.view',
+            'business.sales.create', 'business.sales.store', 'business.orders.create', 'business.orders.store' => 'sales.create',
+            'business.sales.edit', 'business.sales.update', 'business.orders.edit', 'business.orders.update' => 'sales.edit',
+            'business.sales.status', 'business.orders.status' => 'sales.update_status',
+            'business.sales.cancel', 'business.sales.destroy', 'business.sales.void', 'business.orders.cancel', 'business.orders.destroy', 'business.orders.void' => 'sales.update_status',
+            'business.sales.assignDelivery', 'business.orders.assignDelivery' => 'deliveries.assign',
             'business.pos.index', 'business.pos.history' => 'pos.view', 'business.pos.register.open' => 'pos.open_register', 'business.pos.register.close' => 'pos.close_register',
-            'business.pos.sales.store' => 'pos.create_sale', 'business.pos.sales.completed' => 'pos.view', 'business.pos.receipt', 'business.pos.receipt.pdf', 'business.pos.receipt.pdf.download' => 'pos.print_receipt', 'business.pos.void' => 'pos.void_sale', 'business.pos.returns' => 'pos.returns',
-            'business.pos.returns.store' => 'pos.process_return', 'business.pos.report' => 'pos.reports',
-            'business.payments' => 'sales.view', 'business.payments.store' => 'sales.payments',
+            'business.pos.sales.store' => 'pos.create_sale', 'business.pos.sales.completed' => 'pos.view', 'business.pos.receipt', 'business.pos.receipt.pdf', 'business.pos.receipt.pdf.download' => 'pos.print_receipt', 'business.pos.void' => 'pos.void_sale',
+            'business.pos.returns', 'business.sales.returns.index', 'business.sales.returns.create', 'business.sales.returns.show', 'business.sales.returns.edit' => 'sales_returns.view',
+            'business.pos.returns.store', 'business.sales.returns.start', 'business.sales.returns.process', 'business.sales.returns.store' => 'sales_returns.process', 'business.pos.report' => 'pos.reports',
+            'business.sales.payments.index', 'business.payments' => 'sales.payments', 'business.sales.payments.store', 'business.payments.store' => 'sales.payments',
             'business.khata' => 'accounting.view', 'business.khata.journal.store' => 'accounting.create_journal',
             'business.deliveries', 'business.deliveries.show', 'business.deliveries.sheet' => 'deliveries.view',
             'business.deliveries.update', 'business.deliveries.start', 'business.deliveries.deliver', 'business.deliveries.fail', 'business.deliveries.reopen', 'business.deliveries.cancel' => 'deliveries.update_status',
-            'business.invoices.index', 'business.invoices.show' => 'invoices.view', 'business.invoices.pdf', 'business.invoices.pdf.download' => 'invoices.export',
-            'business.invoices.update', 'business.invoices.issue', 'business.invoices.reissue', 'business.invoices.credit-notes.store' => 'invoices.create', 'business.invoices.void' => 'invoices.void',
+            'business.sales.invoices.index', 'business.sales.invoices.show', 'business.invoices.index', 'business.invoices.show' => 'sales.invoices',
+            'business.sales.invoices.pdf', 'business.sales.invoices.pdf.download', 'business.invoices.pdf', 'business.invoices.pdf.download' => 'sales.invoice_export',
+            'business.sales.invoices.update', 'business.sales.invoices.issue', 'business.sales.invoices.reissue', 'business.sales.invoices.credit-notes.store', 'business.invoices.update', 'business.invoices.issue', 'business.invoices.reissue', 'business.invoices.credit-notes.store' => 'sales.invoices',
+            'business.sales.invoices.void', 'business.invoices.void' => 'sales.invoice_void',
             'business.expenses.index' => 'expenses.view', 'business.expenses.store' => 'expenses.create', 'business.expenses.destroy' => 'expenses.delete',
             'business.reports' => 'reports.view', 'business.reports.pdf' => 'reports.export',
             'business.audit-logs.index', 'business.audit-logs.live' => 'audit_logs.view',
             'business.audit-logs.export.csv', 'business.audit-logs.export.pdf' => 'audit_logs.export',
             'business.staff', 'business.staff.show' => 'staff.view', 'business.staff.store' => 'staff.create',
             'business.staff.edit', 'business.staff.update', 'business.staff.status', 'business.staff.archive', 'business.staff.restore', 'business.staff.reset-password', 'business.staff.destroy' => 'staff.edit',
-            'business.settings' => 'settings.view', 'business.settings.business' => 'settings.update',
+            'business.settings' => 'settings.view',
+            'business.settings.business' => 'settings.update',
             default => null,
         };
     }

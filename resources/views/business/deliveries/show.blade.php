@@ -42,7 +42,7 @@
     <h2 class="h5">Edit Delivery</h2>
     <form method="POST" action="{{ route('business.deliveries.update', $delivery) }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PATCH')
         <div class="col-md-4"><label class="form-label">Status</label><select name="status" class="form-select">@foreach(['Assigned','Picked Up','Out For Delivery','Failed','Returned','Cancelled'] as $status)<option @selected($delivery->status === $status)>{{ $status }}</option>@endforeach</select></div>
-        @if(auth()->user()->role !== 'delivery_staff')
+        @if(app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.assign') || app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.edit'))
             <div class="col-md-4"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select"><option value="">Keep current staff</option>@foreach($deliveryStaff ?? [] as $member)<option value="{{ $member->id }}" @selected($delivery->delivery_staff_id === $member->id)>{{ $member->name }}</option>@endforeach</select></div>
         @endif
         <div class="col-md-8"><label class="form-label">Address</label><input name="address" value="{{ $delivery->address }}" class="form-control"></div>

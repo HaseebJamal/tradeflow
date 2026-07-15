@@ -24,7 +24,7 @@ class StoreOrUpdateProductRequest extends FormRequest
             'sku' => ['nullable', 'max:100'],
             'barcode' => ['nullable', 'max:100', Rule::unique('products', 'barcode')->where('business_id', $this->user()->business_id)->whereNull('deleted_at')->ignore($productId)],
             'batch_number' => ['nullable', 'max:100'], 'manufacturing_date' => ['nullable', 'date'], 'expiry_date' => ['nullable', 'date'], 'expiry_alert_days' => ['nullable', 'integer', 'min:0'],
-            'purchase_cost' => ['required', 'numeric', 'min:0'], 'wholesale_price' => ['required', 'numeric', 'min:0'], 'retail_price' => ['required', 'numeric', 'min:0'],
+            'purchase_cost' => ['required', 'numeric', 'min:0'], 'wholesale_price' => ['required', 'numeric', 'min:0'], 'retail_price' => ['nullable', 'numeric', 'min:0'],
             'minimum_order_quantity' => ['nullable', 'integer', 'min:1'],
             'low_stock_alert_qty' => ['nullable', 'integer', 'min:0'], 'unit' => ['required', 'in:Piece,Carton,KG,Liter'], 'status' => ['required', 'in:Active,Inactive'],
             'description' => ['nullable', 'string'], 'brand' => ['nullable', 'max:100'], 'manufacturer' => ['nullable', 'max:100'], 'warehouse_location' => ['nullable', 'max:150'], 'has_batch_tracking' => ['nullable', 'boolean'],
@@ -40,7 +40,7 @@ class StoreOrUpdateProductRequest extends FormRequest
             if (is_numeric($this->input('wholesale_price')) && (float) $this->input('wholesale_price') <= (float) $purchase) {
                 $validator->errors()->add('wholesale_price', 'Selling Price must be greater than Purchase Price.');
             }
-            if (is_numeric($this->input('retail_price')) && (float) $this->input('retail_price') > 0 && (float) $this->input('retail_price') <= (float) $purchase) {
+            if ($this->filled('retail_price') && is_numeric($this->input('retail_price')) && (float) $this->input('retail_price') <= (float) $purchase) {
                 $validator->errors()->add('retail_price', 'Selling Price must be greater than Purchase Price.');
             }
         });

@@ -99,9 +99,9 @@ class PosController extends Controller
 
         $data = $request->validate([
             'customer_id' => ['nullable', 'string'],
-            'new_customer_name' => ['nullable', 'string', 'max:255'],
-            'new_customer_phone' => ['nullable', 'string', 'max:30'],
-            'new_customer_city' => ['nullable', 'string', 'max:100'],
+            'new_customer_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'new_customer_phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'new_customer_city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'new_customer_address' => ['nullable', 'string', 'max:500'],
             'discount_type' => ['required', 'in:percentage,fixed'],
             'discount_value' => ['nullable', 'numeric', 'min:0'],
@@ -315,7 +315,7 @@ class PosController extends Controller
     public function returns(Order $order)
     {
         $this->scopedPosOrder($order);
-        if (!$this->permissions->allowsUser(auth()->user(), 'pos.returns')) {
+        if (!$this->permissions->allowsUser(auth()->user(), 'sales_returns.view')) {
             return redirect()->route('business.pos.history')->withErrors([
                 'permission' => 'You do not have permission to process POS returns.',
             ]);
@@ -332,9 +332,9 @@ class PosController extends Controller
             'refund_method' => ['required', 'in:Cash,Store Credit,Bank Transfer'],
             'items' => ['required', 'array'],
             'items.*.order_item_id' => ['required', 'integer', 'exists:order_items,id'],
-            'items.*.quantity' => ['required', 'integer', 'min:0'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
         ]);
-        if (!$this->permissions->allowsUser(auth()->user(), 'pos.process_return')) {
+        if (!$this->permissions->allowsUser(auth()->user(), 'sales_returns.process')) {
             return redirect()->route('business.pos.history')->withErrors([
                 'permission' => 'You do not have permission to process POS returns.',
             ]);
@@ -376,7 +376,7 @@ class PosController extends Controller
             $this->audit('POS return processed '.$order->order_number, $return->id, ['refund_amount' => $refund]);
         });
 
-        return redirect()->route('business.pos.history')->with('success', 'POS return processed and inventory restored.');
+        return redirect()->route($request->routeIs('business.sales.returns.*') ? 'business.sales.returns.index' : 'business.pos.history')->with('success', 'POS return processed and inventory restored.');
     }
 
     public function report()

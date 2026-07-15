@@ -11,6 +11,19 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(append: [
+            \App\Http\Middleware\RejectNegativeNumericInput::class,
+        ]);
+        $middleware->redirectGuestsTo(fn () => route('login'));
+        $middleware->redirectUsersTo(function (\Illuminate\Http\Request $request): string {
+            return match ($request->user()?->role) {
+                'super_admin' => route('admin.dashboard'),
+                'retailer' => route('retailer.dashboard'),
+                'custom_staff' => route('staff.dashboard'),
+                default => route('business.dashboard'),
+            };
+        });
+
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'business.permission' => \App\Http\Middleware\BusinessPermissionMiddleware::class,

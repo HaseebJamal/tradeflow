@@ -34,9 +34,9 @@ class CustomerController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name' => ['required', 'max:255'], 'shop_name' => ['nullable', 'max:255'], 'business_name' => ['nullable', 'max:255'], 'phone' => ['nullable', 'max:30'],
+            'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'phone' => ['nullable', 'regex:/^\d{11}$/'],
             'email' => ['nullable', 'email', 'max:255'],
-            'address' => ['nullable'], 'city' => ['nullable', 'max:100'], 'province' => ['nullable', 'max:100'], 'customer_type' => ['required', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
+            'address' => ['nullable'], 'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'province' => ['nullable', 'max:100'], 'customer_type' => ['required', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
             'credit_limit' => ['nullable', 'numeric', 'min:0'], 'opening_balance' => ['nullable', 'numeric', 'min:0'], 'status' => ['required', 'in:Active,Blocked'],
         ]);
         $data['business_name'] = $data['shop_name'] ?? $data['business_name'] ?? null;
@@ -73,16 +73,17 @@ class CustomerController extends Controller
     {
         abort_unless($customer->business_id === auth()->user()->business_id, 403);
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'shop_name' => ['nullable', 'max:255'],
-            'business_name' => ['nullable', 'max:255'],
-            'phone' => ['nullable', 'max:30'],
+            'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'phone' => ['nullable', 'regex:/^\d{11}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable'],
-            'city' => ['nullable', 'max:100'],
+            'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'province' => ['nullable', 'max:100'],
             'customer_type' => ['nullable', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
             'credit_limit' => ['nullable', 'numeric', 'min:0'],
+            'current_balance' => ['nullable', 'numeric', 'min:0'],
             'status' => ['required', 'in:Active,Blocked,Inactive'],
         ]);
         if (!empty($data['shop_name'])) {

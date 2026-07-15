@@ -3,12 +3,17 @@
 @section('page-subtitle', 'Update profile information and password')
 @section('content')
 @php($hasProfileImage = $user->profile_image && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->profile_image))
+@php($requiresOwnerApproval = $user->business_id && $user->role !== 'business_owner' && ! $user->isSuperAdmin())
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 <div class="row g-4">
     <div class="col-lg-7">
         <div class="tf-card p-4">
-            <h2 class="h5">Profile Information</h2>
+            <h2 class="h5">{{ $requiresOwnerApproval ? 'Request Profile Detail Change' : 'Profile Information' }}</h2>
+            @if($requiresOwnerApproval)
+                <p class="tf-muted">Your Business Owner must approve and apply profile-detail changes. Your current details stay unchanged until then.</p>
+                @if($pendingProfileRequest)<div class="alert alert-warning py-2">A profile-change request is already pending owner review. Submitting this form updates that request.</div>@endif
+            @endif
             <form method="POST" action="{{ route('profile.update') }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PUT')
                 <div class="col-12 text-center">
                     @if($hasProfileImage)
@@ -20,9 +25,9 @@
                     <div class="fw-bold">{{ $user->name }}</div>
                     <small class="tf-muted">{{ $user->role }}</small>
                 </div>
-                <div class="col-md-6"><label class="form-label">Name</label><input name="name" class="form-control" value="{{ old('name', $user->name) }}"></div>
-                <div class="col-md-6"><label class="form-label">Email</label><input name="email" type="email" class="form-control" value="{{ old('email', $user->email) }}"></div>
-                <div class="col-md-6"><label class="form-label">Phone</label><input name="phone" class="form-control" value="{{ old('phone', $user->phone) }}"></div>
+                <div class="col-md-6"><label class="form-label">{{ $requiresOwnerApproval ? 'Requested Name' : 'Name' }}</label><input name="name" class="form-control" value="{{ old('name', $pendingProfileRequest?->requested_values['name'] ?? $user->name) }}" required></div>
+                <div class="col-md-6"><label class="form-label">{{ $requiresOwnerApproval ? 'Requested Email' : 'Email' }}</label><input name="email" type="email" class="form-control" value="{{ old('email', $pendingProfileRequest?->requested_values['email'] ?? $user->email) }}" required></div>
+                <div class="col-md-6"><label class="form-label">{{ $requiresOwnerApproval ? 'Requested Phone' : 'Phone' }}</label><input name="phone" class="form-control" inputmode="numeric" maxlength="11" value="{{ old('phone', $pendingProfileRequest?->requested_values['phone'] ?? $user->phone) }}"></div>
                 <div class="col-md-6">
                     <label class="form-label">Upload New Image</label>
                     <input name="profile_image" type="file" class="form-control" accept="image/jpeg,image/png,image/webp" data-tf-profile-input>
@@ -32,7 +37,10 @@
                     <div class="col-12"><small class="tf-muted">Saved image: {{ $user->profile_image }}</small></div>
                     <div class="col-12"><label class="form-check"><input name="remove_image" value="1" type="checkbox" class="form-check-input" data-tf-profile-remove> Remove Image</label></div>
                 @endif
-                <div class="col-12"><button class="btn btn-tf-primary">Save Profile Changes</button></div>
+                @if($requiresOwnerApproval)
+                    <div class="col-12"><label class="form-label">Reason for Change</label><textarea name="reason" class="form-control" rows="3" minlength="10" maxlength="2000" required placeholder="Explain why these profile details need to change.">{{ old('reason', $pendingProfileRequest?->reason) }}</textarea></div>
+                @endif
+                <div class="col-12"><button class="btn btn-tf-primary" @if($requiresOwnerApproval) data-tf-confirm-message="Submit this profile-change request to your Business Owner?" @endif>{{ $requiresOwnerApproval ? 'Submit Change Request' : 'Save Profile Changes' }}</button></div>
             </form>
         </div>
     </div>
@@ -42,4 +50,30 @@
         <div class="input-group"><input id="profileConfirmPassword" name="password_confirmation" type="password" class="form-control" placeholder="Confirm password"><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileConfirmPassword" data-tf-password-icon="#profileConfirmPasswordIcon"><i id="profileConfirmPasswordIcon" class="bi bi-eye"></i></button></div>
         <button class="btn btn-outline-primary">Change Password</button></form></div></div>
 </div>
+@if($user->role === 'business_owner')
+    <div class="tf-card p-4 mt-4">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">User Profile Change Requests</h2><p class="tf-muted mb-0">Review requests from users in your business. Changes are only made after you approve and apply them.</p></div><span class="tf-badge {{ $profileChangeRequests->where('status', 'Pending')->isNotEmpty() ? 'tf-badge-warning' : 'tf-badge-success' }}">{{ $profileChangeRequests->where('status', 'Pending')->count() }} pending</span></div>
+        @forelse($profileChangeRequests as $changeRequest)
+            <div class="border rounded p-3 mb-3">
+                <div class="d-flex justify-content-between flex-wrap gap-2 mb-2"><strong>{{ $changeRequest->user?->name }}</strong><span class="tf-badge {{ $changeRequest->status === 'Pending' ? 'tf-badge-warning' : 'tf-badge-success' }}">{{ $changeRequest->status }}</span></div>
+                <p class="mb-2"><strong>Reason:</strong> {{ $changeRequest->reason }}</p>
+                <div class="row g-2 small mb-3">
+                    @foreach(['Name' => 'name', 'Email' => 'email', 'Phone' => 'phone'] as $label => $field)
+                        <div class="col-md-4"><div class="bg-light rounded p-2"><span class="tf-muted d-block">{{ $label }}</span><span>Current: {{ $changeRequest->old_values[$field] ?: '—' }}</span><strong class="d-block">Requested: {{ $changeRequest->requested_values[$field] ?: '—' }}</strong></div></div>
+                    @endforeach
+                </div>
+                @if($changeRequest->status === 'Pending')
+                    <div class="row g-2">
+                        <form method="POST" action="{{ route('profile.user-detail-change-requests.approve', $changeRequest) }}" class="col-md-6" data-tf-confirm-message="Approve this request? You must still apply the changes before they affect the user.">@csrf @method('PATCH')<div class="input-group"><input name="review_note" class="form-control" maxlength="2000" placeholder="Optional approval note"><button class="btn btn-success">Approve</button></div></form>
+                        <form method="POST" action="{{ route('profile.user-detail-change-requests.reject', $changeRequest) }}" class="col-md-6" data-tf-confirm-message="Reject this profile-change request? The user will be notified.">@csrf @method('PATCH')<div class="input-group"><input name="review_note" class="form-control" maxlength="2000" required placeholder="Reason for rejection"><button class="btn btn-outline-danger">Reject</button></div></form>
+                    </div>
+                @elseif($changeRequest->status === 'Approved')
+                    <form method="POST" action="{{ route('profile.user-detail-change-requests.apply', $changeRequest) }}" data-tf-confirm-message="Apply these approved profile changes? The user will be notified.">@csrf @method('PATCH')<button class="btn btn-success">Apply Changes & Notify User</button></form>
+                @endif
+            </div>
+        @empty
+            <div class="text-center tf-muted py-3">No user profile-change requests are awaiting review.</div>
+        @endforelse
+    </div>
+@endif
 @endsection

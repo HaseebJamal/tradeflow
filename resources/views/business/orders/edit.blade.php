@@ -1,99 +1,72 @@
 @extends('layouts.dashboard')
-@section('page-title', 'Edit Order')
+@section('page-title', 'Edit Sale')
 @section('page-subtitle', $order->order_number)
 @section('content')
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
-<form method="POST" action="{{ route('business.orders.update', $order) }}" class="tf-card p-4 mb-4" data-edit-order-form>
+<form method="POST" action="{{ route('business.sales.update', $order) }}" class="tf-card p-4 mb-4" data-sale-edit-form>
     @csrf
     @method('PUT')
+
     <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <label class="form-label">Customer</label>
-            <select name="customer_id" class="form-select">
-                <option value="walk_in" @selected(old('customer_id', $order->customer_id ? $order->customer_id : 'walk_in') === 'walk_in')>Walk-in Customer</option>
-                @foreach($customers as $customer)
-                    <option value="{{ $customer->id }}" @selected((string) old('customer_id', $order->customer_id) === (string) $customer->id)>{{ $customer->business_name ?: $customer->name }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Payment Type</label>
-            <select name="payment_type" class="form-select">
-                @foreach(['Credit', 'Cash', 'Partial'] as $paymentType)
-                    <option @selected(old('payment_type', $order->payment_type) === $paymentType)>{{ $paymentType }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Discount %</label>
-            <input name="discount" type="number" min="0" max="100" step="0.01" class="form-control" value="{{ old('discount', $order->discount_percentage ?? $order->discount ?? 0) }}" data-edit-order-discount>
-        </div>
-        <div class="col-md-2 d-flex align-items-end">
-            <button class="btn btn-tf-primary w-100">Save Changes</button>
-        </div>
+        <div class="col-md-5"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="walk_in" @selected(old('customer_id', $order->customer_id ? $order->customer_id : 'walk_in') === 'walk_in')>Walk-in Customer</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected((string) old('customer_id', $order->customer_id) === (string) $customer->id)>{{ $customer->display_name }}</option>@endforeach</select></div>
+        <div class="col-md-3"><label class="form-label">Payment Type</label><select name="payment_type" class="form-select">@foreach(['Credit', 'Cash', 'Partial'] as $paymentType)<option @selected(old('payment_type', $order->payment_type) === $paymentType)>{{ $paymentType }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">Discount %</label><input name="discount" type="number" min="0" max="100" step="0.01" class="form-control" value="{{ old('discount', $order->discount_percentage ?? $order->discount ?? 0) }}" data-sale-edit-discount></div>
+        <div class="col-md-2 d-flex align-items-end"><button class="btn btn-tf-primary w-100">Save Changes</button></div>
     </div>
 
-    <x-table>
-        <thead><tr><th>Product</th><th>Available Stock</th><th>Current Qty</th><th>New Qty</th><th>Rate</th><th>Line Total</th><th></th></tr></thead>
-        <tbody data-edit-order-rows>
-            @foreach($order->items as $item)
-                @php($availableForEdit = ($item->product?->stock_quantity ?? 0) + $item->quantity)
-                <tr data-edit-order-row data-price="{{ $item->price }}">
-                    <td>
-                        {{ $item->product?->name }}
-                        <input type="hidden" name="items[{{ $loop->index }}][item_id]" value="{{ $item->id }}">
-                        <input type="hidden" name="items[{{ $loop->index }}][product_id]" value="{{ $item->product_id }}">
-                    </td>
-                    <td>{{ $availableForEdit }} {{ $item->product?->unit }}</td>
-                    <td>{{ $item->quantity }}</td>
-                    <td><input name="items[{{ $loop->index }}][quantity]" type="number" min="1" max="{{ $availableForEdit }}" class="form-control" value="{{ old('items.'.$loop->index.'.quantity', $item->quantity) }}" style="max-width:110px" data-edit-order-qty></td>
-                    <td>Rs {{ number_format($item->price) }}</td>
-                    <td data-edit-order-line-total>Rs {{ number_format($item->total) }}</td>
-                    <td>
-                        <input type="hidden" name="items[{{ $loop->index }}][remove]" value="0" data-edit-order-remove>
-                        <button type="button" class="btn btn-sm btn-outline-danger" data-remove-order-row>Remove</button>
-                    </td>
-                </tr>
-            @endforeach
-        </tbody>
-    </x-table>
+    <section class="border rounded bg-light p-3 mb-3" aria-label="Add or update sale item">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><div><h2 class="h6 mb-0">Sale item</h2><small class="tf-muted">Select an item, then add it to the compact list below.</small></div><small class="tf-muted" data-sale-edit-mode>New item</small></div>
+        <div class="row g-2 align-items-end">
+            <div class="col-lg-3"><label class="form-label">Product</label><select class="form-select" data-sale-edit-product><option value="">Select product</option>@foreach($products as $product)<option value="{{ $product->id }}" data-name="{{ $product->name }}" data-price="{{ $product->wholesale_price }}" data-stock="{{ $product->stock_quantity }}" data-unit="{{ $product->unit }}">{{ $product->name }}</option>@endforeach</select></div>
+            <div class="col-lg-1"><label class="form-label">Available Stock</label><input class="form-control" readonly data-sale-edit-stock></div>
+            <div class="col-lg-1"><label class="form-label">Quantity</label><input type="number" min="1" value="1" class="form-control" data-sale-edit-qty></div>
+            <div class="col-lg-2"><label class="form-label">Unit Price</label><input class="form-control" readonly data-sale-edit-price></div>
+            <div class="col-lg-1"><label class="form-label">Discount</label><input class="form-control" value="Rs 0.00" readonly></div>
+            <div class="col-lg-1"><label class="form-label">Tax</label><input class="form-control" value="Rs 0.00" readonly></div>
+            <div class="col-lg-2"><label class="form-label">Line Total</label><input class="form-control" value="Rs 0.00" readonly data-sale-edit-total></div>
+            <div class="col-lg-1 d-grid"><button type="button" class="btn btn-tf-primary" data-sale-edit-add aria-label="Add or update item"><i class="bi bi-check-lg"></i></button></div>
+        </div>
+        <div class="invalid-feedback d-block d-none mt-2" data-sale-edit-error></div>
+    </section>
 
-    <button type="button" class="btn btn-outline-primary mt-3" data-add-order-row><i class="bi bi-plus-lg me-1"></i>Add Product Row</button>
+    <div class="table-responsive border rounded" style="max-height: 360px"><table class="table align-middle mb-0"><thead class="sticky-top"><tr><th>#</th><th>Product</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Tax</th><th>Line Total</th><th>Edit</th><th>Delete</th></tr></thead><tbody data-sale-edit-items>
+        @foreach($order->items as $item)
+            @php($availableForEdit = ($item->product?->stock_quantity ?? 0) + $item->quantity)
+            <tr data-sale-edit-row data-existing="1" data-item-id="{{ $item->id }}" data-product-id="{{ $item->product_id }}" data-product-name="{{ $item->product?->name }}" data-stock="{{ $availableForEdit }}" data-unit="{{ $item->product?->unit }}" data-price="{{ $item->price }}">
+                <td data-sale-edit-index>{{ $loop->iteration }}</td><td>{{ $item->product?->name }}<input type="hidden" data-sale-edit-field="item_id" value="{{ $item->id }}"><input type="hidden" data-sale-edit-field="product_id" value="{{ $item->product_id }}"><input type="hidden" data-sale-edit-field="quantity" value="{{ old('items.'.$loop->index.'.quantity', $item->quantity) }}"><input type="hidden" data-sale-edit-field="remove" value="0"></td><td data-sale-edit-qty-label>{{ old('items.'.$loop->index.'.quantity', $item->quantity) }}</td><td data-sale-edit-price-label>Rs {{ number_format($item->price, 2) }}</td><td>Rs 0.00</td><td>Rs 0.00</td><td data-sale-edit-line-total>Rs {{ number_format($item->price * old('items.'.$loop->index.'.quantity', $item->quantity), 2) }}</td><td><button type="button" class="btn btn-sm btn-outline-primary" data-sale-edit-row-edit>Edit</button></td><td><button type="button" class="btn btn-sm btn-outline-danger" data-sale-edit-row-delete>Delete</button></td>
+            </tr>
+        @endforeach
+        <tr data-sale-edit-empty class="d-none"><td colspan="9" class="text-center tf-muted py-4">No sale items remain. Add an item before saving.</td></tr>
+    </tbody></table></div>
+    <div class="d-none" data-sale-edit-removed></div>
 
-    <div class="row g-3 mt-3">
-        <div class="col-md-3"><div class="border rounded p-3"><small class="tf-muted">Subtotal</small><strong class="d-block" data-edit-order-subtotal>Rs 0</strong></div></div>
-        <div class="col-md-3"><div class="border rounded p-3"><small class="tf-muted">Discount Amount</small><strong class="d-block" data-edit-order-discount-amount>Rs 0</strong></div></div>
-        <div class="col-md-3"><div class="border rounded p-3"><small class="tf-muted">Grand Total</small><strong class="d-block" data-edit-order-grand-total>Rs 0</strong></div></div>
-        <div class="col-md-3"><div class="border rounded p-3"><small class="tf-muted">Paid / Balance</small><strong class="d-block">Rs {{ number_format($order->paid_amount ?? 0) }} / <span data-edit-order-balance>Rs {{ number_format($order->balance ?? 0) }}</span></strong></div></div>
-    </div>
-
-    <div class="d-flex justify-content-between align-items-center mt-4">
-        <a href="{{ route('business.orders.show', $order) }}" class="btn btn-outline-secondary">Back to Details</a>
-        <button class="btn btn-tf-primary">Save Order Changes</button>
-    </div>
+    <div class="row g-3 mt-3"><div class="col-md-3"><div class="border rounded p-3"><small class="tf-muted">Subtotal</small><strong class="d-block" data-sale-edit-subtotal>Rs 0</strong></div></div><div class="col-md-3"><div class="border rounded p-3"><small class="tf-muted">Discount Amount</small><strong class="d-block" data-sale-edit-discount-amount>Rs 0</strong></div></div><div class="col-md-3"><div class="border rounded p-3"><small class="tf-muted">Grand Total</small><strong class="d-block" data-sale-edit-grand-total>Rs 0</strong></div></div><div class="col-md-3"><div class="border rounded p-3"><small class="tf-muted">Paid / Balance</small><strong class="d-block">Rs {{ number_format($order->paid_amount ?? 0) }} / <span data-sale-edit-balance>Rs {{ number_format($order->balance ?? 0) }}</span></strong></div></div></div>
+    <div class="d-flex justify-content-between align-items-center mt-4"><a href="{{ route('business.sales.show', $order) }}" class="btn btn-outline-secondary">Back to Details</a><button class="btn btn-tf-primary">Save Order Changes</button></div>
 </form>
-
-<template data-edit-order-template>
-    <tr data-edit-order-row data-price="0">
-        <td>
-            <select class="form-select" data-new-product-select>
-                <option value="">Select product</option>
-                @foreach($products as $product)
-                    <option value="{{ $product->id }}" data-price="{{ $product->wholesale_price }}" data-stock="{{ $product->stock_quantity }}" data-unit="{{ $product->unit }}">{{ $product->name }}</option>
-                @endforeach
-            </select>
-            <input type="hidden" data-new-product-input>
-        </td>
-        <td data-new-product-stock>-</td>
-        <td>-</td>
-        <td><input type="number" min="1" class="form-control" style="max-width:110px" data-edit-order-qty></td>
-        <td data-new-product-rate>Rs 0</td>
-        <td data-edit-order-line-total>Rs 0</td>
-        <td>
-            <input type="hidden" value="0" data-edit-order-remove>
-            <button type="button" class="btn btn-sm btn-outline-danger" data-delete-new-order-row>Remove</button>
-        </td>
-    </tr>
-</template>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.querySelector('[data-sale-edit-form]');
+    if (!form) return;
+    const body = form.querySelector('[data-sale-edit-items]'), removed = form.querySelector('[data-sale-edit-removed]'), product = form.querySelector('[data-sale-edit-product]'), stock = form.querySelector('[data-sale-edit-stock]'), qty = form.querySelector('[data-sale-edit-qty]'), price = form.querySelector('[data-sale-edit-price]'), total = form.querySelector('[data-sale-edit-total]'), error = form.querySelector('[data-sale-edit-error]'), mode = form.querySelector('[data-sale-edit-mode]');
+    let editing = null;
+    const money = value => `Rs ${Number(value || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    const rows = () => [...body.querySelectorAll('[data-sale-edit-row]')];
+    const selected = () => product.selectedOptions[0];
+    const currentPrice = () => Number(price.value || 0);
+    const syncEntry = () => { const option = selected(); if (!option?.value) { stock.value = ''; price.value = ''; total.value = 'Rs 0.00'; return; } stock.value = `${option.dataset.stock || 0} ${option.dataset.unit || ''}`; price.value = option.dataset.price || 0; total.value = money((Number(qty.value) || 0) * currentPrice()); };
+    const indexFields = () => { [...body.querySelectorAll('[data-sale-edit-row]'), ...removed.querySelectorAll('[data-sale-edit-removed-row]')].forEach((row, index) => row.querySelectorAll('[data-sale-edit-field]').forEach(field => field.name = `items[${index}][${field.dataset.saleEditField}]`)); };
+    const render = () => { let subtotal = 0; rows().forEach((row, index) => { const line = Number(row.dataset.price || 0) * Number(row.querySelector('[data-sale-edit-field="quantity"]')?.value || 0); subtotal += line; row.querySelector('[data-sale-edit-index]').textContent = index + 1; row.querySelector('[data-sale-edit-qty-label]').textContent = row.querySelector('[data-sale-edit-field="quantity"]').value; row.querySelector('[data-sale-edit-line-total]').textContent = money(line); }); body.querySelector('[data-sale-edit-empty]')?.classList.toggle('d-none', rows().length > 0); const discount = Math.min(100, Math.max(0, Number(form.querySelector('[data-sale-edit-discount]').value || 0))); const discountAmount = subtotal * discount / 100, grand = Math.max(0, subtotal - discountAmount), paid = {{ (float) ($order->paid_amount ?? 0) }}; form.querySelector('[data-sale-edit-subtotal]').textContent = money(subtotal); form.querySelector('[data-sale-edit-discount-amount]').textContent = money(discountAmount); form.querySelector('[data-sale-edit-grand-total]').textContent = money(grand); form.querySelector('[data-sale-edit-balance]').textContent = money(Math.max(0, grand - paid)); indexFields(); };
+    const reset = () => { editing = null; product.disabled = false; product.value = ''; qty.value = 1; price.value = ''; stock.value = ''; total.value = 'Rs 0.00'; mode.textContent = 'New item'; error.classList.add('d-none'); window.syncTradeFlowTomSelect?.(product); setTimeout(() => window.getTradeFlowTomSelect?.(product)?.focus(), 0); };
+    const addOrUpdate = () => { const option = selected(), quantity = Number(qty.value || 0), available = Number(option?.dataset.stock || 0); if (!option?.value || quantity < 1 || quantity > available) { error.textContent = !option?.value ? 'Select a product.' : `Insufficient stock. Only ${available} units are available.`; error.classList.remove('d-none'); return; } const row = editing || document.createElement('tr'); row.dataset.saleEditRow = ''; row.dataset.existing = '0'; row.dataset.productId = option.value; row.dataset.productName = option.dataset.name || option.text; row.dataset.stock = available; row.dataset.unit = option.dataset.unit || ''; row.dataset.price = option.dataset.price || 0; row.innerHTML = `<td data-sale-edit-index></td><td>${option.text}<input type="hidden" data-sale-edit-field="product_id" value="${option.value}"><input type="hidden" data-sale-edit-field="quantity" value="${quantity}"><input type="hidden" data-sale-edit-field="remove" value="0"></td><td data-sale-edit-qty-label></td><td data-sale-edit-price-label>${money(option.dataset.price)}</td><td>Rs 0.00</td><td>Rs 0.00</td><td data-sale-edit-line-total></td><td><button type="button" class="btn btn-sm btn-outline-primary" data-sale-edit-row-edit>Edit</button></td><td><button type="button" class="btn btn-sm btn-outline-danger" data-sale-edit-row-delete>Delete</button></td>`; row.querySelector('[data-sale-edit-field="quantity"]').value = quantity; if (!editing) body.appendChild(row); render(); reset(); };
+    form.querySelector('[data-sale-edit-add]').addEventListener('click', addOrUpdate);
+    product.addEventListener('change', syncEntry); qty.addEventListener('input', () => { total.value = money((Number(qty.value) || 0) * currentPrice()); }); form.querySelector('[data-sale-edit-discount]').addEventListener('input', render);
+    body.addEventListener('click', event => { const row = event.target.closest('[data-sale-edit-row]'); if (!row) return; if (event.target.closest('[data-sale-edit-row-edit]')) { editing = row; product.value = row.dataset.productId; product.disabled = row.dataset.existing === '1'; qty.value = row.querySelector('[data-sale-edit-field="quantity"]').value; stock.value = `${row.dataset.stock} ${row.dataset.unit}`; price.value = row.dataset.price; total.value = money(Number(qty.value) * Number(row.dataset.price)); mode.textContent = row.dataset.existing === '1' ? 'Updating existing item' : 'Updating new item'; error.classList.add('d-none'); window.syncTradeFlowTomSelect?.(product); setTimeout(() => window.getTradeFlowTomSelect?.(product)?.focus(), 0); } if (event.target.closest('[data-sale-edit-row-delete]')) { if (editing === row) reset(); if (row.dataset.existing === '1') { const deleted = document.createElement('div'); deleted.dataset.saleEditRemovedRow = ''; deleted.innerHTML = `<input type="hidden" data-sale-edit-field="item_id" value="${row.dataset.itemId}"><input type="hidden" data-sale-edit-field="product_id" value="${row.dataset.productId}"><input type="hidden" data-sale-edit-field="remove" value="1">`; removed.appendChild(deleted); } row.remove(); render(); } });
+    form.addEventListener('submit', event => { if (rows().length) return; event.preventDefault(); error.textContent = 'Keep at least one sale item before saving.'; error.classList.remove('d-none'); window.getTradeFlowTomSelect?.(product)?.focus(); });
+    syncEntry(); render();
+});
+</script>
+@endpush

@@ -123,12 +123,12 @@ class SupplierController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
-            'supplier_name' => ['required', 'string', 'max:255'],
-            'company_name' => ['nullable', 'string', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:50'],
+            'supplier_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'company_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'phone' => ['nullable', 'regex:/^\d{11}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string'],
-            'city' => ['nullable', 'string', 'max:100'],
+            'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'opening_balance' => ['nullable', 'numeric', 'min:0'],
             'status' => ['required', Rule::in(['Active', 'Inactive'])],
         ]);

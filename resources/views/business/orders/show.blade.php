@@ -7,19 +7,18 @@
 @php
     $user = auth()->user();
     $access = app(\App\Services\CompanyPermissionService::class);
-    $canManageOrder = $access->allowsUser($user, 'sales.update_status');
-    $canEditOrder = $access->allowsUser($user, 'sales.create');
+    $canManageOrder = $access->allowsUser($user, 'orders.update_status');
+    $canEditOrder = $access->allowsUser($user, 'orders.edit');
     $editableStatus = in_array($order->status, ['New', 'Accepted', 'Packing'], true);
-    $canAssignDelivery = $access->allowsUser($user, 'sales.update_status')
-        && in_array($user->role, ['business_owner', 'manager', 'business_admin', 'business_sub_admin'], true)
+    $canAssignDelivery = $access->allowsUser($user, 'deliveries.assign')
         && in_array($order->status, ['New', 'Accepted', 'Packing', 'Ready'], true)
         && !$order->delivery;
 @endphp
 
 <div class="tf-card p-4 mb-4">
     <div class="row g-3 align-items-start">
-        <div class="col-md-3"><strong>Customer</strong><p class="tf-muted mb-0">{{ $order->customer?->business_name ?? $order->customer?->name ?? 'Walk-in Customer' }}</p></div>
-        <div class="col-md-3"><strong>Status</strong>@companyCan('sales.update_status')<form method="POST" action="{{ route('business.orders.status', $order) }}" class="mt-2">@csrf @method('PATCH')<select name="status" class="form-select form-select-sm mb-2">@foreach(['New','Accepted','Packing','Ready','Out For Delivery','Delivered','Completed','Cancelled'] as $status)<option @selected($order->status === $status)>{{ $status }}</option>@endforeach</select><button class="btn btn-sm btn-outline-primary">Update</button></form>@else<div class="tf-muted mt-2">{{ $order->status }}</div>@endcompanyCan</div>
+        <div class="col-md-3"><strong>Customer</strong><p class="tf-muted mb-0">{{ $order->customer?->display_name ?? 'Walk-in Customer' }}</p></div>
+            <div class="col-md-3"><strong>Status</strong>@companyCan('sales.update_status')<form method="POST" action="{{ route('business.sales.status', $order) }}" class="mt-2">@csrf @method('PATCH')<select name="status" class="form-select form-select-sm mb-2">@foreach(['New','Accepted','Packing','Ready','Out For Delivery','Delivered','Completed','Cancelled'] as $status)<option @selected($order->status === $status)>{{ $status }}</option>@endforeach</select><button class="btn btn-sm btn-outline-primary">Update</button></form>@else<div class="tf-muted mt-2">{{ $order->status }}</div>@endcompanyCan</div>
         <div class="col-md-3">
             <strong>Totals</strong>
             <div class="small tf-muted mt-2">Subtotal: Rs {{ number_format($order->subtotal) }}</div>
@@ -44,17 +43,17 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
             @if($canEditOrder && $editableStatus)
-                <a class="btn btn-outline-primary" href="{{ route('business.orders.edit', $order) }}"><i class="bi bi-pencil-square me-1"></i>Edit Order</a>
+                <a class="btn btn-outline-primary" href="{{ route('business.sales.edit', $order) }}"><i class="bi bi-pencil-square me-1"></i>Edit Sale</a>
             @endif
             @if($order->delivery)
                 <a class="btn btn-outline-success" href="{{ route('business.deliveries.show', $order->delivery) }}"><i class="bi bi-truck me-1"></i>View Delivery</a>
             @elseif($canAssignDelivery)
                 <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#assignDeliveryModal"><i class="bi bi-truck me-1"></i>Assign Delivery</button>
             @endif
-            @companyCan('invoices.view')<a class="btn btn-tf-primary" href="{{ route('business.invoices.show', $order) }}"><i class="bi bi-receipt me-1"></i>View Invoice</a>@endcompanyCan
-            @companyCan('invoices.export')<a class="btn btn-outline-primary" target="_blank" rel="noopener" href="{{ route('business.invoices.pdf', $order) }}"><i class="bi bi-filetype-pdf me-1"></i>View PDF</a>@endcompanyCan
+            @companyCan('sales.invoices')<a class="btn btn-tf-primary" href="{{ route('business.sales.invoices.show', $order) }}"><i class="bi bi-receipt me-1"></i>View Invoice</a>@endcompanyCan
+            @companyCan('sales.invoice_export')<a class="btn btn-outline-primary" target="_blank" rel="noopener" href="{{ route('business.sales.invoices.pdf', $order) }}"><i class="bi bi-filetype-pdf me-1"></i>View PDF</a>@endcompanyCan
             @if($canManageOrder && !in_array($order->status, ['Cancelled','Void'], true))
-                @companyCan('sales.update_status')<button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#cancelOrderModal"><i class="bi bi-x-circle me-1"></i>Cancel Order</button><button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#voidOrderModal"><i class="bi bi-slash-circle me-1"></i>Void Order</button><button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteOrderModal"><i class="bi bi-trash me-1"></i>Delete Order</button>@endcompanyCan
+                @companyCan('orders.update_status')<button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#cancelOrderModal"><i class="bi bi-x-circle me-1"></i>Cancel Order</button><button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#voidOrderModal"><i class="bi bi-slash-circle me-1"></i>Void Order</button><button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteOrderModal"><i class="bi bi-trash me-1"></i>Delete Order</button>@endcompanyCan
             @endif
         </div>
     </div>
@@ -77,12 +76,12 @@
                 <h2 class="modal-title h5">Assign Delivery</h2>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form method="POST" action="{{ route('business.orders.assignDelivery', $order) }}">
+            <form method="POST" action="{{ route('business.sales.assignDelivery', $order) }}">
                 @csrf
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-md-6"><label class="form-label">Order Number</label><input class="form-control" value="{{ $order->order_number }}" readonly></div>
-                        <div class="col-md-6"><label class="form-label">Customer</label><input class="form-control" value="{{ $order->customer?->business_name ?? $order->customer?->name ?? 'Walk-in Customer' }}" readonly></div>
+                        <div class="col-md-6"><label class="form-label">Customer</label><input class="form-control" value="{{ $order->customer?->display_name ?? 'Walk-in Customer' }}" readonly></div>
                         <div class="col-md-8"><label class="form-label">Address</label><input name="address" class="form-control" value="{{ old('address', $order->customer?->address) }}" required></div>
                         <div class="col-md-4"><label class="form-label">Amount</label><input class="form-control" value="Rs {{ number_format($order->grand_total ?: $order->total) }}" readonly></div>
                         <div class="col-md-12">
@@ -119,7 +118,7 @@
             <div class="modal-body">Cancel {{ $order->order_number }}? Product stock will be restored if it has not already been restored. Payments and khata records will be kept.</div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Keep Order</button>
-                @companyCan('sales.update_status')<form method="POST" action="{{ route('business.orders.cancel', $order) }}">@csrf @method('PATCH')<button class="btn btn-warning">Cancel Order</button></form>@endcompanyCan
+                @companyCan('sales.update_status')<form method="POST" action="{{ route('business.sales.cancel', $order) }}">@csrf @method('PATCH')<button class="btn btn-warning">Cancel Order</button></form>@endcompanyCan
             </div>
         </div>
     </div>
@@ -132,7 +131,7 @@
             <div class="modal-body">Delete {{ $order->order_number }}? If this order has payments, khata, invoice, or delivery records, it will be marked Cancelled instead of hard deleted.</div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-                @companyCan('sales.update_status')<form method="POST" action="{{ route('business.orders.destroy', $order) }}">@csrf @method('DELETE')<button class="btn btn-danger">Delete Order</button></form>@endcompanyCan
+                @companyCan('sales.update_status')<form method="POST" action="{{ route('business.sales.destroy', $order) }}">@csrf @method('DELETE')<button class="btn btn-danger">Delete Order</button></form>@endcompanyCan
             </div>
         </div>
     </div>
@@ -142,7 +141,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header"><h2 class="modal-title h5">Void Order</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-            @companyCan('sales.update_status')<form method="POST" action="{{ route('business.orders.void', $order) }}">@csrf @method('PATCH')
+            @companyCan('sales.update_status')<form method="POST" action="{{ route('business.sales.void', $order) }}">@csrf @method('PATCH')
                 <div class="modal-body"><label class="form-label">Void Reason</label><textarea name="void_reason" class="form-control" rows="4" required></textarea></div>
                 <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button><button class="btn btn-danger">Void Order</button></div>
             </form>@endcompanyCan

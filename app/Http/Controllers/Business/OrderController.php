@@ -19,13 +19,14 @@ use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
+use App\Services\CompanyPermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private CompanyPermissionService $permissions) {}
 
     public function index(Request $request)
     {
@@ -86,19 +87,33 @@ class OrderController extends Controller
         ]);
     }
 
+    /** Resolve a scanned sale/order number inside the current business. */
+    public function lookup(Request $request)
+    {
+        $code = trim((string) $request->validate(['code' => ['required', 'string', 'max:120']])['code']);
+        $order = Order::where('business_id', $request->user()->business_id)
+            ->where('order_number', $code)
+            ->first();
+
+        return response()->json([
+            'found' => (bool) $order,
+            'url' => $order ? route('business.sales.show', $order) : null,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
             'customer_id' => ['nullable', 'string'],
-            'new_customer_name' => ['nullable', 'string', 'max:255'],
-            'new_customer_shop' => ['nullable', 'string', 'max:255'],
-            'new_customer_phone' => ['nullable', 'string', 'max:30'],
-            'new_customer_city' => ['nullable', 'string', 'max:100'],
+            'new_customer_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'new_customer_shop' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'new_customer_phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'new_customer_city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'new_customer_address' => ['nullable', 'string'],
             'new_customer_type' => ['nullable', 'in:Retail Shop,Dealer,Distributor,Retailer,Wholesaler'],
             'new_customer_credit_limit' => ['nullable', 'numeric', 'min:0'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:100'], 'payment_type' => ['nullable', 'in:Cash,Credit,Partial'],
-            'products' => ['required', 'array'], 'products.*.id' => ['required', 'exists:products,id'], 'products.*.quantity' => ['required', 'integer', 'min:0'],
+            'products' => ['required', 'array'], 'products.*.id' => ['required', 'exists:products,id'], 'products.*.quantity' => ['required', 'integer', 'min:1'],
         ]);
         $data['products'] = collect($data['products'])->filter(fn ($line) => (int) $line['quantity'] > 0)->values()->all();
         if (empty($data['products'])) return back()->withErrors(['products' => 'Add at least one product quantity.']);
@@ -213,7 +228,7 @@ class OrderController extends Controller
             $this->audit($request, 'Sale created '.$order->order_number, 'Sales', $order->id, null, ['status' => $order->status, 'grand_total' => $grandTotal]);
         });
 
-        return redirect()->route('business.orders.index')->with('success', 'Order created.');
+        return redirect()->route('business.sales.index')->with('success', 'Sale created.');
     }
 
     public function show(Order $order)
@@ -224,8 +239,13 @@ class OrderController extends Controller
             'order' => $order->load(['customer', 'items.product', 'payments', 'delivery.staff']),
             'journalEntries' => JournalEntry::with('lines.account')->where('business_id', $order->business_id)->where('reference_type', 'order')->where('reference_id', $order->id)->latest()->get(),
             'deliveryStaff' => User::where('business_id', auth()->user()->business_id)
-                ->where('role', 'delivery_staff')
+                ->where('role', 'custom_staff')
                 ->where('status', 'active')
+                ->where(function ($query) {
+                    $query->whereJsonContains('permissions', 'deliveries.view')
+                        ->orWhereJsonContains('permissions', 'deliveries.update_status')
+                        ->orWhereJsonContains('permissions', 'deliveries.upload_proof');
+                })
                 ->orderBy('name')
                 ->get(),
         ]);
@@ -236,12 +256,12 @@ class OrderController extends Controller
         abort_unless($order->business_id === auth()->user()->business_id, 403);
 
         if (!$this->canEditOrder($order)) {
-            return redirect()->route('business.orders.show', $order)
+            return redirect()->route('business.sales.show', $order)
                 ->withErrors(['permission' => 'You do not have permission to edit this order. Please contact your business owner.']);
         }
 
         if (!$this->isEditableStatus($order)) {
-            return redirect()->route('business.orders.show', $order)
+            return redirect()->route('business.sales.show', $order)
                 ->withErrors(['status' => 'This order can no longer be edited because it is already in delivery/completed stage.']);
         }
 
@@ -258,12 +278,12 @@ class OrderController extends Controller
         abort_unless($order->business_id === auth()->user()->business_id, 403);
 
         if (!$this->canEditOrder($order)) {
-            return redirect()->route('business.orders.show', $order)
+            return redirect()->route('business.sales.show', $order)
                 ->withErrors(['permission' => 'You do not have permission to edit this order. Please contact your business owner.']);
         }
 
         if (!$this->isEditableStatus($order)) {
-            return redirect()->route('business.orders.show', $order)
+            return redirect()->route('business.sales.show', $order)
                 ->withErrors(['status' => 'This order can no longer be edited because it is already in delivery/completed stage.']);
         }
 
@@ -330,7 +350,7 @@ class OrderController extends Controller
             $this->audit($request, 'Updated sale '.$order->order_number, 'Sales', $order->id, ['grand_total' => $oldTotal], ['grand_total' => $grandTotal]);
         });
 
-        return redirect()->route('business.orders.show', $order)->with('success', 'Order updated successfully.');
+        return redirect()->route('business.sales.show', $order)->with('success', 'Sale updated successfully.');
     }
 
     public function updateStatus(Request $request, Order $order)
@@ -348,14 +368,14 @@ class OrderController extends Controller
     {
         $businessId = auth()->user()->business_id;
         if ($order->business_id !== $businessId) {
-            return redirect()->route('business.orders.index')->withErrors([
+            return redirect()->route('business.sales.index')->withErrors([
                 'order' => 'This order does not belong to your business.',
             ]);
         }
 
-        if (!in_array(auth()->user()->role, ['business_owner', 'manager', 'business_admin', 'business_sub_admin'], true)) {
+        if (!$this->permissions->allowsUser(auth()->user(), 'deliveries.assign')) {
             return back()->withErrors([
-                'permission' => 'Only an authorized business owner or manager can assign deliveries.',
+                'permission' => 'You do not have permission to assign deliveries.',
             ]);
         }
 
@@ -372,8 +392,13 @@ class OrderController extends Controller
         ]);
 
         $staff = User::where('business_id', $businessId)
-            ->where('role', 'delivery_staff')
+            ->where('role', 'custom_staff')
             ->where('status', 'active')
+            ->where(function ($query) {
+                $query->whereJsonContains('permissions', 'deliveries.view')
+                    ->orWhereJsonContains('permissions', 'deliveries.update_status')
+                    ->orWhereJsonContains('permissions', 'deliveries.upload_proof');
+            })
             ->findOrFail($data['delivery_staff_id']);
 
         DB::transaction(function () use ($order, $staff, $data): void {
@@ -463,14 +488,14 @@ class OrderController extends Controller
             $orderNumber = $order->order_number;
             $order->items()->delete();
             $order->delete();
-            $this->audit($request, 'Deleted order '.$orderNumber, 'Orders', $order->id);
+            $this->audit($request, 'Deleted sale '.$orderNumber, 'Sales', $order->id);
         });
 
         if ($hasRelatedRecords) {
             return back()->with('success', 'Order has related records, so it was marked Cancelled instead of deleted.');
         }
 
-        return redirect()->route('business.orders.index')->with('success', 'Order deleted successfully.');
+        return redirect()->route('business.sales.index')->with('success', 'Sale deleted successfully.');
     }
 
     public function void(Request $request, Order $order)
@@ -492,26 +517,14 @@ class OrderController extends Controller
 
     private function canManageOrder(Order $order): bool
     {
-        $role = auth()->user()->role;
-
-        return in_array($role, ['business_owner', 'business_admin', 'business_sub_admin', 'manager'], true);
+        return $this->permissions->allowsUser(auth()->user(), 'orders.update_status');
     }
 
     private function canEditOrder(Order $order): bool
     {
-        $role = auth()->user()->role;
-        if ($role === 'business_owner') {
-            return true;
-        }
-
-        if (in_array($role, ['business_admin', 'business_sub_admin', 'manager'], true)) {
-            return $this->userHasPermission('orders.edit');
-        }
-
-        return $role === 'sales_staff'
-            && $order->created_by === auth()->id()
-            && in_array($order->status, ['New', 'Accepted'], true)
-            && $this->userHasPermission('orders.edit');
+        return $this->permissions->allowsUser(auth()->user(), 'orders.edit')
+            && ($order->created_by === auth()->id() || $this->permissions->allowsUser(auth()->user(), 'orders.update_status'))
+            && in_array($order->status, ['New', 'Accepted', 'Packing'], true);
     }
 
     private function isEditableStatus(Order $order): bool

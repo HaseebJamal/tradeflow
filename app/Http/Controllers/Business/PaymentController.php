@@ -19,12 +19,24 @@ class PaymentController extends Controller
 {
     public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity) {}
 
-    public function index()
+    public function index(Request $request)
     {
+        $request->validate([
+            'customer_id' => ['nullable', 'integer'],
+            'method' => ['nullable', 'string', 'max:50'],
+            'status' => ['nullable', 'in:Paid,Partial,Pending'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+        ]);
         $businessId = auth()->user()->business_id;
         $payments = Payment::with(['customer', 'order'])->where('business_id', $businessId);
-        if (request('method')) $payments->where('method', request('method'));
-        if (request('status')) $payments->where('status', request('status'));
+        $dateFrom = $request->input('date_from') ?: now(config('app.timezone'))->toDateString();
+        $dateTo = $request->input('date_to') ?: now(config('app.timezone'))->toDateString();
+        if ($request->filled('method')) $payments->where('method', $request->string('method')->value());
+        if ($request->filled('status')) $payments->where('status', $request->string('status')->value());
+        if ($request->filled('customer_id')) $payments->where('customer_id', $request->integer('customer_id'));
+        $payments->where('payment_date', '>=', \Illuminate\Support\Carbon::parse($dateFrom, config('app.timezone'))->startOfDay());
+        $payments->where('payment_date', '<=', \Illuminate\Support\Carbon::parse($dateTo, config('app.timezone'))->endOfDay());
         return view('business.payments.index', [
             'payments' => $payments->latest()->paginate(20)->withQueryString(),
             'customers' => Customer::where('business_id', $businessId)->get(),
@@ -36,7 +48,7 @@ class PaymentController extends Controller
     {
         $data = $request->validate([
             'order_id' => ['nullable', 'exists:orders,id'], 'customer_id' => ['required', 'exists:customers,id'],
-            'method' => ['required', 'in:Cash,Bank Transfer,JazzCash manual,Easypaisa manual,Cheque,JazzCash,Easypaisa'], 'amount' => ['required', 'numeric', 'min:0'],
+            'method' => ['required', 'in:Cash,Bank Transfer,JazzCash manual,Easypaisa manual,Cheque,JazzCash,Easypaisa'], 'amount' => ['required', 'numeric', 'min:0.01'],
             'transaction_reference' => ['nullable', 'max:255'], 'reference_number' => ['nullable', 'max:255'], 'payment_date' => ['nullable', 'date'], 'proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'status' => ['required', 'in:Paid,Partial,Pending'],
         ]);
@@ -97,7 +109,7 @@ class PaymentController extends Controller
             'amount' => $payment->amount,
             'method' => $payment->method,
         ]);
-        return back()->with('success', 'Manual payment recorded.');
+        return redirect()->route('business.sales.payments.index')->with('success', 'Customer payment recorded successfully.');
     }
 
     private function postPaymentAccounting(Payment $payment): void

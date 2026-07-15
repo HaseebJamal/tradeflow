@@ -17,6 +17,7 @@ use App\Models\SupplierPayment;
 use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -27,24 +28,53 @@ class PurchaseController extends Controller
     public function index(Request $request)
     {
         $businessId = $this->businessId();
+        $filters = $request->validate([
+            'supplier_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'string', 'max:60'],
+            'search' => ['nullable', 'string', 'max:120'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'create' => ['nullable', 'boolean'],
+        ]);
+        $filters['date_from'] ??= now(config('app.timezone'))->toDateString();
+        $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
         $purchases = Purchase::with(['supplier', 'invoice'])->where('business_id', $businessId)
             ->when($request->filled('supplier_id'), fn ($query) => $query->where('supplier_id', $request->integer('supplier_id')))
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->value()))
-            ->when($request->filled('search'), fn ($query) => $query->where(fn ($inner) => $inner->where('purchase_number', 'like', '%'.$request->search.'%')->orWhere('supplier_invoice_number', 'like', '%'.$request->search.'%')))
+            ->when($request->filled('search'), fn ($query) => $query->where(fn ($inner) => $inner
+                ->where('purchase_number', 'like', '%'.$request->search.'%')
+                ->orWhere('supplier_invoice_number', 'like', '%'.$request->search.'%')
+                ->orWhere('notes', 'like', '%'.$request->search.'%')))
+            ->where('purchase_date', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
+            ->where('purchase_date', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
             ->latest('purchase_date')->paginate(20)->withQueryString();
 
         return view('business.purchases.index', [
             'purchases' => $purchases,
             'suppliers' => Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get(),
+            'products' => $request->boolean('create') ? Product::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get() : collect(),
+            'showPurchaseCreate' => $request->boolean('create'),
         ]);
     }
 
     public function create()
     {
-        $businessId = $this->businessId();
-        return view('business.purchases.create', [
-            'suppliers' => Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get(),
-            'products' => Product::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(),
+        return redirect()->route('business.purchases.index', ['create' => 1]);
+    }
+
+    /** Resolve a PO, supplier invoice, or exact reference for scanner input. */
+    public function lookup(Request $request)
+    {
+        $code = trim((string) $request->validate(['code' => ['required', 'string', 'max:120']])['code']);
+        $purchase = Purchase::where('business_id', $this->businessId())
+            ->where(fn ($query) => $query->where('purchase_number', $code)
+                ->orWhere('supplier_invoice_number', $code)
+                ->orWhere('notes', $code))
+            ->first();
+
+        return response()->json([
+            'found' => (bool) $purchase,
+            'url' => $purchase ? route('business.purchases.show', $purchase) : null,
         ]);
     }
 
@@ -157,7 +187,7 @@ class PurchaseController extends Controller
     public function processReturn(Request $request, Purchase $purchase)
     {
         $purchase = $this->scoped($purchase);
-        $data = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'items' => ['required', 'array', 'min:1'], 'items.*.purchase_item_id' => ['required', 'integer'], 'items.*.quantity' => ['required', 'integer', 'min:0']]);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'items' => ['required', 'array', 'min:1'], 'items.*.purchase_item_id' => ['required', 'integer'], 'items.*.quantity' => ['required', 'integer', 'min:1']]);
         DB::transaction(function () use ($purchase, $data) {
             $return = PurchaseReturn::create(['business_id' => $purchase->business_id, 'purchase_id' => $purchase->id, 'supplier_id' => $purchase->supplier_id, 'created_by' => auth()->id(), 'return_number' => 'PR-'.now()->format('ymdHis').'-'.$purchase->id, 'return_date' => now()->toDateString(), 'reason' => $data['reason']]);
             $total = 0;

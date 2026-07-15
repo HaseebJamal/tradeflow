@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $query = Product::with(['category', 'creator'])->where('business_id', auth()->user()->business_id);
         if (request('archived')) {
@@ -53,6 +53,20 @@ class ProductController extends Controller
         return view('business.products.index', [
             'products' => $query->latest()->paginate(15)->withQueryString(),
             'categories' => Category::where('business_id', auth()->user()->business_id)->orWhereNull('business_id')->orderBy('name')->get(),
+        ]);
+    }
+
+    /** Resolve an exact scanner lookup within the active business only. */
+    public function lookup(Request $request)
+    {
+        $code = trim((string) $request->validate(['code' => ['required', 'string', 'max:100']])['code']);
+        $product = Product::where('business_id', $request->user()->business_id)
+            ->where(fn ($query) => $query->where('barcode', $code)->orWhere('sku', $code))
+            ->first();
+
+        return response()->json([
+            'found' => (bool) $product,
+            'url' => $product ? route('business.products.show', $product) : null,
         ]);
     }
 
@@ -209,7 +223,8 @@ class ProductController extends Controller
                     'sku' => $row['sku'] ?? null,
                     'barcode' => $row['barcode'] ?? null,
                     'batch_number' => $row['batch_number'] ?? null,
-                    'expiry_date' => $row['expiry_date'] ?? null,
+                    'expiry_date' => filled($row['expiry_date'] ?? null) ? $row['expiry_date'] : null,
+                    'has_batch_tracking' => (bool) ($row['has_batch_tracking'] ?? false),
                     'minimum_order_quantity' => 1,
                     'low_stock_alert_qty' => $row['low_stock_alert_qty'] ?? 10,
                     'status' => 'Active',
@@ -231,7 +246,7 @@ class ProductController extends Controller
 
     public function csvTemplate()
     {
-        return response("Product Name,Category,Unit,Purchase Cost,Wholesale Price,Retail Price,SKU,Barcode,Batch Number,Expiry Date,Low Stock Alert\n", 200, [
+        return response("Product Name,Category,Unit,Purchase Cost,Wholesale Price,Retail Price,SKU,Barcode,Batch Number,Expiry Date (Optional),Low Stock Alert\n", 200, [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename=tradeflow-products-template.csv',
         ]);

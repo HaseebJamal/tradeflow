@@ -6,12 +6,15 @@ use App\Models\AuditLog;
 use App\Models\Business;
 use App\Models\User;
 use App\Notifications\BusinessActivityNotification;
+use App\Services\CompanyPermissionService;
 
 class BusinessActivityService
 {
     /**
      * Persist one authoritative audit record after a successful business
-     * transaction, then notify active Super Admins about that same record.
+     * transaction, then notify only users inside that business who have
+     * notification access. Platform administrators receive their own platform
+     * alerts through the dedicated platform notification workflows.
      *
      * @param array<string, mixed>|null $oldValues
      * @param array<string, mixed>|null $newValues
@@ -38,7 +41,13 @@ class BusinessActivityService
             'user_agent' => substr((string) request()->userAgent(), 0, 1000),
         ]);
 
-        User::query()->where('role', 'super_admin')->where('status', 'active')
-            ->each(fn (User $admin) => $admin->notify(new BusinessActivityNotification($business, $module, $action, $recordId, $newValues ?? [])));
+        $permissions = app(CompanyPermissionService::class);
+        User::query()
+            ->where('business_id', $business->id)
+            ->whereIn('role', ['business_owner', 'custom_staff'])
+            ->where('status', 'active')
+            ->get()
+            ->filter(fn (User $recipient) => $permissions->allowsUser($recipient, 'notifications.view', $business))
+            ->each(fn (User $recipient) => $recipient->notify(new BusinessActivityNotification($business, $module, $action, $recordId, $newValues ?? [])));
     }
 }

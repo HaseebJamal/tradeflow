@@ -40,6 +40,7 @@
         <div class="list-group list-group-flush">
             @forelse($notifications as $notification)
                 @php($isRegistration = data_get($notification->data, 'category') === 'company_registration')
+                @php($isDetailChangeRequest = data_get($notification->data, 'category') === 'business_detail_change_request')
                 <div class="list-group-item p-3 p-lg-4 {{ $notification->read_at ? '' : 'bg-light' }}">
                     <div class="d-flex gap-3 justify-content-between align-items-start">
                         <span class="tf-icon-tile {{ $isRegistration ? 'bg-blue' : 'bg-amber' }} text-white flex-shrink-0"><i class="bi {{ $isRegistration ? 'bi-buildings' : 'bi-bell' }}"></i></span>
@@ -51,6 +52,9 @@
                         <div class="d-flex flex-wrap justify-content-end gap-2 flex-shrink-0">
                             @if($isRegistration)
                                 <a class="btn btn-sm btn-tf-primary" href="{{ route('admin.notifications.review', $notification->id) }}"><i class="bi bi-clipboard-check me-1"></i>Review registration</a>
+                            @endif
+                            @if($isDetailChangeRequest)
+                                <a class="btn btn-sm btn-tf-primary" href="{{ route('admin.notifications.review', $notification->id) }}"><i class="bi bi-clipboard-check me-1"></i>Review request</a>
                             @endif
                             @if(!$notification->read_at)
                                 <form method="POST" action="{{ route('admin.notifications.read', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Mark read</button></form>

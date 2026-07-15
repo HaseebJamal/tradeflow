@@ -33,6 +33,7 @@
         ['Subscriptions', 'admin.subscriptions', 'bi-credit-card', $expiredSubscriptions.' expired'],
         ['Complaints & Support', 'admin.support-tickets', 'bi-life-preserver', $ticketsCount.' open'],
         ['Audit Logs', 'admin.audit-logs', 'bi-activity', $securityAlerts.' alerts'],
+        ['Notifications', 'admin.notifications.index', 'bi-bell', auth()->user()->unreadNotifications()->count().' unread'],
         ['Payments', 'admin.payments', 'bi-cash-stack', 'Payment records'],
         ['Business Reports', 'admin.business-reports', 'bi-graph-up', 'Review reports'],
         ['Categories', 'admin.categories', 'bi-tags', 'Catalog categories'],

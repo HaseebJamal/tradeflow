@@ -16,7 +16,7 @@ class SupportController extends Controller
         $tickets = SupportTicket::query()
             ->with(['creator', 'assignedAdmin', 'assignedSubAdmin'])
             ->where('business_id', $user->business_id)
-            ->when(!in_array($user->role, ['business_owner', 'business_admin', 'manager'], true), fn ($query) => $query->where('user_id', $user->id))
+            ->when($user->role !== 'business_owner', fn ($query) => $query->where('user_id', $user->id))
             ->latest()
             ->paginate(15);
 

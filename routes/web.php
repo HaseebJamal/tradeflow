@@ -63,11 +63,29 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::match(['post', 'put'], '/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
+    Route::patch('/profile/user-detail-change-requests/{changeRequest}/approve', [ProfileController::class, 'approveUserDetailChangeRequest'])->name('profile.user-detail-change-requests.approve');
+    Route::patch('/profile/user-detail-change-requests/{changeRequest}/apply', [ProfileController::class, 'applyUserDetailChangeRequest'])->name('profile.user-detail-change-requests.apply');
+    Route::patch('/profile/user-detail-change-requests/{changeRequest}/reject', [ProfileController::class, 'rejectUserDetailChangeRequest'])->name('profile.user-detail-change-requests.reject');
     Route::post('/activity/heartbeat', [AdminController::class, 'heartbeat'])->name('activity.heartbeat');
-    Route::get('/notifications', function () {
-        return view('auth.notifications', ['notifications' => auth()->user()->notifications()->latest()->paginate(20)]);
+    Route::get('/notifications', function (\Illuminate\Http\Request $request) {
+        // A Super Admin working inside a company must read that company's
+        // notifications, not be taken back to the platform notification feed.
+        if ($request->user()?->role === 'super_admin' && $request->session()->has('super_admin_business_context_id')) {
+            return redirect()->route('business.context.notifications');
+        }
+
+        if ($request->user()?->business_id && !app(\App\Services\CompanyPermissionService::class)->allowsUser($request->user(), 'notifications.view')) {
+            abort(403, 'Notification access is not enabled for your account.');
+        }
+
+        $notifications = $request->user()->notifications();
+        if ($request->user()?->role === 'super_admin') {
+            $notifications->where('data', 'not like', '%business_activity%');
+        }
+
+        return view('auth.notifications', ['notifications' => $notifications->latest()->paginate(20)]);
     })->name('notifications.index');
-    Route::prefix('business')->name('business.')->middleware(['super_admin.context', 'role:super_admin,business_owner,business_admin,business_sub_admin,manager,sales_staff,inventory_staff,accountant,delivery_staff,cashier,support_staff,custom_staff', 'business.approved', 'track.activity'])->group(function () {
+    Route::prefix('business')->name('business.')->middleware(['super_admin.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'track.activity'])->group(function () {
         Route::get('/support', [SupportController::class, 'index'])->name('support');
         Route::post('/support', [SupportController::class, 'store'])->name('support.store');
     });
@@ -90,6 +108,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
     Route::patch('/companies/{company}/archive', [CompanyController::class, 'archive'])->name('companies.archive');
     Route::patch('/companies/{company}/restore', [CompanyController::class, 'restore'])->name('companies.restore');
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->name('companies.destroy');
+    Route::get('/business-detail-change-requests', [CompanyController::class, 'detailChangeRequests'])->name('business-detail-change-requests.index');
+    Route::patch('/business-detail-change-requests/{changeRequest}/approve', [CompanyController::class, 'approveDetailChangeRequest'])->name('business-detail-change-requests.approve');
+    Route::patch('/business-detail-change-requests/{changeRequest}/apply', [CompanyController::class, 'applyDetailChangeRequest'])->name('business-detail-change-requests.apply');
+    Route::patch('/business-detail-change-requests/{changeRequest}/reject', [CompanyController::class, 'rejectDetailChangeRequest'])->name('business-detail-change-requests.reject');
     Route::post('/companies/{company}/open-dashboard', [CompanyController::class, 'openDashboard'])->name('companies.open-dashboard');
     Route::post('/company-context/return', [CompanyController::class, 'returnToDashboard'])->name('company-context.return');
     Route::post('/companies/{company}/owner/reset-password', [CompanyController::class, 'resetOwnerPassword'])->name('companies.owner.reset-password');
@@ -140,6 +162,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
     Route::get('/categories', [AdminController::class, 'categories'])->name('categories');
     Route::post('/categories', [AdminController::class, 'storeCategory'])->name('categories.store');
     Route::get('/payments', [AdminController::class, 'payments'])->name('payments');
+    Route::post('/payments', [AdminController::class, 'storePlatformPayment'])->name('payments.store');
     Route::get('/notifications', [AdminController::class, 'notifications'])->name('notifications');
     Route::post('/notifications', [AdminController::class, 'storeAnnouncement'])->name('notifications.store');
     Route::get('/audit-logs', [AdminController::class, 'auditLogs'])->name('audit-logs');
@@ -155,8 +178,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
     Route::get('/business-reports/{report}/pdf', [AdminController::class, 'reportPdf'])->name('business-reports.pdf');
 });
 
-Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.context', 'role:super_admin,business_owner,business_admin,business_sub_admin,manager,sales_staff,inventory_staff,accountant,delivery_staff,cashier,support_staff,custom_staff', 'business.approved', 'business.action', 'track.activity'])->group(function () {
-    Route::get('/dashboard', BusinessDashboardController::class)->name('dashboard');
+Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'business.action', 'track.activity'])->group(function () {
+    Route::get('/access-denied', fn () => view('business.access-denied'))->name('access-denied');
+    Route::get('/dashboard', BusinessDashboardController::class)->name('dashboard')->middleware('business.permission:Dashboard');
     Route::get('/context-profile', [BusinessContextController::class, 'profile'])->name('context.profile');
     Route::get('/context-notifications', [BusinessContextController::class, 'notifications'])->name('context.notifications');
     Route::patch('/products/{product}/low-stock-alert', [ProductController::class, 'updateLowStockAlert'])->name('products.low-stock-alert')->middleware('business.permission:Products');
@@ -164,6 +188,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::post('/products-bulk', [ProductController::class, 'bulkStore'])->name('products.bulk.store')->middleware('business.permission:Products');
     Route::get('/products-template.csv', [ProductController::class, 'csvTemplate'])->name('products.template')->middleware('business.permission:Products');
     Route::get('/products-export.csv', [ProductController::class, 'export'])->name('products.export')->middleware('business.permission:Products');
+    Route::get('/products/lookup', [ProductController::class, 'lookup'])->name('products.lookup')->middleware('business.permission:Products');
     Route::patch('/products/{product}/archive', [ProductController::class, 'archive'])->name('products.archive')->middleware('business.permission:Products');
     Route::patch('/products/{product}/restore', [ProductController::class, 'restore'])->name('products.restore')->middleware('business.permission:Products');
     Route::resource('products', ProductController::class)->middleware('business.permission:Products');
@@ -181,6 +206,12 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/purchases', [\App\Http\Controllers\Business\PurchaseController::class, 'index'])->name('purchases.index')->middleware('business.permission:Purchases');
     Route::get('/purchases/create', [\App\Http\Controllers\Business\PurchaseController::class, 'create'])->name('purchases.create')->middleware('business.permission:Purchases');
     Route::post('/purchases', [\App\Http\Controllers\Business\PurchaseController::class, 'store'])->name('purchases.store')->middleware('business.permission:Purchases');
+    Route::get('/purchases/lookup', [\App\Http\Controllers\Business\PurchaseController::class, 'lookup'])->name('purchases.lookup')->middleware('business.permission:Purchases');
+    Route::get('/purchase-returns', [\App\Http\Controllers\Business\PurchaseReturnController::class, 'index'])->name('purchase-returns.index')->middleware(['business.permission:Purchase Returns', 'business.permission:Purchases']);
+    Route::get('/purchase-returns/create', [\App\Http\Controllers\Business\PurchaseReturnController::class, 'create'])->name('purchase-returns.create')->middleware(['business.permission:Purchase Returns', 'business.permission:Purchases']);
+    Route::post('/purchase-returns/start', [\App\Http\Controllers\Business\PurchaseReturnController::class, 'start'])->name('purchase-returns.start')->middleware(['business.permission:Purchase Returns', 'business.permission:Purchases']);
+    Route::get('/purchase-returns/{purchaseReturn}', [\App\Http\Controllers\Business\PurchaseReturnController::class, 'show'])->name('purchase-returns.show')->middleware(['business.permission:Purchase Returns', 'business.permission:Purchases']);
+    Route::get('/purchase-returns/{purchaseReturn}/edit', [\App\Http\Controllers\Business\PurchaseReturnController::class, 'edit'])->name('purchase-returns.edit')->middleware(['business.permission:Purchase Returns', 'business.permission:Purchases']);
     Route::get('/purchases/{purchase}', [\App\Http\Controllers\Business\PurchaseController::class, 'show'])->name('purchases.show')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/receive', [\App\Http\Controllers\Business\PurchaseController::class, 'receive'])->name('purchases.receive')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/payments', [\App\Http\Controllers\Business\PurchaseController::class, 'pay'])->name('purchases.pay')->middleware('business.permission:Purchases');
@@ -188,16 +219,49 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/sales/quotations', [\App\Http\Controllers\Business\SalesQuotationController::class, 'index'])->name('sales.quotations.index')->middleware('business.permission:Sales');
     Route::get('/sales/quotations/create', [\App\Http\Controllers\Business\SalesQuotationController::class, 'create'])->name('sales.quotations.create')->middleware('business.permission:Sales');
     Route::post('/sales/quotations', [\App\Http\Controllers\Business\SalesQuotationController::class, 'store'])->name('sales.quotations.store')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
-    Route::get('/orders', [OrderController::class, 'index'])->name('orders.index')->middleware('business.permission:Sales');
-    Route::get('/orders/create', [OrderController::class, 'create'])->name('orders.create')->middleware('business.permission:Sales');
+    // Sales is the consolidated home for orders, customer payments, and sales invoices.
+    Route::get('/sales', [OrderController::class, 'index'])->name('sales.index')->middleware('business.permission:Sales');
+    Route::get('/sales/lookup', [OrderController::class, 'lookup'])->name('sales.lookup')->middleware('business.permission:Sales');
+    Route::get('/sales/create', [OrderController::class, 'create'])->name('sales.create')->middleware('business.permission:Sales');
+    Route::post('/sales', [OrderController::class, 'store'])->name('sales.store')->middleware(['business.permission:Sales', 'company.permission:sales.create']);
+    Route::get('/sales/returns', [\App\Http\Controllers\Business\SalesReturnController::class, 'index'])->name('sales.returns.index')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
+    Route::get('/sales/returns/create', [\App\Http\Controllers\Business\SalesReturnController::class, 'create'])->name('sales.returns.create')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
+    Route::post('/sales/returns/start', [\App\Http\Controllers\Business\SalesReturnController::class, 'start'])->name('sales.returns.start')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
+    Route::get('/sales/returns/process/{order}', [\App\Http\Controllers\Business\SalesReturnController::class, 'process'])->name('sales.returns.process')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
+    Route::post('/sales/returns/process/{order}', [\App\Http\Controllers\Business\SalesReturnController::class, 'store'])->name('sales.returns.store')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
+    Route::get('/sales/returns/records/{salesReturn}', [\App\Http\Controllers\Business\SalesReturnController::class, 'show'])->name('sales.returns.show')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
+    Route::get('/sales/returns/records/{salesReturn}/edit', [\App\Http\Controllers\Business\SalesReturnController::class, 'edit'])->name('sales.returns.edit')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
+    Route::get('/sales/payments', [PaymentController::class, 'index'])->name('sales.payments.index')->middleware('business.permission:Sales');
+    Route::post('/sales/payments', [PaymentController::class, 'store'])->name('sales.payments.store')->middleware(['business.permission:Sales', 'company.permission:sales.payments']);
+    Route::get('/sales/invoices', [InvoiceController::class, 'index'])->name('sales.invoices.index')->middleware('business.permission:Sales');
+    Route::get('/sales/invoices/{order}', [InvoiceController::class, 'show'])->name('sales.invoices.show')->middleware('business.permission:Sales');
+    Route::get('/sales/invoices/{order}/pdf', [InvoiceController::class, 'pdf'])->name('sales.invoices.pdf')->middleware('business.permission:Sales');
+    Route::get('/sales/invoices/{order}/pdf/download', [InvoiceController::class, 'downloadPdf'])->name('sales.invoices.pdf.download')->middleware('business.permission:Sales');
+    Route::patch('/sales/invoice-records/{invoice}', [InvoiceController::class, 'update'])->name('sales.invoices.update')->middleware('business.permission:Sales');
+    Route::patch('/sales/invoice-records/{invoice}/issue', [InvoiceController::class, 'issue'])->name('sales.invoices.issue')->middleware('business.permission:Sales');
+    Route::patch('/sales/invoice-records/{invoice}/void', [InvoiceController::class, 'void'])->name('sales.invoices.void')->middleware('business.permission:Sales');
+    Route::patch('/sales/invoice-records/{invoice}/reissue', [InvoiceController::class, 'reissue'])->name('sales.invoices.reissue')->middleware('business.permission:Sales');
+    Route::post('/sales/invoice-records/{invoice}/credit-notes', [InvoiceController::class, 'creditNote'])->name('sales.invoices.credit-notes.store')->middleware('business.permission:Sales');
+    Route::post('/sales/{order}/assign-delivery', [OrderController::class, 'assignDelivery'])->name('sales.assignDelivery')->middleware(['business.permission:Deliveries', 'company.permission:deliveries.assign']);
+    Route::get('/sales/{order}/edit', [OrderController::class, 'edit'])->name('sales.edit')->middleware('business.permission:Sales');
+    Route::put('/sales/{order}', [OrderController::class, 'update'])->name('sales.update')->middleware(['business.permission:Sales', 'company.permission:sales.edit']);
+    Route::patch('/sales/{order}/cancel', [OrderController::class, 'cancel'])->name('sales.cancel')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
+    Route::patch('/sales/{order}/void', [OrderController::class, 'void'])->name('sales.void')->middleware('business.permission:Sales');
+    Route::delete('/sales/{order}', [OrderController::class, 'destroy'])->name('sales.destroy')->middleware('business.permission:Sales');
+    Route::get('/sales/{order}', [OrderController::class, 'show'])->name('sales.show')->middleware('business.permission:Sales');
+    Route::patch('/sales/{order}/status', [OrderController::class, 'updateStatus'])->name('sales.status')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
+
+    // Legacy order URLs remain available as safe redirects or action aliases.
+    Route::get('/orders', fn () => redirect()->route('business.sales.index'))->name('orders.index')->middleware('business.permission:Sales');
+    Route::get('/orders/create', fn () => redirect()->route('business.sales.create'))->name('orders.create')->middleware('business.permission:Sales');
     Route::post('/orders', [OrderController::class, 'store'])->name('orders.store')->middleware(['business.permission:Sales', 'company.permission:sales.create']);
-    Route::post('/orders/{order}/assign-delivery', [OrderController::class, 'assignDelivery'])->name('orders.assignDelivery')->middleware(['business.permission:Deliveries', 'company.permission:sales.update_status']);
-    Route::get('/orders/{order}/edit', [OrderController::class, 'edit'])->name('orders.edit')->middleware('business.permission:Sales');
-    Route::put('/orders/{order}', [OrderController::class, 'update'])->name('orders.update')->middleware(['business.permission:Sales', 'company.permission:sales.create']);
+    Route::post('/orders/{order}/assign-delivery', [OrderController::class, 'assignDelivery'])->name('orders.assignDelivery')->middleware(['business.permission:Deliveries', 'company.permission:deliveries.assign']);
+    Route::get('/orders/{order}/edit', fn ($order) => redirect()->route('business.sales.edit', $order))->name('orders.edit')->middleware('business.permission:Sales');
+    Route::put('/orders/{order}', [OrderController::class, 'update'])->name('orders.update')->middleware(['business.permission:Sales', 'company.permission:sales.edit']);
     Route::patch('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
     Route::patch('/orders/{order}/void', [OrderController::class, 'void'])->name('orders.void')->middleware('business.permission:Sales');
     Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy')->middleware('business.permission:Sales');
-    Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show')->middleware('business.permission:Sales');
+    Route::get('/orders/{order}', fn ($order) => redirect()->route('business.sales.show', $order))->name('orders.show')->middleware('business.permission:Sales');
     Route::patch('/orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
     Route::get('/pos', [PosController::class, 'index'])->name('pos.index')->middleware('business.permission:POS');
     Route::post('/pos/register/open', [PosController::class, 'openRegister'])->name('pos.register.open')->middleware('business.permission:POS');
@@ -212,7 +276,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/pos/returns/{order}', [PosController::class, 'returns'])->name('pos.returns')->middleware('business.permission:POS');
     Route::post('/pos/returns/{order}', [PosController::class, 'storeReturn'])->name('pos.returns.store')->middleware('business.permission:POS');
     Route::get('/pos/reports', [PosController::class, 'report'])->name('pos.report')->middleware('business.permission:POS');
-    Route::get('/payments', [PaymentController::class, 'index'])->name('payments')->middleware('business.permission:Sales');
+    Route::get('/payments', fn () => redirect()->route('business.sales.payments.index'))->name('payments')->middleware('business.permission:Sales');
     Route::post('/payments', [PaymentController::class, 'store'])->name('payments.store')->middleware(['business.permission:Sales', 'company.permission:sales.payments']);
     Route::get('/khata', [KhataController::class, 'index'])->name('khata')->middleware('business.permission:Accounting');
     Route::post('/khata/journal-entries', [KhataController::class, 'storeJournal'])->name('khata.journal.store')->middleware('business.permission:Accounting');
@@ -225,15 +289,15 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::patch('/deliveries/{delivery}/reopen', [DeliveryController::class, 'reopen'])->name('deliveries.reopen')->middleware('business.permission:Deliveries');
     Route::patch('/deliveries/{delivery}/cancel', [DeliveryController::class, 'cancel'])->name('deliveries.cancel')->middleware('business.permission:Deliveries');
     Route::get('/deliveries/{delivery}/sheet', [DeliveryController::class, 'sheet'])->name('deliveries.sheet')->middleware('business.permission:Deliveries');
-    Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index')->middleware('business.permission:Invoices');
-    Route::get('/invoices/{order}', [InvoiceController::class, 'show'])->name('invoices.show')->middleware('business.permission:Invoices');
-    Route::get('/invoices/{order}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf')->middleware('business.permission:Invoices');
-    Route::get('/invoices/{order}/pdf/download', [InvoiceController::class, 'downloadPdf'])->name('invoices.pdf.download')->middleware('business.permission:Invoices');
-    Route::patch('/invoice-records/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update')->middleware('business.permission:Invoices');
-    Route::patch('/invoice-records/{invoice}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue')->middleware('business.permission:Invoices');
-    Route::patch('/invoice-records/{invoice}/void', [InvoiceController::class, 'void'])->name('invoices.void')->middleware('business.permission:Invoices');
-    Route::patch('/invoice-records/{invoice}/reissue', [InvoiceController::class, 'reissue'])->name('invoices.reissue')->middleware('business.permission:Invoices');
-    Route::post('/invoice-records/{invoice}/credit-notes', [InvoiceController::class, 'creditNote'])->name('invoices.credit-notes.store')->middleware('business.permission:Invoices');
+    Route::get('/invoices', fn () => redirect()->route('business.sales.invoices.index'))->name('invoices.index')->middleware('business.permission:Sales');
+    Route::get('/invoices/{order}', fn ($order) => redirect()->route('business.sales.invoices.show', $order))->name('invoices.show')->middleware('business.permission:Sales');
+    Route::get('/invoices/{order}/pdf', fn ($order) => redirect()->route('business.sales.invoices.pdf', $order))->name('invoices.pdf')->middleware('business.permission:Sales');
+    Route::get('/invoices/{order}/pdf/download', fn ($order) => redirect()->route('business.sales.invoices.pdf.download', $order))->name('invoices.pdf.download')->middleware('business.permission:Sales');
+    Route::patch('/invoice-records/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update')->middleware('business.permission:Sales');
+    Route::patch('/invoice-records/{invoice}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue')->middleware('business.permission:Sales');
+    Route::patch('/invoice-records/{invoice}/void', [InvoiceController::class, 'void'])->name('invoices.void')->middleware('business.permission:Sales');
+    Route::patch('/invoice-records/{invoice}/reissue', [InvoiceController::class, 'reissue'])->name('invoices.reissue')->middleware('business.permission:Sales');
+    Route::post('/invoice-records/{invoice}/credit-notes', [InvoiceController::class, 'creditNote'])->name('invoices.credit-notes.store')->middleware('business.permission:Sales');
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store')->middleware('business.permission:Expenses');
     Route::get('/expenses', [ExpenseController::class, 'index'])->name('expenses.index')->middleware('business.permission:Expenses');
     Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy')->middleware('business.permission:Expenses');
@@ -243,22 +307,22 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/audit-logs/live', [AuditLogController::class, 'live'])->name('audit-logs.live')->middleware('business.permission:Audit Logs');
     Route::get('/audit-logs/export/csv', [AuditLogController::class, 'exportCsv'])->name('audit-logs.export.csv')->middleware('business.permission:Audit Logs');
     Route::get('/audit-logs/export/pdf', [AuditLogController::class, 'exportPdf'])->name('audit-logs.export.pdf')->middleware('business.permission:Audit Logs');
-    Route::get('/staff', [StaffController::class, 'index'])->name('staff')->middleware('role:super_admin,business_owner,business_admin');
-    Route::post('/staff', [StaffController::class, 'store'])->name('staff.store')->middleware('role:super_admin,business_owner,business_admin');
-    Route::get('/staff/{staff}', [StaffController::class, 'show'])->name('staff.show')->middleware('role:super_admin,business_owner,business_admin');
-    Route::get('/staff/{staff}/edit', [StaffController::class, 'edit'])->name('staff.edit')->middleware('role:super_admin,business_owner,business_admin');
-    Route::put('/staff/{staff}', [StaffController::class, 'update'])->name('staff.update')->middleware('role:super_admin,business_owner,business_admin');
-    Route::patch('/staff/{staff}/status', [StaffController::class, 'updateStatus'])->name('staff.status')->middleware('role:super_admin,business_owner,business_admin');
-    Route::patch('/staff/{staff}/reset-password', [StaffController::class, 'resetPassword'])->name('staff.reset-password')->middleware('role:super_admin,business_owner,business_admin');
-    Route::patch('/staff/{staff}/archive', [StaffController::class, 'archive'])->name('staff.archive')->middleware('role:super_admin,business_owner,business_admin');
-    Route::patch('/staff/{staff}/restore', [StaffController::class, 'restore'])->name('staff.restore')->middleware('role:super_admin,business_owner,business_admin');
-    Route::delete('/staff/{staff}', [StaffController::class, 'destroy'])->name('staff.destroy')->middleware('role:super_admin,business_owner,business_admin');
-    Route::get('/settings', [SettingsController::class, 'index'])->name('settings')->middleware('role:super_admin,business_owner');
+    Route::get('/staff', [StaffController::class, 'index'])->name('staff')->middleware('role:super_admin,business_owner');
+    Route::post('/staff', [StaffController::class, 'store'])->name('staff.store')->middleware('role:super_admin,business_owner');
+    Route::get('/staff/{staff}', [StaffController::class, 'show'])->name('staff.show')->middleware('role:super_admin,business_owner');
+    Route::get('/staff/{staff}/edit', [StaffController::class, 'edit'])->name('staff.edit')->middleware('role:super_admin,business_owner');
+    Route::put('/staff/{staff}', [StaffController::class, 'update'])->name('staff.update')->middleware('role:super_admin,business_owner');
+    Route::patch('/staff/{staff}/status', [StaffController::class, 'updateStatus'])->name('staff.status')->middleware('role:super_admin,business_owner');
+    Route::patch('/staff/{staff}/reset-password', [StaffController::class, 'resetPassword'])->name('staff.reset-password')->middleware('role:super_admin,business_owner');
+    Route::patch('/staff/{staff}/archive', [StaffController::class, 'archive'])->name('staff.archive')->middleware('role:super_admin,business_owner');
+    Route::patch('/staff/{staff}/restore', [StaffController::class, 'restore'])->name('staff.restore')->middleware('role:super_admin,business_owner');
+    Route::delete('/staff/{staff}', [StaffController::class, 'destroy'])->name('staff.destroy')->middleware('role:super_admin,business_owner');
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings')->middleware('role:super_admin,business_owner,custom_staff');
     Route::put('/settings/business', [SettingsController::class, 'updateBusiness'])->name('settings.business')->middleware('role:super_admin,business_owner');
 });
 
-Route::prefix('staff')->name('staff.')->middleware(['auth', 'role:business_admin,business_sub_admin,manager,sales_staff,inventory_staff,accountant,delivery_staff,cashier,support_staff,custom_staff', 'business.approved', 'track.activity'])->group(function () {
-    Route::get('/dashboard', StaffDashboardController::class)->name('dashboard');
+Route::prefix('staff')->name('staff.')->middleware(['auth', 'role:custom_staff', 'business.approved', 'track.activity'])->group(function () {
+    Route::get('/dashboard', StaffDashboardController::class)->name('dashboard')->middleware('business.permission:Dashboard');
 });
 
 Route::prefix('retailer')->name('retailer.')->middleware(['auth', 'role:retailer'])->group(function () {

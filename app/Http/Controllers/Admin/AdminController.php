@@ -17,6 +17,7 @@ use App\Models\Invoice;
 use App\Models\OrderItem;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\PlatformPayment;
 use App\Models\PlatformSetting;
 use App\Models\Product;
 use App\Models\Purchase;
@@ -570,7 +571,60 @@ class AdminController extends Controller
 
     public function payments()
     {
-        return view('super-admin.payments', ['payments' => Payment::with(['customer.business', 'order'])->latest()->paginate(25)]);
+        $filters = request()->validate([
+            'business_id' => ['nullable', 'exists:businesses,id'],
+            'status' => ['nullable', Rule::in(['Received', 'Pending', 'Rejected', 'Refunded'])],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'clear' => ['nullable', 'boolean'],
+        ]);
+
+        // Keep the payment register focused on today's activity by default. The
+        // explicit Clear link remains available when the administrator needs the
+        // complete payment history.
+        $filters += ['date_from' => null, 'date_to' => null];
+        if (! request()->boolean('clear') && ! $filters['date_from'] && ! $filters['date_to']) {
+            $filters['date_from'] = now()->toDateString();
+            $filters['date_to'] = now()->toDateString();
+        }
+
+        $payments = PlatformPayment::with(['business.owner', 'subscription.plan', 'recordedBy'])
+            ->when($filters['business_id'] ?? null, fn ($query, $value) => $query->where('business_id', $value))
+            ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
+            ->when($filters['date_from'] ?? null, fn ($query, $value) => $query->where('paid_at', '>=', Carbon::parse($value)->startOfDay()))
+            ->when($filters['date_to'] ?? null, fn ($query, $value) => $query->where('paid_at', '<=', Carbon::parse($value)->endOfDay()))
+            ->latest('paid_at')
+            ->paginate(25)
+            ->withQueryString();
+
+        return view('super-admin.payments', [
+            'payments' => $payments,
+            'businesses' => Business::with('subscription.plan')->orderBy('business_name')->get(),
+            'filters' => $filters,
+        ]);
+    }
+
+    public function storePlatformPayment(Request $request)
+    {
+        $data = $request->validate([
+            'business_id' => ['required', 'exists:businesses,id'],
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
+            'reference_number' => ['nullable', 'string', 'max:120'],
+            'status' => ['required', Rule::in(['Received', 'Pending', 'Rejected', 'Refunded'])],
+            'paid_at' => ['required', 'date'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $business = Business::with('subscription')->findOrFail($data['business_id']);
+        $payment = PlatformPayment::create($data + [
+            'subscription_id' => $business->subscription?->id,
+            'recorded_by' => $request->user()->id,
+        ]);
+
+        $this->audit('Recorded platform payment from '.$business->business_name, $request, 'Platform Payments', $payment->id, null, $payment->only(['amount', 'method', 'status', 'paid_at']));
+
+        return back()->with('success', 'Platform payment recorded for '.$business->business_name.'.');
     }
 
     public function notifications()

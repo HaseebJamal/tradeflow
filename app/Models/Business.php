@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Business extends Model
 {
-    protected $fillable = ['owner_id', 'created_by', 'business_name', 'business_type', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo', 'status', 'archived_at', 'archived_by', 'archived_status'];
+    protected $fillable = ['owner_id', 'created_by', 'business_name', 'business_type', 'business_description', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo', 'status', 'archived_at', 'archived_by', 'archived_status'];
 
     protected $casts = ['archived_at' => 'datetime'];
 

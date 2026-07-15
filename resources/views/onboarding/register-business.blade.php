@@ -43,12 +43,12 @@
                                 <div class="row g-3 mt-1">
                                     <div class="col-md-6">
                                         <label class="form-label" for="business-owner-name">Owner Name <span class="text-danger" aria-hidden="true">*</span></label>
-                                        <input id="business-owner-name" name="name" type="text" autocomplete="name" maxlength="255" class="form-control @error('name') is-invalid @enderror" value="{{ old('name') }}" required>
+                                        <input id="business-owner-name" name="name" type="text" autocomplete="name" maxlength="255" class="form-control @error('name') is-invalid @enderror" value="{{ old('name') }}" required data-tf-name-only>
                                         <div class="invalid-feedback" data-register-error="name">@error('name'){{ $message }}@enderror</div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label" for="business-owner-phone">Phone <span class="text-danger" aria-hidden="true">*</span></label>
-                                        <input id="business-owner-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="15" class="form-control @error('phone') is-invalid @enderror" value="{{ old('phone') }}" placeholder="03001234567" required>
+                                        <input id="business-owner-phone" name="phone" type="tel" autocomplete="tel" inputmode="numeric" maxlength="11" class="form-control @error('phone') is-invalid @enderror" value="{{ old('phone') }}" placeholder="03001234567" required data-tf-phone>
                                         <div class="invalid-feedback" data-register-error="phone">@error('phone'){{ $message }}@enderror</div>
                                     </div>
                                     <div class="col-md-6">
@@ -79,7 +79,7 @@
                             <div class="tf-step-panel" data-tf-step-panel="1">
                                 <h2 class="h4 fw-bold">Business Type <span class="text-danger" aria-hidden="true">*</span></h2>
                                 <div class="row g-3 mt-1">
-                                    @foreach (['Manufacturer' => 'bi-gear-wide-connected', 'Distributor' => 'bi-diagram-3', 'Wholesaler' => 'bi-boxes', 'Retail Shop' => 'bi-shop'] as $type => $icon)
+                                    @foreach (['Manufacturer' => 'bi-gear-wide-connected', 'Distributor' => 'bi-diagram-3', 'Wholesaler' => 'bi-boxes', 'Retail Shop' => 'bi-shop', 'Other' => 'bi-grid-3x3-gap'] as $type => $icon)
                                         <div class="col-md-6 col-xl-3">
                                             <label class="tf-business-type-card">
                                                 <input type="radio" name="business_type" value="{{ $type }}" @checked(old('business_type') === $type) required>
@@ -96,7 +96,7 @@
                                 <div class="row g-3 mt-1">
                                     <div class="col-md-6">
                                         <label class="form-label" for="business_name">Business Name <span class="text-danger" aria-hidden="true">*</span></label>
-                                        <input id="business_name" name="business_name" maxlength="255" class="form-control @error('business_name') is-invalid @enderror" value="{{ old('business_name') }}" required>
+                                        <input id="business_name" name="business_name" maxlength="255" class="form-control @error('business_name') is-invalid @enderror" value="{{ old('business_name') }}" required data-tf-name-only>
                                         <div class="invalid-feedback" data-register-error="business_name">@error('business_name'){{ $message }}@enderror</div>
                                     </div>
                                     <div class="col-md-6">
@@ -110,13 +110,14 @@
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label" for="business_city">City <span class="text-danger" aria-hidden="true">*</span></label>
-                                        <input id="business_city" name="city" maxlength="100" class="form-control @error('city') is-invalid @enderror" value="{{ old('city') }}" required>
+                                        <input id="business_city" name="city" maxlength="100" class="form-control @error('city') is-invalid @enderror" value="{{ old('city') }}" required data-tf-name-only>
                                         <div class="invalid-feedback" data-register-error="city">@error('city'){{ $message }}@enderror</div>
                                     </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label" for="business_category">Category <span class="text-danger" aria-hidden="true">*</span></label>
-                                        <input id="business_category" name="category" maxlength="100" class="form-control @error('category') is-invalid @enderror" value="{{ old('category') }}" required>
-                                        <div class="invalid-feedback" data-register-error="category">@error('category'){{ $message }}@enderror</div>
+                                    <div class="col-12 d-none" data-tf-other-business-description>
+                                        <label class="form-label" for="business_description">Describe Your Business <span class="text-danger" aria-hidden="true">*</span></label>
+                                        <textarea id="business_description" name="business_description" maxlength="1000" rows="2" class="form-control @error('business_description') is-invalid @enderror" placeholder="Briefly describe the type of business you operate.">{{ old('business_description') }}</textarea>
+                                        <small class="tf-muted">Required only if you selected Other as the business type.</small>
+                                        <div class="invalid-feedback d-block" data-register-error="business_description">@error('business_description'){{ $message }}@enderror</div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label" for="registration_number">Registration Number <span class="tf-muted">Optional</span></label>

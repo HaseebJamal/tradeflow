@@ -22,7 +22,7 @@
     <div class="row g-2 align-items-end">
         <div class="col-md-1"><label class="form-label">ID</label><input name="delivery_id" value="{{ request('delivery_id') }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Order Number</label><input name="order_number" value="{{ request('order_number') }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="">All</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(request('customer_id') == $customer->id)>{{ $customer->business_name ?: $customer->name }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="">All</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(request('customer_id') == $customer->id)>{{ $customer->display_name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select"><option value="">All</option>@foreach($staff as $member)<option value="{{ $member->id }}" @selected(request('delivery_staff_id') == $member->id)>{{ $member->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option>@foreach(['Pending','Assigned','Picked Up','Out For Delivery','Delivered','Failed','Returned','Cancelled'] as $status)<option @selected(request('status')===$status)>{{ $status }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Payment Status</label><select name="payment_status" class="form-select"><option value="">All</option>@foreach(['Pending','Partial','Paid'] as $status)<option @selected(request('payment_status')===$status)>{{ $status }}</option>@endforeach</select></div>
@@ -50,7 +50,7 @@
         <tr>
             <td>#DEL-{{ $delivery->id }}</td>
             <td>{{ $delivery->order?->order_number }}</td>
-            <td>{{ $delivery->order?->customer?->business_name ?? $delivery->order?->customer?->name ?? '-' }}</td>
+            <td>{{ $delivery->order?->customer?->display_name ?? '-' }}</td>
             <td>{{ $delivery->staff?->name ?? '-' }}</td>
             <td><span class="badge {{ $delivery->status === 'Delivered' ? 'text-bg-success' : ($delivery->status === 'Failed' ? 'text-bg-danger' : 'text-bg-warning') }}">{{ $delivery->status }}</span></td>
             <td><span class="badge {{ $paymentBadge }}">{{ $paymentStatus }}</span></td>

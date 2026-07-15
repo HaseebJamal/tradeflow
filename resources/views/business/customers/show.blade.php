@@ -1,12 +1,12 @@
 @extends('layouts.dashboard')
 @section('page-title', 'Customer Profile')
-@section('page-subtitle', $customer->business_name ?: $customer->name)
+@section('page-subtitle', $customer->display_name)
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 <div class="row g-4">
     <div class="col-lg-4">
         <div class="tf-card p-4">
-            <h2 class="h4">{{ $customer->business_name ?: $customer->name }}</h2>
+            <h2 class="h4">{{ $customer->display_name }}</h2>
             <p class="tf-muted">{{ $customer->customer_type }}, {{ $customer->city }} {{ $customer->province ? ', '.$customer->province : '' }}</p>
             <div class="h3 text-danger">Rs {{ number_format($outstanding) }}</div><small class="tf-muted">Outstanding receivable</small>
             <div class="row g-2 mt-3">
@@ -39,7 +39,8 @@
                 <div class="col-6"><input name="province" value="{{ $customer->province }}" class="form-control" placeholder="Province"></div>
                 <div class="col-6"><select name="customer_type" class="form-select">@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option @selected($customer->customer_type === $type)>{{ $type }}</option>@endforeach</select></div>
                 <div class="col-6"><select name="status" class="form-select"><option @selected($customer->status === 'Active')>Active</option><option @selected($customer->status === 'Blocked')>Blocked</option><option @selected($customer->status === 'Inactive')>Inactive</option></select></div>
-                <div class="col-12"><input name="credit_limit" type="number" step="0.01" value="{{ $customer->credit_limit }}" class="form-control" placeholder="Credit limit"></div>
+                <div class="col-6"><label class="form-label small">Credit Limit</label><input name="credit_limit" type="number" min="0" step="0.01" value="{{ $customer->credit_limit }}" class="form-control" placeholder="Credit limit"></div>
+                <div class="col-6"><label class="form-label small">Current Balance</label><input name="current_balance" type="number" min="0" step="0.01" value="{{ $customer->current_balance }}" class="form-control" placeholder="Current balance"></div>
                 <div class="col-12"><input name="address" value="{{ $customer->address }}" class="form-control" placeholder="Address"></div>
                 <div class="col-12"><button class="btn btn-outline-primary btn-sm">Save Changes</button></div>
             </form>

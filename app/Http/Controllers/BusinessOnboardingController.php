@@ -34,6 +34,7 @@ class BusinessOnboardingController extends Controller
                 'owner_id' => $user->id,
                 'business_name' => $data['business_name'],
                 'business_type' => $data['business_type'],
+                'business_description' => $data['business_description'] ?? null,
                 'category' => $data['category'] ?? null,
                 'phone' => $data['phone'],
                 'address' => $data['address'] ?? null,

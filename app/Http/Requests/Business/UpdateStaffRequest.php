@@ -13,7 +13,7 @@ class UpdateStaffRequest extends FormRequest
     public function authorize(): bool
     {
         return $this->user()?->business_id !== null
-            && in_array($this->user()?->role, ['business_owner', 'business_admin'], true);
+            && in_array($this->user()?->role, ['super_admin', 'business_owner'], true);
     }
 
     public function rules(): array
@@ -21,16 +21,16 @@ class UpdateStaffRequest extends FormRequest
         $staff = $this->route('staff');
 
         return [
-            'name' => ['required', 'string', 'max:255'],
-            'father_name' => ['nullable', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:30'],
+            'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'father_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'phone' => ['required', 'regex:/^\d{11}$/'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($staff?->id)],
-            'cnic' => ['nullable', 'string', 'max:30'],
+            'cnic' => ['nullable', 'regex:/^\d{13}$/'],
             'address' => ['nullable', 'string', 'max:1000'],
-            'city' => ['nullable', 'string', 'max:100'],
+            'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'employee_id' => ['required', 'string', 'max:100'],
-            'role' => ['required', Rule::in(array_keys(BusinessStaffRoles::ROLES))],
-            'custom_role_name' => ['nullable', 'string', 'max:100', 'required_if:role,custom_staff'],
+            'role' => ['required', Rule::in(['custom_staff'])],
+            'custom_role_name' => ['required', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'employment_type' => ['required', Rule::in(['Full Time', 'Part Time', 'Temporary'])],
             'joining_date' => ['required', 'date'],
             'salary' => ['nullable', 'numeric', 'min:0'],
@@ -67,6 +67,7 @@ class UpdateStaffRequest extends FormRequest
         return [
             'password.confirmed' => 'Password and confirm password do not match.',
             'custom_role_name.required_if' => 'Enter a name for the custom staff role.',
+            'cnic.regex' => 'CNIC must contain exactly 13 digits.',
         ];
     }
 }

@@ -20,4 +20,10 @@ class Customer extends Model
     public function payments() { return $this->hasMany(Payment::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
     public function journalLines() { return $this->hasMany(JournalEntryLine::class); }
+
+    /** Customer/person name is the primary identity; shop name is secondary. */
+    public function getDisplayNameAttribute(): string
+    {
+        return (string) ($this->name ?: $this->business_name ?: 'Customer');
+    }
 }

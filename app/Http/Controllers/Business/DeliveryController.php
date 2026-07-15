@@ -12,12 +12,13 @@ use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
+use App\Services\CompanyPermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DeliveryController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private CompanyPermissionService $permissions) {}
 
     public function index(Request $request)
     {
@@ -81,7 +82,7 @@ class DeliveryController extends Controller
                 'failed' => (clone $statsQuery)->where('status', 'Failed')->count(),
                 'cash_to_collect' => $cashToCollect,
             ],
-            'staff' => User::where('business_id', auth()->user()->business_id)->where('role', 'delivery_staff')->where('status', 'active')->get(),
+            'staff' => $this->deliveryStaffQuery()->get(),
             'customers' => \App\Models\Customer::where('business_id', auth()->user()->business_id)->orderBy('name')->get(),
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
@@ -99,11 +100,7 @@ class DeliveryController extends Controller
         return view('business.deliveries.show', [
             'delivery' => $delivery,
             'paidAmount' => $delivery->order?->paid_amount ?? 0,
-            'deliveryStaff' => User::where('business_id', auth()->user()->business_id)
-                ->where('role', 'delivery_staff')
-                ->where('status', 'active')
-                ->orderBy('name')
-                ->get(),
+            'deliveryStaff' => $this->deliveryStaffQuery()->orderBy('name')->get(),
         ]);
     }
 
@@ -120,10 +117,10 @@ class DeliveryController extends Controller
         ]);
 
         if (!empty($data['delivery_staff_id'])) {
-            if (auth()->user()->role === 'delivery_staff' && (int) $data['delivery_staff_id'] !== (int) $delivery->delivery_staff_id) {
-                return back()->withErrors(['delivery_staff_id' => 'Delivery staff cannot reassign a delivery.']);
+            if (!$this->canManageAllDeliveries(auth()->user()) && (int) $data['delivery_staff_id'] !== (int) $delivery->delivery_staff_id) {
+                return back()->withErrors(['delivery_staff_id' => 'You can only update deliveries assigned to you.']);
             }
-            $staff = User::where('business_id', auth()->user()->business_id)->where('role', 'delivery_staff')->where('status', 'active')->findOrFail($data['delivery_staff_id']);
+            $staff = $this->deliveryStaffQuery()->findOrFail($data['delivery_staff_id']);
             $data['delivery_staff_id'] = $staff->id;
         }
         if (($data['status'] ?? null) === 'Out for Delivery') {
@@ -181,8 +178,8 @@ class DeliveryController extends Controller
         $data = $request->validate([
             'proof_image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'signature_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'receiver_name' => ['required', 'string', 'max:255'],
-            'receiver_phone' => ['nullable', 'string', 'max:30'],
+            'receiver_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'receiver_phone' => ['nullable', 'regex:/^\d{11}$/'],
             'note' => ['nullable', 'string'],
             'collected_amount' => ['nullable', 'numeric', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer Manual,JazzCash Manual,Easypaisa Manual,Cheque'],
@@ -329,7 +326,7 @@ class DeliveryController extends Controller
         $user = auth()->user();
         $query = Delivery::query()->where('business_id', $user->business_id);
 
-        if ($user->role === 'delivery_staff') {
+        if (!$this->canManageAllDeliveries($user)) {
             $query->where('delivery_staff_id', $user->id);
         }
 
@@ -340,11 +337,30 @@ class DeliveryController extends Controller
     {
         $user = auth()->user();
         abort_unless($delivery->business_id === $user->business_id, 403);
-        if ($user->role === 'delivery_staff') {
+        if (!$this->canManageAllDeliveries($user)) {
             abort_unless($delivery->delivery_staff_id === $user->id, 403);
         }
 
         return $delivery;
+    }
+
+    private function canManageAllDeliveries(User $user): bool
+    {
+        return $this->permissions->allowsUser($user, 'deliveries.assign')
+            || $this->permissions->allowsUser($user, 'deliveries.edit');
+    }
+
+    private function deliveryStaffQuery()
+    {
+        return User::query()
+            ->where('business_id', auth()->user()->business_id)
+            ->where('role', 'custom_staff')
+            ->where('status', 'active')
+            ->where(function ($query) {
+                $query->whereJsonContains('permissions', 'deliveries.view')
+                    ->orWhereJsonContains('permissions', 'deliveries.update_status')
+                    ->orWhereJsonContains('permissions', 'deliveries.upload_proof');
+            });
     }
 
     private function canTransition(string $from, string $to): bool

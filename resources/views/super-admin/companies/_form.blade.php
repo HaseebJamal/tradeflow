@@ -7,17 +7,21 @@
     @csrf
     @if($editing) @method('PUT') @endif
 
+    @php($firstNonPermissionError = collect($errors->getMessages())->except('permissions')->flatten()->first())
+    @if($firstNonPermissionError)
+        <div class="col-12"><div class="alert alert-danger mb-0"><strong>Company could not be saved.</strong> {{ $firstNonPermissionError }}</div></div>
+    @endif
+
     @if(!$editing)
         <div class="col-12"><p class="small tf-muted mb-0">Fields marked with <span class="text-danger">*</span> are required.</p></div>
-        <div class="col-12 d-none" data-company-draft-alert><div class="alert alert-info d-flex justify-content-between align-items-center mb-0" data-tf-auto-dismiss>Your unfinished company draft has been restored.<button class="btn btn-sm btn-outline-secondary" type="button" data-clear-company-draft>Clear Saved Draft</button></div></div>
     @endif
 
     <div class="col-12"><h2 class="h5 mb-0">Company Information</h2></div>
-    <div class="col-md-6"><label class="form-label" for="businessName">Company Name {!! $required !!}</label><input id="businessName" name="business_name" class="form-control @error('business_name') is-invalid @enderror" value="{{ old('business_name', $company->business_name ?? '') }}" required autofocus>@error('business_name')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
-    <div class="col-md-3"><label class="form-label" for="businessType">Business Type {!! $required !!}</label><select id="businessType" name="business_type" class="form-select @error('business_type') is-invalid @enderror" required><option value="">Select type</option>@foreach(['Manufacturer','Distributor','Wholesaler','Retail Shop'] as $type)<option value="{{ $type }}" @selected(old('business_type', $company->business_type ?? '') === $type)>{{ $type }}</option>@endforeach</select></div>
-    <div class="col-md-3"><label class="form-label" for="companyCategory">Category</label><input id="companyCategory" name="category" class="form-control" value="{{ old('category', $company->category ?? '') }}"></div>
-    <div class="col-md-4"><label class="form-label" for="companyPhone">Company Phone {!! $required !!}</label><input id="companyPhone" name="{{ $editing ? 'phone' : 'company_phone' }}" class="form-control @error('company_phone') is-invalid @enderror" value="{{ old($editing ? 'phone' : 'company_phone', $company->phone ?? '') }}" required>@error('company_phone')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
-    <div class="col-md-4"><label class="form-label" for="companyCity">City {!! $required !!}</label><input id="companyCity" name="city" class="form-control" value="{{ old('city', $company->city ?? '') }}" required></div>
+    <div class="col-md-6"><label class="form-label" for="businessName">Company Name {!! $required !!}</label><input id="businessName" name="business_name" class="form-control @error('business_name') is-invalid @enderror" value="{{ old('business_name', $company->business_name ?? '') }}" required autofocus data-tf-name-only>@error('business_name')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+    <div class="col-md-6"><label class="form-label" for="businessType">Business Type {!! $required !!}</label><select id="businessType" name="business_type" class="form-select js-select2 @error('business_type') is-invalid @enderror" required data-tf-business-type><option value="">Select type</option>@foreach(['Manufacturer','Distributor','Wholesaler','Retail Shop','Other'] as $type)<option value="{{ $type }}" @selected(old('business_type', $company->business_type ?? '') === $type)>{{ $type }}</option>@endforeach</select></div>
+    <div class="col-12 d-none" data-tf-other-business-description><label class="form-label" for="businessDescription">Describe Your Business {!! $required !!}</label><textarea id="businessDescription" name="business_description" class="form-control @error('business_description') is-invalid @enderror" rows="2" maxlength="1000" placeholder="Briefly describe the type of business you operate.">{{ old('business_description', $company->business_description ?? '') }}</textarea><small class="tf-muted">This is required only when Business Type is Other.</small>@error('business_description')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>
+    <div class="col-md-4"><label class="form-label" for="companyPhone">Company Phone {!! $required !!}</label><input id="companyPhone" name="{{ $editing ? 'phone' : 'company_phone' }}" type="tel" inputmode="numeric" maxlength="11" class="form-control @error('company_phone') is-invalid @enderror" value="{{ old($editing ? 'phone' : 'company_phone', $company->phone ?? '') }}" required data-tf-phone>@error('company_phone')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+    <div class="col-md-4"><label class="form-label" for="companyCity">City {!! $required !!}</label><input id="companyCity" name="city" class="form-control" value="{{ old('city', $company->city ?? '') }}" required data-tf-name-only></div>
     <div class="col-md-4"><label class="form-label" for="registrationNumber">Registration Number <span class="tf-muted">Optional</span></label><input id="registrationNumber" name="registration_number" class="form-control" value="{{ old('registration_number', $company->registration_number ?? '') }}"></div>
     <div class="col-md-8"><label class="form-label" for="companyAddress">Address {!! $required !!}</label><textarea id="companyAddress" name="address" class="form-control" rows="2" required>{{ old('address', $company->address ?? '') }}</textarea></div>
     <div class="col-md-4"><label class="form-label" for="taxNumber">Tax / NTN Number <span class="tf-muted">Optional</span></label><input id="taxNumber" name="tax_number" class="form-control" value="{{ old('tax_number', $company->tax_number ?? '') }}"></div>
@@ -25,9 +29,9 @@
     <div class="col-md-6"><label class="form-label" for="companyDocument">Business Document <span class="tf-muted">Optional</span></label><input id="companyDocument" name="business_document" type="file" accept=".pdf,image/jpeg,image/png" class="form-control"><small class="tf-muted">Uploading adds a new verification document.</small></div>
 
     <div class="col-12 mt-3"><h2 class="h5 mb-0">Owner Account</h2></div>
-    <div class="col-md-4"><label class="form-label" for="ownerName">Owner Name {!! $required !!}</label><input id="ownerName" name="owner_name" class="form-control" value="{{ old('owner_name', $company->owner?->name ?? '') }}" required></div>
+    <div class="col-md-4"><label class="form-label" for="ownerName">Owner Name {!! $required !!}</label><input id="ownerName" name="owner_name" class="form-control" value="{{ old('owner_name', $company->owner?->name ?? '') }}" required data-tf-name-only></div>
     <div class="col-md-4"><label class="form-label" for="ownerEmail">Owner Email {!! $required !!}</label><input id="ownerEmail" name="owner_email" type="email" class="form-control @error('owner_email') is-invalid @enderror" value="{{ old('owner_email', $company->owner?->email ?? '') }}" required>@error('owner_email')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
-    <div class="col-md-4"><label class="form-label" for="ownerPhone">Owner Phone {!! $required !!}</label><input id="ownerPhone" name="owner_phone" class="form-control" value="{{ old('owner_phone', $company->owner?->phone ?? '') }}" required><small class="tf-muted">Private owner contact; reports use the company phone only.</small></div>
+    <div class="col-md-4"><label class="form-label" for="ownerPhone">Owner Phone {!! $required !!}</label><input id="ownerPhone" name="owner_phone" type="tel" inputmode="numeric" maxlength="11" class="form-control" value="{{ old('owner_phone', $company->owner?->phone ?? '') }}" required data-tf-phone><small class="tf-muted">Private owner contact; reports use the company phone only.</small></div>
     @if($editing)
         <div class="col-md-6"><label class="form-label" for="ownerPassword">New Owner Password <span class="tf-muted">Optional</span></label><div class="input-group"><input id="ownerPassword" name="owner_password" type="password" class="form-control @error('owner_password') is-invalid @enderror" autocomplete="new-password"><button type="button" class="btn btn-outline-secondary tf-password-toggle" data-tf-password-toggle="#ownerPassword" data-tf-password-icon="#ownerPasswordIcon" aria-label="Show password"><i id="ownerPasswordIcon" class="bi bi-eye"></i></button></div><small class="tf-muted">Leave blank to keep the current password. Must include uppercase, lowercase, number, and symbol.</small>@error('owner_password')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>
         <div class="col-md-6"><label class="form-label" for="ownerPasswordConfirmation">Confirm New Password</label><div class="input-group"><input id="ownerPasswordConfirmation" name="owner_password_confirmation" type="password" class="form-control" autocomplete="new-password"><button type="button" class="btn btn-outline-secondary tf-password-toggle" data-tf-password-toggle="#ownerPasswordConfirmation" data-tf-password-icon="#ownerPasswordConfirmationIcon" aria-label="Show password confirmation"><i id="ownerPasswordConfirmationIcon" class="bi bi-eye"></i></button></div></div>
@@ -35,12 +39,33 @@
 
     @if(!$editing)
         <div class="col-md-4"><label class="form-label" for="temporaryPassword">Temporary Password {!! $required !!}</label><div class="input-group"><input id="temporaryPassword" name="temporary_password" type="password" class="form-control @error('temporary_password') is-invalid @enderror" autocomplete="new-password" required data-company-password><button type="button" class="btn btn-outline-secondary tf-password-toggle" data-tf-password-toggle="#temporaryPassword" data-tf-password-icon="#temporaryPasswordIcon" aria-label="Show temporary password"><i id="temporaryPasswordIcon" class="bi bi-eye"></i></button></div><small class="tf-muted">8+ characters with uppercase, lowercase, number, and special character.</small>@error('temporary_password')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>
-        <div class="col-md-4"><label class="form-label" for="temporaryPasswordConfirmation">Confirm Password {!! $required !!}</label><div class="input-group"><input id="temporaryPasswordConfirmation" name="temporary_password_confirmation" type="password" class="form-control" autocomplete="new-password" required data-company-password-confirmation><button type="button" class="btn btn-outline-secondary tf-password-toggle" data-tf-password-toggle="#temporaryPasswordConfirmation" data-tf-password-icon="#temporaryPasswordConfirmationIcon" aria-label="Show confirm password"><i id="temporaryPasswordConfirmationIcon" class="bi bi-eye"></i></button></div><div class="invalid-feedback" data-company-password-error>Password and confirm password do not match.</div></div>
+        <div class="col-md-4"><label class="form-label" for="temporaryPasswordConfirmation">Confirm Password {!! $required !!}</label><div class="input-group"><input id="temporaryPasswordConfirmation" name="temporary_password_confirmation" type="password" class="form-control" autocomplete="new-password" required data-company-password-confirmation data-tf-manual-confirmation><button type="button" class="btn btn-outline-secondary tf-password-toggle" data-tf-password-toggle="#temporaryPasswordConfirmation" data-tf-password-icon="#temporaryPasswordConfirmationIcon" aria-label="Show confirm password"><i id="temporaryPasswordConfirmationIcon" class="bi bi-eye"></i></button></div><small class="tf-muted">Re-enter the password manually. Paste is disabled for this field.</small><div class="invalid-feedback" data-company-password-error>Password and confirm password do not match.</div></div>
         <div class="col-md-4"><label class="form-label">Initial Status</label><div class="form-control bg-light">Approved</div><small class="tf-muted">Companies created by Super Admin are approved automatically.</small></div>
         <div class="col-12"><label class="form-label" for="companyNotes">Notes <span class="tf-muted">Optional</span></label><textarea id="companyNotes" name="notes" class="form-control" rows="2" placeholder="Internal creation notes">{{ old('notes') }}</textarea></div>
-        <div class="col-12 mt-3"><div class="d-flex flex-wrap justify-content-between align-items-center gap-2"><div><h2 class="h5 mb-1">Company Panel Permissions</h2><p class="tf-muted mb-0">Enable a module, then select the features and actions available to this new company.</p></div><label class="form-check border rounded px-3 py-2 mb-0"><input class="form-check-input me-2" type="checkbox" data-permission-master> Select All</label></div></div>
+        <div class="col-12 mt-3"><div class="d-flex flex-wrap justify-content-between align-items-center gap-2"><div><h2 class="h5 mb-1">Company Panel Permissions</h2><p class="tf-muted mb-0">Enable a module, then select the features and actions available to this new company.</p></div><label class="form-check border rounded px-3 py-2 mb-0"><input class="form-check-input me-2" type="checkbox" data-permission-master> Select All <span class="tf-muted" data-permission-total-selected></span></label></div></div>
         <div class="col-12"><div class="row g-3">@foreach(($definitions ?? collect())->groupBy('module') as $module => $permissions)<div class="col-md-6 col-xl-4"><x-admin.permission-group :module="$module" :label="ucwords(str_replace('_', ' ', $module))" :permissions="$permissions" :selected-permissions="old('permissions', [])" /></div>@endforeach</div></div>
     @endif
 
-    <div class="col-12"><button class="btn btn-tf-primary" type="submit" @if(!$editing) data-company-create-submit disabled @endif>{{ $editing ? 'Save Company Changes' : 'Create Company' }}</button><a href="{{ $editing ? route('admin.companies.show', $company) : route('admin.companies.index') }}" class="btn btn-outline-secondary">Cancel</a></div>
+    <div class="col-12"><button class="btn btn-tf-primary" type="submit" @if(!$editing) data-company-create-submit disabled @endif>{{ $editing ? 'Save Company Changes' : 'Create Company' }}</button><a href="{{ $editing ? route('admin.companies.show', $company) : route('admin.companies.index') }}" class="btn btn-outline-secondary">Cancel</a>@if(!$editing)<div class="small text-danger mt-2 d-none" data-company-create-status></div>@endif</div>
 </form>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const type = document.getElementById('businessType');
+    const container = document.querySelector('[data-tf-other-business-description]');
+    const description = container?.querySelector('[name="business_description"]');
+    if (!type || !container || !description) return;
+
+    const syncOtherDescription = () => {
+        const isOther = type.value === 'Other';
+        container.classList.toggle('d-none', !isOther);
+        description.disabled = !isOther;
+        description.required = isOther;
+    };
+
+    type.addEventListener('change', syncOtherDescription);
+    syncOtherDescription();
+});
+</script>
+@endpush

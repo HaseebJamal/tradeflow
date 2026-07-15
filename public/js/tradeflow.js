@@ -71,6 +71,346 @@ function togglePassword(inputId, iconId) {
 
 window.togglePassword = togglePassword;
 
+// Every standard select keeps its original element, name, value, and native
+// form submission while Tom Select adds search, keyboard navigation, and a
+// Bootstrap 5 control. Mark a specialised select with data-native-select to
+// opt out. This initializer is also safe for modal and AJAX content.
+window.getTradeFlowTomSelect = (element) => element?.tomselect || null;
+window.syncTradeFlowTomSelect = (element) => {
+    const control = window.getTradeFlowTomSelect(element);
+    if (!control) return;
+    const value = element.multiple
+        ? [...element.selectedOptions].map((option) => option.value)
+        : element.value;
+    control.setValue(value, true);
+};
+
+function positionTradeFlowTomSelectDropdown(control) {
+    if (!control?.isOpen || control.settings.dropdownParent !== 'body') return;
+
+    const rect = control.control.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const width = Math.min(rect.width, Math.max(0, viewportWidth - 24));
+    const menuHeight = Math.min(control.dropdown.offsetHeight || 280, Math.max(0, window.innerHeight - 24));
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const opensUp = spaceBelow < Math.min(menuHeight, 260) && spaceAbove > spaceBelow;
+    const left = Math.max(12, Math.min(rect.left + window.scrollX, window.scrollX + viewportWidth - width - 12));
+    const top = opensUp
+        ? window.scrollY + Math.max(12, rect.top - menuHeight)
+        : window.scrollY + rect.bottom;
+
+    control.wrapper.classList.toggle('tf-tom-select-up', opensUp);
+    Object.assign(control.dropdown.style, {
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${Math.max(0, width)}px`,
+    });
+}
+
+function positionOpenTradeFlowTomSelectDropdowns() {
+    document.querySelectorAll('select.tomselected').forEach((element) => positionTradeFlowTomSelectDropdown(element.tomselect));
+}
+
+window.addEventListener('resize', positionOpenTradeFlowTomSelectDropdowns);
+window.addEventListener('scroll', positionOpenTradeFlowTomSelectDropdowns, { passive: true });
+
+window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document, { force = false } = {}) {
+    if (!window.TomSelect) return;
+
+    const selects = root.matches?.('select:not([data-native-select])')
+        ? [root]
+        : [...(root.querySelectorAll?.('select:not([data-native-select])') || [])];
+
+    selects.forEach((element) => {
+        // SweetAlert controls are intentionally native. Its focus trap and
+        // transient DOM do not need an enhanced select instance.
+        if (element.closest('.swal2-container')) return;
+
+        // A Tom Select dropdown is portaled to <body>. Initializing a select
+        // inside a hidden Bootstrap modal can therefore leave the plugin's
+        // search input orphaned in the page flow. Defer it until Bootstrap
+        // emits shown.bs.modal below.
+        const containingModal = element.closest('.modal');
+        if (containingModal && !containingModal.classList.contains('show')) return;
+
+        if (element.tomselect && !force) return;
+        if (element.tomselect && force) element.tomselect.destroy();
+        if (element.disabled && element.dataset.tomSelectDisabled === '1') return;
+
+        const placeholderOption = [...element.options].find((option) => option.value === '');
+        const isMultiple = element.multiple;
+        const canClear = isMultiple || !element.required;
+
+        const control = new window.TomSelect(element, {
+            create: false,
+            allowEmptyOption: true,
+            maxItems: isMultiple ? null : 1,
+            maxOptions: 500,
+            closeAfterSelect: true,
+            hideSelected: true,
+            searchField: ['text'],
+            placeholder: element.dataset.placeholder || element.getAttribute('placeholder') || placeholderOption?.textContent?.trim() || 'Select an option',
+            plugins: {
+                dropdown_input: {},
+                ...(canClear ? { clear_button: { title: 'Clear selection' } } : {}),
+            },
+            dropdownParent: 'body',
+            position: 'auto',
+            render: {
+                no_results: () => '<div class="no-results">No matching records found</div>',
+            },
+        });
+
+        // When the menu is portaled to body, lock its width to the originating
+        // control so it never inherits the page or sidebar width.
+        control.on('dropdown_open', () => requestAnimationFrame(() => positionTradeFlowTomSelectDropdown(control)));
+        control.on('dropdown_close', () => control.wrapper.classList.remove('tf-tom-select-up'));
+    });
+};
+
+window.reinitializeTradeFlowTomSelect = (root = document) => window.initTradeFlowTomSelect(root, { force: true });
+
+window.initTradeFlowTomSelect();
+document.addEventListener('shown.bs.modal', (event) => window.initTradeFlowTomSelect(event.target));
+document.addEventListener('tradeflow:content-loaded', (event) => window.initTradeFlowTomSelect(event.target || document));
+
+function initTradeFlowBootstrapDropdowns(root = document) {
+    const toggles = root.matches?.('[data-bs-toggle="dropdown"]')
+        ? [root]
+        : [...(root.querySelectorAll?.('[data-bs-toggle="dropdown"]') || [])];
+
+    toggles.forEach((toggle) => {
+        if (toggle.dataset.tradeFlowDropdownReady === '1') return;
+        toggle.dataset.tradeFlowDropdownReady = '1';
+        toggle.setAttribute('data-bs-display', 'dynamic');
+        toggle.setAttribute('data-bs-boundary', 'viewport');
+        const menu = toggle.parentElement?.querySelector(':scope > .dropdown-menu');
+        if (menu && toggle.closest('.table-responsive, .tf-card, .card')) menu.classList.add('dropdown-menu-end');
+    });
+}
+
+initTradeFlowBootstrapDropdowns();
+
+// Automatically cover HTML appended by modal, AJAX, or inline form scripts.
+let tradeFlowTomSelectFrame;
+new MutationObserver((records) => {
+    const roots = new Set();
+    records.forEach((record) => record.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) roots.add(node);
+    }));
+    if (!roots.size) return;
+    cancelAnimationFrame(tradeFlowTomSelectFrame);
+    tradeFlowTomSelectFrame = requestAnimationFrame(() => roots.forEach((root) => {
+        window.initTradeFlowTomSelect(root);
+        initTradeFlowBootstrapDropdowns(root);
+        initTradeFlowSidebarSubmenus(root);
+        initTradeFlowStaffActionDropdowns(root);
+    }));
+}).observe(document.documentElement, { childList: true, subtree: true });
+
+// Responsive table/card wrappers scroll their contents, which can otherwise
+// clip Bootstrap action menus. Open only the active wrapper and restore its
+// normal responsive overflow when the menu closes.
+function closeTradeFlowStaffActions(except = null) {
+    document.querySelectorAll('.staff-table-wrap [data-bs-toggle="dropdown"][aria-expanded="true"]').forEach((toggle) => {
+        if (toggle === except) return;
+        window.bootstrap?.Dropdown.getInstance(toggle)?.hide();
+    });
+}
+
+function initTradeFlowStaffActionDropdowns(root = document) {
+    const toggles = root.matches?.('.staff-table-wrap [data-bs-toggle="dropdown"]')
+        ? [root]
+        : [...(root.querySelectorAll?.('.staff-table-wrap [data-bs-toggle="dropdown"]') || [])];
+
+    toggles.forEach((toggle) => {
+        if (toggle.dataset.staffActionDropdownReady === '1' || !window.bootstrap?.Dropdown) return;
+        toggle.dataset.staffActionDropdownReady = '1';
+
+        window.bootstrap.Dropdown.getOrCreateInstance(toggle, {
+            boundary: 'viewport',
+            display: 'dynamic',
+            popperConfig(defaultConfig) {
+                return {
+                    ...defaultConfig,
+                    placement: 'bottom-end',
+                    modifiers: (defaultConfig.modifiers || []).map((modifier) => modifier.name === 'flip'
+                        ? { ...modifier, options: { ...modifier.options, fallbackPlacements: [] } }
+                        : modifier),
+                };
+            },
+        });
+    });
+}
+
+initTradeFlowStaffActionDropdowns();
+
+document.addEventListener('show.bs.dropdown', (event) => {
+    const toggle = event.target;
+    const wrapper = toggle.closest('.table-responsive, .tf-card, .card');
+    wrapper?.classList.add('tf-dropdown-open');
+
+    if (!toggle.closest('.staff-table-wrap')) return;
+
+    closeTradeFlowStaffActions(toggle);
+    const dropdown = toggle.closest('.dropdown');
+    const menu = dropdown?.querySelector('.dropdown-menu');
+    dropdown?.classList.remove('dropup');
+
+    // Keep the menu below its own Actions button. It scrolls internally when
+    // the row is near the bottom, instead of flipping over another row.
+    const availableBelow = Math.max(0, window.innerHeight - toggle.getBoundingClientRect().bottom - 12);
+    if (menu) menu.style.maxHeight = `${availableBelow}px`;
+});
+
+document.addEventListener('hidden.bs.dropdown', (event) => {
+    const toggle = event.target;
+    toggle.closest('.table-responsive, .tf-card, .card')?.classList.remove('tf-dropdown-open');
+    const menu = toggle.closest('.staff-table-wrap .dropdown')?.querySelector('.dropdown-menu');
+    if (menu) menu.style.removeProperty('max-height');
+});
+
+document.addEventListener('click', (event) => {
+    const item = event.target.closest('.staff-table-wrap .dropdown-menu .dropdown-item');
+    if (!item) return;
+    window.bootstrap?.Dropdown.getInstance(item.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]'))?.hide();
+});
+
+window.addEventListener('resize', () => closeTradeFlowStaffActions());
+document.addEventListener('scroll', (event) => {
+    if (event.target instanceof Element && event.target.closest('.staff-table-wrap .dropdown-menu')) return;
+    closeTradeFlowStaffActions();
+}, true);
+
+function initTradeFlowSidebarSubmenus(root = document) {
+    const toggles = root.matches?.('[data-tf-sidebar-submenu-toggle]')
+        ? [root]
+        : [...(root.querySelectorAll?.('[data-tf-sidebar-submenu-toggle]') || [])];
+
+    toggles.forEach((toggle) => {
+        if (toggle.dataset.submenuReady === '1') return;
+        toggle.dataset.submenuReady = '1';
+        toggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            const submenu = document.getElementById(toggle.getAttribute('aria-controls'));
+            if (!submenu) return;
+            const shouldOpen = !submenu.classList.contains('is-open');
+            document.querySelectorAll('.tf-sidebar-submenu.is-open').forEach((openSubmenu) => {
+                openSubmenu.classList.remove('is-open');
+                document.querySelector(`[aria-controls="${openSubmenu.id}"]`)?.setAttribute('aria-expanded', 'false');
+            });
+            submenu.classList.toggle('is-open', shouldOpen);
+            toggle.setAttribute('aria-expanded', String(shouldOpen));
+        });
+    });
+}
+
+initTradeFlowSidebarSubmenus();
+
+// Exact identifiers (barcode, SKU, PO, sale number, invoice, or reference)
+// should behave like scanner input: resolve once and open the matching record.
+function initTradeFlowCodeLookups(root = document) {
+    const forms = root.matches?.('[data-code-lookup-form]')
+        ? [root]
+        : [...(root.querySelectorAll?.('[data-code-lookup-form]') || [])];
+
+    forms.forEach((form) => {
+        if (form.dataset.codeLookupReady === '1') return;
+        const input = form.querySelector('[data-code-lookup]');
+        const endpoint = form.dataset.codeLookupUrl;
+        if (!input || !endpoint) return;
+        form.dataset.codeLookupReady = '1';
+        let timer;
+        let lastCode = '';
+        let pending = false;
+
+        const resolve = async () => {
+            const code = input.value.trim();
+            if (!code || code === lastCode || pending) return false;
+            lastCode = code;
+            pending = true;
+            try {
+                const response = await fetch(`${endpoint}?code=${encodeURIComponent(code)}`, { headers: { Accept: 'application/json' } });
+                if (!response.ok) return false;
+                const result = await response.json();
+                if (result.found && result.url) {
+                    window.location.assign(result.url);
+                    return true;
+                }
+            } catch (_) {
+                // A normal filter submit remains available if lookup is offline.
+            } finally {
+                pending = false;
+            }
+            return false;
+        };
+
+        input.addEventListener('input', () => {
+            window.clearTimeout(timer);
+            lastCode = '';
+            if (input.value.trim().length < 2) return;
+            timer = window.setTimeout(resolve, 180);
+        });
+        input.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            lastCode = '';
+            resolve().then((found) => { if (!found) form.requestSubmit(); });
+        });
+        if (document.activeElement === document.body) input.focus();
+    });
+}
+
+window.initTradeFlowCodeLookups = initTradeFlowCodeLookups;
+initTradeFlowCodeLookups();
+
+function initNonNegativeNumberGuards(root = document) {
+    const selector = 'input[type="number"]:not([data-allow-negative]), [data-non-negative]';
+    const fields = root.matches?.(selector)
+        ? [root]
+        : [...(root.querySelectorAll?.(selector) || [])];
+    fields.forEach((field) => {
+        if (field.dataset.nonNegativeReady === '1') return;
+        field.dataset.nonNegativeReady = '1';
+        const name = (field.name || '').toLowerCase();
+        const wholeNumber = /(quantity|qty|stock|units?|count|days?|alert)/.test(name);
+        if (!field.hasAttribute('min')) field.min = '0';
+        if (!field.hasAttribute('step')) field.step = wholeNumber ? '1' : '0.01';
+
+        const rejectNegativeValue = () => {
+            if (field.value === '' || Number(field.value) >= 0) {
+                field.setCustomValidity('');
+                return false;
+            }
+            field.value = '';
+            field.setCustomValidity('Negative values are not allowed.');
+            return true;
+        };
+
+        field.addEventListener('keydown', (event) => {
+            if (['-', '+', 'e', 'E'].includes(event.key)) event.preventDefault();
+        });
+        field.addEventListener('beforeinput', (event) => {
+            if (event.data && /[-+eE]/.test(event.data)) event.preventDefault();
+        });
+        field.addEventListener('paste', (event) => {
+            const pasted = event.clipboardData?.getData('text') || '';
+            if (/[-+]/.test(pasted) || (wholeNumber && /[.eE]/.test(pasted))) {
+                event.preventDefault();
+                field.setCustomValidity('Negative values are not allowed.');
+            }
+        });
+        field.addEventListener('wheel', (event) => {
+            if (document.activeElement === field) event.preventDefault();
+        }, { passive: false });
+        field.addEventListener('input', rejectNegativeValue);
+        field.addEventListener('change', rejectNegativeValue);
+    });
+}
+
+initNonNegativeNumberGuards();
+
 // Forms opt in to a predictable keyboard sequence. This works for both auth
 // forms and multi-step onboarding, while excluding hidden/disabled fields.
 function applyTradeFlowTabOrder(form, focusFirst = false) {
@@ -89,28 +429,282 @@ function applyTradeFlowTabOrder(form, focusFirst = false) {
 window.applyTradeFlowTabOrder = applyTradeFlowTabOrder;
 document.querySelectorAll('form[data-tf-tab-order]').forEach((form) => applyTradeFlowTabOrder(form, true));
 
-// Flash confirmations are temporary. Validation errors remain visible so users
-// can correct their input; information alerts opt in with data-tf-auto-dismiss.
-function scheduleAutoDismissAlert(alert) {
-    if (!alert.matches('.alert-success, [data-tf-auto-dismiss]') || alert.dataset.tfAutoDismissTimer || alert.classList.contains('d-none')) return;
-    alert.dataset.tfAutoDismissTimer = '1';
+// Keep personal/company names, telephone numbers, and CNIC values clean at
+// the point of entry. Server-side rules remain authoritative for every
+// business and staff workflow.
+function initTradeFlowFieldGuards(root = document) {
+    const fields = root.querySelectorAll?.('input, textarea') || [];
+    fields.forEach((field) => {
+        const name = (field.name || '').toLowerCase();
+        const isPhone = field.matches('[data-tf-phone]') || name.includes('phone');
+        const isCnic = field.matches('[data-tf-cnic]') || name === 'cnic' || name.endsWith('_cnic');
+        const isName = field.matches('[data-tf-name-only]') || [
+            'name', 'owner_name', 'father_name', 'customer_name', 'supplier_name',
+            'business_name', 'company_name', 'custom_role_name', 'city',
+        ].includes(name) || ((name.endsWith('_name') || name.endsWith('_city')) && name !== 'product_name');
 
-    window.setTimeout(() => {
-        alert.classList.add('fade');
-        window.setTimeout(() => alert.remove(), 180);
-    }, 3000);
+        if (isPhone) {
+            field.type = 'tel';
+            field.inputMode = 'numeric';
+            field.autocomplete = 'tel';
+            field.maxLength = 11;
+            field.addEventListener('input', () => {
+                field.value = field.value.replace(/\D/g, '').slice(0, 11);
+            });
+        }
+
+        if (isCnic) {
+            field.type = 'tel';
+            field.inputMode = 'numeric';
+            field.autocomplete = 'off';
+            field.maxLength = 13;
+            field.addEventListener('input', () => {
+                field.value = field.value.replace(/\D/g, '').slice(0, 13);
+            });
+        }
+
+        if (isName) {
+            field.addEventListener('input', () => {
+                field.value = field.value.replace(/[^\p{L}\s]/gu, '').replace(/\s{2,}/g, ' ');
+            });
+        }
+    });
 }
 
-function scanAutoDismissAlerts(node = document) {
-    if (node instanceof Element && node.matches?.('.alert-success, [data-tf-auto-dismiss]')) scheduleAutoDismissAlert(node);
-    node.querySelectorAll?.('.alert-success, [data-tf-auto-dismiss]').forEach(scheduleAutoDismissAlert);
+function initOtherBusinessDescription(root = document) {
+    root.querySelectorAll?.('[data-tf-other-business-description]').forEach((container) => {
+        const form = container.closest('form') || document;
+        const description = container.querySelector('textarea, input');
+        const typeFields = [...form.querySelectorAll('[data-tf-business-type], input[name="business_type"]')];
+        if (!description || !typeFields.length || container.dataset.tfOtherBusinessReady === '1') return;
+        container.dataset.tfOtherBusinessReady = '1';
+
+        const sync = () => {
+            const selected = typeFields.find((field) => field.tagName === 'SELECT' || field.checked);
+            const isOther = selected?.value === 'Other';
+            container.classList.toggle('d-none', !isOther);
+            description.disabled = !isOther;
+            description.required = isOther;
+            if (!isOther) description.value = '';
+        };
+
+        typeFields.forEach((field) => field.addEventListener('change', sync));
+        sync();
+    });
 }
 
-scanAutoDismissAlerts();
+initTradeFlowFieldGuards();
+initOtherBusinessDescription();
+
+// Use one professional notification and confirmation experience throughout the
+// application. Server flash messages and legacy Bootstrap alerts are promoted
+// to SweetAlert automatically, while validation feedback stays inline.
+function sweetAlertIcon(alert) {
+    if (alert.classList.contains('alert-success')) return 'success';
+    if (alert.classList.contains('alert-warning')) return 'warning';
+    if (alert.classList.contains('alert-danger')) return 'error';
+    return 'info';
+}
+
+function showTradeFlowAlert(alert) {
+    // Context banners deliberately remain visible until the user leaves that
+    // workspace. They are not transient notifications.
+    if (!alert || alert.hasAttribute('data-tf-persistent-alert') || alert.dataset.tfSweetAlertShown === '1' || alert.classList.contains('d-none')) return;
+    if (!window.Swal) return;
+
+    alert.dataset.tfSweetAlertShown = '1';
+    const icon = sweetAlertIcon(alert);
+    const message = (alert.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!message) return;
+
+    window.Swal.fire({
+        icon,
+        title: icon === 'success' ? 'Completed' : icon === 'error' ? 'Please review' : 'TradeFlow',
+        text: message,
+        toast: icon !== 'error',
+        position: icon === 'error' ? 'center' : 'top-end',
+        showConfirmButton: icon === 'error',
+        timer: icon === 'error' ? undefined : 3500,
+        timerProgressBar: icon !== 'error',
+        confirmButtonText: 'OK',
+    });
+    alert.remove();
+}
+
+function scanTradeFlowAlerts(node = document) {
+    if (node instanceof Element && node.matches?.('.alert-success, .alert-warning, .alert-danger, .alert-info')) showTradeFlowAlert(node);
+    node.querySelectorAll?.('.alert-success, .alert-warning, .alert-danger, .alert-info').forEach(showTradeFlowAlert);
+}
+
+function initSweetAlertConfirmations(node = document) {
+    const forms = node instanceof HTMLFormElement ? [node] : [...node.querySelectorAll?.('form[onsubmit*="confirm"]') || []];
+    forms.forEach((form) => {
+        const source = form.getAttribute('onsubmit') || '';
+        const match = source.match(/confirm\(\s*['\"]([^'\"]+)['\"]\s*\)/);
+        if (!match || form.dataset.tfConfirmMessage) return;
+        form.dataset.tfConfirmMessage = match[1];
+        form.removeAttribute('onsubmit');
+        form.onsubmit = null;
+    });
+}
+
+function askTradeFlowConfirmation({ title = 'Confirm action', text, confirmButtonText = 'Continue', confirmButtonColor = '#dc3545' }, onConfirm) {
+    if (!window.Swal) {
+        // Do not fall back to a browser confirmation dialog. SweetAlert is
+        // loaded by every TradeFlow layout before this script.
+        return;
+    }
+    window.Swal.fire({
+        icon: 'warning', title, text, showCancelButton: true,
+        confirmButtonText, cancelButtonText: 'Cancel', confirmButtonColor, reverseButtons: true,
+    }).then((result) => { if (result.isConfirmed) onConfirm(); });
+}
+
+window.askTradeFlowConfirmation = askTradeFlowConfirmation;
+
+function initManualConfirmationFields(node = document) {
+    const fields = node instanceof HTMLInputElement
+        ? (node.matches('[data-tf-manual-confirmation], input[name$="password_confirmation"]') ? [node] : [])
+        : [...node.querySelectorAll?.('[data-tf-manual-confirmation], input[name$="password_confirmation"]') || []];
+
+    fields.forEach((field) => {
+        if (field.dataset.tfManualConfirmationReady === '1') return;
+        field.dataset.tfManualConfirmationReady = '1';
+        ['paste', 'drop', 'copy', 'cut'].forEach((eventName) => field.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            if ((eventName === 'paste' || eventName === 'drop') && window.Swal) {
+                window.Swal.fire({
+                    icon: 'info',
+                    title: 'Manual confirmation required',
+                    text: 'For security, please type the confirmation password manually.',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3200,
+                    timerProgressBar: true,
+                });
+            }
+        }));
+    });
+}
+
+function initCompanyDeletionForms(node = document) {
+    const forms = node instanceof HTMLFormElement ? [node] : [...node.querySelectorAll?.('form[data-tf-company-delete]') || []];
+    forms.forEach((form) => { form.dataset.tfCompanyDeleteReady = '1'; });
+}
+
+document.addEventListener('submit', (event) => {
+    const deleteForm = event.target.closest?.('form[data-tf-company-delete]');
+    if (deleteForm && deleteForm.dataset.tfCompanyDeleteApproved !== '1') {
+        event.preventDefault();
+        if (!window.Swal) return;
+        const companyName = deleteForm.dataset.companyName || 'this company';
+        window.Swal.fire({
+            icon: 'warning',
+            title: 'Permanently delete company?',
+            text: companyName + ' and all of its operational records, staff accounts, transactions, invoices, and activity data will be permanently removed. Enter your Super Admin password to continue.',
+            input: 'password',
+            inputPlaceholder: 'Super Admin password',
+            inputAttributes: { autocomplete: 'current-password', 'aria-label': 'Super Admin password' },
+            showCancelButton: true,
+            confirmButtonText: 'Verify & permanently delete',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#dc3545',
+            reverseButtons: true,
+            focusConfirm: false,
+            inputValidator: (value) => value ? undefined : 'Enter your Super Admin password to continue.',
+        }).then((result) => {
+            if (!result.isConfirmed) return;
+            const password = document.createElement('input');
+            password.type = 'hidden';
+            password.name = 'admin_password';
+            password.value = result.value;
+            deleteForm.querySelector('input[name="admin_password"]')?.remove();
+            deleteForm.append(password);
+            deleteForm.dataset.tfCompanyDeleteApproved = '1';
+            deleteForm.requestSubmit();
+        });
+        return;
+    }
+
+    const form = event.target.closest?.('form[data-tf-confirm-message]');
+    if (!form || form.dataset.tfConfirmApproved === '1') return;
+
+    event.preventDefault();
+    const action = form.querySelector('button[type="submit"], button:not([type])')?.textContent?.replace(/\s+/g, ' ').trim() || 'Continue';
+    const proceed = () => {
+        form.dataset.tfConfirmApproved = '1';
+        form.requestSubmit();
+    };
+    if (!window.Swal) return proceed();
+
+    window.Swal.fire({
+        icon: 'warning',
+        title: `${action}?`,
+        text: form.dataset.tfConfirmMessage,
+        showCancelButton: true,
+        confirmButtonText: action,
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#dc3545',
+        reverseButtons: true,
+    }).then((result) => { if (result.isConfirmed) proceed(); });
+}, true);
+
+scanTradeFlowAlerts();
+initSweetAlertConfirmations();
+initManualConfirmationFields();
+initCompanyDeletionForms();
 new MutationObserver((changes) => changes.forEach((change) => {
-    if (change.type === 'attributes') scheduleAutoDismissAlert(change.target);
-    change.addedNodes.forEach(scanAutoDismissAlerts);
+    if (change.type === 'attributes') {
+        scanTradeFlowAlerts(change.target);
+        return;
+    }
+    change.addedNodes.forEach((node) => {
+        if (!(node instanceof Element)) return;
+        scanTradeFlowAlerts(node);
+        initSweetAlertConfirmations(node);
+        initManualConfirmationFields(node);
+        initCompanyDeletionForms(node);
+        initTradeFlowCodeLookups(node);
+        initNonNegativeNumberGuards(node);
+        initTradeFlowMoneyInputs(node);
+    });
 })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+
+// Monetary text inputs display grouped thousands for readability but submit a
+// plain decimal value, so existing Laravel numeric validation/calculations
+// continue to receive raw values.
+function initTradeFlowMoneyInputs(root = document) {
+    const fields = root.matches?.('[data-money-input]')
+        ? [root]
+        : [...(root.querySelectorAll?.('[data-money-input]') || [])];
+
+    const raw = (value) => String(value || '').replace(/,/g, '').trim();
+    const format = (value) => {
+        const clean = raw(value);
+        if (clean === '' || !/^\d*(?:\.\d{0,2})?$/.test(clean)) return clean;
+        const [whole = '0', decimal] = clean.split('.');
+        const grouped = Number.parseInt(whole || '0', 10).toLocaleString('en-US');
+        return decimal === undefined ? grouped : `${grouped}.${decimal}`;
+    };
+
+    fields.forEach((field) => {
+        if (field.dataset.moneyInputReady === '1') return;
+        field.dataset.moneyInputReady = '1';
+        field.value = format(field.value);
+        field.addEventListener('focus', () => { field.value = raw(field.value); });
+        field.addEventListener('blur', () => { field.value = format(field.value); });
+        field.addEventListener('input', () => {
+            const clean = raw(field.value).replace(/[^\d.]/g, '');
+            const [whole = '', ...decimals] = clean.split('.');
+            field.value = decimals.length ? `${whole}.${decimals.join('').slice(0, 2)}` : whole;
+        });
+        field.closest('form')?.addEventListener('submit', () => { field.value = raw(field.value); });
+    });
+}
+
+window.initTradeFlowMoneyInputs = initTradeFlowMoneyInputs;
+initTradeFlowMoneyInputs();
 
 document.querySelectorAll('[data-tf-password-toggle]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -435,86 +1029,8 @@ function initStaffPasswordForm(form) {
 
 document.querySelectorAll('[data-staff-password-form]').forEach(initStaffPasswordForm);
 
-function initStaffDraftForm(form) {
-    if (!form || form.dataset.staffDraftReady === '1') return;
-    form.dataset.staffDraftReady = '1';
-    const key = form.dataset.staffDraftKey;
-    if (!key) return;
-
-    const alert = form.querySelector('[data-staff-draft-alert]');
-    const clear = form.querySelector('[data-clear-staff-draft]');
-    const fields = [...form.querySelectorAll('input, select, textarea')].filter((field) => {
-        return field.name && !['password', 'password_confirmation'].includes(field.name)
-            && !['file', 'hidden', 'submit', 'button'].includes(field.type);
-    });
-    let dirty = false;
-    let submitting = false;
-
-    const save = () => {
-        const values = {};
-        fields.forEach((field) => {
-            if (field.type === 'checkbox') {
-                if (!values[field.name]) values[field.name] = [];
-                if (field.checked) values[field.name].push(field.value || '1');
-            } else if (field.type === 'radio') {
-                if (field.checked) values[field.name] = field.value;
-            } else {
-                values[field.name] = field.value;
-            }
-        });
-        sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), values, scrollY: window.scrollY }));
-    };
-
-    const restore = () => {
-        if (form.dataset.staffDraftCreated === '1') {
-            sessionStorage.removeItem(key);
-            return;
-        }
-        try {
-            const draft = JSON.parse(sessionStorage.getItem(key) || 'null');
-            if (!draft?.values) return;
-            fields.forEach((field) => {
-                if (!(field.name in draft.values)) return;
-                if (field.type === 'checkbox') {
-                    field.checked = Array.isArray(draft.values[field.name]) && draft.values[field.name].includes(field.value || '1');
-                } else if (field.type === 'radio') {
-                    field.checked = draft.values[field.name] === field.value;
-                } else {
-                    field.value = draft.values[field.name];
-                }
-                field.dispatchEvent(new Event('change', { bubbles: true }));
-            });
-            window.TradeFlowPermissions?.syncForm(form);
-            alert?.classList.remove('d-none');
-            if (Number.isFinite(draft.scrollY)) window.setTimeout(() => window.scrollTo({ top: draft.scrollY, behavior: 'auto' }), 0);
-        } catch (_) {
-            sessionStorage.removeItem(key);
-        }
-    };
-
-    restore();
-    fields.forEach((field) => {
-        field.addEventListener('input', () => { dirty = true; save(); });
-        field.addEventListener('change', () => { dirty = true; save(); });
-    });
-    clear?.addEventListener('click', () => {
-        if (!window.confirm('Are you sure you want to clear this staff draft?')) return;
-        sessionStorage.removeItem(key);
-        form.reset();
-        alert?.classList.add('d-none');
-        window.TradeFlowPermissions?.syncForm(form);
-        form.querySelector('[data-staff-role]')?.dispatchEvent(new Event('change', { bubbles: true }));
-        dirty = false;
-    });
-    form.addEventListener('submit', () => { submitting = true; });
-    window.addEventListener('beforeunload', (event) => {
-        if (!dirty || submitting) return;
-        event.preventDefault();
-        event.returnValue = '';
-    });
-}
-
-document.querySelectorAll('[data-staff-create-form]').forEach(initStaffDraftForm);
+// Staff/user drafts are intentionally disabled: credentials and uploads must
+// never be persisted in browser storage.
 
 function updateOrderPreview() {
     const form = document.querySelector('[data-order-form]');
@@ -736,7 +1252,15 @@ document.querySelector('[data-add-bulk-row]')?.addEventListener('click', () => {
     const index = tbody.querySelectorAll('[data-bulk-row]').length;
     template.querySelectorAll('input, select').forEach((field) => {
         field.name = field.name.replace(/products\[\d+\]/, `products[${index}]`);
-        if (field.tagName === 'INPUT') field.value = field.type === 'number' && field.name.includes('low_stock_alert_qty') ? '10' : '';
+        if (field.id && field.id.startsWith('bulkExpiryTracking')) field.id = `bulkExpiryTracking${index}`;
+        if (field.tagName === 'INPUT') {
+            field.value = field.type === 'number' && field.name.includes('low_stock_alert_qty') ? '10' : '';
+            if (field.matches('[data-bulk-expiry-toggle]')) field.checked = false;
+            if (field.matches('[data-bulk-expiry-date]')) field.disabled = true;
+        }
+    });
+    template.querySelectorAll('label[for^="bulkExpiryTracking"]').forEach((label) => {
+        label.htmlFor = `bulkExpiryTracking${index}`;
     });
     tbody.appendChild(template);
 });
@@ -774,6 +1298,8 @@ function initPermissionHierarchy(form) {
         const selected = children.filter((child) => child.checked).length;
         parent.checked = selected === children.length;
         parent.indeterminate = selected > 0 && selected < children.length;
+        group.querySelector('[data-permission-selected-count]')?.replaceChildren(document.createTextNode(String(selected)));
+        group.classList.toggle('has-selected-permissions', selected > 0);
     };
 
     const syncMaster = () => {
@@ -782,6 +1308,7 @@ function initPermissionHierarchy(form) {
         const selected = children.filter((child) => child.checked).length;
         master.checked = children.length > 0 && selected === children.length;
         master.indeterminate = selected > 0 && selected < children.length;
+        form.querySelector('[data-permission-total-selected]')?.replaceChildren(document.createTextNode(`(${selected} selected)`));
     };
 
     const syncAll = () => {
@@ -810,40 +1337,13 @@ document.querySelectorAll('[data-company-permission-form]').forEach(initPermissi
 function initCompanyCreateForm(form) {
     if (!form || form.dataset.companyCreateReady === '1') return;
     form.dataset.companyCreateReady = '1';
-    const storageKey = 'tradeflow_super_admin_create_company_draft';
     const password = form.querySelector('[data-company-password]');
     const confirmation = form.querySelector('[data-company-password-confirmation]');
     const passwordError = form.querySelector('[data-company-password-error]');
     const submit = form.querySelector('[data-company-create-submit]');
-    const draftAlert = form.querySelector('[data-company-draft-alert]');
-    const fields = [...form.querySelectorAll('input, select, textarea')].filter((field) => field.name && !['temporary_password', 'temporary_password_confirmation', 'permissions[]'].includes(field.name) && field.type !== 'file' && field.type !== 'hidden');
+    const validationStatus = form.querySelector('[data-company-create-status]');
+    const permissionInputs = [...form.querySelectorAll('[data-permission-child]')];
     const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
-
-    const saveDraft = () => {
-        const draft = {};
-        fields.forEach((field) => {
-            if (field.type === 'radio') { if (field.checked) draft[field.name] = field.value; }
-            else if (field.type === 'checkbox') draft[field.name] = field.checked;
-            else draft[field.name] = field.value;
-        });
-        localStorage.setItem(storageKey, JSON.stringify({ savedAt: Date.now(), fields: draft }));
-    };
-
-    const restoreDraft = () => {
-        try {
-            const stored = JSON.parse(localStorage.getItem(storageKey) || 'null');
-            if (!stored?.fields) return;
-            fields.forEach((field) => {
-                if (!(field.name in stored.fields)) return;
-                if (field.type === 'radio') field.checked = stored.fields[field.name] === field.value;
-                else if (field.type === 'checkbox') field.checked = Boolean(stored.fields[field.name]);
-                else field.value = stored.fields[field.name];
-            });
-            draftAlert?.classList.remove('d-none');
-        } catch (_) {
-            localStorage.removeItem(storageKey);
-        }
-    };
 
     const validate = () => {
         const value = password?.value || '';
@@ -855,27 +1355,35 @@ function initCompanyCreateForm(form) {
         passwordError?.classList.toggle('d-block', showError);
         if (password) password.setCustomValidity(value && !strong ? 'Use a stronger password.' : '');
         if (confirmation) confirmation.setCustomValidity(showError ? 'Password and confirm password do not match.' : '');
-        if (submit) submit.disabled = !form.checkValidity() || !strong || !matches;
+        const invalidField = [...form.elements].find((field) => !permissionInputs.includes(field) && typeof field.checkValidity === 'function' && !field.checkValidity());
+        let message = '';
+        if (value && !strong) message = 'Temporary Password must include uppercase, lowercase, number, and special character.';
+        else if (confirmation?.value && !matches) message = 'Password and confirm password do not match.';
+        else if (invalidField) message = `${invalidField.labels?.[0]?.textContent?.replace('*', '').trim() || 'A required field'} is required or invalid.`;
+
+        validationStatus?.classList.toggle('d-none', !message);
+        if (validationStatus) validationStatus.textContent = message;
+        if (submit) submit.disabled = Boolean(message) || !form.checkValidity() || !strong || !matches;
     };
 
-    restoreDraft();
-    fields.forEach((field) => field.addEventListener('input', () => { saveDraft(); validate(); }));
-    fields.forEach((field) => field.addEventListener('change', () => { saveDraft(); validate(); }));
+    form.querySelectorAll('input, select, textarea').forEach((field) => {
+        field.addEventListener('input', validate);
+        field.addEventListener('change', validate);
+    });
     password?.addEventListener('input', validate);
     confirmation?.addEventListener('input', validate);
-    form.querySelector('[data-clear-company-draft]')?.addEventListener('click', () => {
-        if (window.confirm('Are you sure you want to clear this company draft?')) {
-            localStorage.removeItem(storageKey);
-            form.reset();
-            draftAlert?.classList.add('d-none');
-            validate();
-        }
-    });
+    permissionInputs.forEach((input) => input.addEventListener('change', validate));
     form.addEventListener('submit', (event) => {
         validate();
         if (!form.checkValidity() || submit?.disabled) {
             event.preventDefault();
             form.reportValidity();
+            return;
+        }
+        if (submit) {
+            submit.disabled = true;
+            submit.dataset.submitting = '1';
+            submit.textContent = 'Creating Company…';
         }
     });
     validate();

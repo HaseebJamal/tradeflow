@@ -12,15 +12,15 @@
 
 <div class="tf-card p-3 mb-3">
     <div class="d-flex justify-content-between align-items-center mb-2"><strong>Filter Companies</strong><small class="tf-muted">Current time: <time data-current-time></time></small></div>
-    <form method="GET" action="{{ route('admin.companies.index') }}" class="row g-2 align-items-end">
+    <form method="GET" action="{{ route('admin.companies.index') }}" class="row g-2 align-items-end"><input type="hidden" name="filters_applied" value="1">
         <div class="col-md-3"><label class="form-label">Search</label><input name="search" class="form-control" value="{{ $filters['search'] ?? '' }}" placeholder="Company, owner, email, phone"></div>
         <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All statuses</option>@foreach(['pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected', 'suspended' => 'Suspended', 'archived' => 'Archived'] as $value => $label)<option value="{{ $value }}" @selected(($statusFilter ?? '') === $value)>{{ $label }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Business Type</label><select name="business_type" class="form-select"><option value="">All types</option>@foreach($businessTypes as $type)<option value="{{ $type }}" @selected(($filters['business_type'] ?? '') === $type)>{{ $type }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">City</label><input name="city" class="form-control" value="{{ $filters['city'] ?? '' }}" placeholder="Any city"></div>
         <div class="col-md-2"><label class="form-label">Plan</label><select name="plan_id" class="form-select"><option value="">All plans</option>@foreach($plans as $plan)<option value="{{ $plan->id }}" @selected((int)($filters['plan_id'] ?? 0) === $plan->id)>{{ $plan->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Sort</label><select name="sort" class="form-select"><option value="newest" @selected(($filters['sort'] ?? 'newest') === 'newest')>Newest first</option><option value="oldest" @selected(($filters['sort'] ?? '') === 'oldest')>Oldest first</option><option value="name_asc" @selected(($filters['sort'] ?? '') === 'name_asc')>Name A-Z</option><option value="name_desc" @selected(($filters['sort'] ?? '') === 'name_desc')>Name Z-A</option></select></div>
-        <div class="col-md-2"><label class="form-label">Created From</label><input type="date" name="date_from" max="{{ now()->toDateString() }}" class="form-control" value="{{ $filters['date_from'] ?? '' }}"></div>
-        <div class="col-md-2"><label class="form-label">Created To</label><input type="date" name="date_to" max="{{ now()->toDateString() }}" class="form-control" value="{{ $filters['date_to'] ?? '' }}"></div>
+        <div class="col-md-2"><label class="form-label">Created From</label><input type="date" name="date_from" max="{{ now()->toDateString() }}" class="form-control" value="{{ $filters['date_from'] ?? now()->toDateString() }}"></div>
+        <div class="col-md-2"><label class="form-label">Created To</label><input type="date" name="date_to" max="{{ now()->toDateString() }}" class="form-control" value="{{ $filters['date_to'] ?? now()->toDateString() }}"></div>
         <div class="col-md-1"><button class="btn btn-outline-primary w-100">Filter</button></div>
         <div class="col-md-1"><a href="{{ route('admin.companies.index') }}" class="btn btn-outline-secondary w-100">Clear</a></div>
     </form>
@@ -32,7 +32,7 @@
     @forelse($companies as $company)
         @php($companyStatus = strtolower((string) $company->status))
         <tr>
-            <td><strong>{{ $company->business_name }}</strong><small class="d-block tf-muted">{{ $company->category ?: 'Uncategorized' }}</small></td>
+            <td><strong>{{ $company->business_name }}</strong></td>
             <td>{{ $company->owner?->name ?? '—' }}<small class="d-block tf-muted">{{ $company->owner?->email }}</small></td>
             <td>{{ $company->business_type }}</td>
             <td>{{ $company->subscription?->plan?->name ?? 'No plan' }}</td>
@@ -59,7 +59,7 @@
                         @else
                             <form method="POST" action="{{ route('admin.companies.archive', $company) }}" onsubmit="return confirm('Archive this company? Its data will remain intact.')">@csrf @method('PATCH')<button type="submit" class="dropdown-item text-warning">Archive</button></form>
                         @endif
-                        <form method="POST" action="{{ route('admin.companies.destroy', $company) }}" onsubmit="return confirm('Delete this company only when it has no operational records?')">@csrf @method('DELETE')<button type="submit" class="dropdown-item text-danger">Delete when safe</button></form>
+                        <form method="POST" action="{{ route('admin.companies.destroy', $company) }}" data-tf-company-delete data-company-name="{{ $company->business_name }}">@csrf @method('DELETE')<button type="submit" class="dropdown-item text-danger">Permanently Delete Company</button></form>
                     </div>
                 </div>
             </td>

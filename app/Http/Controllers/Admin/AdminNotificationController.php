@@ -10,7 +10,11 @@ class AdminNotificationController extends Controller
 {
     public function index(Request $request, ?string $category = null)
     {
-        $allNotifications = $request->user()->notifications();
+        // Tenant operational activity belongs in the relevant business inbox.
+        // Older records are retained, but are never surfaced in the Super
+        // Admin notification centre.
+        $allNotifications = $request->user()->notifications()
+            ->where('data', 'not like', '%business_activity%');
         $notifications = (clone $allNotifications)
             ->when($category === 'unread', fn ($query) => $query->whereNull('read_at'))
             ->when($category === 'registrations', fn ($query) => $query->where('data', 'like', '%company_registration%'))
@@ -65,7 +69,19 @@ class AdminNotificationController extends Controller
     public function review(Request $request, string $notification)
     {
         $item = $request->user()->notifications()->findOrFail($notification);
-        abort_unless(data_get($item->data, 'category') === 'company_registration', 404);
+        $category = data_get($item->data, 'category');
+
+        if ($category === 'business_detail_change_request') {
+            if (!$item->read_at) {
+                $item->markAsRead();
+            }
+
+            return redirect()->route('admin.business-detail-change-requests.index', [
+                'business_id' => data_get($item->data, 'business_id'),
+            ]);
+        }
+
+        abort_unless($category === 'company_registration', 404);
 
         $business = Business::with(['owner', 'documents', 'approvalLogs.changedBy'])
             ->findOrFail(data_get($item->data, 'business_id'));

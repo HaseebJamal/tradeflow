@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Business;
 
 use App\Http\Controllers\Controller;
 use App\Models\Business;
+use App\Services\CompanyPermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -19,6 +20,7 @@ class BusinessContextController extends Controller
     public function notifications(Request $request)
     {
         $business = $this->business($request)->loadMissing('owner');
+        abort_unless(app(CompanyPermissionService::class)->allowsUser($request->user(), 'notifications.view', $business), 403);
         $notifications = $business->owner
             ? $business->owner->notifications()->latest()->paginate(20)
             : new LengthAwarePaginator([], 0, 20);

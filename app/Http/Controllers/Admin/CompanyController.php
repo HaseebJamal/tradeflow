@@ -7,6 +7,7 @@ use App\Http\Requests\Admin\StoreCompanyRequest;
 use App\Http\Requests\Admin\UpdateCompanyRequest;
 use App\Models\ActivityLog;
 use App\Models\Business;
+use App\Models\BusinessDetailChangeRequest;
 use App\Models\BusinessDocument;
 use App\Models\CompanyApprovalLog;
 use App\Models\CompanyPermission;
@@ -20,13 +21,18 @@ use App\Models\Supplier;
 use App\Models\User;
 use App\Models\PermissionDefinition;
 use App\Notifications\CompanyRegistrationNotification;
+use App\Notifications\BusinessDetailsChangeDecisionNotification;
+use App\Notifications\BusinessDetailsUpdatedNotification;
 use App\Services\AccountingService;
+use App\Services\BusinessWorkspaceAccessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class CompanyController extends Controller
 {
@@ -42,9 +48,15 @@ class CompanyController extends Controller
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'name_asc', 'name_desc'])],
         ]);
         $query = Business::with(['owner', 'subscription.plan', 'assignments.user'])
-            ->withCount(['users', 'orders', 'companyPermissions as permissions_count' => fn ($permission) => $permission->where('allowed', true)]);
+            ->withCount(['users', 'orders', 'companyPermissions as permissions_count' => fn ($permission) => $permission
+                ->where('allowed', true)
+                ->where('permission_key', 'like', '%.view')]);
 
         $status ??= $request->string('status')->lower()->value();
+        if ($request->boolean('filters_applied') && empty($filters['date_from']) && empty($filters['date_to'])) {
+            $filters['date_from'] = now()->toDateString();
+            $filters['date_to'] = now()->toDateString();
+        }
         if ($status) {
             $query->whereRaw('LOWER(status) = ?', [strtolower($status)]);
         }
@@ -73,7 +85,9 @@ class CompanyController extends Controller
         return view('super-admin.companies.index', [
             'companies' => $query->paginate(20)->withQueryString(),
             'statusFilter' => $status,
-            'businessTypes' => Business::query()->whereNotNull('business_type')->distinct()->orderBy('business_type')->pluck('business_type'),
+            'businessTypes' => collect(['Manufacturer', 'Distributor', 'Wholesaler', 'Retail Shop', 'Other'])
+                ->merge(Business::query()->whereNotNull('business_type')->distinct()->pluck('business_type'))
+                ->unique()->sort()->values(),
             'plans' => \App\Models\SubscriptionPlan::orderBy('name')->get(['id', 'name']),
             'filters' => $filters,
         ]);
@@ -128,55 +142,75 @@ class CompanyController extends Controller
     {
         $data = $request->validated();
 
-        $company = DB::transaction(function () use ($request, $data) {
-            $owner = User::create([
-                'name' => $data['owner_name'],
-                'email' => $data['owner_email'],
-                'phone' => $data['owner_phone'],
-                'password' => Hash::make($data['temporary_password']),
-                'role' => 'business_owner',
-                'status' => 'active',
-                'created_by' => auth()->id(),
+        try {
+            $company = DB::transaction(function () use ($request, $data) {
+                if (Business::whereRaw('LOWER(business_name) = ?', [mb_strtolower($data['business_name'])])->lockForUpdate()->exists()) {
+                    throw ValidationException::withMessages(['business_name' => 'A company with this name already exists.']);
+                }
+
+                $owner = User::create([
+                    'name' => $data['owner_name'],
+                    'email' => $data['owner_email'],
+                    'phone' => $data['owner_phone'],
+                    'password' => Hash::make($data['temporary_password']),
+                    'role' => 'business_owner',
+                    'status' => 'active',
+                    'created_by' => auth()->id(),
+                ]);
+
+                $company = Business::create([
+                    'owner_id' => $owner->id,
+                    'created_by' => auth()->id(),
+                    'business_name' => $data['business_name'],
+                    'business_type' => $data['business_type'],
+                    'business_description' => $data['business_description'] ?? null,
+                    'phone' => $data['company_phone'],
+                    'address' => $data['address'],
+                    'city' => $data['city'],
+                    'registration_number' => $data['registration_number'] ?? null,
+                    'tax_number' => $data['tax_number'] ?? null,
+                    'status' => 'Approved',
+                ]);
+
+                $owner->update(['business_id' => $company->id]);
+
+                if ($request->hasFile('company_logo')) {
+                    $company->update(['logo' => $request->file('company_logo')->store('business-logos', 'public')]);
+                }
+                if ($request->hasFile('business_document')) {
+                    BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public')]);
+                }
+
+                app(AccountingService::class)->ensureDefaultAccounts($company->id);
+                $this->applyInitialPermissions($company, $data['permissions'] ?? []);
+                $this->recordApprovalLog($company, null, 'Approved', 'Company created and approved by Super Admin');
+
+                User::where('role', 'super_admin')->where('status', 'active')->get()
+                    ->each(fn (User $admin) => $admin->notify(new CompanyRegistrationNotification($company)));
+
+                return $company;
+            });
+        } catch (Throwable $exception) {
+            \App\Models\AuditLog::create([
+                'user_id' => auth()->id(),
+                'actor_id' => auth()->id(),
+                'actor_role' => auth()->user()?->role,
+                'module' => 'Companies',
+                'action' => 'company creation failed',
+                'description' => 'Company creation failed: '.$exception->getMessage(),
+                'new_values' => collect($data)->only(['business_name', 'business_type', 'company_phone', 'city', 'owner_name', 'owner_email', 'owner_phone', 'permissions'])->all(),
+                'ip_address' => $request->ip(),
+                'user_agent' => substr((string) $request->userAgent(), 0, 1000),
             ]);
 
-            $company = Business::create([
-                'owner_id' => $owner->id,
-                'created_by' => auth()->id(),
-                'business_name' => $data['business_name'],
-                'business_type' => $data['business_type'],
-                'category' => $data['category'] ?? null,
-                'phone' => $data['company_phone'],
-                'address' => $data['address'],
-                'city' => $data['city'],
-                'registration_number' => $data['registration_number'] ?? null,
-                'tax_number' => $data['tax_number'] ?? null,
-                'status' => 'Approved',
-            ]);
-
-            $owner->update(['business_id' => $company->id]);
-
-            if ($request->hasFile('company_logo')) {
-                $company->update(['logo' => $request->file('company_logo')->store('business-logos', 'public')]);
-            }
-            if ($request->hasFile('business_document')) {
-                BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public')]);
-            }
-
-            app(AccountingService::class)->ensureDefaultAccounts($company->id);
-            $this->applyInitialPermissions($company, $data['permissions'] ?? []);
-            $this->recordApprovalLog($company, null, 'Approved', 'Company created and approved by Super Admin');
-
-            User::where('role', 'super_admin')->where('status', 'active')->get()
-                ->each(fn (User $admin) => $admin->notify(new CompanyRegistrationNotification($company)));
-
-            return $company;
-        });
+            throw $exception;
+        }
 
         $this->audit($request, 'company created', $company, null, $company->only(['business_name', 'status']));
+        $this->audit($request, 'company permissions assigned', $company, null, ['permissions' => $data['permissions'] ?? []]);
 
         return redirect()->route('admin.companies.show', $company)
-            ->with('success', 'Company created successfully.')
-            ->with('clear_company_draft', true);
+            ->with('success', 'Company created successfully.');
     }
 
     public function show(Request $request, Business $company)
@@ -195,8 +229,8 @@ class CompanyController extends Controller
         $data = $request->validate([
             'destination' => ['nullable', Rule::in([
                 'business.dashboard', 'business.products.index', 'business.inventory', 'business.customers.index',
-                'business.suppliers.index', 'business.purchases.index', 'business.orders.index', 'business.payments', 'business.khata',
-                'business.deliveries', 'business.invoices.index', 'business.expenses.index', 'business.reports',
+                'business.suppliers.index', 'business.purchases.index', 'business.purchase-returns.index', 'business.sales.index', 'business.sales.returns.index', 'business.khata',
+                'business.deliveries', 'business.expenses.index', 'business.reports',
                 'business.staff', 'business.audit-logs.index', 'business.settings', 'business.pos.index',
             ])],
         ]);
@@ -205,10 +239,16 @@ class CompanyController extends Controller
             'super_admin_business_context_id' => $company->id,
             'super_admin_business_context_name' => $company->business_name,
         ]);
-        $this->audit($request, 'login as business started', $company, null, ['destination' => $data['destination'] ?? 'business.dashboard']);
+        $destination = $data['destination']
+            ?? app(BusinessWorkspaceAccessService::class)->firstEnabledRoute($request->user(), $company)
+            ?? 'business.access-denied';
 
-        return redirect()->route($data['destination'] ?? 'business.dashboard')
-            ->with('success', 'You are now viewing '.$company->business_name.'.');
+        $this->audit($request, 'login as business started', $company, null, ['destination' => $destination]);
+
+        // The persistent business-context banner identifies the selected company
+        // until the Super Admin explicitly returns to the platform dashboard.
+        // Do not also show a transient success alert when entering that context.
+        return redirect()->route($destination);
     }
 
     public function returnToDashboard(Request $request)
@@ -261,10 +301,10 @@ class CompanyController extends Controller
     public function update(UpdateCompanyRequest $request, Business $company)
     {
         $data = $request->validated();
-        $old = $company->only(['business_name', 'business_type', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo']);
+        $old = $company->only(['business_name', 'business_type', 'business_description', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo']);
 
         DB::transaction(function () use ($request, $company, $data) {
-            $company->update(collect($data)->only(['business_name', 'business_type', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number'])->all());
+            $company->update(collect($data)->only(['business_name', 'business_type', 'business_description', 'phone', 'address', 'city', 'registration_number', 'tax_number'])->all());
             $ownerData = [
                 'name' => $data['owner_name'],
                 'email' => $data['owner_email'],
@@ -286,9 +326,84 @@ class CompanyController extends Controller
             }
         });
 
-        $this->audit($request, 'company updated', $company, $old, $company->fresh()->only(array_keys($old)));
+        $company->refresh()->load('owner');
+        $company->owner?->notify(new BusinessDetailsUpdatedNotification($company, $request->user()));
+        $this->audit($request, 'company updated', $company, $old, $company->only(array_keys($old)));
 
         return redirect()->route('admin.companies.show', $company)->with('success', 'Company details updated.');
+    }
+
+    public function detailChangeRequests(Request $request)
+    {
+        $requests = BusinessDetailChangeRequest::with(['business', 'requester', 'reviewer'])
+            ->when($request->integer('business_id'), fn ($query, int $businessId) => $query->where('business_id', $businessId))
+            ->when($request->filled('status'), fn ($query, string $status) => $query->where('status', ucfirst(strtolower($status))))
+            ->latest()
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('super-admin.companies.detail-change-requests', [
+            'requests' => $requests,
+            'businesses' => Business::orderBy('business_name')->get(['id', 'business_name']),
+        ]);
+    }
+
+    public function approveDetailChangeRequest(Request $request, BusinessDetailChangeRequest $changeRequest)
+    {
+        abort_unless($changeRequest->status === 'Pending', 404);
+        $data = $request->validate(['review_note' => ['nullable', 'string', 'max:2000']]);
+        $changeRequest->update([
+            'status' => 'Approved',
+            'reviewed_by' => auth()->id(),
+            'reviewed_at' => now(),
+            'review_note' => $data['review_note'] ?? null,
+        ]);
+        $this->audit($request, 'business details change approved for application', $changeRequest->business, $changeRequest->old_values, $changeRequest->requested_values);
+
+        return back()->with('success', 'Request approved. Review it once more, then use Apply Changes to update the business and notify its owner.');
+    }
+
+    public function applyDetailChangeRequest(Request $request, BusinessDetailChangeRequest $changeRequest)
+    {
+        abort_unless($changeRequest->status === 'Approved', 404);
+        $company = $changeRequest->business()->with('owner')->firstOrFail();
+        $oldValues = $company->only(['business_name', 'phone', 'address', 'city', 'category', 'logo']);
+        $updates = collect($changeRequest->requested_values ?? [])
+            ->only(['business_name', 'phone', 'address', 'city', 'category', 'logo'])
+            ->all();
+
+        DB::transaction(function () use ($company, $updates, $changeRequest): void {
+            $company->update($updates);
+            $changeRequest->update(['status' => 'Applied']);
+        });
+
+        if (!empty($updates['logo']) && $oldValues['logo'] && $oldValues['logo'] !== $updates['logo']) {
+            Storage::disk('public')->delete($oldValues['logo']);
+        }
+
+        $this->audit($request, 'business details change applied', $company, $oldValues, $updates);
+        $changeRequest->refresh()->load('business');
+        $company->owner?->notify(new BusinessDetailsChangeDecisionNotification($changeRequest));
+
+        return back()->with('success', 'Approved business-detail changes were applied. The business owner has been notified.');
+    }
+
+    public function rejectDetailChangeRequest(Request $request, BusinessDetailChangeRequest $changeRequest)
+    {
+        abort_unless($changeRequest->status === 'Pending', 404);
+        $data = $request->validate(['review_note' => ['required', 'string', 'max:2000']]);
+        $changeRequest->update([
+            'status' => 'Rejected',
+            'reviewed_by' => auth()->id(),
+            'reviewed_at' => now(),
+            'review_note' => $data['review_note'],
+        ]);
+
+        $changeRequest->load('business');
+        $this->audit($request, 'business details change rejected', $changeRequest->business, $changeRequest->old_values, $changeRequest->requested_values);
+        $changeRequest->business->owner?->notify(new BusinessDetailsChangeDecisionNotification($changeRequest));
+
+        return back()->with('success', 'Business-detail change request rejected. The business owner has been notified.');
     }
 
     public function updateStatus(Request $request, Business $company)
@@ -350,23 +465,50 @@ class CompanyController extends Controller
 
     public function destroy(Request $request, Business $company)
     {
-        $hasRecords = $company->users()->exists()
-            || Customer::where('business_id', $company->id)->withTrashed()->exists()
-            || Product::where('business_id', $company->id)->withTrashed()->exists()
-            || Order::where('business_id', $company->id)->withTrashed()->exists()
-            || Payment::where('business_id', $company->id)->exists()
-            || Delivery::where('business_id', $company->id)->exists()
-            || Invoice::where('business_id', $company->id)->exists()
-            || Supplier::where('business_id', $company->id)->withTrashed()->exists();
+        $data = $request->validate([
+            'admin_password' => ['required', 'string'],
+        ]);
 
-        if ($hasRecords) {
-            return back()->withErrors(['company' => 'This company has operational records and cannot be deleted. Archive it instead.']);
+        if (!Hash::check($data['admin_password'], (string) auth()->user()->password)) {
+            return back()->withErrors(['admin_password' => 'The Super Admin password is incorrect. The company was not deleted.']);
         }
 
-        $this->audit($request, 'company deleted', $company, $company->only(['business_name', 'status']), null);
-        $company->delete();
+        $counts = $this->companyDeletionCounts($company);
+        $totalRecords = array_sum($counts);
+        $companyName = $company->business_name;
 
-        return redirect()->route('admin.companies.index')->with('success', 'Company deleted.');
+        DB::transaction(function () use ($request, $company): void {
+            // Related operational records are protected by database foreign-key
+            // cascades. Users are deliberately removed afterwards because their
+            // business_id is nullable to support platform accounts.
+            $this->audit($request, 'company permanently deleted', $company, $company->only(['business_name', 'status']), null);
+            $company->delete();
+
+            User::withTrashed()
+                ->where('business_id', $company->id)
+                ->get()
+                ->each
+                ->forceDelete();
+        });
+
+        return redirect()->route('admin.companies.index')->with(
+            'success',
+            $companyName.' and '.$totalRecords.' related record'.($totalRecords === 1 ? '' : 's').' were permanently deleted after Super Admin password verification.'
+        );
+    }
+
+    private function companyDeletionCounts(Business $company): array
+    {
+        return [
+            'staff_accounts' => User::withTrashed()->where('business_id', $company->id)->count(),
+            'customers' => Customer::withTrashed()->where('business_id', $company->id)->count(),
+            'products' => Product::withTrashed()->where('business_id', $company->id)->count(),
+            'orders' => Order::withTrashed()->where('business_id', $company->id)->count(),
+            'payments' => Payment::where('business_id', $company->id)->count(),
+            'deliveries' => Delivery::where('business_id', $company->id)->count(),
+            'invoices' => Invoice::where('business_id', $company->id)->count(),
+            'suppliers' => Supplier::withTrashed()->where('business_id', $company->id)->count(),
+        ];
     }
 
     private function audit(Request $request, string $action, Business $company, ?array $old, ?array $new): void

@@ -33,7 +33,7 @@ class InventoryController extends Controller
         $data = $request->validate([
             'product_id' => ['required', 'exists:products,id'],
             'type' => ['required', 'in:added,reduced,returned,damaged,adjustment'],
-            'quantity' => ['required', 'integer', 'min:0'],
+            'quantity' => ['required', 'integer', 'min:1'],
             'note' => ['nullable', 'string', 'max:255'],
             'reason' => ['nullable', 'string', 'max:255'],
         ]);

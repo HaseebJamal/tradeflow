@@ -44,7 +44,7 @@ class StaffController extends Controller
         }
 
         if ($request->filled('role')) {
-            $query->where('role', $request->string('role')->toString());
+            $query->whereHas('staffProfile', fn ($profile) => $profile->where('custom_role_name', $request->string('role')->toString()));
         }
 
         if ($request->filled('status')) {
@@ -62,6 +62,7 @@ class StaffController extends Controller
             'staff' => $staff,
             'stats' => $this->stats(),
             'roles' => BusinessStaffRoles::ROLES,
+            'customRoleNames' => $this->customRoleNames(),
             'permissionGroups' => $this->companyPermissionGroups(),
             'roleDefaults' => collect(array_keys(BusinessStaffRoles::ROLES))
                 ->mapWithKeys(fn (string $role) => [$role => BusinessStaffRoles::defaults($role)])
@@ -122,6 +123,7 @@ class StaffController extends Controller
             'staff' => $staff,
             'activity' => $this->activity($staff),
             'roles' => BusinessStaffRoles::ROLES,
+            'customRoleNames' => $this->customRoleNames(),
         ]);
     }
 
@@ -130,6 +132,7 @@ class StaffController extends Controller
         return view('business.staff.edit', [
             'staff' => $this->scopedStaff($staff)->load('staffProfile'),
             'roles' => BusinessStaffRoles::ROLES,
+            'customRoleNames' => $this->customRoleNames(),
             'permissionGroups' => $this->companyPermissionGroups(),
             'roleDefaults' => collect(array_keys(BusinessStaffRoles::ROLES))
                 ->mapWithKeys(fn (string $role) => [$role => BusinessStaffRoles::defaults($role)])
@@ -315,10 +318,9 @@ class StaffController extends Controller
         $definitions = PermissionDefinition::where('status', 'active')->orderBy('module')->orderBy('label')->get();
         $grouped = $definitions
             ->filter(fn (PermissionDefinition $definition) => $companyPermissions->allows(auth()->user(), $definition->permission_key))
-            ->groupBy('module')
-            ->map(fn ($items) => $items->mapWithKeys(fn (PermissionDefinition $definition) => [$definition->permission_key => $definition->label])->all());
+            ->groupBy(fn (PermissionDefinition $definition) => strtolower($definition->module));
 
-        $order = ['products', 'inventory', 'suppliers', 'purchases', 'customers', 'sales', 'pos', 'deliveries', 'invoices', 'accounting', 'expenses', 'reports', 'staff', 'audit_logs', 'settings'];
+        $order = ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'purchase_returns', 'customers', 'sales', 'sales_returns', 'pos', 'deliveries', 'accounting', 'expenses', 'reports', 'notifications', 'staff', 'audit_logs', 'settings'];
 
         return collect($order)
             ->filter(fn (string $module) => $grouped->has($module))
@@ -339,7 +341,7 @@ class StaffController extends Controller
         $isValidTarget = $staff->business_id === $this->businessId()
             && array_key_exists($staff->role, BusinessStaffRoles::ROLES);
 
-        if (!$isValidTarget || (!in_array($actor->role, ['super_admin', 'business_owner'], true) && ($staff->id === $actor->id || $staff->role === 'business_admin'))) {
+        if (!$isValidTarget || !in_array($actor->role, ['super_admin', 'business_owner'], true)) {
             throw ValidationException::withMessages(['staff' => 'You do not have permission to perform this action.']);
         }
 
@@ -389,9 +391,9 @@ class StaffController extends Controller
             'total' => (clone $base)->count(),
             'active' => (clone $base)->where('status', 'active')->count(),
             'inactive' => (clone $base)->whereIn('status', ['inactive', 'suspended'])->count(),
-            'managers' => (clone $base)->where('role', 'manager')->count(),
-            'sales' => (clone $base)->where('role', 'sales_staff')->count(),
-            'delivery' => (clone $base)->where('role', 'delivery_staff')->count(),
+            'roles' => $this->customRoleNames()->count(),
+            'with_permissions' => (clone $base)->whereNotNull('permissions')->where('permissions', '!=', '[]')->count(),
+            'suspended' => (clone $base)->where('status', 'suspended')->count(),
         ];
     }
 
@@ -452,5 +454,16 @@ class StaffController extends Controller
         }
 
         return (int) $businessId;
+    }
+
+    private function customRoleNames()
+    {
+        return StaffProfile::query()
+            ->whereHas('user', fn ($query) => $query->where('business_id', $this->businessId())->where('role', 'custom_staff'))
+            ->whereNotNull('custom_role_name')
+            ->where('custom_role_name', '!=', '')
+            ->distinct()
+            ->orderBy('custom_role_name')
+            ->pluck('custom_role_name');
     }
 }
