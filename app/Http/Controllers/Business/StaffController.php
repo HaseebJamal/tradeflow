@@ -39,7 +39,6 @@ class StaffController extends Controller
                 ->where('name', 'like', "%{$search}%")
                 ->orWhere('email', 'like', "%{$search}%")
                 ->orWhere('phone', 'like', "%{$search}%")
-                ->orWhereHas('staffProfile', fn ($profile) => $profile->where('employee_id', 'like', "%{$search}%"))
             );
         }
 
@@ -74,7 +73,7 @@ class StaffController extends Controller
     {
         $this->ensureStaffCapacity();
         $data = $request->validated();
-        $this->assertAssignableRole($data['role']);
+        $this->assertAssignableRole('custom_staff');
         $imagePath = $request->hasFile('profile_image')
             ? $request->file('profile_image')->store('profile_images', 'public')
             : null;
@@ -90,7 +89,7 @@ class StaffController extends Controller
                     'email' => $data['email'],
                     'phone' => $data['phone'],
                     'password' => Hash::make($data['password']),
-                    'role' => $data['role'],
+                    'role' => 'custom_staff',
                     'status' => $data['status'],
                     'profile_image' => $imagePath,
                     'permissions' => $this->normalisePermissions($data['permissions'] ?? []),
@@ -144,7 +143,7 @@ class StaffController extends Controller
     {
         $staff = $this->scopedStaff($staff);
         $data = $request->validated();
-        $this->assertAssignableRole($data['role']);
+        $this->assertAssignableRole('custom_staff');
         $oldImage = $staff->profile_image;
         $newImage = $request->hasFile('profile_image')
             ? $request->file('profile_image')->store('profile_images', 'public')
@@ -157,7 +156,7 @@ class StaffController extends Controller
                     'name' => $data['name'],
                     'email' => $data['email'],
                     'phone' => $data['phone'],
-                    'role' => $data['role'],
+                    'role' => 'custom_staff',
                     'status' => $data['status'],
                     'permissions' => $this->normalisePermissions($data['permissions'] ?? []),
                 ];
@@ -259,8 +258,7 @@ class StaffController extends Controller
     private function profileData(array $data): array
     {
         return [
-            'employee_id' => $data['employee_id'],
-            'custom_role_name' => $data['role'] === 'custom_staff' ? $data['custom_role_name'] : null,
+            'custom_role_name' => $data['role'],
             'father_name' => $data['father_name'] ?? null,
             'cnic' => $data['cnic'] ?? null,
             'address' => $data['address'] ?? null,

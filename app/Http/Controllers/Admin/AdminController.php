@@ -100,7 +100,7 @@ class AdminController extends Controller
             'phone' => ['nullable', 'string', 'max:30'],
             'role' => ['required', Rule::in(['platform_admin', 'platform_sub_admin'])],
             'parent_user_id' => ['nullable', 'exists:users,id'],
-            'password' => ['required', 'confirmed', 'min:8'],
+            'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
             'status' => ['required', 'in:active,inactive,suspended'],
             'permissions' => ['nullable', 'array'],
         ]);
@@ -140,7 +140,7 @@ class AdminController extends Controller
             'status' => ['required', 'in:active,inactive,suspended'],
             'parent_user_id' => ['nullable', 'exists:users,id'],
             'permissions' => ['nullable', 'array'],
-            'password' => ['nullable', 'confirmed', 'min:8'],
+            'password' => ['nullable', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
         ]);
 
         if ($user->role === 'platform_sub_admin' && !empty($data['parent_user_id'])) {

@@ -268,8 +268,12 @@ class CompanyController extends Controller
     public function resetOwnerPassword(Request $request, Business $company)
     {
         $data = $request->validate([
+            'current_password' => ['required', 'current_password'],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
-        ], ['password.confirmed' => 'Password and confirm password do not match.']);
+        ], [
+            'current_password.current_password' => 'Your current Super Admin password is incorrect.',
+            'password.confirmed' => 'Password and confirm password do not match.',
+        ]);
 
         abort_unless($company->owner, 404);
         $company->owner->update(['password' => Hash::make($data['password'])]);

@@ -48,7 +48,6 @@
         <div class="tf-card p-4 mb-4">
             <h3 class="h5">Job Details</h3>
             <div class="row g-3">
-                <div class="col-md-6"><small class="tf-muted">Employee ID</small><div>{{ $staff->staffProfile?->employee_id ?? '-' }}</div></div>
                 <div class="col-md-6"><small class="tf-muted">Joining Date</small><div>{{ $staff->staffProfile?->joining_date?->format('M d, Y') ?? '-' }}</div></div>
                 <div class="col-md-6"><small class="tf-muted">Salary</small><div>{{ $staff->staffProfile?->salary ? 'Rs '.number_format($staff->staffProfile->salary) : '-' }}</div></div>
                 <div class="col-md-6"><small class="tf-muted">Employment Type</small><div>{{ $staff->staffProfile?->employment_type ?? '-' }}</div></div>

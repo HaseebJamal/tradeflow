@@ -112,6 +112,12 @@ function positionOpenTradeFlowTomSelectDropdowns() {
     document.querySelectorAll('select.tomselected').forEach((element) => positionTradeFlowTomSelectDropdown(element.tomselect));
 }
 
+function closeTradeFlowTomSelectDropdowns(except = null) {
+    document.querySelectorAll('select.tomselected').forEach((element) => {
+        if (element.tomselect && element.tomselect !== except) element.tomselect.close();
+    });
+}
+
 window.addEventListener('resize', positionOpenTradeFlowTomSelectDropdowns);
 window.addEventListener('scroll', positionOpenTradeFlowTomSelectDropdowns, { passive: true });
 
@@ -164,7 +170,12 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
 
         // When the menu is portaled to body, lock its width to the originating
         // control so it never inherits the page or sidebar width.
-        control.on('dropdown_open', () => requestAnimationFrame(() => positionTradeFlowTomSelectDropdown(control)));
+        control.on('dropdown_open', () => {
+            document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach((toggle) => {
+                window.bootstrap?.Dropdown?.getInstance(toggle)?.hide();
+            });
+            requestAnimationFrame(() => positionTradeFlowTomSelectDropdown(control));
+        });
         control.on('dropdown_close', () => control.wrapper.classList.remove('tf-tom-select-up'));
     });
 };
@@ -234,10 +245,24 @@ function initTradeFlowStaffActionDropdowns(root = document) {
             popperConfig(defaultConfig) {
                 return {
                     ...defaultConfig,
+                    strategy: 'fixed',
                     placement: 'bottom-end',
-                    modifiers: (defaultConfig.modifiers || []).map((modifier) => modifier.name === 'flip'
-                        ? { ...modifier, options: { ...modifier.options, fallbackPlacements: [] } }
-                        : modifier),
+                    modifiers: [
+                        ...(defaultConfig.modifiers || []).filter((modifier) => !['flip', 'preventOverflow', 'offset'].includes(modifier.name)),
+                        { name: 'offset', options: { offset: [0, 6] } },
+                        {
+                            name: 'preventOverflow',
+                            options: { boundary: 'viewport', padding: 12, altAxis: true },
+                        },
+                        {
+                            name: 'flip',
+                            options: {
+                                boundary: 'viewport',
+                                padding: 12,
+                                fallbackPlacements: ['top-end', 'bottom-start', 'top-start'],
+                            },
+                        },
+                    ],
                 };
             },
         });
@@ -248,27 +273,21 @@ initTradeFlowStaffActionDropdowns();
 
 document.addEventListener('show.bs.dropdown', (event) => {
     const toggle = event.target;
+    // A filter select (for example, the Company Plan filter) must never stay
+    // open over an Actions menu. Closing it keeps each control usable without
+    // resetting its selected value.
+    closeTradeFlowTomSelectDropdowns();
     const wrapper = toggle.closest('.table-responsive, .tf-card, .card');
     wrapper?.classList.add('tf-dropdown-open');
 
     if (!toggle.closest('.staff-table-wrap')) return;
 
     closeTradeFlowStaffActions(toggle);
-    const dropdown = toggle.closest('.dropdown');
-    const menu = dropdown?.querySelector('.dropdown-menu');
-    dropdown?.classList.remove('dropup');
-
-    // Keep the menu below its own Actions button. It scrolls internally when
-    // the row is near the bottom, instead of flipping over another row.
-    const availableBelow = Math.max(0, window.innerHeight - toggle.getBoundingClientRect().bottom - 12);
-    if (menu) menu.style.maxHeight = `${availableBelow}px`;
 });
 
 document.addEventListener('hidden.bs.dropdown', (event) => {
     const toggle = event.target;
     toggle.closest('.table-responsive, .tf-card, .card')?.classList.remove('tf-dropdown-open');
-    const menu = toggle.closest('.staff-table-wrap .dropdown')?.querySelector('.dropdown-menu');
-    if (menu) menu.style.removeProperty('max-height');
 });
 
 document.addEventListener('click', (event) => {
@@ -593,12 +612,35 @@ function initCompanyDeletionForms(node = document) {
     forms.forEach((form) => { form.dataset.tfCompanyDeleteReady = '1'; });
 }
 
+function closeCompanyDeleteBackgroundControls() {
+    // The confirmation is rendered in SweetAlert above the page. Close only
+    // transient UI controls; their instances and selected values remain intact
+    // when the dialog is dismissed.
+    document.querySelectorAll('select.tomselected').forEach((select) => select.tomselect?.close());
+
+    document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach((toggle) => {
+        window.bootstrap?.Dropdown?.getInstance(toggle)?.hide();
+    });
+
+    if (window.jQuery?.fn?.select2) {
+        window.jQuery('.select2-hidden-accessible').each(function closeSelect2() {
+            window.jQuery(this).select2('close');
+        });
+    }
+
+    if (document.activeElement instanceof HTMLSelectElement) document.activeElement.blur();
+}
+
 document.addEventListener('submit', (event) => {
     const deleteForm = event.target.closest?.('form[data-tf-company-delete]');
     if (deleteForm && deleteForm.dataset.tfCompanyDeleteApproved !== '1') {
         event.preventDefault();
         if (!window.Swal) return;
         const companyName = deleteForm.dataset.companyName || 'this company';
+        const trigger = event.submitter instanceof HTMLElement
+            ? event.submitter
+            : deleteForm.querySelector('button[type="submit"], button:not([type])');
+        closeCompanyDeleteBackgroundControls();
         window.Swal.fire({
             icon: 'warning',
             title: 'Permanently delete company?',
@@ -612,6 +654,21 @@ document.addEventListener('submit', (event) => {
             confirmButtonColor: '#dc3545',
             reverseButtons: true,
             focusConfirm: false,
+            allowEscapeKey: true,
+            allowOutsideClick: true,
+            returnFocus: true,
+            willOpen: () => {
+                closeCompanyDeleteBackgroundControls();
+                document.body.classList.add('tf-company-delete-modal-open');
+            },
+            didOpen: (popup) => popup.querySelector('input[type="password"]')?.focus(),
+            willClose: () => {
+                closeCompanyDeleteBackgroundControls();
+                document.body.classList.remove('tf-company-delete-modal-open');
+            },
+            didClose: () => {
+                if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+            },
             inputValidator: (value) => value ? undefined : 'Enter your Super Admin password to continue.',
         }).then((result) => {
             if (!result.isConfirmed) return;
@@ -668,6 +725,7 @@ new MutationObserver((changes) => changes.forEach((change) => {
         initTradeFlowCodeLookups(node);
         initNonNegativeNumberGuards(node);
         initTradeFlowMoneyInputs(node);
+        initTradeFlowPasswordControls(node);
     });
 })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 
@@ -706,13 +764,127 @@ function initTradeFlowMoneyInputs(root = document) {
 window.initTradeFlowMoneyInputs = initTradeFlowMoneyInputs;
 initTradeFlowMoneyInputs();
 
-document.querySelectorAll('[data-tf-password-toggle]').forEach((button) => {
-    button.addEventListener('click', () => {
-        const inputSelector = button.dataset.tfPasswordToggle;
-        const iconSelector = button.dataset.tfPasswordIcon || `#${button.querySelector('i')?.id}`;
-        togglePassword(inputSelector, iconSelector);
+let tradeFlowPasswordFieldId = 0;
+
+function passwordFeedback(input, kind, fallbackSelector = '') {
+    const form = input.closest('form');
+    const existing = fallbackSelector ? form?.querySelector(fallbackSelector) : null;
+    if (existing) return existing;
+
+    const marker = `tfPassword${kind}Feedback`;
+    if (input.dataset[marker]) return document.getElementById(input.dataset[marker]);
+
+    const feedback = document.createElement('div');
+    feedback.className = 'invalid-feedback';
+    feedback.dataset.tfPasswordFeedback = kind;
+    const host = input.closest('.input-group') || input;
+    host.insertAdjacentElement('afterend', feedback);
+    feedback.id = `tf-password-${kind}-${++tradeFlowPasswordFieldId}`;
+    input.dataset[marker] = feedback.id;
+    return feedback;
+}
+
+function initTradeFlowPasswordControls(root = document) {
+    const passwordInputs = root.matches?.('input[type="password"], input[type="text"][data-tf-password-field]')
+        ? [root]
+        : [...(root.querySelectorAll?.('input[type="password"], input[type="text"][data-tf-password-field]') || [])];
+
+    passwordInputs.forEach((input) => {
+        if (!input.name || !/(^|_)password(?:_confirmation)?$/.test(input.name)) return;
+        input.dataset.tfPasswordField = '1';
+        if (!input.id) input.id = `tf-password-field-${++tradeFlowPasswordFieldId}`;
+
+        let group = input.closest('.input-group');
+        if (!group) {
+            group = document.createElement('div');
+            group.className = 'input-group';
+            input.parentNode?.insertBefore(group, input);
+            group.append(input);
+        }
+
+        if (group.querySelector(`[data-tf-password-toggle="#${CSS.escape(input.id)}"]`)) return;
+        const button = document.createElement('button');
+        const icon = document.createElement('i');
+        const iconId = `tf-password-icon-${++tradeFlowPasswordFieldId}`;
+        button.type = 'button';
+        button.className = 'btn btn-outline-secondary tf-password-toggle';
+        button.dataset.tfPasswordToggle = `#${input.id}`;
+        button.dataset.tfPasswordIcon = `#${iconId}`;
+        button.setAttribute('aria-label', input.name.includes('confirmation') ? 'Show password confirmation' : 'Show password');
+        icon.id = iconId;
+        icon.className = 'bi bi-eye';
+        button.append(icon);
+        group.append(button);
     });
-});
+
+    const toggles = root.matches?.('[data-tf-password-toggle]')
+        ? [root]
+        : [...(root.querySelectorAll?.('[data-tf-password-toggle]') || [])];
+    toggles.forEach((button) => {
+        if (button.dataset.tfPasswordToggleReady === '1') return;
+        button.dataset.tfPasswordToggleReady = '1';
+        button.addEventListener('click', () => {
+            const inputSelector = button.dataset.tfPasswordToggle;
+            const iconSelector = button.dataset.tfPasswordIcon || `#${button.querySelector('i')?.id}`;
+            togglePassword(inputSelector, iconSelector);
+        });
+    });
+
+    const forms = root.matches?.('form') ? [root] : [...(root.querySelectorAll?.('form') || [])];
+    forms.forEach((form) => {
+        // These two wizard forms already provide their own single validation
+        // state and inline feedback; keep them authoritative to avoid a
+        // second listener/message for the same password fields.
+        if (form.matches('[data-tf-register-form], [data-company-create-form]')) return;
+        if (form.dataset.tfPasswordValidationReady === '1') return;
+        const confirmations = [...form.querySelectorAll('input[name$="password_confirmation"]')];
+        if (!confirmations.length) return;
+        form.dataset.tfPasswordValidationReady = '1';
+
+        const validate = () => {
+            let valid = true;
+            confirmations.forEach((confirmation) => {
+                const passwordName = confirmation.name.replace(/_confirmation$/, '');
+                const password = form.querySelector(`input[name="${CSS.escape(passwordName)}"]`);
+                if (!password) return;
+
+                password.minLength = 8;
+                const strengthInvalid = Boolean(password.value) && !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password.value);
+                const mismatch = Boolean(confirmation.value) && password.value !== confirmation.value;
+                const strengthMessage = 'Use at least 8 characters with uppercase, lowercase, number, and special character.';
+                const matchMessage = 'Password and confirm password do not match.';
+                const strength = passwordFeedback(password, 'strength');
+                const match = passwordFeedback(confirmation, 'match', '[data-staff-password-match-error], [data-company-password-error]');
+
+                password.classList.toggle('is-invalid', strengthInvalid);
+                password.setCustomValidity(strengthInvalid ? strengthMessage : '');
+                strength.textContent = strengthInvalid ? strengthMessage : '';
+                strength.classList.toggle('d-block', strengthInvalid);
+
+                confirmation.classList.toggle('is-invalid', mismatch);
+                confirmation.setCustomValidity(mismatch ? matchMessage : '');
+                match.textContent = mismatch ? matchMessage : '';
+                match.classList.toggle('d-block', mismatch);
+                valid = valid && !strengthInvalid && !mismatch;
+            });
+            return valid;
+        };
+
+        form.addEventListener('input', (event) => {
+            if (event.target instanceof HTMLInputElement && /(password|password_confirmation)$/.test(event.target.name)) validate();
+        });
+        form.addEventListener('submit', (event) => {
+            if (!validate()) {
+                event.preventDefault();
+                form.reportValidity();
+            }
+        });
+        validate();
+    });
+}
+
+window.initTradeFlowPasswordControls = initTradeFlowPasswordControls;
+initTradeFlowPasswordControls();
 
 function initPasswordResetRequestForm(form) {
     if (!form || form.dataset.passwordResetReady === '1') return;
@@ -1000,34 +1172,6 @@ document.addEventListener('change', (event) => {
 });
 
 document.querySelectorAll('[data-staff-form]').forEach((form) => TradeFlowPermissions.syncForm(form));
-
-function initStaffPasswordForm(form) {
-    if (!form || form.dataset.staffPasswordReady === '1') return;
-    form.dataset.staffPasswordReady = '1';
-    const password = form.querySelector('[data-staff-password]');
-    const confirmation = form.querySelector('[data-staff-password-confirmation]');
-    const error = form.querySelector('[data-staff-password-match-error]');
-
-    const validate = () => {
-        if (!password || !confirmation) return true;
-        const mismatch = Boolean(confirmation.value) && password.value !== confirmation.value;
-        confirmation.classList.toggle('is-invalid', mismatch);
-        error?.classList.toggle('d-block', mismatch);
-        confirmation.setCustomValidity(mismatch ? 'Password and confirm password do not match.' : '');
-        return !mismatch;
-    };
-
-    password?.addEventListener('input', validate);
-    confirmation?.addEventListener('input', validate);
-    form.addEventListener('submit', (event) => {
-        if (!validate() || !form.checkValidity()) {
-            event.preventDefault();
-            form.reportValidity();
-        }
-    });
-}
-
-document.querySelectorAll('[data-staff-password-form]').forEach(initStaffPasswordForm);
 
 // Staff/user drafts are intentionally disabled: credentials and uploads must
 // never be persisted in browser storage.

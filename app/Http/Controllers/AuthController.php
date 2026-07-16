@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 
 class AuthController extends Controller
 {
@@ -137,7 +138,7 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')],
             'phone' => ['nullable', 'regex:/^\d{11}$/'],
-            'password' => ['required', 'confirmed', 'min:8'],
+            'password' => ['required', 'confirmed', PasswordRule::min(8)->mixedCase()->numbers()->symbols()],
             'role' => ['nullable', Rule::in(['retailer', 'business_owner'])],
         ]);
 

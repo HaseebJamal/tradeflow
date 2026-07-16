@@ -636,6 +636,15 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
 .dropdown { position: relative; }
 .dropdown-menu { max-height: min(70vh, 34rem); overflow-y: auto; z-index: 1090; }
 
+/* Company action menus sit above the filter card and any portaled filter UI. */
+.admin-company-table.tf-dropdown-open { position: relative; z-index: 1100; }
+.admin-company-table .dropdown-menu { background-color: var(--bs-dropdown-bg, #fff); isolation: isolate; opacity: 1; z-index: 1110; }
+
+/* Company deletion uses SweetAlert. It must always sit above portaled
+   Tom Select and Bootstrap menus, while SweetAlert handles its focus trap. */
+body.tf-company-delete-modal-open { overflow: hidden !important; overscroll-behavior: none; }
+.swal2-container { z-index: 2000 !important; }
+
 /* Tom Select keeps selected values in the control and search in the open panel. */
 .ts-wrapper { position: relative; width: 100%; }
 .ts-control { align-items: center; cursor: pointer; display: flex; min-height: 40px; }
@@ -716,8 +725,8 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
 
 /* Keep staff actions above the responsive table without affecting its normal scroll state. */
 .staff-table-wrap { position: relative; }
-.staff-table-wrap.tf-dropdown-open { overflow: visible !important; }
-.staff-table-wrap .dropdown-menu { max-height: min(320px, calc(100vh - 24px)); min-width: 175px; z-index: 1100; }
+.staff-table-wrap.tf-dropdown-open { overflow: visible !important; position: relative; z-index: 1120; }
+.staff-table-wrap .dropdown-menu { max-height: min(70vh, 34rem); min-width: 175px; z-index: 1130; }
 
 .btn:hover {
     box-shadow: 0 10px 22px rgba(37, 99, 235, .16);

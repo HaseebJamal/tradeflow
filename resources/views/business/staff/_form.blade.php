@@ -9,7 +9,7 @@
     $passwordIconId = $editing ? 'staffPasswordIcon'.$staffMember->id : 'staffPasswordCreateIcon';
     $confirmId = $editing ? 'staffPasswordConfirm'.$staffMember->id : 'staffPasswordConfirmCreate';
     $confirmIconId = $editing ? 'staffPasswordConfirmIcon'.$staffMember->id : 'staffPasswordConfirmCreateIcon';
-    $currentRole = old('role', $staffMember->role ?? '');
+    $currentRole = old('role', $editing ? ($staffMember?->staffProfile?->custom_role_name ?: 'Custom Role') : '');
 @endphp
 
 <form method="POST" action="{{ $editing ? route('business.staff.update', $staffMember) : route('business.staff.store') }}" enctype="multipart/form-data" class="row g-3" data-staff-form data-company-permission-form novalidate>
@@ -35,17 +35,11 @@
     <div class="col-md-3"><label for="staff-address" class="form-label">Address <span class="tf-muted small">Optional</span></label><input id="staff-address" name="address" class="form-control @error('address') is-invalid @enderror" value="{{ old('address', $staffMember?->staffProfile?->address ?? '') }}" maxlength="1000">@error('address')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
 
     <div class="col-12 mt-2"><h3 class="h6 mb-0">Job Information</h3></div>
-    <div class="col-md-3"><label for="staff-employee-id" class="form-label">Employee ID <span class="text-danger" aria-hidden="true">*</span></label><input id="staff-employee-id" name="employee_id" class="form-control @error('employee_id') is-invalid @enderror" value="{{ old('employee_id', $staffMember?->staffProfile?->employee_id ?? '') }}" maxlength="100" required>@error('employee_id')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
     <div class="col-md-3">
         <label for="staff-role" class="form-label">Role <span class="text-danger" aria-hidden="true">*</span></label>
-        <input type="hidden" name="role" value="custom_staff"><input id="staff-role" class="form-control" value="Custom Role" readonly>
+        <input id="staff-role" name="role" list="staff-role-options" class="form-control @error('role') is-invalid @enderror" value="{{ $currentRole }}" maxlength="100" autocomplete="off" required>
+        <datalist id="staff-role-options">@foreach($customRoleNames ?? [] as $roleName)<option value="{{ $roleName }}">@endforeach</datalist>
         @error('role')<div class="invalid-feedback">{{ $message }}</div>@enderror
-    </div>
-    <div class="col-md-3" data-custom-role-field>
-        <label for="staff-custom-role" class="form-label">Custom Role Name <span class="text-danger" aria-hidden="true">*</span></label>
-        <input id="staff-custom-role" name="custom_role_name" list="staff-custom-role-options" class="form-control @error('custom_role_name') is-invalid @enderror" value="{{ old('custom_role_name', $staffMember?->staffProfile?->custom_role_name ?? '') }}" maxlength="100" data-custom-role-input required>
-        <datalist id="staff-custom-role-options">@foreach($customRoleNames ?? [] as $roleName)<option value="{{ $roleName }}">@endforeach</datalist>
-        @error('custom_role_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
     <div class="col-md-3"><label for="staff-employment-type" class="form-label">Employment Type <span class="text-danger" aria-hidden="true">*</span></label><select id="staff-employment-type" name="employment_type" class="form-select @error('employment_type') is-invalid @enderror" required>@foreach(['Full Time','Part Time','Temporary'] as $type)<option @selected(old('employment_type', $staffMember?->staffProfile?->employment_type ?? 'Full Time') === $type)>{{ $type }}</option>@endforeach</select>@error('employment_type')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
     <div class="col-md-3"><label for="staff-joining-date" class="form-label">Joining Date <span class="text-danger" aria-hidden="true">*</span></label><input id="staff-joining-date" name="joining_date" type="date" class="form-control @error('joining_date') is-invalid @enderror" value="{{ old('joining_date', $editing ? optional($staffMember?->staffProfile?->joining_date)->format('Y-m-d') : now()->toDateString()) }}" required>@error('joining_date')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
@@ -80,22 +74,3 @@
 
     <div class="col-12"><button class="btn btn-tf-primary" data-staff-submit>{{ $editing ? 'Update User Account' : 'Create User Account' }}</button>@if($editing)<a href="{{ route('business.staff.show', $staffMember) }}" class="btn btn-outline-secondary">Cancel</a>@endif</div>
 </form>
-
-<script>
-document.querySelectorAll('[data-staff-form]').forEach((form) => {
-    const password = form.querySelector('[data-staff-password]');
-    const confirmation = form.querySelector('[data-staff-password-confirmation]');
-    const passwordError = form.querySelector('[data-staff-password-match-error]');
-    const validatePasswords = () => {
-        if (!password || !confirmation) return true;
-        const mismatch = Boolean(confirmation.value) && password.value !== confirmation.value;
-        confirmation.classList.toggle('is-invalid', mismatch);
-        passwordError?.classList.toggle('d-block', mismatch);
-        confirmation.setCustomValidity(mismatch ? 'Password and confirm password do not match.' : '');
-        return !mismatch;
-    };
-    password?.addEventListener('input', validatePasswords);
-    confirmation?.addEventListener('input', validatePasswords);
-    form.addEventListener('submit', (event) => { if (!validatePasswords() || !form.checkValidity()) { event.preventDefault(); form.reportValidity(); } });
-});
-</script>
