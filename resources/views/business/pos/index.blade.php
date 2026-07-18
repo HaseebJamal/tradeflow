@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     new MutationObserver(syncCartControls).observe(cartElement,{childList:true,subtree:true});
     paymentsElement.addEventListener('input',()=>updateSummary(totals()));document.getElementById('pos-add-payment')?.addEventListener('click',()=>{paymentsElement.insertAdjacentHTML('beforeend',paymentRow(paymentsElement.querySelectorAll('.payment-row').length));window.initTradeFlowTomSelect?.(paymentsElement);});document.getElementById('pos-customer').addEventListener('change',event=>document.getElementById('pos-new-customer').classList.toggle('d-none',event.target.value!=='new'));document.getElementById('pos-clear-cart').addEventListener('click',()=>{cart.clear();render();focusBarcode();});['pos-discount-value','pos-discount-type','pos-tax-rate','pos-payment-mode'].forEach(id=>{const input=document.getElementById(id);input.addEventListener('input',render);input.addEventListener('change',render);});
     holdButton.addEventListener('click',()=>{if(sessionStorage.getItem(holdKey)){restoreHeldSale();return;}if(!cart.size){window.Swal?.fire({icon:'info',title:'Cart is empty',text:'Add at least one product before holding this sale.'});return;}sessionStorage.setItem(holdKey,JSON.stringify(holdState()));cart.clear();form.reset();paymentsElement.innerHTML='';document.getElementById('pos-new-customer').classList.add('d-none');syncSelect(entryProduct);syncSelect(document.getElementById('pos-customer'));syncSelect(document.getElementById('pos-discount-type'));syncSelect(paymentMode);render();refreshHoldButton();focusBarcode();window.Swal?.fire({icon:'success',title:'Sale held',text:'The cart is saved for this browser session and can be resumed from POS.'});});
-    form.addEventListener('submit',event=>{if(!cart.size){event.preventDefault();window.Swal?.fire({icon:'info',title:'Cart is empty',text:'Add at least one product before completing this sale.'});return;}if(!form.checkValidity())return;if(form.dataset.submitting==='1'){event.preventDefault();return;}form.dataset.submitting='1';sessionStorage.removeItem(holdKey);if(completeButton){completeButton.disabled=true;completeButton.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>Completing Sale';}});
+    form.addEventListener('submit',event=>{if(!cart.size){event.preventDefault();window.Swal?.fire({icon:'info',title:'Cart is empty',text:'Add at least one product before completing this sale.'});return;}if(form.dataset.submitting==='1'){event.preventDefault();return;}form.dataset.submitting='1';sessionStorage.removeItem(holdKey);if(completeButton){completeButton.disabled=true;completeButton.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>Completing Sale';}});
     syncEntry();render();syncCartControls();refreshHoldButton();focusBarcode();
 });
 </script>
@@ -249,7 +249,22 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     };
 
-    const saleIsReady = () => cartIsValid() && customerIsValid() && form.checkValidity() && form.dataset.submitting !== '1';
+    const checkoutIsValid = () => {
+        const discount = Number(form.querySelector('#pos-discount-value')?.value || 0);
+        const tax = Number(form.querySelector('#pos-tax-rate')?.value || 0);
+        const ratesAreValid = Number.isInteger(discount) && discount >= 0
+            && Number.isInteger(tax) && tax >= 0 && tax <= 100;
+
+        if (!ratesAreValid) return false;
+
+        if (customer?.value !== 'new') return true;
+
+        return Boolean(
+            form.querySelector('[name="new_customer_name"]')?.value.trim()
+            || form.querySelector('[name="new_customer_phone"]')?.value.trim()
+        );
+    };
+    const saleIsReady = () => cartIsValid() && customerIsValid() && checkoutIsValid() && form.dataset.submitting !== '1';
     const syncCompleteButton = () => {
         if (completeButton) completeButton.disabled = !saleIsReady();
     };

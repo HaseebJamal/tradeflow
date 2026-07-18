@@ -24,7 +24,7 @@
     </div>
 </form>
 <x-table class="product-list-table">
-    <thead><tr><th>Image</th><th>Product</th><th>Category</th><th>Unit</th><th>Latest Purchase</th><th>Average Purchase</th><th>Wholesale</th><th>Stock</th><th>Barcode</th><th>Status</th><th>Created</th><th class="text-end">Actions</th></tr></thead>
+    <thead><tr><th>Image</th><th>Product</th><th>Category</th><th>Unit</th><th>Latest P.</th><th>Avg. P.</th><th>Retail Price</th><th>Stock</th><th>Barcode</th><th>Status</th><th>Created</th><th class="text-end">Actions</th></tr></thead>
     <tbody>
     @forelse($products ?? [] as $product)
         <tr>
@@ -34,7 +34,7 @@
             <td>{{ $product->unit }}</td>
             <td>{{ $product->latest_purchase_price !== null ? 'Rs '.number_format($product->latest_purchase_price, 2) : '-' }}</td>
             <td>{{ $product->average_purchase_price !== null ? 'Rs '.number_format($product->average_purchase_price, 2) : '-' }}</td>
-            <td>Rs {{ number_format($product->wholesale_price, 2) }}</td>
+            <td>Rs {{ number_format($product->retail_price, 2) }}</td>
             <td>{{ $product->stock_quantity }}</td>
             <td>{{ $product->barcode ?: '-' }}</td>
             <td><span class="tf-badge {{ $product->status === 'Active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $product->deleted_at ? 'Archived' : $product->status }}</span></td>

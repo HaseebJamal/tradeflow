@@ -177,9 +177,9 @@ class ProductController extends Controller
         return view('business.products.create', [
             'product' => $product,
             'categories' => Category::where('business_id', auth()->user()->business_id)->where('type', 'Product')
-                ->where(fn ($query) => $query->where('status', 'Active')->orWhereKey($product->category_id))->orderBy('name')->get(),
+                ->where(fn ($query) => $query->where('status', 'Active')->orWhere('id', $product->category_id))->orderBy('name')->get(),
             'units' => Unit::where('business_id', auth()->user()->business_id)
-                ->where(fn ($query) => $query->where('status', 'Active')->orWhereKey($product->unit_id))
+                ->where(fn ($query) => $query->where('status', 'Active')->orWhere('id', $product->unit_id))
                 ->orderBy('unit_name')
                 ->get(),
         ]);

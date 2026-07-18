@@ -40,7 +40,7 @@
                 <section class="tf-card p-4" data-product-section>
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                         <div>
-                            <h2 class="h5 mb-1" data-product-heading>Product {{ $loop->iteration }}</h2>
+                            <h2 class="h5 mb-1" data-product-heading>{{ $loop->first ? 'Product' : 'Product '.$loop->iteration }}</h2>
                             <p class="tf-muted mb-0">Product identity and tracking details.</p>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-danger" data-remove-product @if($loop->first) hidden @endif><i class="bi bi-trash me-1"></i>Remove Product</button>
@@ -89,7 +89,7 @@
 
         const updateSections = () => {
             [...sections.querySelectorAll('[data-product-section]')].forEach((section, index) => {
-                section.querySelector('[data-product-heading]').textContent = `Product ${index + 1}`;
+                section.querySelector('[data-product-heading]').textContent = index === 0 ? 'Product' : `Product ${index + 1}`;
                 const removeButton = section.querySelector('[data-remove-product]');
                 if (removeButton) removeButton.hidden = index === 0;
 
