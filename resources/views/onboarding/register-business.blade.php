@@ -28,7 +28,7 @@
                             <div class="alert alert-danger">Please correct the highlighted fields and continue from this step.</div>
                         @endif
                         @if (session('success'))
-                            <div class="alert alert-success" data-tf-registration-complete>{{ session('success') }}</div>
+                            <div class="alert alert-success d-none" data-tf-registration-complete data-tf-persistent-alert data-redirect-url="{{ route('public.home') }}">{{ session('success') }}</div>
                         @endif
                         <div class="alert alert-info d-none" data-tf-register-restored data-tf-auto-dismiss>
                             Your saved registration draft has been restored. For security, please re-enter your password and select the verification files again.
@@ -132,13 +132,14 @@
 
                             <div class="tf-step-panel" data-tf-step-panel="3">
                                 <h2 class="h4 fw-bold">Verification Upload</h2>
-                                <p class="tf-muted small">Upload PDF, JPG, JPEG, or PNG files up to 5 MB. Shop image accepts JPG, JPEG, or PNG.</p>
+                                <p class="tf-muted small">Files are checked for their real type and then manually verified by Super Admin. Each upload must be a separate, readable file up to 5 MB.</p>
                                 <div class="row g-3 mt-1">
                                     <div class="col-md-4">
                                         <div class="tf-upload">
                                             <i class="bi bi-card-image h2 text-blue"></i>
                                             <label class="h6 d-block" for="cnic_image">CNIC Upload <span class="text-danger" aria-hidden="true">*</span></label>
-                                            <input id="cnic_image" name="cnic_image" class="form-control @error('cnic_image') is-invalid @enderror" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required data-register-file>
+                                            <input id="cnic_image" name="cnic_image" class="form-control @error('cnic_image') is-invalid @enderror" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required data-register-file data-document-purpose="cnic_image">
+                                            <small class="tf-muted d-block mt-1">CNIC front/back image or CNIC PDF only.</small>
                                             <small class="tf-muted" data-file-name="cnic_image">No file selected.</small>
                                             <div class="invalid-feedback d-block" data-register-error="cnic_image">@error('cnic_image'){{ $message }}@enderror</div>
                                         </div>
@@ -147,7 +148,8 @@
                                         <div class="tf-upload">
                                             <i class="bi bi-file-earmark-arrow-up h2 text-blue"></i>
                                             <label class="h6 d-block" for="business_document">Business Document <span class="text-danger" aria-hidden="true">*</span></label>
-                                            <input id="business_document" name="business_document" class="form-control @error('business_document') is-invalid @enderror" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required data-register-file>
+                                            <input id="business_document" name="business_document" class="form-control @error('business_document') is-invalid @enderror" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required data-register-file data-document-purpose="business_document">
+                                            <small class="tf-muted d-block mt-1">Registration, NTN/tax, license, partnership, or company proof.</small>
                                             <small class="tf-muted" data-file-name="business_document">No file selected.</small>
                                             <div class="invalid-feedback d-block" data-register-error="business_document">@error('business_document'){{ $message }}@enderror</div>
                                         </div>
@@ -156,7 +158,8 @@
                                         <div class="tf-upload">
                                             <i class="bi bi-shop h2 text-blue"></i>
                                             <label class="h6 d-block" for="shop_image">Shop / Business Image <span class="text-danger" aria-hidden="true">*</span></label>
-                                            <input id="shop_image" name="shop_image" class="form-control @error('shop_image') is-invalid @enderror" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required data-register-file>
+                                            <input id="shop_image" name="shop_image" class="form-control @error('shop_image') is-invalid @enderror" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required data-register-file data-document-purpose="shop_image">
+                                            <small class="tf-muted d-block mt-1">A clear photo of the shop, office, warehouse, or other business premises.</small>
                                             <small class="tf-muted" data-file-name="shop_image">No file selected.</small>
                                             <div class="invalid-feedback d-block" data-register-error="shop_image">@error('shop_image'){{ $message }}@enderror</div>
                                         </div>

@@ -10,12 +10,13 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Services\FinanceCalculator;
+use App\Services\DocumentNumberService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class RetailerController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance) {}
+    public function __construct(private FinanceCalculator $finance, private DocumentNumberService $numbers) {}
 
     public function dashboard()
     {
@@ -47,7 +48,7 @@ class RetailerController extends Controller
                 ['business_id' => $data['business_id'], 'phone' => auth()->user()->phone],
                 ['name' => auth()->user()->name, 'business_name' => auth()->user()->name, 'customer_type' => 'Retailer', 'status' => 'Active']
             );
-            $order = Order::create(['order_number' => 'RTL-'.now()->format('ymdHis'), 'business_id' => $data['business_id'], 'customer_id' => $customer->id, 'retailer_id' => auth()->id()]);
+            $order = Order::create(['order_number' => $this->numbers->next('sales'), 'business_id' => $data['business_id'], 'customer_id' => $customer->id, 'retailer_id' => auth()->id()]);
             $subtotal = 0;
             foreach ($data['products'] as $line) {
                 $product = Product::where('business_id', $data['business_id'])->findOrFail($line['id']);

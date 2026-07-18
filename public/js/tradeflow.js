@@ -147,6 +147,12 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         const placeholderOption = [...element.options].find((option) => option.value === '');
         const isMultiple = element.multiple;
         const canClear = isMultiple || !element.required;
+        // The Create Order controls live in a compact inline form.  Portaling
+        // their dropdowns (and the dropdown_input search field) to <body>
+        // can leave that generated input between form sections.  Keep these
+        // dropdowns inside their own Tom Select wrapper instead.  This is
+        // intentionally route-scoped; other selects retain body portal logic.
+        const useInlineOrderDropdown = Boolean(element.closest('[data-order-form]'));
 
         const control = new window.TomSelect(element, {
             create: false,
@@ -158,10 +164,14 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
             searchField: ['text'],
             placeholder: element.dataset.placeholder || element.getAttribute('placeholder') || placeholderOption?.textContent?.trim() || 'Select an option',
             plugins: {
-                dropdown_input: {},
+                // This plugin is the only source that creates a standalone
+                // search <input>.  On Create Order it previously became an
+                // orphaned field between the customer and item sections.
+                // Native Tom Select search remains available in its control.
+                ...(!useInlineOrderDropdown ? { dropdown_input: {} } : {}),
                 ...(canClear ? { clear_button: { title: 'Clear selection' } } : {}),
             },
-            dropdownParent: 'body',
+            dropdownParent: useInlineOrderDropdown ? null : 'body',
             position: 'auto',
             render: {
                 no_results: () => '<div class="no-results">No matching records found</div>',
@@ -201,7 +211,32 @@ function initTradeFlowBootstrapDropdowns(root = document) {
     });
 }
 
+function initTradeFlowNotificationDropdowns(root = document) {
+    const toggles = root.matches?.('[data-tf-notification-toggle]')
+        ? [root]
+        : [...(root.querySelectorAll?.('[data-tf-notification-toggle]') || [])];
+
+    toggles.forEach((toggle) => {
+        if (toggle.dataset.tradeFlowNotificationReady === '1' || !window.bootstrap?.Dropdown) return;
+        toggle.dataset.tradeFlowNotificationReady = '1';
+        const dropdown = toggle.closest('.tf-notification-dropdown');
+        const menu = dropdown?.querySelector('.tf-notification-menu');
+        const instance = window.bootstrap.Dropdown.getOrCreateInstance(toggle, {
+            boundary: 'viewport',
+            display: 'dynamic',
+        });
+
+        menu?.addEventListener('click', (event) => {
+            if (event.target.closest('a')) instance.hide();
+        });
+
+        toggle.addEventListener('shown.bs.dropdown', () => toggle.setAttribute('aria-expanded', 'true'));
+        toggle.addEventListener('hidden.bs.dropdown', () => toggle.setAttribute('aria-expanded', 'false'));
+    });
+}
+
 initTradeFlowBootstrapDropdowns();
+initTradeFlowNotificationDropdowns();
 
 // Automatically cover HTML appended by modal, AJAX, or inline form scripts.
 let tradeFlowTomSelectFrame;
@@ -215,6 +250,8 @@ new MutationObserver((records) => {
     tradeFlowTomSelectFrame = requestAnimationFrame(() => roots.forEach((root) => {
         window.initTradeFlowTomSelect(root);
         initTradeFlowBootstrapDropdowns(root);
+        initTradeFlowNotificationDropdowns(root);
+        initNonNegativeNumberGuards(root);
         initTradeFlowSidebarSubmenus(root);
         initTradeFlowStaffActionDropdowns(root);
     }));
@@ -392,43 +429,79 @@ function initNonNegativeNumberGuards(root = document) {
     fields.forEach((field) => {
         if (field.dataset.nonNegativeReady === '1') return;
         field.dataset.nonNegativeReady = '1';
-        const name = (field.name || '').toLowerCase();
-        const wholeNumber = /(quantity|qty|stock|units?|count|days?|alert)/.test(name);
-        if (!field.hasAttribute('min')) field.min = '0';
-        if (!field.hasAttribute('step')) field.step = wholeNumber ? '1' : '0.01';
+        const descriptor = [
+            field.name,
+            field.id,
+            field.placeholder,
+            ...[...field.attributes].map((attribute) => `${attribute.name} ${attribute.value}`),
+        ].filter(Boolean).join(' ').toLowerCase();
+        const requiresPositiveQuantity = /(quantity|qty|received|returned|return|damaged|damage)/.test(descriptor);
+        const preventsAccidentalStepperChanges = /(quantity|qty|stock|price|cost|discount|tax|amount|payment|paid|received|return|damaged|damage|balance)/.test(descriptor);
+
+        if (preventsAccidentalStepperChanges) {
+            field.classList.add('js-no-number-spinner', 'js-no-wheel-change');
+        }
+
+        if (!field.hasAttribute('min')) field.min = requiresPositiveQuantity ? '1' : '0';
+        field.step = '1';
+        field.inputMode = 'numeric';
+
+        const feedbackFor = () => {
+            if (!field.id) field.id = `tradeflow-number-${Math.random().toString(36).slice(2)}`;
+            let feedback = document.querySelector(`[data-tradeflow-number-feedback="${field.id}"]`);
+            if (feedback) return feedback;
+            feedback = document.createElement('div');
+            feedback.className = 'invalid-feedback d-none';
+            feedback.dataset.tradeflowNumberFeedback = field.id;
+            feedback.textContent = 'Only whole numbers are allowed.';
+            (field.closest('.input-group') || field).insertAdjacentElement('afterend', feedback);
+            return feedback;
+        };
+
+        const setWholeNumberValidity = () => {
+            const valid = field.value === '' || /^\d+$/.test(field.value);
+            const feedback = feedbackFor();
+            field.classList.toggle('is-invalid', !valid);
+            feedback.classList.toggle('d-none', valid);
+            field.setCustomValidity(valid ? '' : 'Only whole numbers are allowed.');
+            return valid;
+        };
 
         const rejectNegativeValue = () => {
-            if (field.value === '' || Number(field.value) >= 0) {
-                field.setCustomValidity('');
-                return false;
-            }
-            field.value = '';
-            field.setCustomValidity('Negative values are not allowed.');
-            return true;
+            return setWholeNumberValidity();
         };
 
         field.addEventListener('keydown', (event) => {
-            if (['-', '+', 'e', 'E'].includes(event.key)) event.preventDefault();
+            if (['-', '+', 'e', 'E', '.', ','].includes(event.key)) event.preventDefault();
         });
         field.addEventListener('beforeinput', (event) => {
-            if (event.data && /[-+eE]/.test(event.data)) event.preventDefault();
+            if (event.data && /[^\d]/.test(event.data)) event.preventDefault();
         });
         field.addEventListener('paste', (event) => {
-            const pasted = event.clipboardData?.getData('text') || '';
-            if (/[-+]/.test(pasted) || (wholeNumber && /[.eE]/.test(pasted))) {
+            const pasted = event.clipboardData?.getData('text')?.trim() || '';
+            if (!/^\d+$/.test(pasted)) {
                 event.preventDefault();
-                field.setCustomValidity('Negative values are not allowed.');
+                field.classList.add('is-invalid');
+                feedbackFor().classList.remove('d-none');
+                field.setCustomValidity('Only whole numbers are allowed.');
             }
         });
-        field.addEventListener('wheel', (event) => {
-            if (document.activeElement === field) event.preventDefault();
-        }, { passive: false });
         field.addEventListener('input', rejectNegativeValue);
         field.addEventListener('change', rejectNegativeValue);
     });
 }
 
 initNonNegativeNumberGuards();
+
+// Delegation also covers dynamically added sale, purchase, POS, and return
+// rows. Only a wheel event on the focused transactional input is prevented,
+// so regular page scrolling remains available everywhere else.
+document.addEventListener('wheel', (event) => {
+    const field = document.activeElement;
+    if (!(field instanceof HTMLInputElement) || !field.classList.contains('js-no-wheel-change')) return;
+    if (event.target !== field) return;
+    event.preventDefault();
+}, { passive: false });
 
 // Forms opt in to a predictable keyboard sequence. This works for both auth
 // forms and multi-step onboarding, while excluding hidden/disabled fields.
@@ -538,7 +611,7 @@ function showTradeFlowAlert(alert) {
 
     window.Swal.fire({
         icon,
-        title: icon === 'success' ? 'Completed' : icon === 'error' ? 'Please review' : 'TradeFlow',
+        title: alert.dataset.tfAlertTitle || (icon === 'success' ? 'Completed' : icon === 'error' ? 'Please review' : 'TradeFlow'),
         text: message,
         toast: icon !== 'error',
         position: icon === 'error' ? 'center' : 'top-end',
@@ -1334,7 +1407,6 @@ document.querySelector('[data-save-quick-customer]')?.addEventListener('click', 
     const values = {
         '[data-new-customer-name]': name,
         '[data-new-customer-shop]': getValue('[data-modal-customer-shop]'),
-        '[data-new-customer-phone]': phone,
         '[data-new-customer-city]': getValue('[data-modal-customer-city]'),
         '[data-new-customer-address]': getValue('[data-modal-customer-address]'),
         '[data-new-customer-type]': getValue('[data-modal-customer-type]') || 'Retailer',
@@ -1534,3 +1606,74 @@ function initCompanyCreateForm(form) {
 }
 
 document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreateForm);
+
+// Reusable, opt-in integer guard. Pages opt in with .js-whole-number so
+// existing decimal-based financial workflows remain untouched.
+(() => {
+    const selector = 'input.js-whole-number, input[data-whole-number]';
+    const blockedKeys = new Set(['e', 'E', '+', '-', '.', ',']);
+
+    const feedbackFor = (input) => {
+        if (!input.id) input.id = `whole-number-${Math.random().toString(36).slice(2)}`;
+
+        let feedback = document.querySelector(`[data-whole-number-feedback="${input.id}"]`);
+        if (feedback) return feedback;
+
+        feedback = document.createElement('div');
+        feedback.className = 'invalid-feedback d-none';
+        feedback.dataset.wholeNumberFeedback = input.id;
+        feedback.textContent = 'Only whole numbers are allowed.';
+        (input.closest('.input-group') || input).insertAdjacentElement('afterend', feedback);
+        return feedback;
+    };
+
+    const setError = (input, invalid) => {
+        const feedback = feedbackFor(input);
+        input.classList.toggle('is-invalid', invalid);
+        feedback.classList.toggle('d-none', !invalid);
+    };
+
+    const normalize = (input) => {
+        const value = input.value.trim();
+        const valid = value === '' || /^\d+$/.test(value);
+        setError(input, !valid);
+        return valid;
+    };
+
+    const initialize = (root = document) => {
+        root.querySelectorAll?.(selector).forEach((input) => {
+            input.setAttribute('step', '1');
+            input.setAttribute('inputmode', 'numeric');
+            normalize(input);
+        });
+    };
+
+    window.initTradeFlowWholeNumberInputs = initialize;
+
+    document.addEventListener('DOMContentLoaded', () => initialize());
+
+    document.addEventListener('keydown', (event) => {
+        const input = event.target.closest?.(selector);
+        if (!input || event.ctrlKey || event.metaKey || event.altKey) return;
+        if (blockedKeys.has(event.key)) {
+            event.preventDefault();
+            setError(input, true);
+        }
+    });
+
+    document.addEventListener('paste', (event) => {
+        const input = event.target.closest?.(selector);
+        if (!input) return;
+
+        const pasted = event.clipboardData?.getData('text')?.trim() || '';
+        if (!/^\d+$/.test(pasted)) {
+            event.preventDefault();
+            setError(input, true);
+        }
+    });
+
+    document.addEventListener('input', (event) => {
+        const input = event.target.closest?.(selector);
+        if (input) normalize(input);
+    });
+})();

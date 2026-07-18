@@ -14,7 +14,7 @@
         <div class="col-md-2"><input name="phone" class="form-control" placeholder="Phone"></div>
         <div class="col-md-2"><input name="city" class="form-control" placeholder="City"></div>
         <div class="col-md-2"><input name="email" type="email" class="form-control" placeholder="Email"></div>
-        <div class="col-md-3"><input name="opening_balance" type="number" step="0.01" min="0" class="form-control" placeholder="Opening balance"></div>
+        <div class="col-md-3"><input name="opening_balance" type="number" step="0.01" min="0" value="{{ old('opening_balance', 0) }}" class="form-control" placeholder="Opening balance"></div>
         <div class="col-md-3"><select name="status" class="form-select"><option>Active</option><option>Inactive</option></select></div>
         <div class="col-md-4"><input name="address" class="form-control" placeholder="Address"></div>
         <div class="col-md-2"><button class="btn btn-tf-primary w-100">Save Supplier</button></div>
@@ -27,7 +27,7 @@
         <div class="col-md-2"><label class="form-label">Company</label><input name="company" value="{{ request('company') }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Phone</label><input name="phone" value="{{ request('phone') }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">City</label><input name="city" value="{{ request('city') }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option><option @selected(request('status') === 'Active')>Active</option><option @selected(request('status') === 'Inactive')>Inactive</option></select></div>
+        <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option><option @selected(request('status') === 'Active')>Active</option><option @selected(request('status') === 'Inactive')>Inactive</option><option value="Archived" @selected(request('status') === 'Archived')>Archived</option></select></div>
         <div class="col-md-2"><label class="form-label">Created By</label><select name="created_by" class="form-select"><option value="">All</option>@foreach($creators as $creator)<option value="{{ $creator->id }}" @selected(request('created_by') == $creator->id)>{{ $creator->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', $dateFrom) }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', $dateTo) }}" class="form-control"></div>
@@ -46,14 +46,25 @@
                 <td>{{ $supplier->phone ?: '-' }}</td>
                 <td>{{ $supplier->city ?: '-' }}</td>
                 <td>Rs {{ number_format($supplier->opening_balance) }}</td>
-                <td><span class="badge {{ $supplier->status === 'Active' ? 'bg-success' : 'bg-secondary' }}">{{ $supplier->status }}</span></td>
+                <td><span class="badge {{ $supplier->trashed() ? 'bg-warning text-dark' : ($supplier->status === 'Active' ? 'bg-success' : 'bg-secondary') }}">{{ $supplier->trashed() ? 'Archived' : $supplier->status }}</span></td>
                 <td>{{ $supplier->creator?->name ?? '-' }}</td>
                 <td><x-date-time :value="$supplier->created_at" /></td>
                 <td><x-date-time :value="$supplier->updated_at" /></td>
-                <td class="d-flex gap-2">
-                    <a href="{{ route('business.suppliers.show', $supplier) }}" class="btn btn-sm btn-outline-primary">View</a>
-                    @companyCan('suppliers.edit')<a href="{{ route('business.suppliers.edit', $supplier) }}" class="btn btn-sm btn-outline-secondary">Edit</a>@endcompanyCan
-                    @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.destroy', $supplier) }}" onsubmit="return confirm('Delete or deactivate this supplier?')">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Delete</button></form>@endcompanyCan
+                <td class="text-end text-nowrap">
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" data-bs-boundary="viewport">Actions</button>
+                        <div class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <a href="{{ route('business.suppliers.show', $supplier) }}" class="dropdown-item">View</a>
+                            @if($supplier->trashed())
+                                @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.restore', $supplier->id) }}">@csrf @method('PATCH')<button class="dropdown-item text-success">Restore</button></form>@endcompanyCan
+                                @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.destroy', $supplier->id) }}" onsubmit="return confirm('Delete this archived supplier permanently?')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Permanently Delete</button></form>@endcompanyCan
+                            @else
+                                @companyCan('suppliers.edit')<a href="{{ route('business.suppliers.edit', $supplier) }}" class="dropdown-item">Edit</a>@endcompanyCan
+                                @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.archive', $supplier) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning">Archive</button></form>@endcompanyCan
+                                @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.destroy', $supplier) }}" onsubmit="return confirm('Delete this unused supplier permanently?')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>@endcompanyCan
+                            @endif
+                        </div>
+                    </div>
                 </td>
             </tr>
         @empty

@@ -27,7 +27,7 @@ class StoreStaffRequest extends FormRequest
             'role' => ['required', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'employment_type' => ['required', Rule::in(['Full Time', 'Part Time', 'Temporary'])],
             'joining_date' => ['required', 'date'],
-            'salary' => ['nullable', 'numeric', 'min:0'],
+            'salary' => ['nullable', 'integer', 'min:0'],
             'status' => ['required', Rule::in(['active', 'inactive', 'suspended'])],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
             'profile_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],

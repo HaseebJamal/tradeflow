@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Business;
 
 use App\Http\Controllers\Controller;
 use App\Models\Account;
+use App\Models\AuditLog;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Supplier;
@@ -24,7 +25,7 @@ class SupplierController extends Controller
             'name' => ['nullable', 'string', 'max:255'],
             'company' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
-            'status' => ['nullable', 'in:Active,Inactive'],
+            'status' => ['nullable', 'in:Active,Inactive,Archived'],
             'city' => ['nullable', 'string', 'max:100'],
             'created_by' => ['nullable', 'integer'],
             'date_from' => ['nullable', 'date'],
@@ -32,15 +33,21 @@ class SupplierController extends Controller
             'clear' => ['nullable', 'boolean'],
         ]);
 
-        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? now()->startOfMonth()->toDateString());
-        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? now()->toDateString());
+        $showArchived = ($filters['status'] ?? null) === 'Archived';
+        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? ($showArchived ? null : now()->startOfMonth()->toDateString()));
+        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? ($showArchived ? null : now()->toDateString()));
 
-        $query = Supplier::where('business_id', $businessId)
-            ->with('creator')
+        $query = Supplier::where('business_id', $businessId)->with('creator');
+
+        if ($showArchived) {
+            $query->onlyTrashed();
+        }
+
+        $query
             ->when($filters['name'] ?? null, fn ($q, $value) => $q->where('supplier_name', 'like', "%{$value}%"))
             ->when($filters['company'] ?? null, fn ($q, $value) => $q->where('company_name', 'like', "%{$value}%"))
             ->when($filters['phone'] ?? null, fn ($q, $value) => $q->where('phone', 'like', "%{$value}%"))
-            ->when($filters['status'] ?? null, fn ($q, $value) => $q->where('status', $value))
+            ->when(in_array($filters['status'] ?? null, ['Active', 'Inactive'], true), fn ($q, $value) => $q->where('status', $value))
             ->when($filters['city'] ?? null, fn ($q, $value) => $q->where('city', 'like', "%{$value}%"))
             ->when($filters['created_by'] ?? null, fn ($q, $value) => $q->where('created_by', $value))
             ->when($dateFrom, fn ($q, $value) => $q->whereDate('created_at', '>=', $value))
@@ -57,7 +64,9 @@ class SupplierController extends Controller
     public function store(Request $request)
     {
         DB::transaction(function () use ($request) {
-            $supplier = Supplier::create($this->validated($request) + [
+            $validated = $this->validated($request);
+            $supplier = Supplier::create($validated + [
+                'opening_balance' => $validated['opening_balance'] ?? 0,
                 'business_id' => auth()->user()->business_id,
                 'created_by' => auth()->id(),
             ]);
@@ -73,8 +82,11 @@ class SupplierController extends Controller
         return redirect()->route('business.suppliers.index');
     }
 
-    public function show(Supplier $supplier)
+    public function show(Request $request, int $supplier)
     {
+        $supplier = Supplier::withTrashed()
+            ->where('business_id', $request->user()->business_id)
+            ->findOrFail($supplier);
         $supplier = $this->scoped($supplier);
         $lines = JournalEntryLine::with(['journalEntry', 'account'])
             ->where('supplier_id', $supplier->id)
@@ -102,22 +114,53 @@ class SupplierController extends Controller
     public function update(Request $request, Supplier $supplier)
     {
         $supplier = $this->scoped($supplier);
-        $supplier->update($this->validated($request));
+        $validated = $this->validated($request);
+
+        DB::transaction(function () use ($supplier, $validated) {
+            $supplier->update($validated + ['opening_balance' => $validated['opening_balance'] ?? 0]);
+            $this->syncOpeningBalance($supplier->fresh());
+        });
 
         return redirect()->route('business.suppliers.show', $supplier)->with('success', 'Supplier updated.');
     }
 
-    public function destroy(Supplier $supplier)
+    public function archive(Supplier $supplier)
     {
         $supplier = $this->scoped($supplier);
+        $supplier->update(['status' => 'Inactive']);
+        $supplier->delete();
+        $this->audit('Supplier Archived', $supplier);
 
-        if ($supplier->journalLines()->exists()) {
-            $supplier->update(['status' => 'Inactive']);
-            return back()->with('success', 'Supplier has ledger history, so it was marked inactive.');
+        return back()->with('success', 'Record archived successfully.');
+    }
+
+    public function restore(Request $request, int $supplier)
+    {
+        $supplier = Supplier::withTrashed()
+            ->where('business_id', $request->user()->business_id)
+            ->findOrFail($supplier);
+        $supplier->restore();
+        $supplier->update(['status' => 'Active']);
+        $this->audit('Supplier Restored', $supplier);
+
+        return back()->with('success', 'Record restored successfully.');
+    }
+
+    public function destroy(Request $request, int $supplier)
+    {
+        $supplier = Supplier::withTrashed()
+            ->where('business_id', $request->user()->business_id)
+            ->findOrFail($supplier);
+        $supplier = $this->scoped($supplier);
+
+        if ($supplier->journalLines()->exists() || $supplier->purchases()->exists() || $supplier->payments()->exists()) {
+            return back()->with('error', 'This supplier has related records and cannot be deleted. Archive it instead.');
         }
 
-        $supplier->delete();
-        return back()->with('success', 'Supplier deleted.');
+        $this->audit('Supplier Permanently Deleted', $supplier);
+        $supplier->forceDelete();
+
+        return back()->with('success', 'Record permanently deleted.');
     }
 
     private function validated(Request $request): array
@@ -129,7 +172,7 @@ class SupplierController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string'],
             'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'opening_balance' => ['nullable', 'numeric', 'min:0'],
+            'opening_balance' => ['nullable', 'integer', 'min:0'],
             'status' => ['required', Rule::in(['Active', 'Inactive'])],
         ]);
     }
@@ -138,6 +181,19 @@ class SupplierController extends Controller
     {
         abort_unless($supplier->business_id === auth()->user()->business_id, 404);
         return $supplier;
+    }
+
+    private function audit(string $action, Supplier $supplier): void
+    {
+        AuditLog::create([
+            'business_id' => $supplier->business_id,
+            'module' => 'Suppliers',
+            'action' => $action,
+            'description' => $supplier->supplier_name,
+            'record_type' => Supplier::class,
+            'record_id' => $supplier->id,
+            'occurred_at' => now(),
+        ]);
     }
 
     private function postOpeningBalance(Supplier $supplier): void
@@ -168,5 +224,30 @@ class SupplierController extends Controller
             ['account_id' => $equity->id, 'supplier_id' => $supplier->id, 'debit' => $supplier->opening_balance, 'credit' => 0, 'description' => 'Opening balance'],
             ['account_id' => $payable->id, 'supplier_id' => $supplier->id, 'debit' => 0, 'credit' => $supplier->opening_balance, 'description' => 'Opening payable'],
         ]);
+    }
+
+    /** Keep the opening ledger entry balanced when the opening figure is edited. */
+    private function syncOpeningBalance(Supplier $supplier): void
+    {
+        $entry = JournalEntry::where('business_id', $supplier->business_id)
+            ->where('reference_type', 'supplier_opening')
+            ->where('reference_id', $supplier->id)
+            ->with('lines.account')
+            ->first();
+
+        if (!$entry) {
+            $this->postOpeningBalance($supplier);
+
+            return;
+        }
+
+        foreach ($entry->lines as $line) {
+            if ($line->account?->name === 'Owner Equity') {
+                $line->update(['debit' => $supplier->opening_balance, 'credit' => 0]);
+            }
+            if ($line->account?->name === 'Accounts Payable') {
+                $line->update(['debit' => 0, 'credit' => $supplier->opening_balance]);
+            }
+        }
     }
 }

@@ -11,13 +11,14 @@ use App\Models\Order;
 use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
+use App\Services\DocumentNumberService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private DocumentNumberService $numbers) {}
 
     public function index()
     {
@@ -126,7 +127,7 @@ class InvoiceController extends Controller
         abort_unless($invoice->business_id === auth()->user()->business_id, 403);
         abort_if($invoice->status === 'Draft', 403);
         $data = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0.01', 'max:'.$invoice->grand_total],
+            'amount' => ['required', 'integer', 'min:1', 'max:'.$invoice->grand_total],
             'reason' => ['required', 'string', 'max:1000'],
         ]);
 
@@ -134,7 +135,7 @@ class InvoiceController extends Controller
             $note = CreditNote::create([
                 'business_id' => $invoice->business_id,
                 'invoice_id' => $invoice->id,
-                'credit_note_number' => 'CN-'.now()->format('ymdHis'),
+                'credit_note_number' => $this->numbers->next('credit_note'),
                 'date' => now()->toDateString(),
                 'reason' => $data['reason'],
                 'amount' => $data['amount'],
@@ -170,7 +171,7 @@ class InvoiceController extends Controller
             [
                 'business_id' => $order->business_id,
                 'customer_id' => $order->customer_id,
-                'invoice_number' => $order->invoice?->invoice_number ?? 'INV-'.now()->format('ymdHis'),
+                'invoice_number' => $order->invoice?->invoice_number ?? $this->numbers->next('sales'),
                 'invoice_date' => $order->order_date ?? now()->toDateString(),
                 'subtotal' => $order->subtotal,
                 'discount_percentage' => $order->discount_percentage ?? $order->discount ?? 0,
@@ -189,7 +190,6 @@ class InvoiceController extends Controller
                 $invoice->items()->create([
                     'product_id' => $item->product_id,
                     'product_name_snapshot' => $item->product_name_snapshot ?: $item->product?->name ?: 'Product',
-                    'sku_snapshot' => $item->sku_snapshot,
                     'quantity' => $item->quantity,
                     'unit' => $item->unit,
                     'unit_price' => $item->unit_price ?: $item->price,

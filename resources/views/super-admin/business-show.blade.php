@@ -18,7 +18,7 @@
         <div class="tf-card p-4">
             <h2 class="h5">Business Information</h2>
             <div class="row g-3">
-                @foreach(['Business Name'=>$business->business_name,'Owner Name'=>$business->owner?->name,'Phone'=>$business->phone,'Email'=>$business->owner?->email,'Address'=>$business->address,'City'=>$business->city,'Business Type'=>$business->business_type,'Registration Date'=>$business->created_at->format('M d, Y'),'Current Plan'=>$business->subscription?->plan?->name ?? '-'] as $k=>$v)
+                @foreach(['Business Name'=>$business->business_name,'Owner Name'=>$business->owner?->name,'Phone'=>$business->phone,'Address'=>$business->address,'City'=>$business->city,'Business Type'=>$business->business_type,'Registration Date'=>$business->created_at->format('M d, Y'),'Current Plan'=>$business->subscription?->plan?->name ?? '-'] as $k=>$v)
                 <div class="col-md-6"><div class="border rounded p-3"><small class="tf-muted">{{ $k }}</small><strong class="d-block">{{ $v }}</strong></div></div>
                 @endforeach
             </div>

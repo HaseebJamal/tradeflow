@@ -31,11 +31,13 @@
 <div class="tf-invoice">
     <div class="d-flex justify-content-between border-bottom pb-3 mb-4"><div><h2 class="tf-brand">TradeFlow</h2><p class="tf-muted mb-0">{{ $order->business?->business_name }}<br>{{ $order->business?->address }}</p></div><div class="text-end"><h1 class="h4">Invoice {{ $invoice->invoice_number }}</h1><p class="tf-muted">{{ ($invoice->invoice_date ?: $invoice->created_at)->format('M d, Y') }}</p></div></div>
     <div class="row mb-4"><div class="col"><strong>Bill To</strong><p class="tf-muted">{{ $order->customer?->display_name }}<br>{{ $order->customer?->address }}</p></div><div class="col text-end"><strong>Status</strong><p><span class="tf-badge tf-badge-warning">{{ $invoice->status }}</span></p><div class="tf-muted small">Payment: {{ $invoice->payment_status }}</div></div></div>
-    <x-table><thead><tr><th>Item</th><th>SKU</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>@foreach($invoice->items->isNotEmpty() ? $invoice->items : $order->items as $item)<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td>{{ $item->sku_snapshot ?? $item->product?->sku }}</td><td>{{ $item->quantity }} {{ $item->unit ?? '' }}</td><td>Rs {{ number_format($item->unit_price ?? $item->price) }}</td><td>Rs {{ number_format($item->line_total ?? $item->total) }}</td></tr>@endforeach</tbody></x-table>
+    <x-table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>@foreach($invoice->items->isNotEmpty() ? $invoice->items : $order->items as $item)<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td>{{ $item->quantity }} {{ $item->unit ?? '' }}</td><td>Rs {{ number_format($item->unit_price ?? $item->price) }}</td><td>Rs {{ number_format($item->line_total ?? $item->total) }}</td></tr>@endforeach</tbody></x-table>
     <div class="text-end mt-4">
         <div>Subtotal: Rs {{ number_format($order->subtotal) }}</div>
         <div>Discount: {{ number_format($order->discount_percentage ?? $order->discount ?? 0, 2) }}%</div>
         <div>Discount Amount: Rs {{ number_format($order->discount_amount ?? 0) }}</div>
+        <div>Tax: {{ number_format($order->tax_rate ?? 0, 2) }}%</div>
+        <div>Tax Amount: Rs {{ number_format($order->tax_amount ?? 0) }}</div>
         <div>Paid: Rs {{ number_format($invoice->paid_amount) }}</div>
         <div>Balance: Rs {{ number_format($invoice->balance) }}</div>
         <div class="h3">Grand Total: Rs {{ number_format($order->grand_total ?: $order->total) }}</div>

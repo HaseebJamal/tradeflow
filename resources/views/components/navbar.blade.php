@@ -12,8 +12,8 @@
                 <li class="nav-item"><a class="nav-link" href="{{ route('public.home') }}#about" data-tf-smooth>About</a></li>
                 <li class="nav-item"><a class="nav-link" href="{{ route('public.home') }}#contact" data-tf-smooth>Contact</a></li>
                 <li class="nav-item"><a class="nav-link" href="{{ route('privacy.security') }}">Privacy & Security</a></li>
-                <li class="nav-item"><a class="btn btn-outline-primary" href="{{ route('login') }}">Sign In</a></li>
-                <li class="nav-item"><a class="btn btn-tf-primary" href="{{ route('register.business') }}"><i class="bi bi-building-add me-1"></i>Register Business</a></li>
+                <li class="nav-item"><a class="btn tf-public-auth-button" href="{{ route('login') }}">Sign In</a></li>
+                <li class="nav-item"><a class="btn tf-public-auth-button" href="{{ route('register.business') }}"><i class="bi bi-building-add me-1"></i>Register Business</a></li>
             </ul>
         </div>
     </div>

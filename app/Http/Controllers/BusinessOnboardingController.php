@@ -61,6 +61,7 @@ class BusinessOnboardingController extends Controller
                         'business_id' => $business->id,
                         'document_type' => $field,
                         'file_path' => $request->file($field)->store('business-documents', 'public'),
+                        'status' => 'Pending Verification',
                     ]);
                 }
             }
@@ -69,6 +70,11 @@ class BusinessOnboardingController extends Controller
         User::where('role', 'super_admin')->where('status', 'active')->get()
             ->each(fn (User $admin) => $admin->notify(new CompanyRegistrationNotification($business)));
 
-        return redirect()->route('register.business')->with('success', 'Your business registration has been submitted for approval.');
+        $request->session()->forget(['registration_step', 'registration_draft']);
+
+        return redirect()->route('register.business')->with(
+            'success',
+            'Your business registration has been submitted successfully. Please wait for Super Admin approval.'
+        );
     }
 }

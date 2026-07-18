@@ -73,7 +73,7 @@ class StaffController extends Controller
     {
         $this->ensureStaffCapacity();
         $data = $request->validated();
-        $this->assertAssignableRole('custom_staff');
+        $this->assertAssignableRole('custom_staff', 'staff.create');
         $imagePath = $request->hasFile('profile_image')
             ? $request->file('profile_image')->store('profile_images', 'public')
             : null;
@@ -115,7 +115,7 @@ class StaffController extends Controller
 
     public function show(User $staff): View
     {
-        $staff = $this->scopedStaff($staff)->load(['staffProfile', 'creator', 'business']);
+        $staff = $this->scopedStaff($staff, 'staff.view')->load(['staffProfile', 'creator', 'business']);
         $this->audit('staff viewed', $staff);
 
         return view('business.staff.show', [
@@ -143,7 +143,7 @@ class StaffController extends Controller
     {
         $staff = $this->scopedStaff($staff);
         $data = $request->validated();
-        $this->assertAssignableRole('custom_staff');
+        $this->assertAssignableRole('custom_staff', 'staff.edit');
         $oldImage = $staff->profile_image;
         $newImage = $request->hasFile('profile_image')
             ? $request->file('profile_image')->store('profile_images', 'public')
@@ -273,7 +273,7 @@ class StaffController extends Controller
     {
         $companyPermissions = app(CompanyPermissionService::class);
         $actor = auth()->user();
-        $available = PermissionDefinition::where('status', 'active')->pluck('permission_key')->all();
+        $available = $companyPermissions->allowedDefinitionsFor($actor)->pluck('permission_key')->all();
 
         $selected = collect($selected)
             ->map(fn ($permission) => $companyPermissions->normalise((string) $permission))
@@ -313,12 +313,10 @@ class StaffController extends Controller
     private function companyPermissionGroups(): array
     {
         $companyPermissions = app(CompanyPermissionService::class);
-        $definitions = PermissionDefinition::where('status', 'active')->orderBy('module')->orderBy('label')->get();
-        $grouped = $definitions
-            ->filter(fn (PermissionDefinition $definition) => $companyPermissions->allows(auth()->user(), $definition->permission_key))
+        $grouped = $companyPermissions->allowedDefinitionsFor(auth()->user())
             ->groupBy(fn (PermissionDefinition $definition) => strtolower($definition->module));
 
-        $order = ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'purchase_returns', 'customers', 'sales', 'sales_returns', 'pos', 'deliveries', 'accounting', 'expenses', 'reports', 'notifications', 'staff', 'audit_logs', 'settings'];
+        $order = ['dashboard', 'products', 'units', 'categories', 'inventory', 'suppliers', 'purchases', 'purchase_returns', 'customers', 'sales', 'sales_returns', 'pos', 'deliveries', 'accounting', 'expenses', 'reports', 'notifications', 'staff', 'audit_logs', 'settings'];
 
         return collect($order)
             ->filter(fn (string $module) => $grouped->has($module))
@@ -333,13 +331,15 @@ class StaffController extends Controller
             ->whereIn('role', array_keys(BusinessStaffRoles::ROLES));
     }
 
-    private function scopedStaff(User $staff): User
+    private function scopedStaff(User $staff, string $requiredPermission = 'staff.edit'): User
     {
         $actor = auth()->user();
         $isValidTarget = $staff->business_id === $this->businessId()
             && array_key_exists($staff->role, BusinessStaffRoles::ROLES);
+        $canManageStaff = in_array($actor->role, ['super_admin', 'business_owner'], true)
+            || app(CompanyPermissionService::class)->allowsUser($actor, $requiredPermission);
 
-        if (!$isValidTarget || !in_array($actor->role, ['super_admin', 'business_owner'], true)) {
+        if (!$isValidTarget || !$canManageStaff) {
             throw ValidationException::withMessages(['staff' => 'You do not have permission to perform this action.']);
         }
 
@@ -364,9 +364,13 @@ class StaffController extends Controller
         return !($hasOrders || $hasDeliveries || $hasPayments || $hasAccounting || $hasAuditTrail);
     }
 
-    private function assertAssignableRole(string $role): void
+    private function assertAssignableRole(string $role, string $requiredPermission): void
     {
-        if (!BusinessStaffRoles::canBeAssignedBy(auth()->user()->role, $role)) {
+        $actor = auth()->user();
+        $canAssign = BusinessStaffRoles::canBeAssignedBy($actor->role, $role)
+            || app(CompanyPermissionService::class)->allowsUser($actor, $requiredPermission);
+
+        if (!$canAssign) {
             throw ValidationException::withMessages(['role' => 'You do not have permission to assign this business role.']);
         }
     }

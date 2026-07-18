@@ -27,8 +27,7 @@
         <div class="col-md-3"><label class="form-label">Search</label><input name="search" value="{{ request('search') }}" class="form-control" placeholder="Name, shop, phone, email"></div>
         <div class="col-md-2"><label class="form-label">Type</label><select name="customer_type" class="form-select"><option value="">All</option>@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option @selected(request('customer_type')===$type)>{{ $type }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">City</label><input name="city" value="{{ request('city') }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option><option>Active</option><option>Blocked</option><option>Inactive</option></select></div>
-        <div class="col-md-1"><div class="form-check"><input type="checkbox" name="archived" value="1" class="form-check-input" @checked(request('archived'))><label class="form-check-label">Archived</label></div></div>
+        <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option><option @selected(request('status') === 'Active')>Active</option><option @selected(request('status') === 'Blocked')>Blocked</option><option @selected(request('status') === 'Inactive')>Inactive</option><option value="Archived" @selected(request('status') === 'Archived' || request('archived'))>Archived</option></select></div>
         <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
     </div>
 </form>

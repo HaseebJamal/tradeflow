@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Services\BusinessDocumentVerifier;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -41,9 +42,9 @@ class RegisterBusinessRequest extends FormRequest
             'city' => ['required', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'registration_number' => ['nullable', 'string', 'max:100'],
             'tax_number' => ['nullable', 'string', 'max:100'],
-            'cnic_image' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
-            'business_document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
-            'shop_image' => ['required', 'file', 'mimes:jpg,jpeg,png', 'max:5120'],
+            'cnic_image' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png', 'max:5120'],
+            'business_document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png', 'max:5120'],
+            'shop_image' => ['required', 'file', 'mimes:jpg,jpeg,png', 'mimetypes:image/jpeg,image/png', 'max:5120'],
         ];
     }
 
@@ -58,9 +59,52 @@ class RegisterBusinessRequest extends FormRequest
             'email.unique' => 'This email address is already registered.',
             'password.confirmed' => 'Password and confirm password do not match.',
             'cnic_image.required' => 'CNIC upload is required.',
+            'cnic_image.file' => 'Please upload a valid CNIC document.',
+            'cnic_image.mimes' => 'Please upload a valid CNIC document.',
+            'cnic_image.mimetypes' => 'Please upload a valid CNIC document.',
+            'cnic_image.max' => 'CNIC document must not exceed 5 MB.',
             'business_document.required' => 'Business document upload is required.',
+            'business_document.file' => 'Please upload a valid business document.',
+            'business_document.mimes' => 'Please upload a valid business document.',
+            'business_document.mimetypes' => 'Please upload a valid business document.',
+            'business_document.max' => 'Business document must not exceed 5 MB.',
             'shop_image.required' => 'Shop or business image upload is required.',
+            'shop_image.file' => 'Please upload a valid shop or business premises image.',
+            'shop_image.mimes' => 'Please upload a valid shop or business premises image.',
+            'shop_image.mimetypes' => 'Please upload a valid shop or business premises image.',
+            'shop_image.max' => 'Shop or business premises image must not exceed 5 MB.',
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $verifier = app(BusinessDocumentVerifier::class);
+            $hashes = [];
+
+            foreach (['cnic_image', 'business_document', 'shop_image'] as $field) {
+                if ($validator->errors()->has($field) || !$this->hasFile($field)) {
+                    continue;
+                }
+
+                $file = $this->file($field);
+                $message = $verifier->validate($file, $field);
+                if ($message) {
+                    $validator->errors()->add($field, $message);
+                    continue;
+                }
+
+                $hash = $verifier->hash($file);
+                if ($hash && isset($hashes[$hash])) {
+                    $validator->errors()->add($field, 'Each verification field must contain its own document or image.');
+                    continue;
+                }
+
+                if ($hash) {
+                    $hashes[$hash] = $field;
+                }
+            }
+        });
     }
 
     protected function failedValidation(Validator $validator): void

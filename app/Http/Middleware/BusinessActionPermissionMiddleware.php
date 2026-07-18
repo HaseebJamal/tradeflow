@@ -3,7 +3,6 @@
 namespace App\Http\Middleware;
 
 use App\Services\CompanyPermissionService;
-use App\Services\BusinessWorkspaceAccessService;
 use App\Models\AuditLog;
 use Closure;
 use Illuminate\Http\Request;
@@ -51,18 +50,11 @@ class BusinessActionPermissionMiddleware
             abort(403, $message);
         }
 
-        $previousPath = parse_url(url()->previous(), PHP_URL_PATH);
-        $currentPath = $request->path() === '/' ? '/' : '/'.$request->path();
-
-        // Redirecting back to a denied route produces an infinite browser
-        // redirect loop. Fall back only to an enabled company module.
-        if ($previousPath && rtrim($previousPath, '/') !== rtrim($currentPath, '/')) {
-            return redirect()->to(url()->previous())->withErrors(['permission' => $message]);
-        }
-
-        $destination = app(BusinessWorkspaceAccessService::class)->firstEnabledRoute($request->user());
-
-        return redirect()->route($destination ?? 'business.access-denied')->withErrors(['permission' => $message]);
+        // Never redirect a denied request to its referrer or to the first
+        // enabled route: either can be the same protected route and create a
+        // browser redirect loop. The basic business dashboard is deliberately
+        // unguarded by business.permission and is safe for every approved user.
+        return redirect()->route('business.dashboard')->withErrors(['permission' => $message]);
     }
 
     private function permissionFor(?string $route): ?string
@@ -75,12 +67,24 @@ class BusinessActionPermissionMiddleware
             'business.products.archive' => 'products.archive', 'business.products.restore' => 'products.restore',
             'business.products.bulk', 'business.products.bulk.store' => 'products.bulk_import',
             'business.products.export', 'business.products.template' => 'products.export',
+            'business.categories.index', 'business.categories.show' => 'categories.view',
+            'business.categories.create', 'business.categories.store' => 'categories.create',
+            'business.categories.edit', 'business.categories.update' => 'categories.edit',
+            'business.categories.status' => 'categories.status',
+            'business.categories.archive', 'business.categories.restore' => 'categories.archive',
+            'business.categories.destroy' => 'categories.delete',
+            'business.units.index', 'business.units.show' => 'units.view',
+            'business.units.create', 'business.units.store' => 'units.create',
+            'business.units.edit', 'business.units.update' => 'units.edit',
+            'business.units.status' => 'units.status',
+            'business.units.archive', 'business.units.restore' => 'units.archive',
+            'business.units.destroy' => 'units.delete',
             'business.inventory' => 'inventory.view', 'business.inventory.adjust' => 'inventory.adjust_stock', 'business.inventory.transfer' => 'inventory.stock_transfer', 'business.inventory.alert' => 'inventory.low_stock_alerts',
             'business.customers.index', 'business.customers.show', 'business.customers.statement' => 'customers.view',
             'business.customers.store' => 'customers.create', 'business.customers.update', 'business.customers.status' => 'customers.edit',
             'business.customers.archive' => 'customers.archive', 'business.customers.restore' => 'customers.restore',
             'business.suppliers.index', 'business.suppliers.show' => 'suppliers.view',
-            'business.suppliers.create', 'business.suppliers.store' => 'suppliers.create', 'business.suppliers.edit', 'business.suppliers.update' => 'suppliers.edit', 'business.suppliers.destroy' => 'suppliers.archive',
+            'business.suppliers.create', 'business.suppliers.store' => 'suppliers.create', 'business.suppliers.edit', 'business.suppliers.update' => 'suppliers.edit', 'business.suppliers.archive', 'business.suppliers.restore', 'business.suppliers.destroy' => 'suppliers.archive',
             'business.purchases.index', 'business.purchases.show' => 'purchases.view', 'business.purchases.create', 'business.purchases.store' => 'purchases.create',
             'business.purchases.receive' => 'purchases.receive', 'business.purchases.pay' => 'purchases.pay', 'business.purchases.return' => 'purchase_returns.process',
             'business.purchase-returns.index', 'business.purchase-returns.create', 'business.purchase-returns.show', 'business.purchase-returns.edit' => 'purchase_returns.view',
@@ -112,6 +116,7 @@ class BusinessActionPermissionMiddleware
             'business.staff.edit', 'business.staff.update', 'business.staff.status', 'business.staff.archive', 'business.staff.restore', 'business.staff.reset-password', 'business.staff.destroy' => 'staff.edit',
             'business.settings' => 'settings.view',
             'business.settings.business' => 'settings.update',
+            'business.settings.logo' => 'settings.update',
             default => null,
         };
     }

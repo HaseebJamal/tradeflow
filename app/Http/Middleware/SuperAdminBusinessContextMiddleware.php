@@ -27,7 +27,6 @@ class SuperAdminBusinessContextMiddleware
             ]);
         }
 
-        // The authenticated user remains the Super Admin; this only scopes the request.
         $user->setAttribute('business_id', $business->id);
         $user->setRelation('business', $business);
         $request->attributes->set('super_admin_business_context', $business);

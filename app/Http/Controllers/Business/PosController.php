@@ -20,6 +20,8 @@ use App\Models\StockMovement;
 use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use App\Services\CompanyPermissionService;
+use App\Services\DocumentNumberService;
+use App\Services\FinanceCalculator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +29,7 @@ use Illuminate\Validation\ValidationException;
 
 class PosController extends Controller
 {
-    public function __construct(private AccountingService $accounting, private CompanyPermissionService $permissions, private BusinessActivityService $activity) {}
+    public function __construct(private AccountingService $accounting, private CompanyPermissionService $permissions, private BusinessActivityService $activity, private DocumentNumberService $numbers, private FinanceCalculator $finance) {}
 
     public function index()
     {
@@ -44,7 +46,7 @@ class PosController extends Controller
     public function openRegister(Request $request)
     {
         $data = $request->validate([
-            'opening_cash' => ['nullable', 'numeric', 'min:0'],
+            'opening_cash' => ['nullable', 'integer', 'min:0'],
             'opening_note' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -70,7 +72,7 @@ class PosController extends Controller
     {
         $this->scopedRegister($register);
         $data = $request->validate([
-            'closing_cash' => ['required', 'numeric', 'min:0'],
+            'closing_cash' => ['required', 'integer', 'min:0'],
             'closing_note' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -104,16 +106,18 @@ class PosController extends Controller
             'new_customer_city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'new_customer_address' => ['nullable', 'string', 'max:500'],
             'discount_type' => ['required', 'in:percentage,fixed'],
-            'discount_value' => ['nullable', 'numeric', 'min:0'],
-            'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'discount_value' => ['nullable', 'integer', 'min:0'],
+            'tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
             'payment_mode' => ['required', 'in:cash,credit,split'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
-            'items.*.price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.price' => ['nullable', 'integer', 'min:0'],
+            'items.*.discount_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'items.*.tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
             'payments' => ['nullable', 'array'],
             'payments.*.method' => ['required_with:payments', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual,Cheque'],
-            'payments.*.amount' => ['required_with:payments', 'numeric', 'min:0.01'],
+            'payments.*.amount' => ['required_with:payments', 'integer', 'min:1'],
             'payments.*.reference_number' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -122,20 +126,42 @@ class PosController extends Controller
         $order = DB::transaction(function () use ($data, $businessId, $register) {
             // Keep an inline customer creation inside the sale transaction.
             $customer = $this->resolveCustomer($data, $businessId);
-            if ($data['payment_mode'] !== 'cash' && !$customer) {
+            if ($data['payment_mode'] === 'credit' && !$customer) {
                 throw ValidationException::withMessages([
-                    'customer_id' => 'Select or create a customer for credit or split sales.',
+                    'customer_id' => 'Credit sales require a registered customer. Walk-in Customer is available for cash sales only.',
+                ]);
+            }
+            if ($data['payment_mode'] === 'split' && !$customer) {
+                throw ValidationException::withMessages([
+                    'customer_id' => 'Select or create a customer before using split payment.',
                 ]);
             }
             $lines = collect($data['items'])->groupBy('product_id')->map(function ($rows, $productId) {
-                return ['product_id' => (int) $productId, 'quantity' => $rows->sum('quantity'), 'price' => $rows->last()['price'] ?? null];
-            })->values();
+                return [
+                    'product_id' => (int) $productId,
+                    'quantity' => $rows->sum('quantity'),
+                    'price' => $rows->last()['price'] ?? null,
+                    'discount_rate' => (int) ($rows->last()['discount_rate'] ?? 0),
+                    'tax_rate' => (int) ($rows->last()['tax_rate'] ?? 0),
+                ];
+            })->sortBy('product_id')->values();
+            $lockedProducts = Product::where('business_id', $businessId)
+                ->whereIn('id', $lines->pluck('product_id')->all())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
             $subtotal = 0.0;
             $saleItems = [];
             $costTotal = 0.0;
 
             foreach ($lines as $line) {
-                $product = Product::where('business_id', $businessId)->lockForUpdate()->findOrFail($line['product_id']);
+                $product = $lockedProducts->get($line['product_id']);
+                if (!$product) {
+                    throw ValidationException::withMessages([
+                        'items' => 'One or more selected products are not available for this business.',
+                    ]);
+                }
                 if ($product->stock_quantity < $line['quantity']) {
                     throw ValidationException::withMessages(['items' => 'Insufficient stock. Only '.$product->stock_quantity.' units are available.']);
                 }
@@ -144,10 +170,16 @@ class PosController extends Controller
                 if ($line['price'] !== null && round($price, 2) !== round((float) $product->retail_price, 2) && !$this->permissions->allowsUser(auth()->user(), 'pos.custom_price')) {
                     throw ValidationException::withMessages(['items' => 'You do not have permission to use a custom price.']);
                 }
-                $lineTotal = round($price * $line['quantity'], 2);
+                $amounts = $this->finance->calculateLineAmounts(
+                    (int) $line['quantity'],
+                    $price,
+                    (int) $line['discount_rate'],
+                    (int) $line['tax_rate'],
+                );
+                $lineTotal = $amounts['lineTotal'];
                 $subtotal += $lineTotal;
                 $costTotal += round((float) ($product->purchase_cost ?: $product->wholesale_price) * $line['quantity'], 2);
-                $saleItems[] = compact('product', 'price', 'lineTotal') + ['quantity' => $line['quantity']];
+                $saleItems[] = compact('product', 'price', 'lineTotal', 'amounts') + ['quantity' => $line['quantity']];
             }
 
             $discountValue = (float) ($data['discount_value'] ?? 0);
@@ -191,8 +223,9 @@ class PosController extends Controller
                 throw ValidationException::withMessages(['payment_mode' => 'This sale exceeds the selected customer credit limit.']);
             }
 
+            $receiptNumber = $this->numbers->next('pos');
             $order = Order::create([
-                'order_number' => 'POS-'.now()->format('ymdHis'), 'business_id' => $businessId, 'customer_id' => $customer?->id,
+                'order_number' => $receiptNumber, 'business_id' => $businessId, 'customer_id' => $customer?->id,
                 'pos_register_id' => $register->id, 'created_by' => auth()->id(), 'order_date' => now(), 'sale_channel' => 'pos',
                 'subtotal' => $subtotal, 'discount' => $data['discount_type'] === 'percentage' ? $discountValue : 0,
                 'discount_percentage' => $data['discount_type'] === 'percentage' ? $discountValue : 0, 'discount_amount' => $discount,
@@ -203,7 +236,23 @@ class PosController extends Controller
 
             foreach ($saleItems as $line) {
                 $product = $line['product'];
-                OrderItem::create(['order_id' => $order->id, 'product_id' => $product->id, 'product_name_snapshot' => $product->name, 'sku_snapshot' => $product->sku, 'quantity' => $line['quantity'], 'unit' => $product->unit, 'unit_price' => $line['price'], 'purchase_cost_snapshot' => $product->purchase_cost, 'line_total' => $line['lineTotal'], 'price' => $line['price'], 'total' => $line['lineTotal']]);
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'product_id' => $product->id,
+                    'product_name_snapshot' => $product->name,
+                    'quantity' => $line['quantity'],
+                    'unit' => $product->unit,
+                    'unit_price' => $line['price'],
+                    'purchase_cost_snapshot' => $product->purchase_cost,
+                    'line_subtotal' => $line['amounts']['lineSubtotal'],
+                    'discount_rate' => $line['amounts']['discountRate'],
+                    'discount_amount' => $line['amounts']['discountAmount'],
+                    'tax_rate' => $line['amounts']['taxRate'],
+                    'tax_amount' => $line['amounts']['taxAmount'],
+                    'line_total' => $line['lineTotal'],
+                    'price' => $line['price'],
+                    'total' => $line['lineTotal'],
+                ]);
                 $product->decrement('stock_quantity', $line['quantity']);
                 $fresh = $product->fresh();
                 Inventory::updateOrCreate(['business_id' => $businessId, 'product_id' => $product->id], ['available_stock' => $fresh->stock_quantity, 'low_stock_alert' => $fresh->low_stock_alert_qty ?? 10]);
@@ -223,9 +272,9 @@ class PosController extends Controller
                 KhataLedger::create(['business_id' => $businessId, 'customer_id' => $customer->id, 'order_id' => $order->id, 'entry_type' => 'purchase', 'type' => 'credit', 'amount' => $balance, 'customer_debit' => 0, 'customer_credit' => $balance, 'business_debit' => $balance, 'business_credit' => 0, 'description' => 'POS credit sale '.$order->order_number, 'balance' => $newBalance, 'balance_after' => $newBalance, 'entry_date' => now()->toDateString()]);
             }
 
-            $invoice = Invoice::create(['business_id' => $businessId, 'order_id' => $order->id, 'invoice_number' => 'POS-INV-'.now()->format('ymdHis'), 'customer_id' => $customer?->id, 'invoice_date' => now()->toDateString(), 'subtotal' => $subtotal, 'discount_percentage' => $order->discount_percentage, 'discount_amount' => $discount, 'grand_total' => $grandTotal, 'paid_amount' => $paid, 'balance' => $balance, 'payment_status' => $order->payment_status, 'status' => $balance <= 0 ? 'Paid' : 'Issued', 'issued_by' => auth()->id(), 'issued_at' => now()]);
+            $invoice = Invoice::create(['business_id' => $businessId, 'order_id' => $order->id, 'invoice_number' => $receiptNumber, 'customer_id' => $customer?->id, 'invoice_date' => now()->toDateString(), 'subtotal' => $subtotal, 'discount_percentage' => $order->discount_percentage, 'discount_amount' => $discount, 'grand_total' => $grandTotal, 'paid_amount' => $paid, 'balance' => $balance, 'payment_status' => $order->payment_status, 'status' => $balance <= 0 ? 'Paid' : 'Issued', 'issued_by' => auth()->id(), 'issued_at' => now()]);
             foreach ($order->items as $item) {
-                $invoice->items()->create(['product_id' => $item->product_id, 'product_name_snapshot' => $item->product_name_snapshot, 'sku_snapshot' => $item->sku_snapshot, 'quantity' => $item->quantity, 'unit' => $item->unit, 'unit_price' => $item->unit_price, 'line_total' => $item->line_total]);
+                $invoice->items()->create(['product_id' => $item->product_id, 'product_name_snapshot' => $item->product_name_snapshot, 'quantity' => $item->quantity, 'unit' => $item->unit, 'unit_price' => $item->unit_price, 'line_total' => $item->line_total]);
             }
 
             $this->postSaleAccounting($order, $paid, $balance, $costTotal);
@@ -340,16 +389,24 @@ class PosController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($order, $data) {
-            $return = PosReturn::create(['business_id' => $order->business_id, 'order_id' => $order->id, 'customer_id' => $order->customer_id, 'processed_by' => auth()->id(), 'refund_method' => $data['refund_method'], 'reason' => $data['reason'], 'returned_at' => now()]);
+        try {
+            $salesReturn = DB::transaction(function () use ($order, $data) {
+            $return = PosReturn::create(['business_id' => $order->business_id, 'return_number' => $this->numbers->next('sales_return'), 'order_id' => $order->id, 'customer_id' => $order->customer_id, 'processed_by' => auth()->id(), 'refund_method' => $data['refund_method'], 'reason' => $data['reason'], 'returned_at' => now()]);
             $refund = 0.0;
             $cost = 0.0;
             $returnedCount = 0;
             foreach (collect($data['items'])->filter(fn ($item) => (int) $item['quantity'] > 0) as $line) {
                 $item = OrderItem::where('order_id', $order->id)->lockForUpdate()->findOrFail($line['order_item_id']);
                 $alreadyReturned = $item->id ? $item->posReturnItems()->sum('quantity') : 0;
-                abort_if($line['quantity'] > ($item->quantity - $alreadyReturned), 422, 'Return quantity exceeds the sold quantity.');
-                $lineRefund = round((float) ($item->unit_price ?: $item->price) * $line['quantity'], 2);
+                $remainingReturnable = max(0, (int) $item->quantity - (int) $alreadyReturned);
+                if ((int) $line['quantity'] > $remainingReturnable) {
+                    throw ValidationException::withMessages([
+                        'items' => 'Return quantity cannot exceed available items. Only '.$remainingReturnable.' units are available.',
+                    ]);
+                }
+                // Refund the stored sale value so item-level tax and discount are not lost.
+                $unitRefund = (float) ($item->line_total ?? $item->total ?? 0) / max(1, (int) $item->quantity);
+                $lineRefund = round($unitRefund * $line['quantity'], 2);
                 $return->items()->create(['order_item_id' => $item->id, 'quantity' => $line['quantity'], 'refund_total' => $lineRefund]);
                 $product = Product::withTrashed()->where('business_id', $order->business_id)->find($item->product_id);
                 if ($product) {
@@ -364,7 +421,11 @@ class PosController extends Controller
                 $cost += round((float) ($item->purchase_cost_snapshot ?? 0) * $line['quantity'], 2);
                 $returnedCount += $line['quantity'];
             }
-            abort_if($returnedCount === 0, 422, 'Select at least one item to return.');
+            if ($returnedCount === 0) {
+                throw ValidationException::withMessages([
+                    'items' => 'Select at least one item to return.',
+                ]);
+            }
             $return->update(['refund_amount' => $refund]);
             if ($data['refund_method'] === 'Store Credit' && $order->customer) {
                 $order->customer->update(['current_balance' => max(0, (float) $order->customer->current_balance - $refund)]);
@@ -373,10 +434,33 @@ class PosController extends Controller
             if ($order->items->sum('quantity') === $order->items->sum(fn ($item) => $item->posReturnItems()->sum('quantity'))) {
                 $order->update(['status' => 'Returned']);
             }
-            $this->audit('POS return processed '.$order->order_number, $return->id, ['refund_amount' => $refund]);
-        });
+            return $return;
+            });
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            report($exception);
 
-        return redirect()->route($request->routeIs('business.sales.returns.*') ? 'business.sales.returns.index' : 'business.pos.history')->with('success', 'POS return processed and inventory restored.');
+            return back()->withInput()->withErrors([
+                'return' => 'Unable to process the return. Please try again.',
+            ]);
+        }
+
+        $this->audit('Sales return completed '.$salesReturn->return_number, $salesReturn->id, [
+            'return_number' => $salesReturn->return_number,
+            'refund_amount' => $salesReturn->refund_amount,
+            'notification_title' => 'Sales Return Completed',
+            'notification_message' => 'Sales return '.$salesReturn->return_number.' has been processed successfully.',
+        ]);
+
+        $destination = $request->routeIs('business.sales.returns.*')
+            ? route('business.sales.returns.show', $salesReturn)
+            : route('business.pos.history');
+
+        return redirect($destination)->with('tradeflow_return_alert', [
+            'title' => 'Sales Return Completed',
+            'message' => 'Sales return has been processed successfully. Stock, customer balance, payment and related accounting entries have been updated. Return No: '.$salesReturn->return_number,
+        ]);
     }
 
     public function report()

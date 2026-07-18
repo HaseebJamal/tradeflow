@@ -7,7 +7,9 @@ use App\Http\Controllers\Admin\CompanyPermissionController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Business\BusinessDashboardController;
 use App\Http\Controllers\Business\BusinessContextController;
+use App\Http\Controllers\Business\BusinessNotificationController;
 use App\Http\Controllers\Business\AuditLogController;
+use App\Http\Controllers\Business\CategoryController;
 use App\Http\Controllers\Business\CustomerController;
 use App\Http\Controllers\Business\DeliveryController;
 use App\Http\Controllers\Business\ExpenseController;
@@ -24,6 +26,7 @@ use App\Http\Controllers\Business\StaffDashboardController;
 use App\Http\Controllers\Business\SettingsController;
 use App\Http\Controllers\Business\SupportController;
 use App\Http\Controllers\Business\SupplierController;
+use App\Http\Controllers\Business\UnitController;
 use App\Http\Controllers\BusinessOnboardingController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\DashboardRedirectController;
@@ -63,28 +66,24 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::match(['post', 'put'], '/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
+    Route::post('/profile/staff-password-change-requests', [ProfileController::class, 'requestStaffPasswordChange'])->name('profile.staff-password-change-requests.store');
+    Route::patch('/profile/staff-password-change-requests/{passwordRequest}/approve', [ProfileController::class, 'approveStaffPasswordChangeRequest'])->name('profile.staff-password-change-requests.approve');
+    Route::patch('/profile/staff-password-change-requests/{passwordRequest}/reject', [ProfileController::class, 'rejectStaffPasswordChangeRequest'])->name('profile.staff-password-change-requests.reject');
     Route::patch('/profile/user-detail-change-requests/{changeRequest}/approve', [ProfileController::class, 'approveUserDetailChangeRequest'])->name('profile.user-detail-change-requests.approve');
     Route::patch('/profile/user-detail-change-requests/{changeRequest}/apply', [ProfileController::class, 'applyUserDetailChangeRequest'])->name('profile.user-detail-change-requests.apply');
     Route::patch('/profile/user-detail-change-requests/{changeRequest}/reject', [ProfileController::class, 'rejectUserDetailChangeRequest'])->name('profile.user-detail-change-requests.reject');
     Route::post('/activity/heartbeat', [AdminController::class, 'heartbeat'])->name('activity.heartbeat');
     Route::get('/notifications', function (\Illuminate\Http\Request $request) {
-        // A Super Admin working inside a company must read that company's
-        // notifications, not be taken back to the platform notification feed.
         if ($request->user()?->role === 'super_admin' && $request->session()->has('super_admin_business_context_id')) {
             return redirect()->route('business.context.notifications');
         }
 
-        if ($request->user()?->business_id && !app(\App\Services\CompanyPermissionService::class)->allowsUser($request->user(), 'notifications.view')) {
-            abort(403, 'Notification access is not enabled for your account.');
-        }
-
-        $notifications = $request->user()->notifications();
-        if ($request->user()?->role === 'super_admin') {
-            $notifications->where('data', 'not like', '%business_activity%');
-        }
-
-        return view('auth.notifications', ['notifications' => $notifications->latest()->paginate(20)]);
+        return app(BusinessNotificationController::class)->index($request);
     })->name('notifications.index');
+    Route::patch('/notifications/{notification}/read', [BusinessNotificationController::class, 'markRead'])->name('notifications.read');
+    Route::patch('/notifications/{notification}/unread', [BusinessNotificationController::class, 'markUnread'])->name('notifications.unread');
+    Route::delete('/notifications/{notification}', [BusinessNotificationController::class, 'destroy'])->name('notifications.destroy');
+    Route::patch('/notifications/read-all', [BusinessNotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::prefix('business')->name('business.')->middleware(['super_admin.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'track.activity'])->group(function () {
         Route::get('/support', [SupportController::class, 'index'])->name('support');
         Route::post('/support', [SupportController::class, 'store'])->name('support.store');
@@ -172,6 +171,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
     Route::get('/settings', [AdminController::class, 'settings'])->name('settings');
     Route::put('/settings', [AdminController::class, 'updateSettings'])->name('settings.update');
     Route::get('/business-reports', [AdminController::class, 'businessReports'])->name('business-reports');
+    Route::get('/business-reports/export/excel', [AdminController::class, 'businessReportsExcel'])->name('business-reports.export.excel');
+    Route::get('/business-reports/export/pdf', [AdminController::class, 'businessReportsPdf'])->name('business-reports.export.pdf');
+    Route::get('/business-reports/reports/{report}/edit', [AdminController::class, 'editBusinessReport'])->name('business-reports.edit');
+    Route::put('/business-reports/reports/{report}', [AdminController::class, 'updateBusinessReport'])->name('business-reports.update');
     Route::get('/business-reports/{business}', [AdminController::class, 'businessReportShow'])->name('business-reports.show');
     Route::post('/business-reports/{report}/approve', [AdminController::class, 'approveReport'])->name('business-reports.approve');
     Route::post('/business-reports/{report}/reject', [AdminController::class, 'rejectReport'])->name('business-reports.reject');
@@ -179,8 +182,19 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
 });
 
 Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'business.action', 'track.activity'])->group(function () {
-    Route::get('/access-denied', fn () => view('business.access-denied'))->name('access-denied');
-    Route::get('/dashboard', BusinessDashboardController::class)->name('dashboard')->middleware('business.permission:Dashboard');
+    Route::get('/access-denied', function (\App\Services\BusinessWorkspaceAccessService $workspaceAccess) {
+        // Re-check current permissions so a stale denial page does not survive
+        // a Super Admin permission update in the same authenticated session.
+        $destination = $workspaceAccess->firstEnabledRoute(request()->user());
+
+        return $destination
+            ? redirect()->route($destination)
+            : view('business.access-denied');
+    })->name('access-denied');
+    // Keep the basic dashboard available to approved businesses even when no
+    // operational module is enabled. Permission middleware uses it as its
+    // one-way denial destination, so it must not guard itself.
+    Route::get('/dashboard', BusinessDashboardController::class)->name('dashboard');
     Route::get('/context-profile', [BusinessContextController::class, 'profile'])->name('context.profile');
     Route::get('/context-notifications', [BusinessContextController::class, 'notifications'])->name('context.notifications');
     Route::patch('/products/{product}/low-stock-alert', [ProductController::class, 'updateLowStockAlert'])->name('products.low-stock-alert')->middleware('business.permission:Products');
@@ -192,6 +206,14 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::patch('/products/{product}/archive', [ProductController::class, 'archive'])->name('products.archive')->middleware('business.permission:Products');
     Route::patch('/products/{product}/restore', [ProductController::class, 'restore'])->name('products.restore')->middleware('business.permission:Products');
     Route::resource('products', ProductController::class)->middleware('business.permission:Products');
+    Route::patch('/categories/{category}/status', [CategoryController::class, 'toggleStatus'])->name('categories.status')->middleware('business.permission:Categories');
+    Route::patch('/categories/{category}/archive', [CategoryController::class, 'archive'])->name('categories.archive')->middleware('business.permission:Categories');
+    Route::patch('/categories/{category}/restore', [CategoryController::class, 'restore'])->name('categories.restore')->middleware('business.permission:Categories');
+    Route::resource('categories', CategoryController::class)->middleware('business.permission:Categories');
+    Route::patch('/units/{unit}/status', [UnitController::class, 'toggleStatus'])->name('units.status')->middleware('business.permission:Units');
+    Route::patch('/units/{unit}/archive', [UnitController::class, 'archive'])->name('units.archive')->middleware('business.permission:Units');
+    Route::patch('/units/{unit}/restore', [UnitController::class, 'restore'])->name('units.restore')->middleware('business.permission:Units');
+    Route::resource('units', UnitController::class)->middleware('business.permission:Units');
     Route::patch('/customers/{customer}/archive', [CustomerController::class, 'archive'])->name('customers.archive')->middleware('business.permission:Customers');
     Route::patch('/customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore')->middleware('business.permission:Customers');
     Route::patch('/customers/{customer}/status', [CustomerController::class, 'updateStatus'])->name('customers.status')->middleware('business.permission:Customers');
@@ -202,6 +224,8 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::post('/inventory/transfer', [InventoryController::class, 'transfer'])->name('inventory.transfer')->middleware('business.permission:Inventory');
     Route::patch('/inventory/{inventory}/alert', [InventoryController::class, 'updateAlert'])->name('inventory.alert')->middleware('business.permission:Inventory');
     Route::resource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update'])->middleware('business.permission:Customers');
+    Route::patch('/suppliers/{supplier}/archive', [SupplierController::class, 'archive'])->name('suppliers.archive')->middleware('business.permission:Suppliers');
+    Route::patch('/suppliers/{supplier}/restore', [SupplierController::class, 'restore'])->name('suppliers.restore')->middleware('business.permission:Suppliers');
     Route::resource('suppliers', SupplierController::class)->middleware('business.permission:Suppliers');
     Route::get('/purchases', [\App\Http\Controllers\Business\PurchaseController::class, 'index'])->name('purchases.index')->middleware('business.permission:Purchases');
     Route::get('/purchases/create', [\App\Http\Controllers\Business\PurchaseController::class, 'create'])->name('purchases.create')->middleware('business.permission:Purchases');
@@ -307,18 +331,19 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/audit-logs/live', [AuditLogController::class, 'live'])->name('audit-logs.live')->middleware('business.permission:Audit Logs');
     Route::get('/audit-logs/export/csv', [AuditLogController::class, 'exportCsv'])->name('audit-logs.export.csv')->middleware('business.permission:Audit Logs');
     Route::get('/audit-logs/export/pdf', [AuditLogController::class, 'exportPdf'])->name('audit-logs.export.pdf')->middleware('business.permission:Audit Logs');
-    Route::get('/staff', [StaffController::class, 'index'])->name('staff')->middleware('role:super_admin,business_owner');
-    Route::post('/staff', [StaffController::class, 'store'])->name('staff.store')->middleware('role:super_admin,business_owner');
-    Route::get('/staff/{staff}', [StaffController::class, 'show'])->name('staff.show')->middleware('role:super_admin,business_owner');
-    Route::get('/staff/{staff}/edit', [StaffController::class, 'edit'])->name('staff.edit')->middleware('role:super_admin,business_owner');
-    Route::put('/staff/{staff}', [StaffController::class, 'update'])->name('staff.update')->middleware('role:super_admin,business_owner');
-    Route::patch('/staff/{staff}/status', [StaffController::class, 'updateStatus'])->name('staff.status')->middleware('role:super_admin,business_owner');
-    Route::patch('/staff/{staff}/reset-password', [StaffController::class, 'resetPassword'])->name('staff.reset-password')->middleware('role:super_admin,business_owner');
-    Route::patch('/staff/{staff}/archive', [StaffController::class, 'archive'])->name('staff.archive')->middleware('role:super_admin,business_owner');
-    Route::patch('/staff/{staff}/restore', [StaffController::class, 'restore'])->name('staff.restore')->middleware('role:super_admin,business_owner');
-    Route::delete('/staff/{staff}', [StaffController::class, 'destroy'])->name('staff.destroy')->middleware('role:super_admin,business_owner');
+    Route::get('/staff', [StaffController::class, 'index'])->name('staff')->middleware('role:super_admin,business_owner,custom_staff');
+    Route::post('/staff', [StaffController::class, 'store'])->name('staff.store')->middleware('role:super_admin,business_owner,custom_staff');
+    Route::get('/staff/{staff}', [StaffController::class, 'show'])->name('staff.show')->middleware('role:super_admin,business_owner,custom_staff');
+    Route::get('/staff/{staff}/edit', [StaffController::class, 'edit'])->name('staff.edit')->middleware('role:super_admin,business_owner,custom_staff');
+    Route::put('/staff/{staff}', [StaffController::class, 'update'])->name('staff.update')->middleware('role:super_admin,business_owner,custom_staff');
+    Route::patch('/staff/{staff}/status', [StaffController::class, 'updateStatus'])->name('staff.status')->middleware('role:super_admin,business_owner,custom_staff');
+    Route::patch('/staff/{staff}/reset-password', [StaffController::class, 'resetPassword'])->name('staff.reset-password')->middleware('role:super_admin,business_owner,custom_staff');
+    Route::patch('/staff/{staff}/archive', [StaffController::class, 'archive'])->name('staff.archive')->middleware('role:super_admin,business_owner,custom_staff');
+    Route::patch('/staff/{staff}/restore', [StaffController::class, 'restore'])->name('staff.restore')->middleware('role:super_admin,business_owner,custom_staff');
+    Route::delete('/staff/{staff}', [StaffController::class, 'destroy'])->name('staff.destroy')->middleware('role:super_admin,business_owner,custom_staff');
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings')->middleware('role:super_admin,business_owner,custom_staff');
     Route::put('/settings/business', [SettingsController::class, 'updateBusiness'])->name('settings.business')->middleware('role:super_admin,business_owner');
+    Route::patch('/settings/logo', [SettingsController::class, 'updateLogo'])->name('settings.logo')->middleware('role:business_owner');
 });
 
 Route::prefix('staff')->name('staff.')->middleware(['auth', 'role:custom_staff', 'business.approved', 'track.activity'])->group(function () {

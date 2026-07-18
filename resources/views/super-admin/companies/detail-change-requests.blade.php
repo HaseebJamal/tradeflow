@@ -1,6 +1,8 @@
 @extends('layouts.dashboard')
+
 @section('page-title', 'Business Detail Change Requests')
 @section('page-subtitle', 'Review and control protected business-detail changes')
+
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
@@ -23,13 +25,15 @@
         <p><strong>Reason:</strong> {{ $changeRequest->reason }}</p>
         <div class="row g-3 mb-3">
             @foreach($changeRequest->requested_values as $field => $requested)
-                <div class="col-md-6">
-                    <div class="border rounded p-3 h-100">
-                        <small class="text-uppercase tf-muted">{{ str_replace('_', ' ', $field) }}</small>
-                        <div class="small tf-muted">Current: {{ $field === 'logo' ? ($changeRequest->old_values[$field] ? 'Logo uploaded' : 'No logo') : ($changeRequest->old_values[$field] ?? '—') }}</div>
+                <div class="col-md-6"><div class="border rounded p-3 h-100">
+                    <small class="text-uppercase tf-muted">{{ str_replace('_', ' ', $field) }}</small>
+                    @if($field === 'owner_email')
+                        <div class="small tf-muted">A protected login email update was requested. The value is not displayed to Super Admins.</div>
+                    @else
+                        <div class="small tf-muted">Current: {{ $field === 'logo' ? (data_get($changeRequest->old_values, $field) ? 'Logo uploaded' : 'No logo') : (data_get($changeRequest->old_values, $field) ?: '—') }}</div>
                         @if($field === 'logo')<div class="mt-1">@if($requested)<img src="{{ asset('storage/'.$requested) }}" class="navbar-avatar" alt="Requested logo">@else No logo change @endif</div>@else<strong>Requested: {{ $requested ?: '—' }}</strong>@endif
-                    </div>
-                </div>
+                    @endif
+                </div></div>
             @endforeach
         </div>
         @if($changeRequest->status === 'Pending')
@@ -38,10 +42,7 @@
                 <form method="POST" action="{{ route('admin.business-detail-change-requests.reject', $changeRequest) }}" class="col-md-6" data-tf-confirm-message="Reject this protected business-detail change request? The business owner will be notified.">@csrf @method('PATCH')<label class="form-label">Rejection Reason</label><div class="input-group"><input name="review_note" class="form-control" maxlength="2000" required placeholder="Explain why the request is rejected"><button class="btn btn-outline-danger">Reject</button></div></form>
             </div>
         @elseif($changeRequest->status === 'Approved')
-            <div class="border rounded p-3 bg-light d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <div><strong>Approved, awaiting application</strong><div class="tf-muted small">No business details have changed yet. Apply only after this final review.</div></div>
-                <form method="POST" action="{{ route('admin.business-detail-change-requests.apply', $changeRequest) }}" data-tf-confirm-message="Apply these approved business-detail changes now? The business owner will be notified after the changes are saved.">@csrf @method('PATCH')<button class="btn btn-success">Apply Changes & Notify Owner</button></form>
-            </div>
+            <div class="border rounded p-3 bg-light d-flex flex-wrap justify-content-between align-items-center gap-3"><div><strong>Approved, awaiting application</strong><div class="tf-muted small">No business details have changed yet. Apply only after this final review.</div></div><form method="POST" action="{{ route('admin.business-detail-change-requests.apply', $changeRequest) }}" data-tf-confirm-message="Apply these approved business-detail changes now? The business owner will be notified after the changes are saved.">@csrf @method('PATCH')<button class="btn btn-success">Apply Changes & Notify Owner</button></form></div>
         @else
             <p class="mb-0"><strong>Reviewed by:</strong> {{ $changeRequest->reviewer?->name ?? 'System' }} · <x-date-time :value="$changeRequest->reviewed_at" />@if($changeRequest->review_note) · {{ $changeRequest->review_note }}@endif</p>
         @endif

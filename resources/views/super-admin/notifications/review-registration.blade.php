@@ -26,7 +26,7 @@
             </div>
         </div>
 
-        <div class="tf-card p-4 mb-4"><h2 class="h5 mb-3">Owner account</h2><div class="row g-3"><div class="col-md-4"><small class="tf-muted d-block">Name</small><strong>{{ $business->owner?->name ?? 'Not available' }}</strong></div><div class="col-md-4"><small class="tf-muted d-block">Email</small><strong>{{ $business->owner?->email ?? 'Not available' }}</strong></div><div class="col-md-4"><small class="tf-muted d-block">Private owner phone</small><strong>{{ $business->owner?->phone ?? 'Not available' }}</strong></div></div></div>
+        <div class="tf-card p-4 mb-4"><h2 class="h5 mb-3">Owner account</h2><div class="row g-3"><div class="col-md-6"><small class="tf-muted d-block">Name</small><strong>{{ $business->owner?->name ?? 'Not available' }}</strong></div><div class="col-md-6"><small class="tf-muted d-block">Private owner phone</small><strong>{{ $business->owner?->phone ?? 'Not available' }}</strong></div></div></div>
 
         <div class="tf-card p-4"><h2 class="h5 mb-3">Verification documents</h2><div class="row g-2">@forelse($business->documents as $document)<div class="col-md-6"><a href="{{ asset('storage/'.$document->file_path) }}" target="_blank" class="d-flex align-items-center gap-2 border rounded p-3 text-decoration-none"><i class="bi bi-file-earmark-text fs-4 text-primary"></i><span>{{ Str::headline($document->document_type) }}<small class="d-block tf-muted">Open document</small></span></a></div>@empty<div class="col-12"><p class="tf-muted mb-0">No verification documents were submitted.</p></div>@endforelse</div></div>
     </div>

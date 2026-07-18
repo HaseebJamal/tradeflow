@@ -22,18 +22,11 @@
 </div>
 
 <div class="row g-4">
-    <div class="col-xl-6"><div class="tf-card p-4 h-100"><h2 class="h5">Business Health</h2>
-        @foreach([['Approved',$activeBusinesses ?? 0,'bg-success'],['Pending',$pendingApprovals ?? 0,'bg-warning'],['Suspended',$suspendedBusinesses ?? 0,'bg-danger'],['Rejected',$rejectedBusinesses ?? 0,'bg-secondary']] as [$name,$count,$bar])
-            @php($width = max(4, min(100, ($totalBusinesses ?? 1) ? ($count / max(1, $totalBusinesses)) * 100 : 0)))
-            <div class="mb-3"><div class="d-flex justify-content-between"><span>{{ $name }}</span><strong>{{ $count }}</strong></div><div class="progress"><div class="progress-bar {{ $bar }}" style="width: {{ $width }}%"></div></div></div>
-        @endforeach
-    </div></div>
-    <div class="col-xl-6"><div class="tf-card p-4 h-100"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Platform Operations</h2><small class="tf-muted">Managed from the dashboard</small></div><div class="row g-2">@foreach([
-        ['Companies & Approvals', 'admin.companies.index', 'bi-buildings', $pendingApprovals.' pending'],
-        ['Subscriptions', 'admin.subscriptions', 'bi-credit-card', $expiredSubscriptions.' expired'],
-        ['Complaints & Support', 'admin.support-tickets', 'bi-life-preserver', $ticketsCount.' open'],
-        ['Audit Logs', 'admin.audit-logs', 'bi-activity', $securityAlerts.' alerts'],
-        ['Notifications', 'admin.notifications.index', 'bi-bell', auth()->user()->unreadNotifications()->count().' unread'],
+    <div class="col-12"><div class="tf-card p-4 h-100"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Platform Operations</h2><small class="tf-muted">Managed from the dashboard</small></div><div class="row g-2">@foreach([
+        ['Companies & Approvals', 'admin.companies.index', 'bi-buildings', 'Manage companies'],
+        ['Subscriptions', 'admin.subscriptions', 'bi-credit-card', 'Manage subscriptions'],
+        ['Complaints & Support', 'admin.support-tickets', 'bi-life-preserver', 'Review support tickets'],
+        ['Audit Logs', 'admin.audit-logs', 'bi-activity', 'Review security activity'],
         ['Payments', 'admin.payments', 'bi-cash-stack', 'Payment records'],
         ['Business Reports', 'admin.business-reports', 'bi-graph-up', 'Review reports'],
         ['Categories', 'admin.categories', 'bi-tags', 'Catalog categories'],

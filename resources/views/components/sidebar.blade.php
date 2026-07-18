@@ -19,11 +19,12 @@
             ]
             : [
                 ['Products', 'bi-box', route('business.products.index'), 'products'],
+                ['Units', 'bi-rulers', route('business.units.index'), 'units'],
+                ['Categories', 'bi-tags', route('business.categories.index'), 'categories'],
                 ['Inventory', 'bi-clipboard-data', route('business.inventory'), 'inventory'],
                 ['Suppliers', 'bi-building-add', route('business.suppliers.index'), 'suppliers'],
                 ['Purchases', 'bi-cart-plus', route('business.purchases.index'), 'purchases'],
                 ['Purchase Returns', 'bi-arrow-return-left', route('business.purchase-returns.index'), 'purchase_returns'],
-                ['Customers', 'bi-person-lines-fill', route('business.customers.index'), 'customers'],
                 ['Sales', 'bi-bag-check', route('business.sales.index'), 'sales'],
                 ['Sales Returns', 'bi-arrow-return-right', route('business.sales.returns.index'), 'sales_returns'],
                 ['POS', 'bi-upc-scan', route('business.pos.index'), 'pos'],
@@ -33,31 +34,28 @@
                 ['Reports', 'bi-graph-up', route('business.reports'), 'reports'],
                 ['Roles & Users', 'bi-person-badge', route('business.staff'), 'staff'],
                 ['Audit Logs', 'bi-activity', route('business.audit-logs.index'), 'audit_logs'],
-                ['Settings', 'bi-gear', route('business.settings'), 'settings'],
             ]);
 
     if ($area === 'business') {
         $companyPermissions = app(\App\Services\CompanyPermissionService::class);
         $items = array_values(array_filter($items, function ($item) use ($companyPermissions, $role) {
             $module = $item[3] ?? null;
-            if ($role === 'custom_staff' && $module === 'staff') {
-                return false;
-            }
             if ($module === 'purchase_returns' && !$companyPermissions->allowsUser(auth()->user(), 'purchases.view')) {
                 return false;
             }
             if ($module === 'sales_returns' && !$companyPermissions->allowsUser(auth()->user(), 'sales.view')) {
                 return false;
             }
-            if ($module && !$companyPermissions->allowsUser(auth()->user(), $module.'.view')) {
+            $visibilityPermissions = $module === 'staff'
+                ? ['staff.view', 'staff.create', 'staff.edit', 'staff.permissions']
+                : [$module.'.view'];
+
+            if ($module && !collect($visibilityPermissions)
+                ->contains(fn (string $permission) => $companyPermissions->allowsUser(auth()->user(), $permission))) {
                 return false;
             }
 
-            if ($role === 'business_owner') {
-                return true;
-            }
-
-            return $item[3] === null || $companyPermissions->allowsUser(auth()->user(), $item[3].'.view');
+            return true;
         }));
     }
 
@@ -65,19 +63,91 @@
         ? ['Dashboard', 'bi-speedometer2', in_array($role, \App\Support\BusinessStaffRoles::DASHBOARD_ROLES, true) ? route('staff.dashboard') : route('business.dashboard')]
         : null;
 
-    $superAdminBusinessContext = $area === 'business'
-        && $role === 'super_admin'
-        && request()->attributes->get('super_admin_business_context');
+    $businessItemsByModule = collect($items)->keyBy(fn ($item) => $item[3] ?? '');
+    $businessGroups = [
+        [
+            'key' => 'products',
+            'parent' => $businessItemsByModule->get('products'),
+            'label' => 'Products',
+            'icon' => 'bi-box',
+            'routes' => ['business.products.*', 'business.units.*', 'business.categories.*'],
+            'items' => array_values(array_filter([
+                $businessItemsByModule->get('units'),
+                $businessItemsByModule->get('categories'),
+            ])),
+        ],
+        [
+            'key' => 'sales',
+            'parent' => $businessItemsByModule->get('sales'),
+            'label' => 'Sales',
+            'icon' => 'bi-bag-check',
+            'routes' => ['business.sales.*'],
+            'items' => array_values(array_filter([
+                $businessItemsByModule->get('sales_returns'),
+            ])),
+        ],
+        [
+            'key' => 'purchases',
+            'parent' => $businessItemsByModule->get('purchases'),
+            'label' => 'Purchases',
+            'icon' => 'bi-cart-plus',
+            'routes' => ['business.purchases.*', 'business.purchase-returns.*'],
+            'items' => array_values(array_filter([
+                $businessItemsByModule->get('purchase_returns'),
+            ])),
+        ],
+        [
+            'key' => 'accounting',
+            'parent' => $businessItemsByModule->get('accounting'),
+            'label' => 'Accounting / Ledger',
+            'icon' => 'bi-journal-text',
+            'routes' => ['business.khata', 'business.expenses.*'],
+            'items' => array_values(array_filter([
+                $businessItemsByModule->get('expenses'),
+            ])),
+        ],
+    ];
 
-    $purchaseReturnItem = collect($items)->first(fn ($item) => ($item[3] ?? null) === 'purchase_returns');
-    $salesReturnItem = collect($items)->first(fn ($item) => ($item[3] ?? null) === 'sales_returns');
+    $businessGroupsByKey = collect($businessGroups)->keyBy('key');
+    $businessItemRoutePatterns = [
+        'inventory' => ['business.inventory', 'business.inventory.*'],
+        'pos' => ['business.pos.*'],
+        'deliveries' => ['business.deliveries*'],
+        'suppliers' => ['business.suppliers.*'],
+        'reports' => ['business.reports*'],
+        'staff' => ['business.staff', 'business.staff.*'],
+        'audit_logs' => ['business.audit-logs.*'],
+        'units' => ['business.units.*'],
+        'categories' => ['business.categories.*'],
+        'sales_returns' => ['business.sales.returns.*'],
+        'purchase_returns' => ['business.purchase-returns.*'],
+    ];
+    $isBusinessItemActive = static function (array $item) use ($businessItemRoutePatterns): bool {
+        $module = $item[3] ?? null;
+        $patterns = $businessItemRoutePatterns[$module] ?? [];
+
+        return $patterns !== [] && request()->routeIs(...$patterns);
+    };
+    $businessSidebarEntries = [
+        ['type' => 'group', 'value' => $businessGroupsByKey->get('products')],
+        ['type' => 'item', 'value' => $businessItemsByModule->get('inventory')],
+        ['type' => 'group', 'value' => $businessGroupsByKey->get('sales')],
+        ['type' => 'item', 'value' => $businessItemsByModule->get('pos')],
+        ['type' => 'item', 'value' => $businessItemsByModule->get('deliveries')],
+        ['type' => 'group', 'value' => $businessGroupsByKey->get('purchases')],
+        ['type' => 'item', 'value' => $businessItemsByModule->get('suppliers')],
+        ['type' => 'group', 'value' => $businessGroupsByKey->get('accounting')],
+        ['type' => 'item', 'value' => $businessItemsByModule->get('reports')],
+        ['type' => 'item', 'value' => $businessItemsByModule->get('staff')],
+        ['type' => 'item', 'value' => $businessItemsByModule->get('audit_logs')],
+    ];
 
 @endphp
 @if($area === 'admin')
     @include('components.super-admin-sidebar')
 @else
 <div class="tf-sidebar-inner p-3">
-    <div class="d-flex align-items-center justify-content-between mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
         <a class="tf-brand text-white d-flex align-items-center mb-0" href="{{ route('public.home') }}">
             <span class="tf-brand-mark bg-blue"><i class="bi bi-box-seam"></i></span>
             <span class="tf-sidebar-text">TradeFlow</span>
@@ -87,28 +157,61 @@
     </div>
     <nav class="d-grid gap-1">
         @if($businessDashboardItem)
-            @php([$label, $icon, $url] = $businessDashboardItem)
+            @php
+                [$label, $icon, $url] = $businessDashboardItem;
+            @endphp
             <a href="{{ $url }}" class="{{ url()->current() === $url ? 'active' : '' }}" title="{{ $label }}"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">{{ $label }}</span></a>
         @endif
-        @foreach($items as $item)
-            @php([$label, $icon, $url] = $item)
-            @if($label === 'Purchase Returns' || $label === 'Sales Returns')
-                @continue
-            @endif
-            @if($label === 'Purchases')
-                <div class="tf-sidebar-module" data-tf-sidebar-module>
-                    <a href="{{ $url }}" class="{{ request()->routeIs('business.purchases.*', 'business.purchase-returns.*') ? 'active' : '' }}" title="Purchases"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">Purchases</span></a>
-                    @if($purchaseReturnItem)<div id="purchase-sidebar-submenu" class="tf-sidebar-submenu {{ request()->routeIs('business.purchases.*', 'business.purchase-returns.*') ? 'is-open' : '' }}"><a href="{{ $purchaseReturnItem[2] }}" class="{{ request()->routeIs('business.purchase-returns.*') ? 'active' : '' }}" title="Purchase Returns"><i class="bi bi-arrow-return-left"></i><span class="tf-sidebar-text">Purchase Returns</span></a></div>@endif
-                </div>
-            @elseif($label === 'Sales')
-                <div class="tf-sidebar-module" data-tf-sidebar-module>
-                    <a href="{{ $url }}" class="{{ request()->routeIs('business.sales.*') ? 'active' : '' }}" title="Sales"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">Sales</span></a>
-                    @if($salesReturnItem)<div id="sales-sidebar-submenu" class="tf-sidebar-submenu {{ request()->routeIs('business.sales.*') ? 'is-open' : '' }}"><a href="{{ $salesReturnItem[2] }}" class="{{ request()->routeIs('business.sales.returns.*') ? 'active' : '' }}" title="Sales Returns"><i class="bi bi-arrow-return-right"></i><span class="tf-sidebar-text">Sales Returns</span></a></div>@endif
-                </div>
-            @else
+        @if($area === 'retailer')
+            @foreach($items as $item)
+                @php
+                    [$label, $icon, $url] = $item;
+                @endphp
                 <a href="{{ $url }}" class="{{ url()->current() === $url ? 'active' : '' }}" title="{{ $label }}"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">{{ $label }}</span></a>
-            @endif
-        @endforeach
+            @endforeach
+        @else
+            @foreach($businessSidebarEntries as $entry)
+                @if($entry['type'] === 'item')
+                    @php
+                        $item = $entry['value'];
+                    @endphp
+                    @if($item)
+                        @php
+                            [$label, $icon, $url] = $item;
+                        @endphp
+                        <a href="{{ $url }}" class="{{ $isBusinessItemActive($item) ? 'active' : '' }}" title="{{ $label }}"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">{{ $label }}</span></a>
+                    @endif
+                @else
+                    @php
+                        $group = $entry['value'];
+                        $groupActive = $group && request()->routeIs(...$group['routes']);
+                        $groupOpen = $groupActive || ($group && !$group['parent'] && !empty($group['items']));
+                    @endphp
+                    @if($group && ($group['parent'] || !empty($group['items'])))
+                        <div class="tf-sidebar-module tf-sidebar-static-group {{ $groupOpen ? 'is-active' : '' }}">
+                            @if($group['parent'])
+                                @php
+                                    [$label, $icon, $url] = $group['parent'];
+                                @endphp
+                                <a href="{{ $url }}" class="tf-sidebar-parent-link {{ $groupActive ? 'active' : '' }}" title="{{ $label }}"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">{{ $label }}</span></a>
+                            @else
+                                <div class="tf-sidebar-parent-link is-disabled" title="{{ $group['label'] }}"><i class="bi {{ $group['icon'] }}"></i><span class="tf-sidebar-text">{{ $group['label'] }}</span></div>
+                            @endif
+                            @if(!empty($group['items']))
+                                <div class="tf-sidebar-submenu">
+                                    @foreach($group['items'] as $item)
+                                        @php
+                                            [$label, $icon, $url] = $item;
+                                        @endphp
+                                        <a href="{{ $url }}" class="{{ $isBusinessItemActive($item) ? 'active' : '' }}" title="{{ $label }}"><i class="bi {{ $icon }}"></i><span class="tf-sidebar-text">{{ $label }}</span></a>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+                @endif
+            @endforeach
+        @endif
     </nav>
 </div>
 @endif

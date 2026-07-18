@@ -16,8 +16,8 @@ class ExpenseController extends Controller
         $businessId = auth()->user()->business_id;
         $filters = request()->validate([
             'category' => ['nullable', 'string', 'max:100'],
-            'amount_from' => ['nullable', 'numeric', 'min:0'],
-            'amount_to' => ['nullable', 'numeric', 'min:0'],
+            'amount_from' => ['nullable', 'integer', 'min:0'],
+            'amount_to' => ['nullable', 'integer', 'min:0'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
             'month' => ['nullable', 'integer', 'between:1,12'],
@@ -55,7 +55,7 @@ class ExpenseController extends Controller
 
     public function store(Request $request)
     {
-        $data = $request->validate(['category' => ['required', 'in:Salary,Rent,Transport,Electricity,Marketing,Purchase,Maintenance,Other'], 'title' => ['required', 'max:255'], 'amount' => ['required', 'numeric', 'min:0'], 'date' => ['nullable', 'date'], 'expense_date' => ['nullable', 'date'], 'description' => ['nullable']]);
+        $data = $request->validate(['category' => ['required', 'in:Salary,Rent,Transport,Electricity,Marketing,Purchase,Maintenance,Other'], 'title' => ['required', 'max:255'], 'amount' => ['required', 'integer', 'min:0'], 'date' => ['nullable', 'date'], 'expense_date' => ['nullable', 'date'], 'description' => ['nullable']]);
         $data['date'] = $data['expense_date'] ?? $data['date'] ?? today();
         $data['expense_date'] = $data['date'];
         $expense = Expense::create($data + ['business_id' => auth()->user()->business_id]);

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class PosReturn extends Model
 {
-    protected $fillable = ['business_id', 'order_id', 'customer_id', 'processed_by', 'refund_amount', 'refund_method', 'reason', 'returned_at'];
+    protected $fillable = ['business_id', 'return_number', 'order_id', 'customer_id', 'processed_by', 'refund_amount', 'refund_method', 'reason', 'returned_at'];
 
     protected $casts = ['returned_at' => 'datetime'];
 

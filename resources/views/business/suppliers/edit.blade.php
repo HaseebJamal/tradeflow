@@ -11,7 +11,7 @@
         <div class="col-md-4"><label class="form-label">Phone</label><input name="phone" value="{{ old('phone', $supplier->phone) }}" class="form-control"></div>
         <div class="col-md-4"><label class="form-label">Email</label><input name="email" type="email" value="{{ old('email', $supplier->email) }}" class="form-control"></div>
         <div class="col-md-4"><label class="form-label">City</label><input name="city" value="{{ old('city', $supplier->city) }}" class="form-control"></div>
-        <div class="col-md-4"><label class="form-label">Opening Balance</label><input name="opening_balance" type="number" step="0.01" min="0" value="{{ old('opening_balance', $supplier->opening_balance) }}" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label">Opening Balance</label><input name="opening_balance" type="number" step="0.01" min="0" value="{{ old('opening_balance', $supplier->opening_balance ?? 0) }}" class="form-control"></div>
         <div class="col-md-4"><label class="form-label">Status</label><select name="status" class="form-select"><option @selected(old('status', $supplier->status) === 'Active')>Active</option><option @selected(old('status', $supplier->status) === 'Inactive')>Inactive</option></select></div>
         <div class="col-12"><label class="form-label">Address</label><textarea name="address" class="form-control" rows="3">{{ old('address', $supplier->address) }}</textarea></div>
         <div class="col-12"><button class="btn btn-tf-primary">Update Supplier</button><a href="{{ route('business.suppliers.show', $supplier) }}" class="btn btn-outline-secondary">Cancel</a></div>

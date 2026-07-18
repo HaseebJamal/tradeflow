@@ -34,8 +34,8 @@ class DeliveryController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'month' => ['nullable', 'integer', 'min:1', 'max:12'],
             'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
-            'amount_from' => ['nullable', 'numeric', 'min:0'],
-            'amount_to' => ['nullable', 'numeric', 'min:0', 'gte:amount_from'],
+            'amount_from' => ['nullable', 'integer', 'min:0'],
+            'amount_to' => ['nullable', 'integer', 'min:0', 'gte:amount_from'],
             'clear' => ['nullable', 'boolean'],
         ]);
         $dateColumn = $filters['date_type'] ?? 'created_at';
@@ -110,7 +110,7 @@ class DeliveryController extends Controller
         $data = $request->validate([
             'delivery_staff_id' => ['nullable', 'exists:users,id'],
             'address' => ['nullable'],
-            'amount' => ['nullable', 'numeric', 'min:0'],
+            'amount' => ['nullable', 'integer', 'min:0'],
             'status' => ['required', 'in:Pending,Assigned,Picked Up,Out for Delivery,Out For Delivery,Delivered,Failed,Returned,Cancelled'],
             'proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'note' => ['nullable'],
@@ -181,7 +181,7 @@ class DeliveryController extends Controller
             'receiver_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'receiver_phone' => ['nullable', 'regex:/^\d{11}$/'],
             'note' => ['nullable', 'string'],
-            'collected_amount' => ['nullable', 'numeric', 'min:0'],
+            'collected_amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer Manual,JazzCash Manual,Easypaisa Manual,Cheque'],
             'payment_reference' => ['nullable', 'string', 'max:255'],
             'payment_proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],

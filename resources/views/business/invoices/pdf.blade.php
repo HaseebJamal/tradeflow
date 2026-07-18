@@ -30,6 +30,8 @@
         <p>Subtotal: Rs {{ number_format($order->subtotal) }}</p>
         <p>Discount: {{ number_format($order->discount_percentage ?? $order->discount ?? 0, 2) }}%</p>
         <p>Discount Amount: Rs {{ number_format($order->discount_amount ?? 0) }}</p>
+        <p>Tax: {{ number_format($order->tax_rate ?? 0, 2) }}%</p>
+        <p>Tax Amount: Rs {{ number_format($order->tax_amount ?? 0) }}</p>
         <p>Paid: Rs {{ number_format($invoice->paid_amount) }}</p>
         <p>Balance: Rs {{ number_format($invoice->balance) }}</p>
         <h2>Grand Total: Rs {{ number_format($order->grand_total ?: $order->total) }}</h2>

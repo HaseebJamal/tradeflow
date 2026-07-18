@@ -44,13 +44,65 @@
             </form>
         </div>
     </div>
-    <div class="col-lg-5"><div class="tf-card p-4"><h2 class="h5">Change Password</h2><form method="POST" action="{{ route('profile.password') }}" class="d-grid gap-3">@csrf @method('PUT')
-        <div class="input-group"><input id="profileCurrentPassword" name="current_password" type="password" class="form-control" placeholder="Current password" autocomplete="current-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileCurrentPassword" data-tf-password-icon="#profileCurrentPasswordIcon"><i id="profileCurrentPasswordIcon" class="bi bi-eye"></i></button></div>
-        <div class="input-group"><input id="profileNewPassword" name="password" type="password" class="form-control" placeholder="New password" autocomplete="new-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileNewPassword" data-tf-password-icon="#profileNewPasswordIcon"><i id="profileNewPasswordIcon" class="bi bi-eye"></i></button></div>
-        <div class="input-group"><input id="profileConfirmPassword" name="password_confirmation" type="password" class="form-control" placeholder="Confirm password" autocomplete="new-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileConfirmPassword" data-tf-password-icon="#profileConfirmPasswordIcon"><i id="profileConfirmPasswordIcon" class="bi bi-eye"></i></button></div>
-        <button class="btn btn-outline-primary">Change Password</button></form></div></div>
+    <div class="col-lg-5">
+        @if($requiresOwnerApproval)
+            <div class="tf-card p-4">
+                <h2 class="h5">Request Password Change</h2>
+                <p class="tf-muted">Password changes require approval from your Business Owner.</p>
+                @if($pendingPasswordRequest)
+                    <div class="alert alert-warning mb-0">
+                        Your password-change request is pending review since {{ $pendingPasswordRequest->requested_at?->timezone(config('app.timezone'))->format('d M, Y h:i A') }}.
+                    </div>
+                @else
+                    <form method="POST" action="{{ route('profile.staff-password-change-requests.store') }}" class="d-grid gap-3" data-tf-confirm-message="Send this password-change request to your Business Owner?">
+                        @csrf
+                        <div>
+                            <label class="form-label" for="passwordChangeReason">Reason for password change</label>
+                            <textarea id="passwordChangeReason" name="reason" class="form-control" rows="4" minlength="10" maxlength="2000" required placeholder="Explain why you need your password changed.">{{ old('reason') }}</textarea>
+                        </div>
+                        <button class="btn btn-outline-primary">Submit Request</button>
+                    </form>
+                @endif
+            </div>
+        @else
+            <div class="tf-card p-4"><h2 class="h5">Change Password</h2><form method="POST" action="{{ route('profile.password') }}" class="d-grid gap-3">@csrf @method('PUT')
+                <div class="input-group"><input id="profileCurrentPassword" name="current_password" type="password" class="form-control" placeholder="Current password" autocomplete="current-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileCurrentPassword" data-tf-password-icon="#profileCurrentPasswordIcon"><i id="profileCurrentPasswordIcon" class="bi bi-eye"></i></button></div>
+                <div class="input-group"><input id="profileNewPassword" name="password" type="password" class="form-control" placeholder="New password" autocomplete="new-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileNewPassword" data-tf-password-icon="#profileNewPasswordIcon"><i id="profileNewPasswordIcon" class="bi bi-eye"></i></button></div>
+                <div class="input-group"><input id="profileConfirmPassword" name="password_confirmation" type="password" class="form-control" placeholder="Confirm password" autocomplete="new-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileConfirmPassword" data-tf-password-icon="#profileConfirmPasswordIcon"><i id="profileConfirmPasswordIcon" class="bi bi-eye"></i></button></div>
+                <button class="btn btn-outline-primary">Change Password</button></form></div>
+        @endif
+    </div>
 </div>
 @if($user->role === 'business_owner')
+    <div class="tf-card p-4 mt-4">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">Staff Password Change Requests</h2><p class="tf-muted mb-0">Review staff password-change requests for this business. Passwords are never included in a request.</p></div><span class="tf-badge {{ $staffPasswordChangeRequests->where('status', 'Pending')->isNotEmpty() ? 'tf-badge-warning' : 'tf-badge-success' }}">{{ $staffPasswordChangeRequests->where('status', 'Pending')->count() }} pending</span></div>
+        @forelse($staffPasswordChangeRequests as $passwordRequest)
+            <div class="border rounded p-3 mb-3">
+                <div class="d-flex justify-content-between flex-wrap gap-2 mb-2"><strong>{{ $passwordRequest->user?->name }}</strong><span class="tf-badge {{ $passwordRequest->status === 'Pending' ? 'tf-badge-warning' : ($passwordRequest->status === 'Rejected' ? 'tf-badge-danger' : 'tf-badge-success') }}">{{ $passwordRequest->status }}</span></div>
+                <p class="mb-1"><strong>Requested:</strong> {{ $passwordRequest->requested_at?->timezone(config('app.timezone'))->format('d M, Y h:i A') }}</p>
+                <details class="mb-2"><summary class="text-primary">View request</summary><p class="mb-0 mt-2"><strong>Reason:</strong> {{ $passwordRequest->reason }}</p></details>
+                @if($passwordRequest->status === 'Pending')
+                    <div class="row g-3">
+                        <form method="POST" action="{{ route('profile.staff-password-change-requests.approve', $passwordRequest) }}" class="col-lg-7" data-tf-confirm-message="Approve this request and set the staff member's new password?">@csrf @method('PATCH')
+                            <label class="form-label">Approve and set new password</label>
+                            <div class="row g-2">
+                                <div class="col-md-6"><div class="input-group"><input id="staffPassword{{ $passwordRequest->id }}" name="password" type="password" class="form-control" placeholder="New password" autocomplete="new-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#staffPassword{{ $passwordRequest->id }}" data-tf-password-icon="#staffPasswordIcon{{ $passwordRequest->id }}"><i id="staffPasswordIcon{{ $passwordRequest->id }}" class="bi bi-eye"></i></button></div></div>
+                                <div class="col-md-6"><div class="input-group"><input id="staffPasswordConfirmation{{ $passwordRequest->id }}" name="password_confirmation" type="password" class="form-control" placeholder="Confirm new password" autocomplete="new-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#staffPasswordConfirmation{{ $passwordRequest->id }}" data-tf-password-icon="#staffPasswordConfirmationIcon{{ $passwordRequest->id }}"><i id="staffPasswordConfirmationIcon{{ $passwordRequest->id }}" class="bi bi-eye"></i></button></div></div>
+                                <div class="col-12"><div class="input-group"><input name="review_note" class="form-control" maxlength="2000" placeholder="Optional note to the staff member"><button class="btn btn-success">Approve</button></div></div>
+                            </div>
+                        </form>
+                        <form method="POST" action="{{ route('profile.staff-password-change-requests.reject', $passwordRequest) }}" class="col-lg-5" data-tf-confirm-message="Reject this password-change request? The staff member will be notified.">@csrf @method('PATCH')
+                            <label class="form-label">Reject request</label><div class="input-group"><input name="review_note" class="form-control" maxlength="2000" required placeholder="Reason for rejection"><button class="btn btn-outline-danger">Reject</button></div>
+                        </form>
+                    </div>
+                @elseif($passwordRequest->review_note)
+                    <p class="mb-0"><strong>Owner note:</strong> {{ $passwordRequest->review_note }}</p>
+                @endif
+            </div>
+        @empty
+            <div class="text-center tf-muted py-3">No staff password-change requests are awaiting review.</div>
+        @endforelse
+    </div>
     <div class="tf-card p-4 mt-4">
         <div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">User Profile Change Requests</h2><p class="tf-muted mb-0">Review requests from users in your business. Changes are only made after you approve and apply them.</p></div><span class="tf-badge {{ $profileChangeRequests->where('status', 'Pending')->isNotEmpty() ? 'tf-badge-warning' : 'tf-badge-success' }}">{{ $profileChangeRequests->where('status', 'Pending')->count() }} pending</span></div>
         @forelse($profileChangeRequests as $changeRequest)

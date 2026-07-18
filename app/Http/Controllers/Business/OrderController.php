@@ -20,13 +20,14 @@ use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
 use App\Services\CompanyPermissionService;
+use App\Services\DocumentNumberService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private CompanyPermissionService $permissions) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private CompanyPermissionService $permissions, private DocumentNumberService $numbers) {}
 
     public function index(Request $request)
     {
@@ -43,8 +44,8 @@ class OrderController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'month' => ['nullable', 'integer', 'min:1', 'max:12'],
             'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
-            'amount_from' => ['nullable', 'numeric', 'min:0'],
-            'amount_to' => ['nullable', 'numeric', 'min:0', 'gte:amount_from'],
+            'amount_from' => ['nullable', 'integer', 'min:0'],
+            'amount_to' => ['nullable', 'integer', 'min:0', 'gte:amount_from'],
             'clear' => ['nullable', 'boolean'],
         ]);
 
@@ -54,7 +55,10 @@ class OrderController extends Controller
 
         $query = Order::with(['customer', 'creator', 'items.product'])
             ->where('business_id', $businessId)
-            ->when($filters['order_number'] ?? null, fn ($q, $value) => $q->where('order_number', 'like', "%{$value}%"))
+            ->when($filters['order_number'] ?? null, fn ($q, $value) => $q->where(function ($orders) use ($value) {
+                $orders->where('order_number', 'like', "%{$value}%")
+                    ->orWhereHas('invoice', fn ($invoice) => $invoice->where('invoice_number', 'like', "%{$value}%"));
+            }))
             ->when($filters['customer_id'] ?? null, fn ($q, $value) => $q->where('customer_id', $value))
             ->when($filters['product_id'] ?? null, fn ($q, $value) => $q->whereHas('items', fn ($items) => $items->where('product_id', $value)))
             ->when($filters['status'] ?? null, fn ($q, $value) => $q->where('status', $value))
@@ -92,7 +96,8 @@ class OrderController extends Controller
     {
         $code = trim((string) $request->validate(['code' => ['required', 'string', 'max:120']])['code']);
         $order = Order::where('business_id', $request->user()->business_id)
-            ->where('order_number', $code)
+            ->where(fn ($query) => $query->where('order_number', $code)
+                ->orWhereHas('invoice', fn ($invoice) => $invoice->where('invoice_number', $code)))
             ->first();
 
         return response()->json([
@@ -111,9 +116,15 @@ class OrderController extends Controller
             'new_customer_city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'new_customer_address' => ['nullable', 'string'],
             'new_customer_type' => ['nullable', 'in:Retail Shop,Dealer,Distributor,Retailer,Wholesaler'],
-            'new_customer_credit_limit' => ['nullable', 'numeric', 'min:0'],
-            'discount' => ['nullable', 'numeric', 'min:0', 'max:100'], 'payment_type' => ['nullable', 'in:Cash,Credit,Partial'],
-            'products' => ['required', 'array'], 'products.*.id' => ['required', 'exists:products,id'], 'products.*.quantity' => ['required', 'integer', 'min:1'],
+            'new_customer_credit_limit' => ['nullable', 'integer', 'min:0'],
+            'discount' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'payment_type' => ['nullable', 'in:Cash,Credit,Partial'],
+            'products' => ['required', 'array'],
+            'products.*.id' => ['required', 'exists:products,id'],
+            'products.*.quantity' => ['required', 'integer', 'min:1'],
+            'products.*.discount_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'products.*.tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
         ]);
         $data['products'] = collect($data['products'])->filter(fn ($line) => (int) $line['quantity'] > 0)->values()->all();
         if (empty($data['products'])) return back()->withErrors(['products' => 'Add at least one product quantity.']);
@@ -142,33 +153,64 @@ class OrderController extends Controller
         }
 
         DB::transaction(function () use ($data, $businessId, $customer, $request) {
-            $discountPercentage = (float) ($data['discount'] ?? 0);
-            $order = Order::create(['order_number' => 'ORD-'.now()->format('ymdHis'), 'business_id' => $businessId, 'customer_id' => $customer?->id, 'created_by' => auth()->id(), 'order_date' => now(), 'discount' => $discountPercentage, 'discount_percentage' => $discountPercentage, 'discount_amount' => 0, 'payment_type' => $data['payment_type'] ?? 'Credit', 'status' => 'New']);
-            $subtotal = 0;
-            $descriptionLines = [];
-            $calculationLines = collect();
-            foreach ($data['products'] as $line) {
-                $product = Product::where('business_id', $businessId)->lockForUpdate()->findOrFail($line['id']);
-                if ($product->stock_quantity < (int) $line['quantity']) {
+            // Lock every requested product in a stable order and validate the
+            // aggregate quantity before creating any sale records. This makes
+            // duplicate lines and concurrent order requests safe.
+            $requestedByProduct = collect($data['products'])
+                ->groupBy('id')
+                ->map(fn ($lines) => $lines->sum(fn ($line) => (int) $line['quantity']));
+            $lockedProducts = Product::where('business_id', $businessId)
+                ->whereIn('id', $requestedByProduct->keys()->all())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            foreach ($requestedByProduct as $productId => $requestedQuantity) {
+                $product = $lockedProducts->get((int) $productId);
+                if (!$product) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'products' => 'One of the selected products is unavailable for this business.',
+                    ]);
+                }
+
+                if ((int) $product->stock_quantity < (int) $requestedQuantity) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
                         'products' => 'Insufficient stock. Only '.$product->stock_quantity.' units are available.',
                     ]);
                 }
-                $total = $product->wholesale_price * $line['quantity'];
-                $subtotal += $total;
-                $calculationLines->push(['quantity' => $line['quantity'], 'price' => $product->wholesale_price]);
+            }
+
+            $discountPercentage = (int) ($data['discount'] ?? 0);
+            $taxRate = (int) ($data['tax_rate'] ?? 0);
+            $order = Order::create(['order_number' => $this->numbers->next('sales'), 'business_id' => $businessId, 'customer_id' => $customer?->id, 'created_by' => auth()->id(), 'order_date' => now(), 'discount' => $discountPercentage, 'discount_percentage' => $discountPercentage, 'discount_amount' => 0, 'tax_rate' => $taxRate, 'tax_amount' => 0, 'payment_type' => $data['payment_type'] ?? 'Credit', 'status' => 'New']);
+            $descriptionLines = [];
+            $calculationLines = collect();
+            foreach ($data['products'] as $line) {
+                $product = $lockedProducts->get((int) $line['id']);
+                $amounts = $this->finance->calculateLineAmounts(
+                    (int) $line['quantity'],
+                    (float) $product->wholesale_price,
+                    (int) ($line['discount_rate'] ?? 0),
+                    (int) ($line['tax_rate'] ?? 0),
+                );
+                $calculationLines->push(['line_total' => $amounts['lineTotal']]);
                 OrderItem::create([
                     'order_id' => $order->id,
                     'product_id' => $product->id,
                     'product_name_snapshot' => $product->name,
-                    'sku_snapshot' => $product->sku,
                     'quantity' => $line['quantity'],
                     'unit' => $product->unit,
                     'unit_price' => $product->wholesale_price,
                     'purchase_cost_snapshot' => $product->purchase_cost,
-                    'line_total' => $total,
+                    'line_subtotal' => $amounts['lineSubtotal'],
+                    'discount_rate' => $amounts['discountRate'],
+                    'discount_amount' => $amounts['discountAmount'],
+                    'tax_rate' => $amounts['taxRate'],
+                    'tax_amount' => $amounts['taxAmount'],
+                    'line_total' => $amounts['lineTotal'],
                     'price' => $product->wholesale_price,
-                    'total' => $total,
+                    'total' => $amounts['lineTotal'],
                 ]);
                 $product->decrement('stock_quantity', $line['quantity']);
                 $freshProduct = $product->fresh();
@@ -192,12 +234,14 @@ class OrderController extends Controller
                 ]);
                 $descriptionLines[] = $product->name.' x '.$line['quantity'];
             }
-            ['subtotal' => $subtotal, 'discountAmount' => $discountAmount, 'grandTotal' => $grandTotal] = $this->finance->orderAmountsFromLines($calculationLines, $discountPercentage);
+            ['subtotal' => $subtotal, 'discountAmount' => $discountAmount, 'taxAmount' => $taxAmount, 'grandTotal' => $grandTotal] = $this->finance->salesAmountsFromLines($calculationLines, $discountPercentage, $taxRate);
             $order->update([
                 'subtotal' => $subtotal,
                 'discount' => $discountPercentage,
                 'discount_percentage' => $discountPercentage,
                 'discount_amount' => $discountAmount,
+                'tax_rate' => $taxRate,
+                'tax_amount' => $taxAmount,
                 'total' => $grandTotal,
                 'grand_total' => $grandTotal,
                 'paid_amount' => 0,
@@ -289,12 +333,15 @@ class OrderController extends Controller
 
         $data = $request->validate([
             'customer_id' => ['nullable', 'string'],
-            'discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'discount' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
             'payment_type' => ['nullable', 'in:Cash,Credit,Partial'],
             'items' => ['required', 'array'],
             'items.*.item_id' => ['nullable', 'integer', 'exists:order_items,id'],
             'items.*.product_id' => ['nullable', 'integer', 'exists:products,id'],
             'items.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'items.*.discount_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'items.*.tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
             'items.*.remove' => ['nullable', 'boolean'],
         ]);
 
@@ -309,17 +356,24 @@ class OrderController extends Controller
         }
 
         DB::transaction(function () use ($order, $data, $request, $customer) {
+            // Serialise edits to the same order as well as the product-row
+            // locks in applyOrderItemEdits(), preventing a concurrent edit
+            // from applying the same stock delta twice.
+            $order = Order::where('business_id', $order->business_id)
+                ->lockForUpdate()
+                ->findOrFail($order->id);
             $order->load(['items.product', 'customer']);
             $oldTotal = (float) ($order->grand_total ?: $order->total);
             $oldCustomer = $order->customer;
-            $discountPercentage = (float) ($data['discount'] ?? 0);
+            $discountPercentage = (int) ($data['discount'] ?? 0);
+            $taxRate = (int) ($data['tax_rate'] ?? 0);
             $this->applyOrderItemEdits($order, $data['items']);
             $order->load(['items.product']);
             if ($order->items->isEmpty()) {
                 throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Order must keep at least one product.']);
             }
 
-            ['subtotal' => $subtotal, 'discountAmount' => $discountAmount, 'grandTotal' => $grandTotal] = $this->finance->orderAmountsFromLines($order->items, $discountPercentage);
+            ['subtotal' => $subtotal, 'discountAmount' => $discountAmount, 'taxAmount' => $taxAmount, 'grandTotal' => $grandTotal] = $this->finance->salesAmountsFromLines($order->items, $discountPercentage, $taxRate);
             $paidAmount = $this->finance->calculatePaidAmount($order);
             if ($paidAmount > $grandTotal) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
@@ -335,6 +389,8 @@ class OrderController extends Controller
                 'discount' => $discountPercentage,
                 'discount_percentage' => $discountPercentage,
                 'discount_amount' => $discountAmount,
+                'tax_rate' => $taxRate,
+                'tax_amount' => $taxAmount,
                 'total' => $grandTotal,
                 'grand_total' => $grandTotal,
                 'paid_amount' => $paidAmount,
@@ -344,7 +400,15 @@ class OrderController extends Controller
             ]);
 
             $this->syncOrderKhataAmount($order->fresh(['customer', 'items.product']), $oldTotal, $grandTotal, $oldCustomer);
-            $order->invoice?->update(['paid_amount' => $paidAmount, 'balance' => $balance]);
+            $order->invoice?->update([
+                'subtotal' => $subtotal,
+                'discount_percentage' => $discountPercentage,
+                'discount_amount' => $discountAmount,
+                'grand_total' => $grandTotal,
+                'paid_amount' => $paidAmount,
+                'balance' => $balance,
+                'payment_status' => $this->finance->paymentStatus($grandTotal, $paidAmount),
+            ]);
             $this->reverseOrderAccounting($order, 'Order edit reversal '.$order->order_number);
             $this->postOrderAccounting($order->fresh(['customer']));
             $this->audit($request, 'Updated sale '.$order->order_number, 'Sales', $order->id, ['grand_total' => $oldTotal], ['grand_total' => $grandTotal]);
@@ -579,12 +643,23 @@ class OrderController extends Controller
                     $this->adjustProductStock($order, $product, $delta, $delta > 0 ? 'order_edit_increase' : 'order_edit_decrease', 'Edited '.$order->order_number);
                 }
 
+                $amounts = $this->finance->calculateLineAmounts(
+                    $newQuantity,
+                    (float) $item->price,
+                    (int) ($row['discount_rate'] ?? $item->discount_rate ?? 0),
+                    (int) ($row['tax_rate'] ?? $item->tax_rate ?? 0),
+                );
                 $item->update([
                     'quantity' => $newQuantity,
                     'price' => $item->price,
-                    'total' => round($newQuantity * (float) $item->price, 2),
+                    'total' => $amounts['lineTotal'],
                     'unit_price' => $item->unit_price ?: $item->price,
-                    'line_total' => round($newQuantity * (float) $item->price, 2),
+                    'line_subtotal' => $amounts['lineSubtotal'],
+                    'discount_rate' => $amounts['discountRate'],
+                    'discount_amount' => $amounts['discountAmount'],
+                    'tax_rate' => $amounts['taxRate'],
+                    'tax_amount' => $amounts['taxAmount'],
+                    'line_total' => $amounts['lineTotal'],
                 ]);
                 $keptOrAdded++;
                 continue;
@@ -606,18 +681,28 @@ class OrderController extends Controller
             }
 
             $this->adjustProductStock($order, $product, $quantity, 'order_item_added', 'Added to '.$order->order_number);
+            $amounts = $this->finance->calculateLineAmounts(
+                $quantity,
+                (float) $product->wholesale_price,
+                (int) ($row['discount_rate'] ?? 0),
+                (int) ($row['tax_rate'] ?? 0),
+            );
             OrderItem::create([
                 'order_id' => $order->id,
                 'product_id' => $product->id,
                 'product_name_snapshot' => $product->name,
-                'sku_snapshot' => $product->sku,
                 'quantity' => $quantity,
                 'unit' => $product->unit,
                 'unit_price' => $product->wholesale_price,
                 'purchase_cost_snapshot' => $product->purchase_cost,
-                'line_total' => round($quantity * (float) $product->wholesale_price, 2),
+                'line_subtotal' => $amounts['lineSubtotal'],
+                'discount_rate' => $amounts['discountRate'],
+                'discount_amount' => $amounts['discountAmount'],
+                'tax_rate' => $amounts['taxRate'],
+                'tax_amount' => $amounts['taxAmount'],
+                'line_total' => $amounts['lineTotal'],
                 'price' => $product->wholesale_price,
-                'total' => round($quantity * (float) $product->wholesale_price, 2),
+                'total' => $amounts['lineTotal'],
             ]);
             $keptOrAdded++;
         }

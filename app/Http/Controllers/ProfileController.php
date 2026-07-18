@@ -3,10 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
+use App\Models\StaffPasswordChangeRequest;
 use App\Models\UserDetailChangeRequest;
+use App\Notifications\StaffPasswordChangeDecisionNotification;
+use App\Notifications\StaffPasswordChangeRequestedNotification;
 use App\Notifications\UserDetailsChangeDecisionNotification;
 use App\Notifications\UserDetailsChangeRequestedNotification;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -23,11 +27,21 @@ class ProfileController extends Controller
             'pendingProfileRequest' => $this->requiresOwnerApproval($user)
                 ? UserDetailChangeRequest::where('user_id', $user->id)->where('status', 'Pending')->latest()->first()
                 : null,
+            'pendingPasswordRequest' => $this->requiresOwnerApproval($user)
+                ? StaffPasswordChangeRequest::where('user_id', $user->id)->where('status', 'Pending')->latest('requested_at')->first()
+                : null,
             'profileChangeRequests' => $user->role === 'business_owner'
                 ? UserDetailChangeRequest::with('user')
                     ->where('business_id', $user->business_id)
                     ->whereIn('status', ['Pending', 'Approved'])
                     ->latest()
+                    ->get()
+                : collect(),
+            'staffPasswordChangeRequests' => $user->role === 'business_owner'
+                ? StaffPasswordChangeRequest::with('user')
+                    ->where('business_id', $user->business_id)
+                    ->whereIn('status', ['Pending', 'Approved', 'Rejected'])
+                    ->latest('requested_at')
                     ->get()
                 : collect(),
         ]);
@@ -184,7 +198,7 @@ class ProfileController extends Controller
         $this->ensureOwnerControlsRequest($changeRequest);
         abort_unless(in_array($changeRequest->status, ['Pending', 'Approved'], true), 422, 'This request is no longer awaiting a decision.');
 
-        $data = $request->validate(['review_note' => ['required', 'string', 'max:2000']]);
+        $data = $request->validate(['review_note' => ['nullable', 'string', 'max:2000']]);
         $requestedImage = $changeRequest->requested_values['profile_image'] ?? null;
         if ($requestedImage) {
             Storage::disk('public')->delete($requestedImage);
@@ -193,7 +207,7 @@ class ProfileController extends Controller
             'status' => 'Rejected',
             'reviewed_by' => auth()->id(),
             'reviewed_at' => now(),
-            'review_note' => $data['review_note'],
+            'review_note' => $data['review_note'] ?? null,
         ]);
         $this->auditProfileRequest($request, $changeRequest, 'profile_details_change_rejected', null, null, auth()->user()->name.' rejected '.$changeRequest->user->name.'\'s profile-change request.');
         $changeRequest->user?->notify(new UserDetailsChangeDecisionNotification($changeRequest->fresh()));
@@ -201,8 +215,113 @@ class ProfileController extends Controller
         return back()->with('success', 'Profile-change request rejected and the user was notified.');
     }
 
+    public function requestStaffPasswordChange(Request $request)
+    {
+        $user = auth()->user();
+        abort_unless($this->requiresOwnerApproval($user), 403);
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+
+        $passwordRequest = DB::transaction(function () use ($user, $data) {
+            // Lock the staff account itself so concurrent submissions cannot both
+            // observe an empty pending-request set.
+            $user->newQuery()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+
+            $pending = StaffPasswordChangeRequest::where('user_id', $user->id)
+                ->where('business_id', $user->business_id)
+                ->where('status', 'Pending')
+                ->lockForUpdate()
+                ->first();
+
+            if ($pending) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'password_request' => 'A password-change request is already pending Business Owner review.',
+                ]);
+            }
+
+            return StaffPasswordChangeRequest::create([
+                'business_id' => $user->business_id,
+                'user_id' => $user->id,
+                'reason' => $data['reason'],
+                'status' => 'Pending',
+                'requested_at' => now(),
+            ]);
+        });
+
+        $this->auditStaffPasswordRequest($request, $passwordRequest, 'staff_password_change_requested', $user->name.' requested a password change from the Business Owner.');
+        $user->business?->owner?->notify(new StaffPasswordChangeRequestedNotification($passwordRequest->load('user')));
+
+        return back()->with('success', 'Your password-change request was sent to the Business Owner.');
+    }
+
+    public function approveStaffPasswordChangeRequest(Request $request, StaffPasswordChangeRequest $passwordRequest)
+    {
+        $this->ensureOwnerControlsPasswordRequest($passwordRequest);
+        $data = $request->validate([
+            'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
+            'review_note' => ['nullable', 'string', 'max:2000'],
+        ], ['password.confirmed' => 'New password and confirmation do not match.']);
+
+        $passwordRequest = DB::transaction(function () use ($passwordRequest, $data) {
+            $lockedRequest = StaffPasswordChangeRequest::where('business_id', auth()->user()->business_id)
+                ->lockForUpdate()
+                ->findOrFail($passwordRequest->id);
+            abort_unless($lockedRequest->status === 'Pending', 422, 'Only pending password-change requests can be approved.');
+
+            $staff = $lockedRequest->user;
+            abort_unless($staff && $staff->business_id === auth()->user()->business_id && $staff->role !== 'business_owner' && ! $staff->isSuperAdmin(), 404);
+            $staff->update(['password' => Hash::make($data['password'])]);
+            $lockedRequest->update([
+                'status' => 'Approved',
+                'reviewed_by' => auth()->id(),
+                'reviewed_at' => now(),
+                'review_note' => $data['review_note'] ?? null,
+            ]);
+
+            return $lockedRequest->fresh('user');
+        });
+
+        $this->auditStaffPasswordRequest($request, $passwordRequest, 'staff_password_change_approved', auth()->user()->name.' approved a password change for '.$passwordRequest->user->name.'.');
+        $passwordRequest->user->notify(new StaffPasswordChangeDecisionNotification($passwordRequest));
+
+        return back()->with('success', 'Password-change request approved and the staff member was notified.');
+    }
+
+    public function rejectStaffPasswordChangeRequest(Request $request, StaffPasswordChangeRequest $passwordRequest)
+    {
+        $this->ensureOwnerControlsPasswordRequest($passwordRequest);
+        $data = $request->validate(['review_note' => ['nullable', 'string', 'max:2000']]);
+
+        $passwordRequest = DB::transaction(function () use ($passwordRequest, $data) {
+            $lockedRequest = StaffPasswordChangeRequest::where('business_id', auth()->user()->business_id)
+                ->lockForUpdate()
+                ->findOrFail($passwordRequest->id);
+            abort_unless($lockedRequest->status === 'Pending', 422, 'Only pending password-change requests can be rejected.');
+
+            $lockedRequest->update([
+                'status' => 'Rejected',
+                'reviewed_by' => auth()->id(),
+                'reviewed_at' => now(),
+                'review_note' => $data['review_note'] ?? null,
+            ]);
+
+            return $lockedRequest->fresh('user');
+        });
+
+        $this->auditStaffPasswordRequest($request, $passwordRequest, 'staff_password_change_rejected', auth()->user()->name.' rejected a password-change request from '.$passwordRequest->user->name.'.');
+        $passwordRequest->user->notify(new StaffPasswordChangeDecisionNotification($passwordRequest));
+
+        return back()->with('success', 'Password-change request rejected and the staff member was notified.');
+    }
+
     public function password(Request $request)
     {
+        if ($this->requiresOwnerApproval(auth()->user())) {
+            return back()->withErrors(['password' => 'Password changes require approval from your Business Owner.']);
+        }
+
         $data = $request->validate([
             'current_password' => ['required', 'current_password'],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
@@ -224,6 +343,13 @@ class ProfileController extends Controller
         abort_unless($owner->role === 'business_owner' && $owner->business_id === $changeRequest->business_id, 403);
     }
 
+    private function ensureOwnerControlsPasswordRequest(StaffPasswordChangeRequest $passwordRequest): void
+    {
+        $owner = auth()->user();
+        abort_unless($owner->role === 'business_owner' && $owner->business_id === $passwordRequest->business_id, 403);
+        abort_unless($passwordRequest->user && $passwordRequest->user->business_id === $owner->business_id && $passwordRequest->user->role !== 'business_owner' && ! $passwordRequest->user->isSuperAdmin(), 404);
+    }
+
     private function auditProfileRequest(Request $request, UserDetailChangeRequest $changeRequest, string $action, ?array $oldValues, ?array $newValues, string $description): void
     {
         AuditLog::create([
@@ -236,6 +362,22 @@ class ProfileController extends Controller
             'description' => $description,
             'old_values' => $oldValues,
             'new_values' => $newValues,
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+        ]);
+    }
+
+    private function auditStaffPasswordRequest(Request $request, StaffPasswordChangeRequest $passwordRequest, string $action, string $description): void
+    {
+        AuditLog::create([
+            'business_id' => $passwordRequest->business_id,
+            'target_user_id' => $passwordRequest->user_id,
+            'module' => 'Roles & Users',
+            'action' => $action,
+            'record_type' => 'StaffPasswordChangeRequest',
+            'record_id' => $passwordRequest->id,
+            'description' => $description,
+            'new_values' => ['status' => $passwordRequest->status],
             'ip_address' => $request->ip(),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);

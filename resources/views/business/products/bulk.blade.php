@@ -12,7 +12,7 @@
         @csrf
         <div class="table-responsive">
             <table class="table align-middle" data-bulk-products>
-                <thead><tr><th>Product Name</th><th>Category</th><th>Unit</th><th>Purchase Cost</th><th>Wholesale Price</th><th>Retail Price</th><th>SKU</th><th>Barcode</th><th>Batch</th><th>Expiry Date (Optional)</th><th>Low Stock</th><th></th></tr></thead>
+                <thead><tr><th>Product Name</th><th>Category</th><th>Unit</th><th>Purchase Cost</th><th>Wholesale Price</th><th>Retail Price</th><th>Barcode</th><th>Batch</th><th>Expiry Date (Optional)</th><th>Low Stock</th><th></th></tr></thead>
                 <tbody>
                     @for($i=0;$i<3;$i++)
                         <tr data-bulk-row>
@@ -22,8 +22,7 @@
                             <td><input name="products[{{ $i }}][purchase_cost]" type="number" step="0.01" min="0" class="form-control" required data-purchase-price></td>
                             <td><input name="products[{{ $i }}][wholesale_price]" type="number" step="0.01" min="0" class="form-control" required data-selling-price></td>
                             <td><input name="products[{{ $i }}][retail_price]" type="number" step="0.01" min="0" class="form-control"></td>
-                            <td><input name="products[{{ $i }}][sku]" class="form-control"></td>
-                            <td><input name="products[{{ $i }}][barcode]" class="form-control"></td>
+                            <td><div class="form-control bg-light text-muted">Auto generated</div></td>
                             <td><input name="products[{{ $i }}][batch_number]" class="form-control"></td>
                             <td class="bulk-expiry-cell">
                                 <div class="form-check mb-1">

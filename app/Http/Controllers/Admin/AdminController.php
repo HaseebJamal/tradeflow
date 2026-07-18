@@ -29,6 +29,7 @@ use App\Models\TicketMessage;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -46,17 +47,27 @@ class AdminController extends Controller
 
     private function platformDashboardData(): array
     {
+        // Keep the platform business-status cards on one authoritative aggregate
+        // instead of issuing a separate query for every status.
+        $businessSummary = Business::query()
+            ->selectRaw("COUNT(*) as total_businesses,
+                SUM(CASE WHEN LOWER(status) = 'pending' THEN 1 ELSE 0 END) as pending_businesses,
+                SUM(CASE WHEN LOWER(status) = 'approved' THEN 1 ELSE 0 END) as approved_businesses,
+                SUM(CASE WHEN LOWER(status) = 'rejected' THEN 1 ELSE 0 END) as rejected_businesses,
+                SUM(CASE WHEN LOWER(status) = 'suspended' THEN 1 ELSE 0 END) as suspended_businesses")
+            ->first();
+
         $monthlyRevenue = Schema::hasColumn('subscriptions', 'amount')
             ? Subscription::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('amount')
             : Subscription::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)
                 ->join('subscription_plans', 'subscriptions.subscription_plan_id', '=', 'subscription_plans.id')->sum('subscription_plans.price');
 
         return [
-            'totalBusinesses' => Business::count(),
-            'pendingApprovals' => Business::whereIn('status', ['Pending', 'pending'])->count(),
-            'activeBusinesses' => Business::whereIn('status', ['Approved', 'approved'])->count(),
-            'rejectedBusinesses' => Business::whereIn('status', ['Rejected', 'rejected'])->count(),
-            'suspendedBusinesses' => Business::whereIn('status', ['Suspended', 'suspended'])->count(),
+            'totalBusinesses' => (int) ($businessSummary->total_businesses ?? 0),
+            'pendingApprovals' => (int) ($businessSummary->pending_businesses ?? 0),
+            'activeBusinesses' => (int) ($businessSummary->approved_businesses ?? 0),
+            'rejectedBusinesses' => (int) ($businessSummary->rejected_businesses ?? 0),
+            'suspendedBusinesses' => (int) ($businessSummary->suspended_businesses ?? 0),
             'totalUsers' => User::count(),
             'activeSubscriptions' => Subscription::where('status', 'Active')->count(),
             'expiredSubscriptions' => Subscription::where('status', 'Expired')->count(),
@@ -258,12 +269,7 @@ class AdminController extends Controller
 
     public function updateStatus(Request $request, Business $business)
     {
-        $data = $request->validate(['status' => ['required', 'in:pending,approved,rejected,suspended']]);
-        $oldStatus = $business->status;
-        $business->update(['status' => $data['status']]);
-        $this->audit('Changed business status from '.$oldStatus.' to '.$data['status'].' for '.$business->business_name, $request);
-
-        return back()->with('success', 'Business status updated.');
+        return app(CompanyController::class)->updateStatus($request, $business);
     }
 
     public function updateBusinessStatus(Request $request, Business $business)
@@ -277,8 +283,10 @@ class AdminController extends Controller
         if ($search = $request->string('search')->trim()->value()) {
             $query->where(fn ($builder) => $builder
                 ->where('name', 'like', "%{$search}%")
-                ->orWhere('email', 'like', "%{$search}%")
-                ->orWhere('phone', 'like', "%{$search}%"));
+                ->orWhere('phone', 'like', "%{$search}%")
+                ->orWhere(fn ($emailQuery) => $emailQuery
+                    ->whereNull('business_id')
+                    ->where('email', 'like', "%{$search}%")));
         }
 
         $query
@@ -301,6 +309,11 @@ class AdminController extends Controller
 
     public function updateUserStatus(Request $request, User $user)
     {
+        if ($user->business_id) {
+            $this->audit('Blocked company account status access', $request, 'Users', $user->id, null, ['operation' => 'user_status_update']);
+            abort(403, 'Manage company users through their company status controls.');
+        }
+
         $data = $request->validate(['status' => ['required', 'in:active,suspended,inactive']]);
         if ($user->role === 'super_admin' && ($user->id === auth()->id() || User::where('role', 'super_admin')->where('status', 'active')->count() <= 1)) {
             return back()->withErrors(['status' => 'The primary Super Admin cannot be suspended or deactivated from normal admin screens.']);
@@ -312,6 +325,11 @@ class AdminController extends Controller
 
     public function resetUserPassword(Request $request, User $user)
     {
+        if ($user->business_id) {
+            $this->audit('Blocked company credential reset attempt', $request, 'Users', $user->id, null, ['operation' => 'password_reset']);
+            abort(403, 'Super Admins cannot reset company user passwords.');
+        }
+
         if ($user->id === auth()->id()) {
             return back()->withErrors(['password' => 'Use your profile security settings to change your own password.']);
         }
@@ -383,7 +401,7 @@ class AdminController extends Controller
     public function storePlan(Request $request)
     {
         $plan = SubscriptionPlan::create($request->validate([
-            'name' => ['required', 'max:100'], 'price' => ['required', 'numeric', 'min:0'], 'product_limit' => ['required', 'integer', 'min:0'], 'staff_limit' => ['required', 'integer', 'min:0'], 'order_limit' => ['required', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Inactive'],
+            'name' => ['required', 'max:100'], 'price' => ['required', 'integer', 'min:0'], 'product_limit' => ['required', 'integer', 'min:0'], 'staff_limit' => ['required', 'integer', 'min:0'], 'order_limit' => ['required', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Inactive'],
         ]));
         $this->audit('Subscription plan created: '.$plan->name, $request, 'Subscriptions', $plan->id, null, $plan->only(['name', 'price', 'product_limit', 'staff_limit', 'order_limit', 'status']));
 
@@ -393,7 +411,7 @@ class AdminController extends Controller
     public function updatePlan(Request $request, SubscriptionPlan $plan)
     {
         $data = $request->validate([
-            'name' => ['required', 'max:100'], 'price' => ['required', 'numeric', 'min:0'], 'product_limit' => ['required', 'integer', 'min:0'], 'staff_limit' => ['required', 'integer', 'min:0'], 'order_limit' => ['required', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Inactive'],
+            'name' => ['required', 'max:100'], 'price' => ['required', 'integer', 'min:0'], 'product_limit' => ['required', 'integer', 'min:0'], 'staff_limit' => ['required', 'integer', 'min:0'], 'order_limit' => ['required', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Inactive'],
         ]);
         $old = $plan->only(array_keys($data));
         $plan->update($data);
@@ -424,7 +442,7 @@ class AdminController extends Controller
         $data = $request->validate([
             'business_id' => ['required', 'exists:businesses,id'],
             'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
-            'amount' => ['nullable', 'numeric', 'min:0'],
+            'amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
@@ -447,7 +465,7 @@ class AdminController extends Controller
     {
         $data = $request->validate([
             'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
-            'amount' => ['nullable', 'numeric', 'min:0'],
+            'amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
@@ -608,7 +626,7 @@ class AdminController extends Controller
     {
         $data = $request->validate([
             'business_id' => ['required', 'exists:businesses,id'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'integer', 'min:1'],
             'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
             'reference_number' => ['nullable', 'string', 'max:120'],
             'status' => ['required', Rule::in(['Received', 'Pending', 'Rejected', 'Refunded'])],
@@ -713,34 +731,24 @@ class AdminController extends Controller
 
     public function businessReports(Request $request)
     {
+        $this->useCurrentBusinessReportDates($request);
         $query = BusinessReport::with('business');
-        foreach (['business_id', 'report_type', 'month', 'year', 'status'] as $filter) {
+        foreach (['business_id', 'report_type', 'status'] as $filter) {
             if ($request->filled($filter)) $query->where($filter, $request->input($filter));
         }
+        $this->applyBusinessReportPeriod($query, 'created_at', $request);
         $sales = Order::whereNotIn('status', ['Cancelled', 'Void', 'Returned'])
-            ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')))
-            ->when($request->filled('date_from'), fn ($builder) => $builder->whereDate('order_date', '>=', $request->date_from))
-            ->when($request->filled('date_to'), fn ($builder) => $builder->whereDate('order_date', '<=', $request->date_to))
-            ->when($request->filled('month'), fn ($builder) => $builder->whereMonth('order_date', $request->integer('month')))
-            ->when($request->filled('year'), fn ($builder) => $builder->whereYear('order_date', $request->integer('year')));
+            ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
+        $this->applyBusinessReportPeriod($sales, 'order_date', $request);
         $expenses = Expense::query()
-            ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')))
-            ->when($request->filled('date_from'), fn ($builder) => $builder->whereDate('expense_date', '>=', $request->date_from))
-            ->when($request->filled('date_to'), fn ($builder) => $builder->whereDate('expense_date', '<=', $request->date_to))
-            ->when($request->filled('month'), fn ($builder) => $builder->whereMonth('expense_date', $request->integer('month')))
-            ->when($request->filled('year'), fn ($builder) => $builder->whereYear('expense_date', $request->integer('year')));
-        $period = fn ($builder, string $column) => $builder
-            ->when($request->filled('date_from'), fn ($q) => $q->whereDate($column, '>=', $request->date_from))
-            ->when($request->filled('date_to'), fn ($q) => $q->whereDate($column, '<=', $request->date_to))
-            ->when($request->filled('month'), fn ($q) => $q->whereMonth($column, $request->integer('month')))
-            ->when($request->filled('year'), fn ($q) => $q->whereYear($column, $request->integer('year')));
-        $companySummaries = Business::when($request->filled('business_id'), fn ($builder) => $builder->whereKey($request->integer('business_id')))
-            ->withSum(['orders as sales_total' => fn ($builder) => $period($builder->whereNotIn('status', ['Cancelled', 'Void', 'Returned']), 'order_date')], 'grand_total')
-            ->withSum(['expenses as expense_total' => fn ($builder) => $period($builder, 'expense_date')], 'amount')
-            ->orderByDesc('sales_total')->get();
+            ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
+        $this->applyBusinessReportPeriod($expenses, 'expense_date', $request);
+        $companySummaries = $this->companyPerformanceQuery($request)
+            ->paginate(20, ['*'], 'company_page')
+            ->withQueryString();
         $purchases = Purchase::query()
             ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
-        $period($purchases, 'purchase_date');
+        $this->applyBusinessReportPeriod($purchases, 'purchase_date', $request);
 
         return view('super-admin.business-reports.index', [
             'reports' => $query->latest()->paginate(20)->withQueryString(),
@@ -783,8 +791,162 @@ class AdminController extends Controller
 
     public function reportPdf(BusinessReport $report)
     {
-        return Pdf::loadView('super-admin.business-reports.pdf', ['report' => $report->load('business.owner')])
-            ->stream('business-report-'.$report->id.'.pdf');
+        $pdf = Pdf::loadView('super-admin.business-reports.pdf', [
+            'report' => $report->load('business.owner'),
+            'generatedAt' => now()->timezone(config('app.timezone')),
+        ]);
+
+        return request()->boolean('download')
+            ? $pdf->download('business-report-'.$report->id.'.pdf')
+            : $pdf->stream('business-report-'.$report->id.'.pdf');
+    }
+
+    public function businessReportsExcel(Request $request)
+    {
+        $this->useCurrentBusinessReportDates($request);
+        $summaries = $this->companyPerformanceQuery($request)->get();
+        $generatedAt = now()->timezone(config('app.timezone'));
+        $filters = $this->businessReportFilterLabels($request);
+
+        $filename = 'tradeflow-business-report-'.$generatedAt->format('Ymd-His').'.xlsx';
+        $path = $this->createBusinessReportsWorkbook($summaries, $generatedAt, $filters);
+
+        return response()->download($path, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    public function businessReportsPdf(Request $request)
+    {
+        $this->useCurrentBusinessReportDates($request);
+        $generatedAt = now()->timezone(config('app.timezone'));
+        $pdf = Pdf::loadView('super-admin.business-reports.summary-pdf', [
+            'companySummaries' => $this->companyPerformanceQuery($request)->get(),
+            'filters' => $this->businessReportFilterLabels($request),
+            'generatedAt' => $generatedAt,
+        ])->setPaper('a4', 'landscape');
+
+        return $request->boolean('download')
+            ? $pdf->download('tradeflow-business-report-'.$generatedAt->format('Ymd-His').'.pdf')
+            : $pdf->stream('tradeflow-business-report-'.$generatedAt->format('Ymd-His').'.pdf');
+    }
+
+    public function editBusinessReport(BusinessReport $report)
+    {
+        return view('super-admin.business-reports.edit', ['report' => $report->load('business')]);
+    }
+
+    public function updateBusinessReport(Request $request, BusinessReport $report): RedirectResponse
+    {
+        $data = $request->validate([
+            'report_type' => ['required', 'string', 'max:100'],
+            'month' => ['nullable', 'integer', 'between:1,12'],
+            'year' => ['nullable', 'integer', 'between:2000,2100'],
+            'status' => ['required', Rule::in(['Pending Review', 'Verified', 'Rejected'])],
+            'admin_note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $report->update($data);
+        $this->audit('Business report metadata updated: #'.$report->id, $request);
+
+        return redirect()->route('admin.business-reports')->with('success', 'Report metadata updated. Financial values remain read-only.');
+    }
+
+    private function companyPerformanceQuery(Request $request)
+    {
+        $period = fn ($builder, string $column) => $this->applyBusinessReportPeriod($builder, $column, $request);
+
+        return Business::query()
+            ->when($request->filled('business_id'), fn ($builder) => $builder->whereKey($request->integer('business_id')))
+            ->withSum(['orders as sales_total' => fn ($builder) => $period($builder->whereNotIn('status', ['Cancelled', 'Void', 'Returned']), 'order_date')], 'grand_total')
+            ->withSum(['expenses as expense_total' => fn ($builder) => $period($builder, 'expense_date')], 'amount')
+            ->orderByDesc('sales_total');
+    }
+
+    private function applyBusinessReportPeriod($query, string $column, Request $request)
+    {
+        if ($request->filled('date_from')) {
+            $query->where($column, '>=', Carbon::parse($request->input('date_from'), config('app.timezone'))->startOfDay());
+        }
+        if ($request->filled('date_to')) {
+            $query->where($column, '<=', Carbon::parse($request->input('date_to'), config('app.timezone'))->endOfDay());
+        }
+
+        return $query;
+    }
+
+    private function businessReportFilterLabels(Request $request): array
+    {
+        $business = $request->filled('business_id') ? Business::find($request->integer('business_id')) : null;
+
+        return array_filter([
+            'Business: '.($business?->business_name ?? 'All businesses'),
+            $request->filled('date_from') ? 'From: '.Carbon::parse($request->input('date_from'), config('app.timezone'))->format('n/j/Y') : null,
+            $request->filled('date_to') ? 'To: '.Carbon::parse($request->input('date_to'), config('app.timezone'))->format('n/j/Y') : null,
+            $request->filled('report_type') ? 'Report Type: '.$request->input('report_type') : null,
+            $request->filled('status') ? 'Status: '.$request->input('status') : null,
+        ]);
+    }
+
+    /** Set the report period to today when the user has not supplied a date. */
+    private function useCurrentBusinessReportDates(Request $request): void
+    {
+        $today = now()->timezone(config('app.timezone'))->toDateString();
+
+        $request->merge([
+            'date_from' => $request->filled('date_from') ? $request->input('date_from') : $today,
+            'date_to' => $request->filled('date_to') ? $request->input('date_to') : $today,
+        ]);
+    }
+
+    /** Create a valid Office Open XML workbook instead of HTML content disguised as .xls. */
+    private function createBusinessReportsWorkbook($summaries, Carbon $generatedAt, array $filters): string
+    {
+        $escape = static fn ($value): string => htmlspecialchars((string) $value, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+        $rows = [
+            ['TradeFlow Company-wise Performance Report'],
+            ['Generated', $generatedAt->format('n/j/Y h:i A')],
+            ['Filters', implode(' | ', $filters)],
+            [],
+            ['Business', 'Sales', 'Expenses', 'Estimated Profit'],
+        ];
+
+        foreach ($summaries as $business) {
+            $sales = (float) ($business->sales_total ?? 0);
+            $expenses = (float) ($business->expense_total ?? 0);
+            $rows[] = [$business->business_name, $sales, $expenses, $sales - $expenses];
+        }
+
+        $sheetRows = [];
+        foreach ($rows as $rowIndex => $row) {
+            $cells = [];
+            foreach ($row as $columnIndex => $value) {
+                $coordinate = chr(65 + $columnIndex).($rowIndex + 1);
+                $style = $rowIndex === 4 ? ' s="1"' : '';
+                $cells[] = is_int($value) || is_float($value)
+                    ? '<c r="'.$coordinate.'"'.$style.'><v>'.number_format($value, 2, '.', '').'</v></c>'
+                    : '<c r="'.$coordinate.'" t="inlineStr"'.$style.'><is><t>'.$escape($value).'</t></is></c>';
+            }
+            $sheetRows[] = '<row r="'.($rowIndex + 1).'">'.implode('', $cells).'</row>';
+        }
+
+        $temporaryFile = tempnam(sys_get_temp_dir(), 'tradeflow-report-');
+        $path = $temporaryFile.'.xlsx';
+        @unlink($temporaryFile);
+        $zip = new \ZipArchive();
+        if ($zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            throw new \RuntimeException('Unable to create the Excel report.');
+        }
+
+        $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
+        $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+        $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Company Performance" sheetId="1" r:id="rId1"/></sheets></workbook>');
+        $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+        $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/></cellXfs></styleSheet>');
+        $zip->addFromString('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="32" customWidth="1"/><col min="2" max="4" width="18" customWidth="1"/></cols><sheetData>'.implode('', $sheetRows).'</sheetData></worksheet>');
+        $zip->close();
+
+        return $path;
     }
 
     private function applyAdminFilters($query, Request $request): void

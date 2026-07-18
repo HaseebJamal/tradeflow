@@ -1,0 +1,140 @@
+<?php
+
+namespace App\Http\Controllers\Business;
+
+use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
+use App\Models\StaffPasswordChangeRequest;
+use App\Models\UserDetailChangeRequest;
+use App\Services\CompanyPermissionService;
+use Illuminate\Http\Request;
+use Illuminate\Notifications\DatabaseNotification;
+
+class BusinessNotificationController extends Controller
+{
+    public function index(Request $request)
+    {
+        $user = $request->user();
+        $this->ensureAccess($request);
+
+        $query = $user->notifications();
+        if ($user->role === 'super_admin') {
+            $query->where('data', 'not like', '%business_activity%');
+        }
+
+        $notifications = $query->latest()->paginate(20)->withQueryString();
+        $profileRequests = collect();
+        $passwordRequests = collect();
+
+        if ($user->role === 'business_owner' && $user->business_id) {
+            $items = $notifications->getCollection();
+            $profileIds = $items->filter(fn ($notification) => data_get($notification->data, 'category') === 'user_detail_change_request'
+                    && (int) data_get($notification->data, 'business_id') === (int) $user->business_id)
+                ->pluck('data.change_request_id')->filter()->unique()->values();
+            $passwordIds = $items->filter(fn ($notification) => data_get($notification->data, 'category') === 'staff_password_change_request'
+                    && (int) data_get($notification->data, 'business_id') === (int) $user->business_id)
+                ->pluck('data.password_change_request_id')->filter()->unique()->values();
+
+            $profileRequests = UserDetailChangeRequest::with('user')
+                ->where('business_id', $user->business_id)
+                ->whereIn('id', $profileIds)
+                ->get()
+                ->keyBy('id');
+            $passwordRequests = StaffPasswordChangeRequest::with('user')
+                ->where('business_id', $user->business_id)
+                ->whereIn('id', $passwordIds)
+                ->get()
+                ->keyBy('id');
+        }
+
+        return view('auth.notifications', compact('notifications', 'profileRequests', 'passwordRequests'));
+    }
+
+    public function markRead(Request $request, string $notification)
+    {
+        $item = $this->notificationForUser($request, $notification);
+        if (! $item->read_at) {
+            $item->markAsRead();
+            $this->audit($request, 'notification_marked_read', $item, 'Notification marked as read.');
+        }
+
+        return back()->with('success', 'Notification marked as read.');
+    }
+
+    public function markUnread(Request $request, string $notification)
+    {
+        abort_if($request->user()->role === 'custom_staff', 403, 'Staff can only mark notifications as read.');
+        $item = $this->notificationForUser($request, $notification);
+        if ($item->read_at) {
+            $item->update(['read_at' => null]);
+            $this->audit($request, 'notification_marked_unread', $item, 'Notification marked as unread.');
+        }
+
+        return back()->with('success', 'Notification marked as unread.');
+    }
+
+    public function destroy(Request $request, string $notification)
+    {
+        abort_if($request->user()->role === 'custom_staff', 403, 'Staff cannot delete notifications.');
+        $item = $this->notificationForUser($request, $notification);
+        $this->audit($request, 'notification_deleted', $item, 'Notification deleted.');
+        $item->delete();
+
+        return back()->with('success', 'Notification deleted.');
+    }
+
+    public function markAllRead(Request $request)
+    {
+        $this->ensureAccess($request);
+        $count = $request->user()->unreadNotifications()->count();
+        $request->user()->unreadNotifications->markAsRead();
+
+        if ($count) {
+            AuditLog::create([
+                'business_id' => $request->user()->business_id,
+                'module' => 'Notifications',
+                'action' => 'notifications_marked_all_read',
+                'record_type' => 'DatabaseNotification',
+                'description' => $count.' notifications marked as read.',
+                'new_values' => ['count' => $count],
+            ]);
+        }
+
+        return back()->with('success', 'All notifications marked as read.');
+    }
+
+    private function ensureAccess(Request $request): void
+    {
+        $user = $request->user();
+        if ($user?->business_id && ! app(CompanyPermissionService::class)->allowsUser($user, 'notifications.view')) {
+            abort(403, 'Notification access is not enabled for your account.');
+        }
+    }
+
+    private function notificationForUser(Request $request, string $notification): DatabaseNotification
+    {
+        $this->ensureAccess($request);
+
+        return $request->user()->notifications()->findOrFail($notification);
+    }
+
+    private function audit(Request $request, string $action, DatabaseNotification $notification, string $description): void
+    {
+        AuditLog::create([
+            'business_id' => $request->user()->business_id,
+            'module' => 'Notifications',
+            'action' => $action,
+            'record_type' => 'DatabaseNotification',
+            // Laravel database notifications use UUID primary keys while the
+            // audit table's record_id is intentionally an unsigned integer.
+            // Keep the UUID as audit metadata instead of coercing/truncating
+            // it into that numeric column.
+            'record_id' => null,
+            'description' => $description,
+            'new_values' => [
+                'notification_id' => (string) $notification->id,
+                'category' => data_get($notification->data, 'category'),
+            ],
+        ]);
+    }
+}

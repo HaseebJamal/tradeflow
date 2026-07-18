@@ -1,36 +1,157 @@
 @extends('layouts.dashboard')
-@section('page-title', isset($product) ? 'Edit Product' : 'Add Product')
-@section('page-subtitle', 'Professional product setup with barcode and batch tracking')
+
+@section('page-title', isset($product) ? 'Edit Product' : 'Add Products')
+@section('page-subtitle', 'Create product identity, classification, and tracking information.')
+
 @section('content')
-<div class="tf-card p-4">
-    @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-    <form method="POST" action="{{ isset($product) ? route('business.products.update', $product) : route('business.products.store') }}" enctype="multipart/form-data" class="row g-3" data-product-price-form data-tf-tab-order>
-        @csrf
-        @isset($product) @method('PUT') @endisset
-        <div class="col-md-6"><label class="form-label">Product Name *</label><input name="product_name" class="form-control" value="{{ old('product_name', $product->name ?? '') }}" required autofocus></div>
-        <div class="col-md-6"><label class="form-label">Category *</label><input name="category" class="form-control" value="{{ old('category', $product->category?->name ?? '') }}" placeholder="Grocery" required></div>
-        <div class="col-md-3"><label class="form-label">Unit *</label><select name="unit" class="form-select">@foreach(['Piece','Carton','KG','Liter'] as $unit)<option @selected(old('unit', $product->unit ?? 'Piece') === $unit)>{{ $unit }}</option>@endforeach</select></div>
-        <div class="col-md-3"><label class="form-label">Purchase Cost *</label><input name="purchase_cost" type="number" step="0.01" min="0" class="form-control" value="{{ old('purchase_cost', $product->purchase_cost ?? 0) }}" required data-purchase-price></div>
-        <div class="col-md-3"><label class="form-label">Wholesale / Selling Price *</label><input name="wholesale_price" type="number" step="0.01" min="0" class="form-control @error('wholesale_price') is-invalid @enderror" value="{{ old('wholesale_price', $product->wholesale_price ?? 0) }}" required data-selling-price><div class="invalid-feedback" data-price-error>@error('wholesale_price'){{ $message }}@enderror</div></div>
-        <div class="col-md-3"><label class="form-label">Stock Management</label><div class="form-control bg-light text-muted">Use Inventory adjustments or Purchases after saving.</div></div>
-        <div class="col-md-3"><label class="form-label">Retail Price</label><input name="retail_price" type="number" step="0.01" min="0" class="form-control @error('retail_price') is-invalid @enderror" value="{{ old('retail_price', ($product->retail_price ?? 0) ?: '') }}" data-retail-price><div class="invalid-feedback" data-retail-price-error>@error('retail_price'){{ $message }}@enderror</div></div>
-        <div class="col-md-3"><label class="form-label">Minimum Order Quantity</label><input name="minimum_order_quantity" type="number" min="1" class="form-control" value="{{ old('minimum_order_quantity', $product->minimum_order_quantity ?? 1) }}"></div>
-        <div class="col-md-3"><label class="form-label">Low Stock Alert Quantity</label><input name="low_stock_alert_qty" type="number" min="0" class="form-control" value="{{ old('low_stock_alert_qty', $product->low_stock_alert_qty ?? 10) }}"></div>
-        <div class="col-md-3"><label class="form-label">Status</label><select name="status" class="form-select"><option @selected(old('status', $product->status ?? 'Active') === 'Active')>Active</option><option @selected(old('status', $product->status ?? '') === 'Inactive')>Inactive</option></select></div>
-        <div class="col-md-4"><label class="form-label">SKU</label><input name="sku" class="form-control" value="{{ old('sku', $product->sku ?? '') }}"></div>
-        <div class="col-md-4"><label class="form-label">Barcode</label><input id="productBarcode" name="barcode" class="form-control" value="{{ old('barcode', $product->barcode ?? '') }}"></div>
-        <div class="col-md-4"><label class="form-label">Product Image</label><input name="product_image" type="file" class="form-control" accept="image/jpeg,image/png,image/webp"></div>
-        <div class="col-md-4"><label class="form-label">Brand</label><input name="brand" class="form-control" value="{{ old('brand', $product->brand ?? '') }}"></div>
-        <div class="col-md-4"><label class="form-label">Manufacturer</label><input name="manufacturer" class="form-control" value="{{ old('manufacturer', $product->manufacturer ?? '') }}"></div>
-        <div class="col-md-4"><label class="form-label">Warehouse / Location</label><input name="warehouse_location" class="form-control" value="{{ old('warehouse_location', $product->warehouse_location ?? '') }}"></div>
-        <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="has_batch_tracking" value="1" id="batchTracking" @checked(old('has_batch_tracking', $product->has_batch_tracking ?? false)) data-batch-toggle><label class="form-check-label" for="batchTracking">This product has batch or expiry tracking</label></div></div>
-        <div class="col-md-3" data-batch-field><label class="form-label">Batch Number</label><input name="batch_number" class="form-control" value="{{ old('batch_number', $product->batch_number ?? '') }}"></div>
-        <div class="col-md-3" data-batch-field><label class="form-label">Manufacturing Date</label><input name="manufacturing_date" type="date" class="form-control" value="{{ old('manufacturing_date', isset($product) && $product->manufacturing_date ? $product->manufacturing_date->format('Y-m-d') : '') }}"></div>
-        <div class="col-md-3" data-batch-field><label class="form-label">Expiry Date</label><input name="expiry_date" type="date" class="form-control" value="{{ old('expiry_date', isset($product) && $product->expiry_date ? $product->expiry_date->format('Y-m-d') : '') }}"></div>
-        <div class="col-md-3" data-batch-field><label class="form-label">Expiry Alert Days</label><input name="expiry_alert_days" type="number" min="0" class="form-control" value="{{ old('expiry_alert_days', $product->expiry_alert_days ?? '') }}"></div>
-        <div class="col-12"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="3">{{ old('description', $product->description ?? '') }}</textarea></div>
-        <div class="col-12"><button class="btn btn-tf-primary">Save Product</button></div>
-    </form>
-</div>
+@php
+    $isEdit = isset($product);
+    $draftProducts = old('products', [[]]);
+    if (! is_array($draftProducts) || $draftProducts === []) {
+        $draftProducts = [[]];
+    }
+    $cannotSave = ($categories ?? collect())->isEmpty() || ($units ?? collect())->isEmpty();
+@endphp
+
+@if($errors->any())
+    <div class="alert alert-danger">Please correct the highlighted product fields.</div>
+@endif
+
+<form method="POST" action="{{ $isEdit ? route('business.products.update', $product) : route('business.products.store') }}" enctype="multipart/form-data" data-inline-products-form>
+    @csrf
+    @if($isEdit) @method('PUT') @endif
+
+    @if($isEdit)
+        <section class="tf-card p-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                    <h2 class="h5 mb-1">Product Information</h2>
+                    <p class="tf-muted mb-0">Update the product identity, classification, and tracking information.</p>
+                </div>
+            </div>
+            @include('business.products._master-fields', ['nested' => false, 'index' => 0, 'values' => $product])
+            <div class="d-flex justify-content-end mt-4">
+                <button class="btn btn-tf-primary" @disabled($cannotSave)>Save Product</button>
+            </div>
+        </section>
+    @else
+        <div id="product-sections" class="d-grid gap-3">
+            @foreach($draftProducts as $index => $values)
+                <section class="tf-card p-4" data-product-section>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                        <div>
+                            <h2 class="h5 mb-1" data-product-heading>Product {{ $loop->iteration }}</h2>
+                            <p class="tf-muted mb-0">Product identity and tracking details.</p>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" data-remove-product @if($loop->first) hidden @endif><i class="bi bi-trash me-1"></i>Remove Product</button>
+                    </div>
+                    @include('business.products._master-fields', ['nested' => true, 'index' => $index, 'values' => $values])
+                </section>
+            @endforeach
+        </div>
+
+        <template id="product-section-template">
+            <section class="tf-card p-4" data-product-section>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <div>
+                        <h2 class="h5 mb-1" data-product-heading>Product</h2>
+                        <p class="tf-muted mb-0">Product identity and tracking details.</p>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-remove-product><i class="bi bi-trash me-1"></i>Remove Product</button>
+                </div>
+                @include('business.products._master-fields', ['nested' => true, 'index' => '__INDEX__', 'values' => []])
+            </section>
+        </template>
+
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-4">
+            <button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Another Product</button>
+            <button class="btn btn-tf-primary" data-save-products @disabled($cannotSave)>Save Products</button>
+        </div>
+    @endif
+</form>
 @endsection
-@push('scripts')<script>document.addEventListener('DOMContentLoaded',()=>{const form=document.querySelector('[data-product-price-form]');if(!form)return;const cost=form.querySelector('[data-purchase-price]'),sell=form.querySelector('[data-selling-price]'),retail=form.querySelector('[data-retail-price]'),message='Selling Price must be greater than Purchase Price.',validate=()=>{const purchase=Number(cost.value),selling=Number(sell.value),retailPrice=Number(retail.value),sellingInvalid=Number.isFinite(purchase)&&Number.isFinite(selling)&&selling<=purchase,retailInvalid=retail.value!==''&&Number.isFinite(purchase)&&Number.isFinite(retailPrice)&&retailPrice<=purchase;sell.classList.toggle('is-invalid',sellingInvalid);form.querySelector('[data-price-error]').textContent=sellingInvalid?message:'';retail.classList.toggle('is-invalid',retailInvalid);form.querySelector('[data-retail-price-error]').textContent=retailInvalid?message:'';return !sellingInvalid&&!retailInvalid};[cost,sell,retail].forEach(input=>input.addEventListener('input',validate));form.addEventListener('submit',event=>{if(!validate()){event.preventDefault();(sell.classList.contains('is-invalid')?sell:retail).focus()}})});</script>@endpush
+
+@if(!isset($product))
+    @push('scripts')
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const form = document.querySelector('[data-inline-products-form]');
+        const sections = document.getElementById('product-sections');
+        const template = document.getElementById('product-section-template');
+        const addButton = document.querySelector('[data-add-product-section]');
+        if (!form || !sections || !template || !addButton) return;
+
+        const syncBatchFields = (section) => {
+            const toggle = section.querySelector('[data-product-batch-toggle]');
+            const fields = section.querySelector('[data-product-batch-fields]');
+            if (toggle && fields) fields.classList.toggle('d-none', !toggle.checked);
+        };
+
+        const updateSections = () => {
+            [...sections.querySelectorAll('[data-product-section]')].forEach((section, index) => {
+                section.querySelector('[data-product-heading]').textContent = `Product ${index + 1}`;
+                const removeButton = section.querySelector('[data-remove-product]');
+                if (removeButton) removeButton.hidden = index === 0;
+
+                section.querySelectorAll('[data-product-field]').forEach((field) => {
+                    const key = field.dataset.productField;
+                    field.name = `products[${index}][${key}]`;
+                    field.id = `product-${index}-${key}`;
+                });
+                section.querySelectorAll('label[for]').forEach((label) => {
+                    const key = label.htmlFor.replace(/^product-(?:__INDEX__|\d+)-/, '');
+                    if (key) label.htmlFor = `product-${index}-${key}`;
+                });
+                syncBatchFields(section);
+            });
+        };
+
+        const initializeSection = (section) => {
+            syncBatchFields(section);
+            window.initTradeFlowTomSelect?.(section);
+        };
+
+        addButton.addEventListener('click', () => {
+            const fragment = template.content.cloneNode(true);
+            const section = fragment.querySelector('[data-product-section]');
+            sections.appendChild(fragment);
+            updateSections();
+            initializeSection(section);
+            section.querySelector('[data-product-field="product_name"]')?.focus();
+        });
+
+        sections.addEventListener('change', (event) => {
+            if (event.target.matches('[data-product-batch-toggle]')) {
+                syncBatchFields(event.target.closest('[data-product-section]'));
+            }
+        });
+
+        sections.addEventListener('click', (event) => {
+            const removeButton = event.target.closest('[data-remove-product]');
+            if (!removeButton) return;
+            const section = removeButton.closest('[data-product-section]');
+            section.querySelectorAll('select').forEach((select) => select.tomselect?.destroy());
+            section.remove();
+            updateSections();
+        });
+
+        form.addEventListener('submit', (event) => {
+            if (!form.checkValidity()) return;
+            const submit = form.querySelector('[data-save-products]');
+            if (submit?.dataset.submitting === 'true') {
+                event.preventDefault();
+                return;
+            }
+            if (submit) {
+                submit.dataset.submitting = 'true';
+                submit.disabled = true;
+                submit.textContent = 'Saving Products...';
+            }
+        });
+
+        updateSections();
+        sections.querySelectorAll('[data-product-section]').forEach(initializeSection);
+    });
+    </script>
+    @endpush
+@endif

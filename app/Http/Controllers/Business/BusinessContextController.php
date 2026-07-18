@@ -28,6 +28,7 @@ class BusinessContextController extends Controller
         return view('auth.notifications', [
             'notifications' => $notifications,
             'business' => $business,
+            'readOnlyNotifications' => true,
         ]);
     }
 

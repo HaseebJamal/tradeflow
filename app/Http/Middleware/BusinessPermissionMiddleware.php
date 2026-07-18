@@ -3,7 +3,6 @@
 namespace App\Http\Middleware;
 
 use App\Services\CompanyPermissionService;
-use App\Services\BusinessWorkspaceAccessService;
 use App\Models\AuditLog;
 use Closure;
 use Illuminate\Http\Request;
@@ -62,9 +61,9 @@ class BusinessPermissionMiddleware
             abort(403, $message);
         }
 
-        $user = $request->user();
-        $destination = app(BusinessWorkspaceAccessService::class)->firstEnabledRoute($user);
-
-        return redirect()->route($destination ?? 'business.access-denied')->withErrors([$key => $message]);
+        // The basic dashboard never uses this middleware. It is therefore a
+        // stable permission-denied destination and cannot redirect back to the
+        // route that was denied.
+        return redirect()->route('business.dashboard')->withErrors([$key => $message]);
     }
 }

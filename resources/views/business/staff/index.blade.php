@@ -46,6 +46,7 @@
             <td>{{ $member->staffProfile?->joining_date?->format('M d, Y') ?? '-' }}</td>
             <td><span class="badge {{ $member->status === 'active' ? 'text-bg-success' : ($member->status === 'suspended' ? 'text-bg-danger' : ($member->status === 'archived' ? 'text-bg-secondary' : 'text-bg-warning')) }}">{{ ucfirst($member->status) }}</span></td>
             <td>
+                @companyCan('staff.edit')
                 <div class="dropdown">
                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false">Actions</button>
                     <div class="dropdown-menu dropdown-menu-end">
@@ -70,6 +71,9 @@
                         @endif
                     </div>
                 </div>
+                @else
+                    <span class="tf-muted">-</span>
+                @endcompanyCan
             </td>
         </tr>
     @empty

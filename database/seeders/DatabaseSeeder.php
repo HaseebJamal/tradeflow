@@ -18,6 +18,7 @@ use App\Models\SubscriptionPlan;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Models\PlatformSetting;
+use App\Services\BarcodeService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -52,11 +53,12 @@ class DatabaseSeeder extends Seeder
 
         $category = Category::create(['business_id' => $business->id, 'name' => 'Grocery', 'type' => 'Product']);
         $products = collect([
-            ['name' => 'Basmati Rice 25kg', 'sku' => 'TF-101', 'wholesale_price' => 8200, 'retail_price' => 8800, 'stock_quantity' => 240],
-            ['name' => 'Cooking Oil 5L', 'sku' => 'TF-102', 'wholesale_price' => 11500, 'retail_price' => 12200, 'stock_quantity' => 95],
-            ['name' => 'Tea Pack 950g', 'sku' => 'TF-103', 'wholesale_price' => 9800, 'retail_price' => 10400, 'stock_quantity' => 8],
+            ['name' => 'Basmati Rice 25kg', 'wholesale_price' => 8200, 'retail_price' => 8800, 'stock_quantity' => 240],
+            ['name' => 'Cooking Oil 5L', 'wholesale_price' => 11500, 'retail_price' => 12200, 'stock_quantity' => 95],
+            ['name' => 'Tea Pack 950g', 'wholesale_price' => 9800, 'retail_price' => 10400, 'stock_quantity' => 8],
         ])->map(function ($item) use ($business, $category) {
             $product = Product::create($item + ['business_id' => $business->id, 'category_id' => $category->id, 'minimum_order_quantity' => 1, 'status' => 'Active']);
+            app(BarcodeService::class)->assign($product);
             Inventory::create(['business_id' => $business->id, 'product_id' => $product->id, 'available_stock' => $product->stock_quantity, 'low_stock_alert' => 10]);
             return $product;
         });

@@ -22,7 +22,9 @@ class SalesReturnController extends Controller
         $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
         $returns = PosReturn::with(['order', 'customer', 'items.orderItem'])
             ->where('business_id', $businessId)
-            ->when($filters['search'] ?? null, fn ($query, $value) => $query->whereHas('order', fn ($orders) => $orders->where('order_number', 'like', "%{$value}%")))
+            ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($inner) => $inner
+                ->where('return_number', 'like', "%{$value}%")
+                ->orWhereHas('order', fn ($orders) => $orders->where('order_number', 'like', "%{$value}%"))))
             ->where('returned_at', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
             ->where('returned_at', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
             ->latest('returned_at')->paginate(20)->withQueryString();
@@ -32,25 +34,36 @@ class SalesReturnController extends Controller
 
     public function create(Request $request)
     {
-        $orders = Order::where('business_id', $request->user()->business_id)->where('sale_channel', 'pos')
-            ->whereNotIn('status', ['Cancelled', 'Void'])->latest('order_date')->get();
+        $orders = $this->eligibleOrders((int) $request->user()->business_id)
+            ->get()
+            ->filter(fn (Order $order) => $this->remainingReturnableQuantity($order) > 0)
+            ->values();
+
         return view('business.sales-returns.create', compact('orders'));
     }
 
     public function start(Request $request)
     {
         $data = $request->validate(['order_id' => ['required', 'integer']]);
-        $order = Order::where('business_id', $request->user()->business_id)->where('sale_channel', 'pos')->findOrFail($data['order_id']);
+        $order = $this->eligibleOrders((int) $request->user()->business_id)
+            ->whereKey($data['order_id'])
+            ->firstOrFail();
+        if ($this->remainingReturnableQuantity($order) < 1) {
+            return back()->withErrors(['order_id' => 'This sale has no remaining items available for return.']);
+        }
+
         return redirect()->route('business.sales.returns.process', $order);
     }
 
     public function process(Request $request, Order $order, PosController $pos)
     {
+        $this->eligibleOrderOrFail($request, $order);
         return $pos->returns($order);
     }
 
     public function store(Request $request, Order $order, PosController $pos)
     {
+        $this->eligibleOrderOrFail($request, $order);
         return $pos->storeReturn($request, $order);
     }
 
@@ -64,5 +77,29 @@ class SalesReturnController extends Controller
     {
         abort_unless($salesReturn->business_id === $request->user()->business_id, 404);
         return view('business.sales-returns.edit', ['return' => $salesReturn->load(['order', 'customer', 'items.orderItem'])]);
+    }
+
+    private function eligibleOrders(int $businessId)
+    {
+        return Order::with(['customer', 'invoice', 'items.posReturnItems'])
+            ->where('business_id', $businessId)
+            ->where('sale_channel', 'pos')
+            ->whereIn('status', ['Completed', 'Delivered', 'Paid', 'Partially Returned'])
+            ->latest('order_date');
+    }
+
+    private function eligibleOrderOrFail(Request $request, Order $order): Order
+    {
+        $order = $this->eligibleOrders((int) $request->user()->business_id)
+            ->whereKey($order->id)
+            ->firstOrFail();
+        abort_if($this->remainingReturnableQuantity($order) < 1, 404);
+
+        return $order;
+    }
+
+    private function remainingReturnableQuantity(Order $order): int
+    {
+        return (int) $order->items->sum(fn ($item) => max(0, (int) $item->quantity - (int) $item->posReturnItems->sum('quantity')));
     }
 }

@@ -29,8 +29,8 @@ class BusinessActivityNotification extends Notification
     {
         return [
             'category' => 'business_activity',
-            'title' => $this->module.' activity: '.$this->business->business_name,
-            'message' => $this->action,
+            'title' => $this->details['notification_title'] ?? ($this->module.' activity: '.$this->business->business_name),
+            'message' => $this->details['notification_message'] ?? $this->action,
             'business_id' => $this->business->id,
             'module' => $this->module,
             'record_id' => $this->recordId,

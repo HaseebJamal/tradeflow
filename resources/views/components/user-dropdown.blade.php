@@ -2,18 +2,43 @@
     $user = auth()->user();
     $contextBusiness = request()->attributes->get('super_admin_business_context');
     $isBusinessContext = $user?->role === 'super_admin' && $contextBusiness;
+    // Notifications use the shared dashboard header but are not nested under
+    // /business. Keep an owner's business branding consistent on that page.
+    $isBusinessOwnerNotificationPage = $user?->role === 'business_owner'
+        && request()->routeIs('notifications.*');
     $businessWorkspace = $isBusinessContext
         ? $contextBusiness
-        : (request()->is('business/*') ? ($user?->business ?? $user?->ownedBusiness) : null);
-    $usesBusinessBranding = (bool) $businessWorkspace;
+        : ((request()->is('business/*') || request()->is('staff/*') || $isBusinessOwnerNotificationPage)
+            ? ($user?->business ?? $user?->ownedBusiness)
+            : null);
+    // A business owner's dashboard keeps the company identity, while every
+    // staff account must display the profile image saved on its own user row.
+    // Super Admin business-context viewing remains branded as the selected
+    // company so it never displays the Super Admin's personal image.
+    $usesBusinessBranding = (bool) $businessWorkspace
+        && ($isBusinessContext || $user?->role === 'business_owner');
     $displayName = $isBusinessContext ? $contextBusiness->business_name : $user?->name;
+    // The shared business header represents the company workspace. Individual
+    // user identity remains available inside the dropdown itself.
+    $navbarDisplayName = $businessWorkspace?->business_name ?? $displayName;
     $displayRole = $isBusinessContext ? 'Business workspace' : $user?->role;
-    // Business pages always use the company logo; owner profile images must not
-    // replace the brand identity in a business dashboard.
+    // Keep the company logo for owner/context branding, but staff always see
+    // their own uploaded profile image in the shared header and menu.
     $displayImage = $usesBusinessBranding ? $businessWorkspace->logo : $user?->profile_image;
     $displayUpdatedAt = $usesBusinessBranding ? $businessWorkspace->updated_at : $user?->updated_at;
+    // Database values are stored as relative public-disk paths. Normalising
+    // legacy public/storage prefixes prevents valid uploads from becoming a
+    // broken header image on routes outside the business URL prefix.
+    $displayImagePath = ltrim((string) $displayImage, '/');
+    $displayImagePath = preg_replace('#^(?:public/|storage/)#', '', $displayImagePath);
     $settingsRoute = route('profile.edit');
-    $hasProfileImage = $displayImage && \Illuminate\Support\Facades\Storage::disk('public')->exists($displayImage);
+    $hasProfileImage = filled($displayImagePath) && \Illuminate\Support\Facades\Storage::disk('public')->exists($displayImagePath);
+    // The application may run from a subdirectory (for example
+    // /tradeflow/public). asset() keeps that base path, unlike a disk URL
+    // beginning with /storage which would point at the web-server root.
+    $displayImageUrl = $hasProfileImage
+        ? asset('storage/'.$displayImagePath).'?v='.($displayUpdatedAt?->timestamp ?? '')
+        : null;
     $hidePasswordOption = in_array($user?->role, ['super_admin', 'business_owner'], true);
     $showAccountSettings = false;
     $showBusinessSettings = $usesBusinessBranding
@@ -28,16 +53,16 @@
 <div class="dropdown">
     <button class="btn btn-light border d-flex align-items-center gap-2 tf-user-dropdown-toggle" data-bs-toggle="dropdown">
         @if($hasProfileImage)
-            <img src="{{ asset('storage/'.$displayImage) }}?v={{ $displayUpdatedAt?->timestamp }}" class="navbar-avatar" alt="{{ $displayName }}">
+            <img src="{{ $displayImageUrl }}" class="navbar-avatar" alt="{{ $navbarDisplayName }}">
         @else
             <span class="navbar-avatar tf-avatar-empty"><i class="bi {{ $usesBusinessBranding ? 'bi-building' : 'bi-person' }}"></i></span>
         @endif
-        <span class="d-none d-md-inline">{{ $displayName }}</span>
+        <span class="d-none d-md-inline">{{ $navbarDisplayName }}</span>
     </button>
     <div class="dropdown-menu dropdown-menu-end shadow-sm tf-user-menu">
         <div class="px-3 py-3 text-center border-bottom">
             @if($hasProfileImage)
-                <img src="{{ asset('storage/'.$displayImage) }}?v={{ $displayUpdatedAt?->timestamp }}" class="tf-avatar tf-avatar-lg mb-2" alt="{{ $displayName }}">
+                <img src="{{ $displayImageUrl }}" class="tf-avatar tf-avatar-lg mb-2" alt="{{ $displayName }}">
             @else
                 <span class="tf-avatar tf-avatar-lg tf-avatar-empty mb-2"><i class="bi {{ $usesBusinessBranding ? 'bi-building' : 'bi-person' }}"></i></span>
             @endif

@@ -18,6 +18,8 @@ class BusinessWorkspaceAccessService
         foreach ([
             'dashboard' => 'business.dashboard',
             'products' => 'business.products.index',
+            'units' => 'business.units.index',
+            'categories' => 'business.categories.index',
             'inventory' => 'business.inventory',
             'suppliers' => 'business.suppliers.index',
             'purchases' => 'business.purchases.index',
@@ -34,10 +36,6 @@ class BusinessWorkspaceAccessService
             'audit_logs' => 'business.audit-logs.index',
             'settings' => 'business.settings',
         ] as $module => $route) {
-            if ($user->role === 'custom_staff' && $module === 'staff') {
-                continue;
-            }
-
             if (app(CompanyPermissionService::class)->allowsUser($user, $module.'.view', $business)) {
                 return $route;
             }

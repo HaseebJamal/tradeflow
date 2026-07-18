@@ -16,14 +16,14 @@ class CustomerController extends Controller
     {
         $query = Customer::with('creator')->where('business_id', auth()->user()->business_id);
 
-        if ($request->boolean('archived')) {
+        if ($request->input('status') === 'Archived' || $request->boolean('archived')) {
             $query->onlyTrashed();
         }
         $query
             ->when($request->search, fn ($q, $value) => $q->where(fn ($inner) => $inner->where('name', 'like', "%{$value}%")->orWhere('business_name', 'like', "%{$value}%")->orWhere('phone', 'like', "%{$value}%")->orWhere('email', 'like', "%{$value}%")))
             ->when($request->customer_type, fn ($q, $value) => $q->where('customer_type', $value))
             ->when($request->city, fn ($q, $value) => $q->where('city', 'like', "%{$value}%"))
-            ->when($request->status, fn ($q, $value) => $q->where('status', $value))
+            ->when(in_array($request->status, ['Active', 'Blocked', 'Inactive'], true), fn ($q, $value) => $q->where('status', $value))
             ->when($request->created_by, fn ($q, $value) => $q->where('created_by', $value))
             ->when($request->date_from, fn ($q, $value) => $q->whereDate('created_at', '>=', $value))
             ->when($request->date_to, fn ($q, $value) => $q->whereDate('created_at', '<=', $value));
@@ -37,7 +37,7 @@ class CustomerController extends Controller
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'phone' => ['nullable', 'regex:/^\d{11}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable'], 'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'province' => ['nullable', 'max:100'], 'customer_type' => ['required', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
-            'credit_limit' => ['nullable', 'numeric', 'min:0'], 'opening_balance' => ['nullable', 'numeric', 'min:0'], 'status' => ['required', 'in:Active,Blocked'],
+            'credit_limit' => ['nullable', 'integer', 'min:0'], 'opening_balance' => ['nullable', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Blocked'],
         ]);
         $data['business_name'] = $data['shop_name'] ?? $data['business_name'] ?? null;
         unset($data['shop_name']);
@@ -82,8 +82,8 @@ class CustomerController extends Controller
             'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'province' => ['nullable', 'max:100'],
             'customer_type' => ['nullable', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
-            'credit_limit' => ['nullable', 'numeric', 'min:0'],
-            'current_balance' => ['nullable', 'numeric', 'min:0'],
+            'credit_limit' => ['nullable', 'integer', 'min:0'],
+            'current_balance' => ['nullable', 'integer', 'min:0'],
             'status' => ['required', 'in:Active,Blocked,Inactive'],
         ]);
         if (!empty($data['shop_name'])) {
@@ -109,7 +109,7 @@ class CustomerController extends Controller
         $customer->update(['status' => 'Inactive']);
         $customer->delete();
 
-        return back()->with('success', 'Customer archived.');
+        return back()->with('success', 'Record archived successfully.');
     }
 
     public function restore(int $customer)
@@ -118,7 +118,7 @@ class CustomerController extends Controller
         $record->restore();
         $record->update(['status' => 'Active']);
 
-        return back()->with('success', 'Customer restored.');
+        return back()->with('success', 'Record restored successfully.');
     }
 
     public function destroy(Customer $customer)

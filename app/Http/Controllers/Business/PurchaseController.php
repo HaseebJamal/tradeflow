@@ -16,6 +16,8 @@ use App\Models\Supplier;
 use App\Models\SupplierPayment;
 use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
+use App\Services\ProductPurchaseCostService;
+use App\Services\DocumentNumberService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +25,12 @@ use Illuminate\Validation\ValidationException;
 
 class PurchaseController extends Controller
 {
-    public function __construct(private AccountingService $accounting, private BusinessActivityService $activity) {}
+    public function __construct(
+        private AccountingService $accounting,
+        private BusinessActivityService $activity,
+        private ProductPurchaseCostService $productCosts,
+        private DocumentNumberService $numbers,
+    ) {}
 
     public function index(Request $request)
     {
@@ -43,7 +50,8 @@ class PurchaseController extends Controller
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->value()))
             ->when($request->filled('search'), fn ($query) => $query->where(fn ($inner) => $inner
                 ->where('purchase_number', 'like', '%'.$request->search.'%')
-                ->orWhere('supplier_invoice_number', 'like', '%'.$request->search.'%')
+                ->orWhereHas('invoice', fn ($invoice) => $invoice->where('invoice_number', 'like', '%'.$request->search.'%'))
+                ->orWhereHas('supplier', fn ($supplier) => $supplier->where('supplier_name', 'like', '%'.$request->search.'%'))
                 ->orWhere('notes', 'like', '%'.$request->search.'%')))
             ->where('purchase_date', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
             ->where('purchase_date', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
@@ -62,13 +70,14 @@ class PurchaseController extends Controller
         return redirect()->route('business.purchases.index', ['create' => 1]);
     }
 
-    /** Resolve a PO, supplier invoice, or exact reference for scanner input. */
+    /** Resolve an internal purchase or supplier record for scanner input. */
     public function lookup(Request $request)
     {
         $code = trim((string) $request->validate(['code' => ['required', 'string', 'max:120']])['code']);
         $purchase = Purchase::where('business_id', $this->businessId())
             ->where(fn ($query) => $query->where('purchase_number', $code)
-                ->orWhere('supplier_invoice_number', $code)
+                ->orWhereHas('invoice', fn ($invoice) => $invoice->where('invoice_number', $code))
+                ->orWhereHas('supplier', fn ($supplier) => $supplier->where('supplier_name', $code))
                 ->orWhere('notes', $code))
             ->first();
 
@@ -81,38 +90,70 @@ class PurchaseController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'supplier_id' => ['required', 'integer'], 'supplier_invoice_number' => ['nullable', 'string', 'max:100'],
+            'supplier_id' => ['required', 'integer'],
             'purchase_date' => ['required', 'date'], 'notes' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'], 'items.*.product_id' => ['required', 'integer'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'], 'items.*.unit_cost' => ['required', 'numeric', 'min:0'],
-            'discount_amount' => ['nullable', 'numeric', 'min:0'], 'tax_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'], 'items.*.unit_cost' => ['required', 'integer', 'min:0'],
+            'items.*.selling_price' => ['required', 'integer', 'min:0'],
+            'items.*.discount_amount' => ['nullable', 'integer', 'min:0'],
+            'items.*.tax_amount' => ['nullable', 'integer', 'min:0'],
+            // Kept for compatibility with the purchase header. These values are
+            // recalculated from item rows below and never trusted from the form.
+            'discount_amount' => ['nullable', 'integer', 'min:0'], 'tax_amount' => ['nullable', 'integer', 'min:0'],
         ]);
         $businessId = $this->businessId();
+
+        foreach ($data['items'] as $index => $item) {
+            if ((int) $item['selling_price'] <= (int) $item['unit_cost']) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.selling_price" => 'Selling Price must be greater than Purchase Price.',
+                ]);
+            }
+        }
 
         $purchase = DB::transaction(function () use ($data, $businessId) {
             $supplier = Supplier::where('business_id', $businessId)->where('status', 'Active')->findOrFail($data['supplier_id']);
             $lines = collect($data['items'])->groupBy('product_id')->map(fn ($items, $productId) => [
-                'product_id' => (int) $productId, 'quantity' => $items->sum('quantity'), 'unit_cost' => (float) $items->last()['unit_cost'],
+                'product_id' => (int) $productId,
+                'quantity' => (int) $items->sum('quantity'),
+                'unit_cost' => (float) $items->last()['unit_cost'],
+                'selling_price' => (float) $items->last()['selling_price'],
+                'discount_amount' => (int) ($items->last()['discount_amount'] ?? 0),
+                'tax_amount' => (int) ($items->last()['tax_amount'] ?? 0),
             ])->values();
             $subtotal = 0;
+            $discount = 0;
+            $tax = 0;
             $prepared = [];
             foreach ($lines as $line) {
                 $product = Product::where('business_id', $businessId)->findOrFail($line['product_id']);
-                $lineTotal = round($line['quantity'] * $line['unit_cost'], 2);
-                $subtotal += $lineTotal;
-                $prepared[] = compact('product', 'lineTotal') + $line;
+                $lineSubtotal = round($line['quantity'] * $line['unit_cost'], 2);
+                $lineDiscount = min($lineSubtotal, (float) $line['discount_amount']);
+                $lineTax = (float) $line['tax_amount'];
+                $lineTotal = round($lineSubtotal - $lineDiscount + $lineTax, 2);
+                $subtotal += $lineSubtotal;
+                $discount += $lineDiscount;
+                $tax += $lineTax;
+                $prepared[] = compact('product', 'lineTotal', 'lineDiscount', 'lineTax') + $line;
             }
-            $discount = min($subtotal, (float) ($data['discount_amount'] ?? 0));
-            $tax = (float) ($data['tax_amount'] ?? 0);
             $total = round($subtotal - $discount + $tax, 2);
             $purchase = Purchase::create([
                 'business_id' => $businessId, 'supplier_id' => $supplier->id, 'created_by' => auth()->id(),
-                'purchase_number' => 'PO-'.now()->format('ymdHis').'-'.str_pad((string) (Purchase::where('business_id', $businessId)->count() + 1), 3, '0', STR_PAD_LEFT),
+                'purchase_number' => $this->numbers->next('purchase'),
                 'supplier_invoice_number' => $data['supplier_invoice_number'] ?? null, 'status' => 'Ordered', 'purchase_date' => $data['purchase_date'],
                 'subtotal' => $subtotal, 'discount_amount' => $discount, 'tax_amount' => $tax, 'grand_total' => $total, 'balance' => $total, 'notes' => $data['notes'] ?? null,
             ]);
             foreach ($prepared as $line) {
-                $purchase->items()->create(['product_id' => $line['product_id'], 'product_name_snapshot' => $line['product']->name, 'quantity' => $line['quantity'], 'unit_cost' => $line['unit_cost'], 'line_total' => $line['lineTotal']]);
+                $purchase->items()->create([
+                    'product_id' => $line['product_id'],
+                    'product_name_snapshot' => $line['product']->name,
+                    'quantity' => $line['quantity'],
+                    'unit_cost' => $line['unit_cost'],
+                    'selling_price' => $line['selling_price'],
+                    'discount_amount' => $line['lineDiscount'],
+                    'tax_amount' => $line['lineTax'],
+                    'line_total' => $line['lineTotal'],
+                ]);
             }
             return $purchase;
         });
@@ -137,22 +178,31 @@ class PurchaseController extends Controller
         if (in_array($purchase->status, ['Received', 'Returned'], true)) return back()->withErrors(['purchase' => 'This purchase has already been fully received.']);
 
         DB::transaction(function () use ($purchase) {
+            $invoiceNumber = $purchase->invoice?->invoice_number ?? $this->numbers->next('supplier_invoice');
+
             $receivedValue = 0;
+            $receivedProducts = collect();
             foreach ($purchase->items()->lockForUpdate()->get() as $item) {
                 $quantity = $item->quantity - $item->received_quantity;
                 if ($quantity <= 0) continue;
                 $product = Product::where('business_id', $purchase->business_id)->lockForUpdate()->findOrFail($item->product_id);
                 $previous = (int) $product->stock_quantity;
-                $product->update(['stock_quantity' => $previous + $quantity, 'purchase_cost' => $item->unit_cost]);
+                $product->update([
+                    'stock_quantity' => $previous + $quantity,
+                    'retail_price' => $item->selling_price,
+                    'wholesale_price' => $item->selling_price,
+                ]);
                 Inventory::updateOrCreate(['business_id' => $purchase->business_id, 'product_id' => $product->id], ['available_stock' => $previous + $quantity, 'low_stock_alert' => $product->low_stock_alert_qty ?? 10]);
                 StockMovement::create(['business_id' => $purchase->business_id, 'product_id' => $product->id, 'type' => 'purchased', 'quantity' => $quantity, 'reason' => 'Purchase receipt '.$purchase->purchase_number, 'user_id' => auth()->id()]);
                 InventoryMovement::create(['business_id' => $purchase->business_id, 'product_id' => $product->id, 'type' => 'PURCHASED', 'quantity' => $quantity, 'previous_stock' => $previous, 'new_stock' => $previous + $quantity, 'note' => 'Goods received for '.$purchase->purchase_number, 'created_by' => auth()->id(), 'movement_date' => now()]);
                 $item->update(['received_quantity' => $item->received_quantity + $quantity]);
+                $receivedProducts->push($product);
                 $receivedValue += (float) $item->line_total;
             }
             if ($receivedValue <= 0) throw ValidationException::withMessages(['purchase' => 'There are no outstanding goods to receive.']);
             $purchase->update(['status' => 'Received', 'received_at' => now()]);
-            PurchaseInvoice::updateOrCreate(['purchase_id' => $purchase->id], ['business_id' => $purchase->business_id, 'supplier_id' => $purchase->supplier_id, 'invoice_number' => $purchase->supplier_invoice_number ?: 'PINV-'.now()->format('ymdHis'), 'invoice_date' => now()->toDateString(), 'grand_total' => $purchase->grand_total, 'paid_amount' => $purchase->paid_amount, 'balance' => $purchase->balance, 'status' => 'Received']);
+            $receivedProducts->unique('id')->each(fn (Product $product) => $this->productCosts->refresh($product));
+            PurchaseInvoice::updateOrCreate(['purchase_id' => $purchase->id], ['business_id' => $purchase->business_id, 'supplier_id' => $purchase->supplier_id, 'invoice_number' => $invoiceNumber, 'invoice_date' => now()->toDateString(), 'grand_total' => $purchase->grand_total, 'paid_amount' => $purchase->paid_amount, 'balance' => $purchase->balance, 'status' => 'Received']);
             $this->postAccountsPayable($purchase, $purchase->grand_total);
         });
 
@@ -167,7 +217,7 @@ class PurchaseController extends Controller
     public function pay(Request $request, Purchase $purchase)
     {
         $purchase = $this->scoped($purchase);
-        $data = $request->validate(['amount' => ['required', 'numeric', 'min:0.01', 'max:'.$purchase->balance], 'method' => ['required', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual,Cheque'], 'reference_number' => ['nullable', 'string', 'max:255'], 'payment_date' => ['required', 'date'], 'notes' => ['nullable', 'string', 'max:1000']]);
+        $data = $request->validate(['amount' => ['required', 'integer', 'min:1', 'max:'.$purchase->balance], 'method' => ['required', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual,Cheque'], 'reference_number' => ['nullable', 'string', 'max:255'], 'payment_date' => ['required', 'date'], 'notes' => ['nullable', 'string', 'max:1000']]);
         DB::transaction(function () use ($purchase, $data) {
             SupplierPayment::create($data + ['business_id' => $purchase->business_id, 'supplier_id' => $purchase->supplier_id, 'purchase_id' => $purchase->id, 'created_by' => auth()->id()]);
             $paid = round($purchase->paid_amount + $data['amount'], 2); $balance = round($purchase->grand_total - $paid, 2);
@@ -188,36 +238,61 @@ class PurchaseController extends Controller
     {
         $purchase = $this->scoped($purchase);
         $data = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'items' => ['required', 'array', 'min:1'], 'items.*.purchase_item_id' => ['required', 'integer'], 'items.*.quantity' => ['required', 'integer', 'min:1']]);
-        DB::transaction(function () use ($purchase, $data) {
-            $return = PurchaseReturn::create(['business_id' => $purchase->business_id, 'purchase_id' => $purchase->id, 'supplier_id' => $purchase->supplier_id, 'created_by' => auth()->id(), 'return_number' => 'PR-'.now()->format('ymdHis').'-'.$purchase->id, 'return_date' => now()->toDateString(), 'reason' => $data['reason']]);
+        try {
+            $purchaseReturn = DB::transaction(function () use ($purchase, $data) {
+            $return = PurchaseReturn::create(['business_id' => $purchase->business_id, 'purchase_id' => $purchase->id, 'supplier_id' => $purchase->supplier_id, 'created_by' => auth()->id(), 'return_number' => $this->numbers->next('purchase_return'), 'return_date' => now()->toDateString(), 'reason' => $data['reason']]);
             $total = 0;
+            $returnedProducts = collect();
             foreach (collect($data['items'])->filter(fn ($line) => (int) $line['quantity'] > 0) as $line) {
                 $item = $purchase->items()->lockForUpdate()->findOrFail($line['purchase_item_id']);
                 $alreadyReturned = PurchaseReturnItem::where('purchase_item_id', $item->id)->sum('quantity');
                 $quantity = (int) $line['quantity'];
                 if ($quantity > ($item->received_quantity - $alreadyReturned)) throw ValidationException::withMessages(['items' => 'Return quantity exceeds received stock for '.$item->product_name_snapshot.'.']);
                 $product = Product::where('business_id', $purchase->business_id)->lockForUpdate()->findOrFail($item->product_id);
-                if ($product->stock_quantity < $quantity) throw ValidationException::withMessages(['items' => 'Insufficient stock. Only '.$product->stock_quantity.' units are available.']);
-                $previous = (int) $product->stock_quantity; $lineTotal = round($quantity * $item->unit_cost, 2);
+                if ($product->stock_quantity < $quantity) throw ValidationException::withMessages(['items' => 'Return quantity cannot exceed available stock. Only '.$product->stock_quantity.' units are available.']);
+                // Return the same proportion of the saved line value so item
+                // discount and tax are not lost when goods are sent back.
+                $lineTotal = round(((float) $item->line_total / max(1, (int) $item->quantity)) * $quantity, 2);
+                $previous = (int) $product->stock_quantity;
                 $product->decrement('stock_quantity', $quantity);
                 Inventory::updateOrCreate(['business_id' => $purchase->business_id, 'product_id' => $product->id], ['available_stock' => $previous - $quantity, 'low_stock_alert' => $product->low_stock_alert_qty ?? 10]);
                 StockMovement::create(['business_id' => $purchase->business_id, 'product_id' => $product->id, 'type' => 'purchase_return', 'quantity' => -$quantity, 'reason' => 'Purchase return '.$return->return_number, 'user_id' => auth()->id()]);
                 InventoryMovement::create(['business_id' => $purchase->business_id, 'product_id' => $product->id, 'type' => 'PURCHASE_RETURN', 'quantity' => -$quantity, 'previous_stock' => $previous, 'new_stock' => $previous - $quantity, 'note' => 'Purchase return '.$return->return_number, 'created_by' => auth()->id(), 'movement_date' => now()]);
                 $return->items()->create(['purchase_item_id' => $item->id, 'product_id' => $product->id, 'quantity' => $quantity, 'unit_cost' => $item->unit_cost, 'line_total' => $lineTotal]); $total += $lineTotal;
+                $returnedProducts->push($product);
             }
             if ($total <= 0) throw ValidationException::withMessages(['items' => 'Select at least one item to return.']);
             $return->update(['total_amount' => $total]);
             $refund = max(0, $total - $purchase->balance); $newBalance = max(0, $purchase->balance - $total); $newPaid = max(0, $purchase->paid_amount - $refund);
             $purchase->update(['balance' => $newBalance, 'paid_amount' => $newPaid, 'payment_status' => $newBalance <= 0 ? 'Paid' : 'Partial', 'status' => 'Partially Returned']);
+            $returnedProducts->unique('id')->each(fn (Product $product) => $this->productCosts->refresh($product));
             $purchase->invoice?->update(['balance' => $newBalance, 'paid_amount' => $newPaid, 'status' => 'Partially Returned']);
             $this->postReturn($purchase, $return->id, $total, $refund);
-        });
+                return $return;
+            });
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->withInput()->withErrors([
+                'return' => 'Unable to process the return. Please try again.',
+            ]);
+        }
+
         $purchase->refresh();
-        $this->activity->record($purchase->business_id, 'Purchases', 'Purchase return processed for '.$purchase->purchase_number, $purchase->id, null, [
+        $this->activity->record($purchase->business_id, 'Purchases', 'Purchase return processed for '.$purchase->purchase_number, $purchaseReturn->id, null, [
+            'return_number' => $purchaseReturn->return_number,
             'balance' => $purchase->balance,
             'status' => $purchase->status,
+            'notification_title' => 'Purchase Return Completed',
+            'notification_message' => 'Purchase return '.$purchaseReturn->return_number.' has been processed successfully.',
         ]);
-        return back()->with('success', 'Purchase return saved, stock reversed, and accounting updated.');
+
+        return redirect()->route('business.purchase-returns.show', $purchaseReturn)->with('tradeflow_return_alert', [
+            'title' => 'Purchase Return Completed',
+            'message' => 'Purchase return has been processed successfully. Stock, supplier balance, payable and related accounting entries have been updated. Return No: '.$purchaseReturn->return_number,
+        ]);
     }
 
     private function postAccountsPayable(Purchase $purchase, float $amount): void { $this->post($purchase, $amount, 'purchase_receipt', $purchase->id, [['Inventory', $amount, 0], ['Accounts Payable', 0, $amount]]); }

@@ -59,7 +59,7 @@
     </div>
 </div>
 
-<x-table><thead><tr><th>Item</th><th>SKU</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>@forelse($order->items as $item)<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td>{{ $item->sku_snapshot ?: $item->product?->sku }}</td><td>{{ $item->unit ?: $item->product?->unit }}</td><td>{{ $item->quantity }}</td><td>Rs {{ number_format($item->unit_price ?: $item->price) }}</td><td>Rs {{ number_format($item->line_total ?: $item->total) }}</td></tr>@empty<tr><td colspan="6" class="text-center tf-muted py-4">No order items.</td></tr>@endforelse</tbody></x-table>
+<x-table><thead><tr><th>Item</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>@forelse($order->items as $item)<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td>{{ $item->unit ?: $item->product?->unit }}</td><td>{{ $item->quantity }}</td><td>Rs {{ number_format($item->unit_price ?: $item->price) }}</td><td>Rs {{ number_format($item->line_total ?: $item->total) }}</td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No order items.</td></tr>@endforelse</tbody></x-table>
 
 @if(($journalEntries ?? collect())->isNotEmpty())
 <div class="tf-card p-4 mt-4">

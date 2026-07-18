@@ -17,6 +17,7 @@ use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\Purchase;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\PermissionDefinition;
@@ -30,7 +31,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -47,10 +47,16 @@ class CompanyController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'name_asc', 'name_desc'])],
         ]);
-        $query = Business::with(['owner', 'subscription.plan', 'assignments.user'])
-            ->withCount(['users', 'orders', 'companyPermissions as permissions_count' => fn ($permission) => $permission
-                ->where('allowed', true)
-                ->where('permission_key', 'like', '%.view')]);
+        $query = Business::with(['owner', 'subscription.plan', 'assignments.user', 'documents', 'users:id,business_id,role'])
+            ->withCount(['users', 'orders', 'products', 'customers'])
+            ->addSelect([
+                'suppliers_count' => Supplier::query()
+                    ->selectRaw('count(*)')
+                    ->whereColumn('suppliers.business_id', 'businesses.id'),
+                'purchases_count' => Purchase::query()
+                    ->selectRaw('count(*)')
+                    ->whereColumn('purchases.business_id', 'businesses.id'),
+            ]);
 
         $status ??= $request->string('status')->lower()->value();
         if ($request->boolean('filters_applied') && empty($filters['date_from']) && empty($filters['date_to'])) {
@@ -66,7 +72,7 @@ class CompanyController extends Controller
             $query->where(fn ($q) => $q->where('business_name', 'like', "%{$search}%")
                 ->orWhere('phone', 'like', "%{$search}%")
                 ->orWhere('city', 'like', "%{$search}%")
-                ->orWhereHas('owner', fn ($owner) => $owner->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%")->orWhere('phone', 'like', "%{$search}%")));
+                ->orWhereHas('owner', fn ($owner) => $owner->where('name', 'like', "%{$search}%")->orWhere('phone', 'like', "%{$search}%")));
         }
         $query
             ->when($filters['business_type'] ?? null, fn ($q, $value) => $q->where('business_type', $value))
@@ -95,7 +101,9 @@ class CompanyController extends Controller
 
     public function create()
     {
-        return view('super-admin.companies.create', ['definitions' => PermissionDefinition::where('status', 'active')->orderBy('module')->orderBy('label')->get()]);
+        return view('super-admin.companies.create', [
+            'definitions' => app(\App\Services\CompanyPermissionService::class)->activeDefinitions(),
+        ]);
     }
 
     public function approvalHistory(Request $request)
@@ -198,7 +206,9 @@ class CompanyController extends Controller
                 'module' => 'Companies',
                 'action' => 'company creation failed',
                 'description' => 'Company creation failed: '.$exception->getMessage(),
-                'new_values' => collect($data)->only(['business_name', 'business_type', 'company_phone', 'city', 'owner_name', 'owner_email', 'owner_phone', 'permissions'])->all(),
+                // Keep failed-creation diagnostics useful without recording
+                // the owner's login identifier or any credential material.
+                'new_values' => collect($data)->only(['business_name', 'business_type', 'company_phone', 'city', 'owner_name', 'owner_phone', 'permissions'])->all(),
                 'ip_address' => $request->ip(),
                 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
             ]);
@@ -228,10 +238,12 @@ class CompanyController extends Controller
     {
         $data = $request->validate([
             'destination' => ['nullable', Rule::in([
-                'business.dashboard', 'business.products.index', 'business.inventory', 'business.customers.index',
-                'business.suppliers.index', 'business.purchases.index', 'business.purchase-returns.index', 'business.sales.index', 'business.sales.returns.index', 'business.khata',
-                'business.deliveries', 'business.expenses.index', 'business.reports',
-                'business.staff', 'business.audit-logs.index', 'business.settings', 'business.pos.index',
+                'business.dashboard', 'business.products.index', 'business.inventory',
+                'business.customers.index', 'business.suppliers.index', 'business.purchases.index',
+                'business.purchase-returns.index', 'business.sales.index', 'business.sales.returns.index',
+                'business.khata', 'business.deliveries', 'business.expenses.index',
+                'business.reports', 'business.staff', 'business.audit-logs.index',
+                'business.settings', 'business.pos.index',
             ])],
         ]);
 
@@ -239,15 +251,13 @@ class CompanyController extends Controller
             'super_admin_business_context_id' => $company->id,
             'super_admin_business_context_name' => $company->business_name,
         ]);
+
         $destination = $data['destination']
             ?? app(BusinessWorkspaceAccessService::class)->firstEnabledRoute($request->user(), $company)
             ?? 'business.access-denied';
 
         $this->audit($request, 'login as business started', $company, null, ['destination' => $destination]);
 
-        // The persistent business-context banner identifies the selected company
-        // until the Super Admin explicitly returns to the platform dashboard.
-        // Do not also show a transient success alert when entering that context.
         return redirect()->route($destination);
     }
 
@@ -267,32 +277,17 @@ class CompanyController extends Controller
 
     public function resetOwnerPassword(Request $request, Business $company)
     {
-        $data = $request->validate([
-            'current_password' => ['required', 'current_password'],
-            'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
-        ], [
-            'current_password.current_password' => 'Your current Super Admin password is incorrect.',
-            'password.confirmed' => 'Password and confirm password do not match.',
-        ]);
+        $this->audit($request, 'blocked business owner credential access', $company, null, ['operation' => 'password_reset']);
 
-        abort_unless($company->owner, 404);
-        $company->owner->update(['password' => Hash::make($data['password'])]);
-        $this->audit($request, 'business owner password reset', $company, null, ['user_id' => $company->owner->id]);
-
-        return back()->with('success', 'Business owner password reset successfully.');
+        abort(403, 'Super Admins cannot reset a business owner password.');
     }
 
     public function resetStaffPassword(Request $request, Business $company, User $staff)
     {
-        abort_unless($staff->business_id === $company->id && $staff->id !== $company->owner_id, 404);
-        $data = $request->validate([
-            'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
-        ], ['password.confirmed' => 'Password and confirm password do not match.']);
+        abort_unless($staff->business_id === $company->id, 404);
+        $this->audit($request, 'blocked company credential access', $company, null, ['operation' => 'staff_password_reset', 'staff_id' => $staff->id]);
 
-        $staff->update(['password' => Hash::make($data['password'])]);
-        $this->audit($request, 'staff password reset', $company, null, ['user_id' => $staff->id]);
-
-        return back()->with('success', 'Password reset successfully for '.$staff->name.'.');
+        abort(403, 'Super Admins cannot reset company user passwords.');
     }
 
     public function edit(Request $request, Business $company)
@@ -309,13 +304,10 @@ class CompanyController extends Controller
 
         DB::transaction(function () use ($request, $company, $data) {
             $company->update(collect($data)->only(['business_name', 'business_type', 'business_description', 'phone', 'address', 'city', 'registration_number', 'tax_number'])->all());
-            $ownerData = [
+            $company->owner?->update([
                 'name' => $data['owner_name'],
-                'email' => $data['owner_email'],
                 'phone' => $data['owner_phone'],
-            ];
-            if (!empty($data['owner_password'])) $ownerData['password'] = Hash::make($data['owner_password']);
-            $company->owner?->update($ownerData);
+            ]);
 
             if ($request->boolean('remove_company_logo') && $company->logo) {
                 Storage::disk('public')->delete($company->logo);
@@ -362,7 +354,7 @@ class CompanyController extends Controller
             'reviewed_at' => now(),
             'review_note' => $data['review_note'] ?? null,
         ]);
-        $this->audit($request, 'business details change approved for application', $changeRequest->business, $changeRequest->old_values, $changeRequest->requested_values);
+        $this->audit($request, 'business details change approved for application', $changeRequest->business, $this->auditableChangeValues($changeRequest->old_values), $this->auditableChangeValues($changeRequest->requested_values));
 
         return back()->with('success', 'Request approved. Review it once more, then use Apply Changes to update the business and notify its owner.');
     }
@@ -372,12 +364,17 @@ class CompanyController extends Controller
         abort_unless($changeRequest->status === 'Approved', 404);
         $company = $changeRequest->business()->with('owner')->firstOrFail();
         $oldValues = $company->only(['business_name', 'phone', 'address', 'city', 'category', 'logo']);
+        $oldOwnerEmail = $company->owner?->email;
         $updates = collect($changeRequest->requested_values ?? [])
             ->only(['business_name', 'phone', 'address', 'city', 'category', 'logo'])
             ->all();
 
         DB::transaction(function () use ($company, $updates, $changeRequest): void {
             $company->update($updates);
+            $requestedEmail = data_get($changeRequest->requested_values, 'owner_email');
+            if ($requestedEmail && $company->owner && $requestedEmail !== $company->owner->email) {
+                $company->owner->update(['email' => $requestedEmail]);
+            }
             $changeRequest->update(['status' => 'Applied']);
         });
 
@@ -385,7 +382,13 @@ class CompanyController extends Controller
             Storage::disk('public')->delete($oldValues['logo']);
         }
 
-        $this->audit($request, 'business details change applied', $company, $oldValues, $updates);
+        $auditOldValues = $oldValues;
+        $auditNewValues = $updates;
+        if (data_get($changeRequest->requested_values, 'owner_email')) {
+            $auditOldValues['owner_email_changed'] = (bool) $oldOwnerEmail;
+            $auditNewValues['owner_email_changed'] = true;
+        }
+        $this->audit($request, 'business details change applied', $company, $auditOldValues, $auditNewValues);
         $changeRequest->refresh()->load('business');
         $company->owner?->notify(new BusinessDetailsChangeDecisionNotification($changeRequest));
 
@@ -404,7 +407,7 @@ class CompanyController extends Controller
         ]);
 
         $changeRequest->load('business');
-        $this->audit($request, 'business details change rejected', $changeRequest->business, $changeRequest->old_values, $changeRequest->requested_values);
+        $this->audit($request, 'business details change rejected', $changeRequest->business, $this->auditableChangeValues($changeRequest->old_values), $this->auditableChangeValues($changeRequest->requested_values));
         $changeRequest->business->owner?->notify(new BusinessDetailsChangeDecisionNotification($changeRequest));
 
         return back()->with('success', 'Business-detail change request rejected. The business owner has been notified.');
@@ -421,6 +424,21 @@ class CompanyController extends Controller
         $newStatus = strtolower($data['status']);
         if ($oldStatus === $newStatus) {
             return back()->with('success', 'Company status is already '.ucfirst($newStatus).'.');
+        }
+
+        $allowedTransitions = [
+            'pending' => ['approved', 'rejected'],
+            'approved' => ['suspended'],
+            'suspended' => ['approved'],
+            'rejected' => ['pending'],
+        ];
+
+        if (!in_array($newStatus, $allowedTransitions[$oldStatus] ?? [], true)) {
+            $message = $oldStatus === 'approved' && $newStatus === 'rejected'
+                ? 'Approved companies cannot be rejected.'
+                : 'This company status transition is not allowed.';
+
+            return back()->withErrors(['status' => $message]);
         }
 
         DB::transaction(function () use ($company, $oldStatus, $newStatus, $data) {
@@ -524,6 +542,17 @@ class CompanyController extends Controller
         ]);
     }
 
+    private function auditableChangeValues(?array $values): ?array
+    {
+        if ($values === null) {
+            return null;
+        }
+
+        return collect($values)
+            ->except(['owner_email', 'email', 'password', 'password_confirmation'])
+            ->all();
+    }
+
     private function recordApprovalLog(Business $company, ?string $oldStatus, string $newStatus, ?string $note): void
     {
         if ($oldStatus !== null && strtolower($oldStatus) === strtolower($newStatus)) {
@@ -542,8 +571,12 @@ class CompanyController extends Controller
 
     private function applyInitialPermissions(Business $company, array $permissions): void
     {
-        $selected = collect($permissions)->map(fn ($key) => strtolower((string) $key))->all();
-        $definitions = PermissionDefinition::where('status', 'active')->get(['module', 'permission_key']);
+        $permissionService = app(\App\Services\CompanyPermissionService::class);
+        $selected = collect($permissions)
+            ->map(fn ($key) => $permissionService->normalise((string) $key))
+            ->unique()
+            ->all();
+        $definitions = $permissionService->activeDefinitions();
         $enabledModules = $definitions
             ->filter(fn (PermissionDefinition $definition) => $definition->permission_key === strtolower($definition->module).'.view')
             ->filter(fn (PermissionDefinition $definition) => in_array(strtolower($definition->permission_key), $selected, true))

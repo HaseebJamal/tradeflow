@@ -10,8 +10,8 @@ class Product extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'business_id', 'category_id', 'name', 'image', 'sku', 'barcode', 'batch_number', 'manufacturing_date',
-        'expiry_date', 'expiry_alert_days', 'retail_price', 'wholesale_price', 'purchase_cost', 'opening_stock',
+        'business_id', 'category_id', 'unit_id', 'name', 'image', 'barcode', 'batch_number', 'manufacturing_date',
+        'expiry_date', 'expiry_alert_days', 'retail_price', 'wholesale_price', 'purchase_cost', 'latest_purchase_price', 'average_purchase_price', 'opening_stock',
         'current_stock', 'minimum_order_quantity', 'stock_quantity', 'low_stock_alert_qty', 'unit', 'description',
         'brand', 'manufacturer', 'warehouse_location', 'has_batch_tracking', 'created_by', 'added_date', 'status',
     ];
@@ -21,12 +21,16 @@ class Product extends Model
         'manufacturing_date' => 'date',
         'has_batch_tracking' => 'boolean',
         'added_date' => 'datetime',
+        'latest_purchase_price' => 'decimal:2',
+        'average_purchase_price' => 'decimal:2',
     ];
 
     public function business() { return $this->belongsTo(Business::class); }
     public function category() { return $this->belongsTo(Category::class); }
+    public function unitRecord() { return $this->belongsTo(Unit::class, 'unit_id'); }
     public function inventory() { return $this->hasOne(Inventory::class); }
     public function movements() { return $this->hasMany(StockMovement::class); }
     public function inventoryMovements() { return $this->hasMany(InventoryMovement::class); }
+    public function purchaseItems() { return $this->hasMany(PurchaseItem::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
 }

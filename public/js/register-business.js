@@ -22,8 +22,26 @@
 
     const clearDraft = () => Object.values(storage).forEach((key) => sessionStorage.removeItem(key));
 
-    if (document.querySelector('[data-tf-registration-complete]')) {
+    const registrationComplete = document.querySelector('[data-tf-registration-complete]');
+    if (registrationComplete) {
         clearDraft();
+        const redirectUrl = registrationComplete.dataset.redirectUrl || '/';
+        const redirectHome = () => window.location.assign(redirectUrl);
+
+        if (!window.Swal) {
+            window.setTimeout(redirectHome, 4000);
+            return;
+        }
+
+        window.Swal.fire({
+            icon: 'success',
+            title: 'Registration Submitted',
+            text: 'Your business registration has been submitted successfully. Please wait for Super Admin approval before logging in. You will be notified once your business has been reviewed.',
+            confirmButtonText: 'OK',
+            timer: 4000,
+            timerProgressBar: true,
+            allowOutsideClick: false,
+        }).then(redirectHome);
         return;
     }
 
@@ -58,6 +76,27 @@
 
     const phoneIsValid = (value) => /^(?:\+92|92|0)3\d{9}$/.test(value.replace(/[\s-]/g, ''));
     const passwordIsStrong = (value) => /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(value);
+    const documentMessage = (field) => ({
+        cnic_image: 'Please upload a valid CNIC document.',
+        business_document: 'Please upload a valid business document.',
+        shop_image: 'Please upload a valid shop or business premises image.',
+    }[field.name] || 'Please upload a valid document.');
+
+    const startsWith = (bytes, signature) => signature.every((value, index) => bytes[index] === value);
+
+    const inspectImage = (file, minimumWidth, minimumHeight) => new Promise((resolve) => {
+        const image = new Image();
+        const url = URL.createObjectURL(file);
+        image.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve(image.naturalWidth >= minimumWidth && image.naturalHeight >= minimumHeight);
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(false);
+        };
+        image.src = url;
+    });
 
     const validateFile = (field) => {
         const file = field.files?.[0];
@@ -68,7 +107,41 @@
             ? ['image/jpeg', 'image/png']
             : ['application/pdf', 'image/jpeg', 'image/png'];
 
-        return allowed.includes(file.type) ? '' : 'Use an approved PDF, JPG, JPEG, or PNG file.';
+        return allowed.includes(file.type) ? '' : documentMessage(field);
+    };
+
+    const validateFileContent = async (field) => {
+        const basicError = validateFile(field);
+        if (basicError) return basicError;
+
+        const file = field.files?.[0];
+        const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+        const isPdf = startsWith(header, [0x25, 0x50, 0x44, 0x46, 0x2d]);
+        const isJpeg = startsWith(header, [0xff, 0xd8, 0xff]);
+        const isPng = startsWith(header, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+        if (file.type === 'application/pdf') return isPdf ? '' : documentMessage(field);
+        if (!isJpeg && !isPng) return documentMessage(field);
+
+        const minimum = field.name === 'shop_image' ? [320, 180] : [200, 120];
+        return (await inspectImage(file, ...minimum)) ? '' : documentMessage(field);
+    };
+
+    const startFileValidation = (field) => {
+        field.dataset.registerFileState = 'pending';
+        field.dataset.registerFileMessage = 'Checking the selected file...';
+
+        validateFileContent(field)
+            .then((message) => {
+                field.dataset.registerFileState = message ? 'invalid' : 'valid';
+                field.dataset.registerFileMessage = message;
+                setError(field, message);
+            })
+            .catch(() => {
+                field.dataset.registerFileState = 'invalid';
+                field.dataset.registerFileMessage = documentMessage(field);
+                setError(field, field.dataset.registerFileMessage);
+            });
     };
 
     const validateStep = (index, focus = true) => {
@@ -92,7 +165,11 @@
             panelFields(index).forEach((field) => {
                 if (field.type === 'password') return;
                 if (field.type === 'file') {
-                    const error = validateFile(field);
+                    const error = field.dataset.registerFileState === 'pending'
+                        ? 'Checking the selected file...'
+                        : (field.dataset.registerFileState === 'invalid'
+                            ? field.dataset.registerFileMessage
+                            : validateFile(field));
                     if (error) setInvalid(field, error);
                     return;
                 }
@@ -236,7 +313,12 @@
             const file = event.target.files?.[0];
             const target = wizard.querySelector('[data-file-name="' + event.target.name + '"]');
             if (target) target.textContent = file ? file.name : 'No file selected.';
-            validateStep(3, false);
+            if (file) startFileValidation(event.target);
+            else {
+                event.target.dataset.registerFileState = '';
+                event.target.dataset.registerFileMessage = '';
+                validateStep(3, false);
+            }
         }
         if (event.target.type !== 'file') saveDraft();
     });
@@ -249,6 +331,11 @@
     });
 
     wizard.addEventListener('submit', (event) => {
+        if (wizard.dataset.submitting === '1') {
+            event.preventDefault();
+            return;
+        }
+
         panels.forEach((panel) => panel.querySelectorAll('input, select, textarea').forEach((field) => {
             field.disabled = false;
         }));
@@ -261,6 +348,7 @@
             }
         }
 
+        wizard.dataset.submitting = '1';
         submit.disabled = true;
         submit.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Submitting';
     });

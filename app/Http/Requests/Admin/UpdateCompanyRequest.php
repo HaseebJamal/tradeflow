@@ -4,11 +4,35 @@ namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
+use App\Models\AuditLog;
 
 class UpdateCompanyRequest extends FormRequest
 {
-    public function authorize(): bool { return $this->user()?->role === 'super_admin'; }
+    public function authorize(): bool
+    {
+        if ($this->user()?->role !== 'super_admin') {
+            return false;
+        }
+
+        if ($this->filled('owner_email') || $this->filled('owner_password') || $this->filled('owner_password_confirmation')) {
+            $company = $this->route('company');
+            AuditLog::create([
+                'user_id' => $this->user()->id,
+                'actor_id' => $this->user()->id,
+                'actor_role' => $this->user()->role,
+                'business_id' => $company?->id,
+                'module' => 'Companies',
+                'action' => 'blocked company credential access',
+                'description' => 'Blocked Super Admin company credential update attempt.',
+                'new_values' => ['operation' => 'credential_update'],
+                'ip_address' => $this->ip(),
+                'user_agent' => substr((string) $this->userAgent(), 0, 1000),
+            ]);
+            abort(403, 'Super Admins cannot update company login credentials.');
+        }
+
+        return true;
+    }
 
     public function rules(): array
     {
@@ -21,9 +45,7 @@ class UpdateCompanyRequest extends FormRequest
             'address' => ['required', 'string', 'max:1000'], 'city' => ['required', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'registration_number' => ['nullable', 'string', 'max:100'], 'tax_number' => ['nullable', 'string', 'max:100'],
             'owner_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($company?->owner_id)],
             'owner_phone' => ['required', 'regex:/^\d{11}$/'],
-            'owner_password' => ['nullable', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
             'company_logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_company_logo' => ['nullable', 'boolean'],
             'business_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],

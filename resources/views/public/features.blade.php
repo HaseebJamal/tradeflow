@@ -7,7 +7,7 @@
         <p class="tf-muted mb-5">ERP-style frontend modules for wholesale operations.</p>
         <div class="row g-4">
             @foreach([
-                ['Product Catalog','Maintain SKUs, units, pricing, and details.','bi-box'],
+                ['Product Catalog','Maintain barcodes, units, pricing, and details.','bi-box'],
                 ['Inventory Control','Review stock, low stock, and warehouse movement.','bi-clipboard-data'],
                 ['Orders','Track retailer and wholesale order stages.','bi-bag-check'],
                 ['Payments & Khata','Preview receipts, pending balances, and ledger rows.','bi-cash-stack'],

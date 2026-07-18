@@ -25,12 +25,17 @@ class CompanyPermissionController extends Controller
     {
         $data = $request->validated();
         $scopeDefinitions = $this->definitionsForScope($data['scope']);
-        $selected = array_map('strtolower', $data['permissions'] ?? []);
+        $permissionService = app(CompanyPermissionService::class);
+        $selected = collect($data['permissions'] ?? [])
+            ->map(fn ($permission) => $permissionService->normalise((string) $permission))
+            ->unique()
+            ->values()
+            ->all();
 
         $company = Business::findOrFail($data['company_id']);
         DB::transaction(function () use ($request, $company, $data, $selected, $scopeDefinitions) {
             $definitions = in_array($data['scope'], ['modules', 'all'], true)
-                ? PermissionDefinition::where('status', 'active')->get(['module', 'permission_key'])
+                ? app(CompanyPermissionService::class)->activeDefinitions()
                 : $scopeDefinitions;
             $current = CompanyPermission::where('company_id', $company->id)->whereIn('permission_key', $definitions->pluck('permission_key'))->pluck('allowed', 'permission_key')->map(fn ($value) => (bool) $value)->all();
             $moduleDefinitions = $definitions->filter(fn (PermissionDefinition $definition) => $definition->permission_key === strtolower($definition->module).'.view');
@@ -82,7 +87,7 @@ class CompanyPermissionController extends Controller
     {
         return view('super-admin.permissions.templates', [
             'templates' => PermissionTemplate::with('items')->latest()->get(),
-            'definitions' => PermissionDefinition::where('status', 'active')->orderBy('module')->orderBy('label')->get(),
+            'definitions' => app(CompanyPermissionService::class)->activeDefinitions(),
             'companies' => Business::orderBy('business_name')->get(),
         ]);
     }
@@ -106,8 +111,12 @@ class CompanyPermissionController extends Controller
     public function applyTemplate(Request $request, PermissionTemplate $template)
     {
         $data = $request->validate(['company_id' => ['required', 'exists:businesses,id']]);
-        $selected = $template->items()->where('allowed', true)->pluck('permission_key')->all();
-        $allKeys = PermissionDefinition::where('status', 'active')->pluck('permission_key')->all();
+        $permissionService = app(CompanyPermissionService::class);
+        $selected = $template->items()->where('allowed', true)->pluck('permission_key')
+            ->map(fn ($permission) => $permissionService->normalise((string) $permission))
+            ->unique()
+            ->all();
+        $allKeys = $permissionService->activeDefinitions()->pluck('permission_key')->all();
 
         foreach ($allKeys as $key) {
             CompanyPermission::updateOrCreate(
@@ -137,15 +146,23 @@ class CompanyPermissionController extends Controller
             'companies' => Business::orderBy('business_name')->get(),
             'selectedCompany' => $selectedCompany,
             'definitions' => $definitions,
-            'selectedPermissions' => old('permissions', $companyId ? CompanyPermission::where('company_id', $companyId)->where('allowed', true)->pluck('permission_key')->all() : []),
+            'selectedPermissions' => old('permissions', $companyId
+                ? CompanyPermission::where('company_id', $companyId)->where('allowed', true)->pluck('permission_key')
+                    ->map(fn ($permission) => app(CompanyPermissionService::class)->normalise((string) $permission))
+                    ->unique()
+                    ->all()
+                : []),
         ]);
     }
 
     private function definitionsForScope(string $scope)
     {
-        return PermissionDefinition::where('status', 'active')
-            ->when($scope !== 'all', fn ($query) => $query->where('permission_type', match ($scope) { 'modules' => 'module', 'features' => 'feature', default => 'action' }))
-            ->orderBy('module')->orderBy('label')->get();
+        return app(CompanyPermissionService::class)->activeDefinitions()
+            ->when($scope !== 'all', fn ($definitions) => $definitions->where(
+                'permission_type',
+                match ($scope) { 'modules' => 'module', 'features' => 'feature', default => 'action' }
+            ))
+            ->values();
     }
 
     private function audit(Request $request, string $action, ?int $companyId = null): void

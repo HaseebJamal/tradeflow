@@ -7,6 +7,7 @@ use App\Models\CompanyPermission;
 use App\Models\PermissionDefinition;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Collection;
 
 class CompanyPermissionService
 {
@@ -51,7 +52,11 @@ class CompanyPermissionService
         // Module access is the hard ceiling. A stale child action can never
         // keep a disabled module visible or reachable.
         if ($moduleKey !== null) {
-            if (($configuredPermissions[$moduleKey] ?? false) !== true) {
+            // Older company records may store a module toggle as "categories"
+            // while current definitions use "categories.view". Treat both as
+            // the same module gate without widening access beyond saved data.
+            if (($configuredPermissions[$moduleKey] ?? false) !== true
+                && ($configuredPermissions[$module] ?? false) !== true) {
                 return false;
             }
         } elseif (($configuredPermissions[$module] ?? false) !== true
@@ -68,9 +73,30 @@ class CompanyPermissionService
 
     public function availableKeys(User $user): array
     {
-        $keys = \App\Models\PermissionDefinition::where('status', 'active')->pluck('permission_key')->all();
+        return $this->allowedDefinitionsFor($user)->pluck('permission_key')->values()->all();
+    }
 
-        return array_values(array_filter($keys, fn ($key) => $this->allows($user, $key)));
+    /**
+     * The canonical registry shared by Super Admin company configuration and
+     * Business Owner role assignment. Legacy aliases are resolved for access,
+     * but are never rendered as a second selectable permission.
+     */
+    public function activeDefinitions(): Collection
+    {
+        return PermissionDefinition::where('status', 'active')
+            ->orderBy('module')
+            ->orderBy('label')
+            ->get()
+            ->filter(fn (PermissionDefinition $definition) => $this->normalise($definition->permission_key) === strtolower($definition->permission_key))
+            ->values();
+    }
+
+    /** Return only canonical permissions enabled for the user's company. */
+    public function allowedDefinitionsFor(User $user, ?Business $business = null): Collection
+    {
+        return $this->activeDefinitions()
+            ->filter(fn (PermissionDefinition $definition) => $this->allows($user, $definition->permission_key, $business))
+            ->values();
     }
 
     /**
@@ -98,6 +124,11 @@ class CompanyPermissionService
             ->unique()
             ->all();
 
+        if ($permission === 'staff.view'
+            && collect($assigned)->contains(fn (string $assignedPermission) => str_starts_with($assignedPermission, 'staff.'))) {
+            return true;
+        }
+
         return in_array($permission, $assigned, true)
             || (str_ends_with($permission, '.view') && in_array($module, $assigned, true));
     }
@@ -109,9 +140,8 @@ class CompanyPermissionService
 
     private function definitionKeys(): array
     {
-        return Cache::remember('tradeflow.permission-definition-keys', now()->addMinutes(30), function () {
-            $definitions = PermissionDefinition::where('status', 'active')
-                ->get(['module', 'permission_key', 'permission_type']);
+        return Cache::remember('tradeflow.permission-definition-keys', now()->addMinutes(30), function (): array {
+            $definitions = $this->activeDefinitions();
 
             return [
                 'modules' => $definitions

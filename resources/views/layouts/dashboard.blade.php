@@ -17,12 +17,6 @@
     </aside>
     <div class="sidebar-overlay" data-tf-sidebar-overlay></div>
     <div class="tf-dashboard-main main-content">
-        @if(request()->is('business/*') && auth()->check() && auth()->user()->role === 'super_admin' && session('super_admin_business_context_id'))
-            <div class="alert alert-warning rounded-0 border-0 mb-0 d-flex flex-wrap align-items-center justify-content-between gap-2 px-3 px-lg-4 py-2" data-tf-persistent-alert>
-                <span><i class="bi bi-person-workspace me-1"></i>You are currently viewing the dashboard of: <strong>{{ session('super_admin_business_context_name') }}</strong>.</span>
-                <form method="POST" action="{{ route('admin.company-context.return') }}">@csrf<button class="btn btn-sm btn-dark">Return to Super Admin Dashboard</button></form>
-            </div>
-        @endif
         <div class="tf-dashboard-topbar dashboard-header px-3 px-lg-4 py-3 sticky-top">
             <div class="d-flex align-items-center gap-3 min-w-0">
                 <button class="btn btn-outline-secondary tf-sidebar-toggle d-lg-none" data-tf-sidebar-toggle aria-label="Open sidebar" title="Open sidebar"><i class="bi bi-list"></i></button>
@@ -33,30 +27,27 @@
             </div>
             <div class="d-flex align-items-center gap-2">
                 @auth
-                    @if(request()->is('business/*') || request()->is('admin/*'))
-                        @php
-                            $dashboardUser = auth()->user();
-                            $contextBusiness = $dashboardUser->role === 'super_admin' && session('super_admin_business_context_id')
-                                ? \App\Models\Business::find(session('super_admin_business_context_id'))
-                                : null;
-                            $canUseNotificationBell = request()->is('admin/*')
-                                || app(\App\Services\CompanyPermissionService::class)->allowsUser($dashboardUser, 'notifications.view', $contextBusiness);
-                            $notificationRoute = request()->is('admin/*')
-                                ? route('admin.notifications.index')
-                                : ($contextBusiness ? route('business.context.notifications') : route('notifications.index'));
-                        @endphp
-                        @if($canUseNotificationBell)
-                            <a href="{{ $notificationRoute }}" class="btn btn-light border position-relative" aria-label="Notifications" title="Notifications">
-                                <i class="bi bi-bell"></i>
-                                @if($dashboardUser->unreadNotifications()->count())<span class="position-absolute top-0 start-100 translate-middle badge rounded-pill text-bg-danger">{{ $dashboardUser->unreadNotifications()->count() }}</span>@endif
-                            </a>
-                        @endif
+                    @if(request()->is('business/*') || request()->is('staff/*') || request()->is('admin/*'))
+                        @include('components.notification-dropdown')
                     @endif
                 @endauth
                 @include('components.user-dropdown')
             </div>
         </div>
-        <main class="dashboard-page">@yield('content')</main>
+        @if(request()->is('business/*') && auth()->check() && auth()->user()->role === 'super_admin' && session('super_admin_business_context_id'))
+            <div class="alert alert-warning tf-company-preview-banner rounded-0 border-0 mb-0 d-flex flex-wrap align-items-center justify-content-between gap-3 px-3 px-lg-4 py-3" role="alert" data-tf-persistent-alert>
+                <div><i class="bi bi-exclamation-triangle-fill me-2"></i><strong>You are currently viewing &quot;{{ session('super_admin_business_context_name') }}&quot; as Super Admin.</strong><span class="d-block small mt-1">Any changes made here will affect this company's live data.</span></div>
+                <form method="POST" action="{{ route('admin.company-context.return') }}">@csrf<button class="btn btn-sm btn-dark text-nowrap"><i class="bi bi-arrow-return-left me-1"></i>Return to Super Admin Dashboard</button></form>
+            </div>
+        @endif
+        <main class="dashboard-page">
+            @if($returnAlert = session('tradeflow_return_alert'))
+                <div class="alert alert-success visually-hidden" data-tf-alert-title="{{ data_get($returnAlert, 'title', 'Completed') }}">
+                    {{ data_get($returnAlert, 'message') }}
+                </div>
+            @endif
+            @yield('content')
+        </main>
     </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

@@ -21,7 +21,7 @@
             <div class="col-lg-5">
                 <div class="tf-hero-panel">
                     <div class="d-flex justify-content-between align-items-center mb-4"><strong>Today Overview</strong><span class="tf-badge tf-badge-success">Live</span></div>
-                    @foreach([['Orders','Rs 482K','bi-bag-check','bg-blue'],['Pending Khata','Rs 91K','bi-journal-text','bg-amber'],['Low Stock','12 SKUs','bi-exclamation-triangle','bg-red'],['Delivered','86 Orders','bi-truck','bg-green']] as [$label,$value,$icon,$color])
+                    @foreach([['Orders','Rs 482K','bi-bag-check','bg-blue'],['Pending Khata','Rs 91K','bi-journal-text','bg-amber'],['Low Stock','12 Items','bi-exclamation-triangle','bg-red'],['Delivered','86 Orders','bi-truck','bg-green']] as [$label,$value,$icon,$color])
                     <div class="tf-mini-row"><div><i class="bi {{ $icon }} {{ $color }} text-white"></i>{{ $label }}</div><strong>{{ $value }}</strong></div>
                     @endforeach
                 </div>
