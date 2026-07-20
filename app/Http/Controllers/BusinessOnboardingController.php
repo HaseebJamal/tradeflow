@@ -72,9 +72,6 @@ class BusinessOnboardingController extends Controller
 
         $request->session()->forget(['registration_step', 'registration_draft']);
 
-        return redirect()->route('register.business')->with(
-            'success',
-            'Your business registration has been submitted successfully. Please wait for Super Admin approval.'
-        );
+        return redirect()->route('public.home')->with('registration_completed', true);
     }
 }

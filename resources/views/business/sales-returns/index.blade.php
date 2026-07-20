@@ -3,8 +3,33 @@
 @section('page-subtitle', 'Review customer returns and the related inventory reversal')
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-0">Sales Returns</h2><p class="tf-muted mb-0">Process returns from the original completed POS sale.</p></div><div class="d-flex gap-2"><a href="{{ route('business.sales.index') }}" class="btn btn-outline-secondary">All Sales</a><a href="{{ route('business.sales.returns.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>New Return</a></div></div>
-<form class="tf-card p-3 mb-3 row g-2 align-items-end"><div class="col-md-5"><label class="form-label">Search sale or return number</label><input name="search" value="{{ request('search') }}" class="form-control" autocomplete="off" autofocus></div><div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div><div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div><div class="col-md-3 d-flex gap-2"><button class="btn btn-outline-primary">Filter</button><a href="{{ route('business.sales.returns.index') }}" class="btn btn-outline-secondary">Clear</a></div></form>
-<x-table><thead><tr><th>Return</th><th>Sale</th><th>Customer</th><th>Returned at</th><th>Refund method</th><th>Refund total</th><th></th></tr></thead><tbody>@forelse($returns as $return)<tr><td><strong>{{ $return->return_number ?? '-' }}</strong></td><td><strong>{{ $return->order?->order_number ?? '-' }}</strong></td><td>{{ $return->customer?->name ?? 'Walk-in Customer' }}</td><td><x-date-time :value="$return->returned_at" /></td><td>{{ $return->refund_method }}</td><td>Rs {{ number_format($return->refund_amount, 2) }}</td><td><a class="btn btn-sm btn-outline-primary" href="{{ route('business.sales.returns.show', $return) }}">View</a></td></tr>@empty<tr><td colspan="7" class="text-center tf-muted py-5">No sales returns found.</td></tr>@endforelse</tbody></x-table>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div><h2 class="h5 mb-0">Sales Returns</h2><p class="tf-muted mb-0">Process returns from completed POS and normal sales.</p></div>
+    <div class="d-flex gap-2"><a href="{{ route('business.sales.index') }}" class="btn btn-outline-secondary">All Sales</a><a href="{{ route('business.sales.returns.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>New Return</a></div>
+</div>
+<form class="tf-card p-3 mb-3 row g-2 align-items-end">
+    <div class="col-md-5"><label class="form-label">Search sale or return number</label><input name="search" value="{{ request('search') }}" class="form-control" autocomplete="off" autofocus></div>
+    <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>
+    <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>
+    <div class="col-md-3 d-flex gap-2"><button class="btn btn-outline-primary">Filter</button><a href="{{ route('business.sales.returns.index') }}" class="btn btn-outline-secondary">Clear</a></div>
+</form>
+<x-table>
+    <thead><tr><th>Return Number</th><th>Source Sale Number</th><th>Source Type</th><th>Customer</th><th>Returned At</th><th>Refund Method</th><th>Refund Total</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>@forelse($returns as $return)
+        <tr>
+            <td><strong>{{ $return->return_number ?? '-' }}</strong></td>
+            <td><strong>{{ $return->order?->invoice?->invoice_number ?? $return->order?->order_number ?? '-' }}</strong></td>
+            <td>{{ $return->order?->sale_channel === 'pos' ? 'POS' : 'Normal Sale' }}</td>
+            <td>{{ $return->customer?->name ?? 'Walk-in Customer' }}</td>
+            <td><x-date-time :value="$return->returned_at" /></td>
+            <td>{{ $return->refund_method }}</td>
+            <td>Rs {{ number_format($return->refund_amount, 2) }}</td>
+            <td>{{ $return->order?->status ?? '-' }}</td>
+            <td><a class="btn btn-sm btn-outline-primary" href="{{ route('business.sales.returns.show', $return) }}">View</a></td>
+        </tr>
+    @empty
+        <tr><td colspan="9" class="text-center tf-muted py-5">No sales returns found.</td></tr>
+    @endforelse</tbody>
+</x-table>
 <div class="mt-3">{{ $returns->links() }}</div>
 @endsection

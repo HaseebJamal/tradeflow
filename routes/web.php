@@ -246,8 +246,10 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     // Sales is the consolidated home for orders, customer payments, and sales invoices.
     Route::get('/sales', [OrderController::class, 'index'])->name('sales.index')->middleware('business.permission:Sales');
     Route::get('/sales/lookup', [OrderController::class, 'lookup'])->name('sales.lookup')->middleware('business.permission:Sales');
-    Route::get('/sales/create', [OrderController::class, 'create'])->name('sales.create')->middleware('business.permission:Sales');
-    Route::post('/sales', [OrderController::class, 'store'])->name('sales.store')->middleware(['business.permission:Sales', 'company.permission:sales.create']);
+    // POS is the only entry point for new sales. Keep legacy endpoints so old
+    // bookmarks do not fail, but never accept a duplicate normal-sale post.
+    Route::get('/sales/create', fn () => redirect()->route('business.pos.index')->with('info', 'New sales are now created through the POS module.'))->name('sales.create');
+    Route::post('/sales', fn () => redirect()->route('business.pos.index')->with('info', 'New sales are now created through the POS module.'))->name('sales.store');
     Route::get('/sales/returns', [\App\Http\Controllers\Business\SalesReturnController::class, 'index'])->name('sales.returns.index')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
     Route::get('/sales/returns/create', [\App\Http\Controllers\Business\SalesReturnController::class, 'create'])->name('sales.returns.create')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
     Route::post('/sales/returns/start', [\App\Http\Controllers\Business\SalesReturnController::class, 'start'])->name('sales.returns.start')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
@@ -277,8 +279,8 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
 
     // Legacy order URLs remain available as safe redirects or action aliases.
     Route::get('/orders', fn () => redirect()->route('business.sales.index'))->name('orders.index')->middleware('business.permission:Sales');
-    Route::get('/orders/create', fn () => redirect()->route('business.sales.create'))->name('orders.create')->middleware('business.permission:Sales');
-    Route::post('/orders', [OrderController::class, 'store'])->name('orders.store')->middleware(['business.permission:Sales', 'company.permission:sales.create']);
+    Route::get('/orders/create', fn () => redirect()->route('business.pos.index')->with('info', 'New sales are now created through the POS module.'))->name('orders.create');
+    Route::post('/orders', fn () => redirect()->route('business.pos.index')->with('info', 'New sales are now created through the POS module.'))->name('orders.store');
     Route::post('/orders/{order}/assign-delivery', [OrderController::class, 'assignDelivery'])->name('orders.assignDelivery')->middleware(['business.permission:Deliveries', 'company.permission:deliveries.assign']);
     Route::get('/orders/{order}/edit', fn ($order) => redirect()->route('business.sales.edit', $order))->name('orders.edit')->middleware('business.permission:Sales');
     Route::put('/orders/{order}', [OrderController::class, 'update'])->name('orders.update')->middleware(['business.permission:Sales', 'company.permission:sales.edit']);

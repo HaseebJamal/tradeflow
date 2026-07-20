@@ -20,11 +20,12 @@ class SalesReturnController extends Controller
         ]);
         $filters['date_from'] ??= now(config('app.timezone'))->toDateString();
         $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
-        $returns = PosReturn::with(['order', 'customer', 'items.orderItem'])
+        $returns = PosReturn::with(['order.invoice', 'customer', 'items.orderItem'])
             ->where('business_id', $businessId)
             ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($inner) => $inner
                 ->where('return_number', 'like', "%{$value}%")
-                ->orWhereHas('order', fn ($orders) => $orders->where('order_number', 'like', "%{$value}%"))))
+                ->orWhereHas('order', fn ($orders) => $orders->where('order_number', 'like', "%{$value}%"))
+                ->orWhereHas('order.invoice', fn ($invoice) => $invoice->where('invoice_number', 'like', "%{$value}%"))))
             ->where('returned_at', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
             ->where('returned_at', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
             ->latest('returned_at')->paginate(20)->withQueryString();
@@ -83,8 +84,8 @@ class SalesReturnController extends Controller
     {
         return Order::with(['customer', 'invoice', 'items.posReturnItems'])
             ->where('business_id', $businessId)
-            ->where('sale_channel', 'pos')
             ->whereIn('status', ['Completed', 'Delivered', 'Paid', 'Partially Returned'])
+            ->whereNotIn('status', ['Cancelled', 'Void', 'Returned'])
             ->latest('order_date');
     }
 

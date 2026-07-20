@@ -60,7 +60,7 @@
 
                                 @if($companyStatus === 'pending')
                                     <a class="dropdown-item" href="{{ route('admin.companies.edit', $company) }}"><i class="bi bi-pencil me-2"></i>Edit Company</a>
-                                    <a class="dropdown-item" href="{{ route('admin.permissions.index', ['company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-2"></i>Manage Permissions</a>
+                                    <a class="dropdown-item" href="{{ route('admin.permissions.index', ['manage_company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-2"></i>Manage Permissions</a>
                                     <div class="dropdown-divider"></div>
                                     <form method="POST" action="{{ route('admin.companies.status', $company) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="approved"><button type="submit" class="dropdown-item text-success">Approve</button></form>
                                     <form method="POST" action="{{ route('admin.companies.status', $company) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="rejected"><button type="submit" class="dropdown-item text-danger">Reject</button></form>
@@ -69,14 +69,14 @@
                                     <form method="POST" action="{{ route('admin.companies.destroy', $company) }}" data-tf-company-delete data-company-name="{{ $company->business_name }}">@csrf @method('DELETE')<button type="submit" class="dropdown-item text-danger">Permanently Delete Company</button></form>
                                 @elseif($companyStatus === 'approved')
                                     <a class="dropdown-item" href="{{ route('admin.companies.edit', $company) }}"><i class="bi bi-pencil me-2"></i>Edit Company</a>
-                                    <a class="dropdown-item" href="{{ route('admin.permissions.index', ['company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-2"></i>Manage Permissions</a>
+                                    <a class="dropdown-item" href="{{ route('admin.permissions.index', ['manage_company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-2"></i>Manage Permissions</a>
                                     <a class="dropdown-item" href="{{ route('admin.subscriptions', ['manage_business_id' => $company->id]) }}#assign-subscription"><i class="bi bi-credit-card me-2"></i>Manage Subscription</a>
                                     <form method="POST" action="{{ route('admin.companies.open-dashboard', $company) }}">@csrf<button type="submit" class="dropdown-item"><i class="bi bi-person-workspace me-2"></i>Open Business Dashboard</button></form>
                                     <div class="dropdown-divider"></div>
                                     <form method="POST" action="{{ route('admin.companies.status', $company) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="suspended"><button type="submit" class="dropdown-item text-warning">Suspend</button></form>
                                     <form method="POST" action="{{ route('admin.companies.archive', $company) }}" onsubmit="return confirm('Archive this company? Its data will remain intact.')">@csrf @method('PATCH')<button type="submit" class="dropdown-item text-warning">Archive</button></form>
                                 @elseif($companyStatus === 'suspended')
-                                    <a class="dropdown-item" href="{{ route('admin.permissions.index', ['company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-2"></i>Manage Permissions</a>
+                                    <a class="dropdown-item" href="{{ route('admin.permissions.index', ['manage_company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-2"></i>Manage Permissions</a>
                                     <a class="dropdown-item" href="{{ route('admin.subscriptions', ['manage_business_id' => $company->id]) }}#assign-subscription"><i class="bi bi-credit-card me-2"></i>Manage Subscription</a>
                                     <div class="dropdown-divider"></div>
                                     <form method="POST" action="{{ route('admin.companies.status', $company) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="approved"><button type="submit" class="dropdown-item text-success">Activate</button></form>

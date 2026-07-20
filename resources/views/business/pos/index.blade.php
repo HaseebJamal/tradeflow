@@ -4,6 +4,7 @@
 @section('page-subtitle', 'Counter sales, receipts, and register control')
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
+@if(session('info'))<div class="alert alert-info">{{ session('info') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
 @if(!$register)

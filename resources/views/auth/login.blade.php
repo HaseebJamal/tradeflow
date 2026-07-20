@@ -11,12 +11,12 @@
                     <p class="tf-muted">Access your wholesale dashboard securely.</p>
                     @if(session('status'))<div class="alert alert-success">{{ session('status') }}</div>@endif
                     @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-                    <form method="POST" action="{{ route('login.store') }}" class="d-grid gap-3" data-tf-tab-order>@csrf
-                        <div><label class="form-label">Email</label><input name="email" type="email" class="form-control form-control-lg" placeholder="admin@tradeflow.com" value="{{ old('email') }}"></div>
+                    <form method="POST" action="{{ route('login.store') }}" class="d-grid gap-3" data-tf-tab-order autocomplete="off">@csrf
+                        <div><label class="form-label">Email</label><input name="email" type="email" class="form-control form-control-lg" placeholder="example@gmail.com" value="{{ old('email') }}" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false"></div>
                         <div>
                             <label class="form-label">Password</label>
                             <div class="input-group input-group-lg">
-                                <input id="loginPassword" name="password" type="password" class="form-control" placeholder="Password">
+                                <input id="loginPassword" name="password" type="password" class="form-control" placeholder="Password" autocomplete="current-password">
                                 <button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#loginPassword" data-tf-password-icon="#loginPasswordIcon"><i id="loginPasswordIcon" class="bi bi-eye"></i></button>
                             </div>
                         </div>

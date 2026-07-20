@@ -91,7 +91,9 @@ class BusinessActionPermissionMiddleware
             'business.purchase-returns.start' => 'purchase_returns.process',
             'business.sales.quotations.index', 'business.sales.quotations.create', 'business.sales.quotations.store' => 'sales.quotations',
             'business.sales.index', 'business.sales.show', 'business.orders.index', 'business.orders.show' => 'sales.view',
-            'business.sales.create', 'business.sales.store', 'business.orders.create', 'business.orders.store' => 'sales.create',
+            // Legacy create URLs now only redirect visitors to POS. They retain
+            // Sales view access for the redirect, while POS enforces creation.
+            'business.sales.create', 'business.sales.store', 'business.orders.create', 'business.orders.store' => 'sales.view',
             'business.sales.edit', 'business.sales.update', 'business.orders.edit', 'business.orders.update' => 'sales.edit',
             'business.sales.status', 'business.orders.status' => 'sales.update_status',
             'business.sales.cancel', 'business.sales.destroy', 'business.sales.void', 'business.orders.cancel', 'business.orders.destroy', 'business.orders.void' => 'sales.update_status',
@@ -107,7 +109,7 @@ class BusinessActionPermissionMiddleware
             'business.sales.invoices.index', 'business.sales.invoices.show', 'business.invoices.index', 'business.invoices.show' => 'sales.invoices',
             'business.sales.invoices.pdf', 'business.sales.invoices.pdf.download', 'business.invoices.pdf', 'business.invoices.pdf.download' => 'sales.invoice_export',
             'business.sales.invoices.update', 'business.sales.invoices.issue', 'business.sales.invoices.reissue', 'business.sales.invoices.credit-notes.store', 'business.invoices.update', 'business.invoices.issue', 'business.invoices.reissue', 'business.invoices.credit-notes.store' => 'sales.invoices',
-            'business.sales.invoices.void', 'business.invoices.void' => 'sales.invoice_void',
+            'business.sales.invoices.void', 'business.invoices.void' => 'sales.invoices',
             'business.expenses.index' => 'expenses.view', 'business.expenses.store' => 'expenses.create', 'business.expenses.destroy' => 'expenses.delete',
             'business.reports' => 'reports.view', 'business.reports.pdf' => 'reports.export',
             'business.audit-logs.index', 'business.audit-logs.live' => 'audit_logs.view',

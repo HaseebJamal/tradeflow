@@ -9,16 +9,25 @@
 
     <div class="tf-card p-4 mb-4">
         <form method="GET" class="row g-3 align-items-end">
-            <div class="col-md-6">
-                <label class="form-label" for="companyPermissionCompany">Select Company</label>
-                <select id="companyPermissionCompany" name="company_id" class="form-select" onchange="this.form.submit()">
-                    <option value="">Choose a company</option>
-                    @foreach($companies as $company)
-                        <option value="{{ $company->id }}" @selected($selectedCompany?->id === $company->id)>{{ $company->business_name }} - {{ $company->owner?->name }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col-md-auto"><button class="btn btn-outline-primary">Load Permissions</button></div>
+            @if($lockedCompany)
+                <div class="col-md-6">
+                    <label class="form-label" for="companyPermissionCompany">Selected Company</label>
+                    <input id="companyPermissionCompany" class="form-control bg-light" value="{{ $lockedCompany->business_name }}" readonly aria-readonly="true">
+                    <input type="hidden" name="manage_company_id" value="{{ $lockedCompany->id }}">
+                    <small class="tf-muted">This company was selected from the Companies actions menu and cannot be changed here.</small>
+                </div>
+            @else
+                <div class="col-md-6">
+                    <label class="form-label" for="companyPermissionCompany">Select Company</label>
+                    <select id="companyPermissionCompany" name="company_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">Choose a company</option>
+                        @foreach($companies as $company)
+                            <option value="{{ $company->id }}" @selected($selectedCompany?->id === $company->id)>{{ $company->business_name }} - {{ $company->owner?->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-auto"><button class="btn btn-outline-primary">Load Permissions</button></div>
+            @endif
             <div class="col-md-auto"><a href="{{ route('admin.permissions.templates') }}" class="btn btn-outline-secondary">Permission Templates</a></div>
         </form>
     </div>

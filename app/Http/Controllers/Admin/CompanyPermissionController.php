@@ -17,13 +17,19 @@ use Illuminate\Validation\Rule;
 class CompanyPermissionController extends Controller
 {
     public function index(Request $request) { return $this->screen($request, 'all'); }
-    public function modules(Request $request) { return redirect()->route('admin.permissions.index', $request->only('company_id')); }
-    public function features(Request $request) { return redirect()->route('admin.permissions.index', $request->only('company_id')); }
-    public function actions(Request $request) { return redirect()->route('admin.permissions.index', $request->only('company_id')); }
+    public function modules(Request $request) { return redirect()->route('admin.permissions.index', $request->only(['company_id', 'manage_company_id'])); }
+    public function features(Request $request) { return redirect()->route('admin.permissions.index', $request->only(['company_id', 'manage_company_id'])); }
+    public function actions(Request $request) { return redirect()->route('admin.permissions.index', $request->only(['company_id', 'manage_company_id'])); }
 
     public function update(UpdateCompanyPermissionsRequest $request)
     {
         $data = $request->validated();
+        $lockedCompanyId = $request->session()->get('admin.permissions.locked_company_id');
+        if ($lockedCompanyId !== null && (int) $data['company_id'] !== (int) $lockedCompanyId) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'company_id' => 'The selected company cannot be changed for this action.',
+            ]);
+        }
         $scopeDefinitions = $this->definitionsForScope($data['scope']);
         $permissionService = app(CompanyPermissionService::class);
         $selected = collect($data['permissions'] ?? [])
@@ -79,7 +85,9 @@ class CompanyPermissionController extends Controller
         });
         app(CompanyPermissionService::class)->clear($company->id);
 
-        return redirect()->route('admin.permissions.index', ['company_id' => $company->id])
+        return redirect()->route('admin.permissions.index', $lockedCompanyId !== null
+            ? ['manage_company_id' => $company->id]
+            : ['company_id' => $company->id])
             ->with('success', 'Permissions updated successfully for '.$company->business_name.'.');
     }
 
@@ -98,7 +106,7 @@ class CompanyPermissionController extends Controller
             'name' => ['required', 'string', 'max:100', 'unique:permission_templates,name'],
             'description' => ['nullable', 'string', 'max:500'],
             'permissions' => ['nullable', 'array'],
-            'permissions.*' => [Rule::exists('permission_definitions', 'permission_key')],
+            'permissions.*' => [Rule::exists('permission_definitions', 'permission_key')->where('status', 'active')],
         ]);
 
         $template = PermissionTemplate::create(['name' => $data['name'], 'description' => $data['description'] ?? null, 'created_by' => auth()->id(), 'status' => 'active']);
@@ -132,10 +140,17 @@ class CompanyPermissionController extends Controller
 
     private function screen(Request $request, string $scope)
     {
-        $companyId = $request->integer('company_id') ?: null;
+        $lockedCompanyId = $request->integer('manage_company_id') ?: null;
+        if ($lockedCompanyId) {
+            $request->session()->put('admin.permissions.locked_company_id', $lockedCompanyId);
+        } else {
+            $request->session()->forget('admin.permissions.locked_company_id');
+        }
+
+        $companyId = $lockedCompanyId ?: ($request->integer('company_id') ?: null);
         $definitions = $this->definitionsForScope($scope);
 
-        $selectedCompany = $companyId ? Business::find($companyId) : null;
+        $selectedCompany = $companyId ? Business::findOrFail($companyId) : null;
         if ($selectedCompany) {
             $this->audit($request, 'company permissions loaded', $selectedCompany->id);
         }
@@ -145,6 +160,7 @@ class CompanyPermissionController extends Controller
             'scope' => $scope,
             'companies' => Business::orderBy('business_name')->get(),
             'selectedCompany' => $selectedCompany,
+            'lockedCompany' => $lockedCompanyId ? $selectedCompany : null,
             'definitions' => $definitions,
             'selectedPermissions' => old('permissions', $companyId
                 ? CompanyPermission::where('company_id', $companyId)->where('allowed', true)->pluck('permission_key')

@@ -3,7 +3,7 @@
 @section('page-subtitle', 'Create a customer sale with stock-checked items')
 @section('content')
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-<form method="POST" action="{{ route('business.sales.store') }}" class="tf-card p-3 p-lg-4" data-order-form>@csrf
+<form method="POST" action="{{ route('business.sales.store') }}" class="tf-card p-3 p-lg-4" data-order-form novalidate>@csrf
     <section class="order-details-panel border rounded p-3 mb-3"><div class="row g-3 align-items-end"><div class="col-lg-5"><label class="form-label">Customer</label><div class="order-customer-control"><div><select name="customer_id" class="form-select" data-order-customer-select><option value="">Select existing customer</option><option value="walk_in" @selected(old('customer_id') === 'walk_in')>Walk-in Customer</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(old('customer_id') == $customer->id)>{{ $customer->display_name }}@if($customer->business_name) — {{ $customer->business_name }}@endif</option>@endforeach</select></div>@companyCan('customers.create')<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#quickCustomerModal"><i class="bi bi-person-plus me-1"></i>Add New Customer</button>@endcompanyCan</div><div class="small text-success mt-2 d-none" data-quick-customer-selected></div></div><div class="col-sm-4 col-lg-2"><label class="form-label">Payment Type</label><select name="payment_type" class="form-select"><option @selected(old('payment_type') === 'Credit')>Credit</option><option @selected(old('payment_type') === 'Cash')>Cash</option><option @selected(old('payment_type') === 'Partial')>Partial</option></select></div><div class="col-sm-4 col-lg-2"><label class="form-label">Sale Discount %</label><input name="discount" type="number" min="0" max="100" step="1" class="form-control js-whole-number" value="{{ old('discount', 0) }}" data-order-discount></div><div class="col-sm-4 col-lg-2"><label class="form-label">Sale Tax %</label><input name="tax_rate" type="number" min="0" max="100" step="1" class="form-control js-whole-number" value="{{ old('tax_rate', 0) }}" data-order-tax></div></div></section>
     <section class="border rounded p-3 mb-3 bg-light"><div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h6 mb-0">Add sale item</h2><small class="tf-muted">Stock is checked before the item is added.</small></div></div><div class="row g-2 align-items-end"><div class="col-md-6 col-xl-3"><label class="form-label">Product</label><select class="form-select" data-sale-entry-product><option value="">Select product</option>@foreach($products as $product)<option value="{{ $product->id }}" data-price="{{ $product->wholesale_price }}" data-stock="{{ $product->stock_quantity }}" data-unit="{{ $product->unit }}">{{ $product->name }}</option>@endforeach</select></div><div class="col-4 col-md-2 col-xl-1"><label class="form-label">Stock</label><input class="form-control" data-sale-entry-stock readonly></div><div class="col-4 col-md-2 col-xl-1"><label class="form-label">Qty</label><input type="number" min="1" step="1" value="1" class="form-control js-whole-number" data-sale-entry-qty></div><div class="col-4 col-md-2 col-xl-2"><label class="form-label">Unit Price</label><input class="form-control" data-sale-entry-price readonly></div><div class="col-6 col-md-3 col-xl-1"><label class="form-label">Item Discount %</label><input type="number" min="0" max="100" step="1" value="0" class="form-control js-whole-number" data-sale-entry-discount></div><div class="col-6 col-md-3 col-xl-1"><label class="form-label">Item Tax %</label><input type="number" min="0" max="100" step="1" value="0" class="form-control js-whole-number" data-sale-entry-tax></div><div class="col-8 col-md-4 col-xl-2"><label class="form-label">Line Total</label><input class="form-control" data-sale-entry-total value="Rs 0.00" readonly></div><div class="col-4 col-md-2 col-xl-1 d-grid"><button type="button" class="btn btn-tf-primary" data-add-sale-item title="Add item"><i class="bi bi-plus-lg me-1"></i><span class="d-none d-xl-inline">Add</span></button></div></div><div class="invalid-feedback d-block d-none mt-2" data-sale-entry-error></div></section>
     <div class="table-responsive border rounded"><table class="table align-middle mb-0"><thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Tax</th><th>Line Total</th><th>Edit</th><th>Delete</th></tr></thead><tbody data-sale-items><tr data-sale-empty><td colspan="9" class="text-center tf-muted py-4">No sale items added yet.</td></tr></tbody></table></div>
@@ -18,181 +18,6 @@
 </form>
 <div class="modal fade" id="quickCustomerModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5">Add New Customer</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="alert alert-warning d-none" data-quick-customer-error>Enter at least customer name or phone.</div><div class="row g-3"><div class="col-md-6"><label class="form-label">Customer Name</label><input class="form-control" data-modal-customer-name></div><div class="col-md-6"><label class="form-label">Shop Name</label><input class="form-control" data-modal-customer-shop></div><div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" data-modal-customer-phone></div><div class="col-md-4"><label class="form-label">City</label><input class="form-control" data-modal-customer-city></div><div class="col-md-4"><label class="form-label">Customer Type</label><select class="form-select" data-modal-customer-type><option>Retailer</option><option>Retail Shop</option><option>Dealer</option><option>Distributor</option><option>Wholesaler</option></select></div><div class="col-md-8"><label class="form-label">Address</label><input class="form-control" data-modal-customer-address></div><div class="col-md-4"><label class="form-label">Credit Limit</label><input type="number" min="0" step="0.01" class="form-control" data-modal-customer-credit-limit></div></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-tf-primary" data-save-quick-customer>Save Customer</button></div></div></div></div>
 @endsection
-@push('scripts')
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const form = document.querySelector('[data-order-form]');
-    const body = form?.querySelector('[data-sale-items]');
-    if (!form || !body || form.dataset.orderEntryReady === '1') return;
-
-    form.dataset.orderEntryReady = '1';
-    const product = form.querySelector('[data-sale-entry-product]');
-    const stock = form.querySelector('[data-sale-entry-stock]');
-    const quantity = form.querySelector('[data-sale-entry-qty]');
-    const price = form.querySelector('[data-sale-entry-price]');
-    const total = form.querySelector('[data-sale-entry-total]');
-    const error = form.querySelector('[data-sale-entry-error]');
-    const addButton = form.querySelector('[data-add-sale-item]');
-    let editing = null;
-
-    const rows = () => [...body.querySelectorAll('[data-order-line]')];
-    const selected = () => product.selectedOptions[0];
-    const selectedStock = () => Number(selected()?.dataset.stock || 0);
-    const selectedQuantity = () => Number(quantity.value || 0);
-    const reservedQuantity = (productId, excludedRow = null) => rows()
-        .filter(row => row !== excludedRow && row.querySelector('[name$="[id]"]')?.value === String(productId))
-        .reduce((sum, row) => sum + Number(row.querySelector('[data-order-qty]')?.value || 0), 0);
-    const availableForEntry = () => Math.max(0, selectedStock() - reservedQuantity(product.value, editing));
-    const clearEntryError = () => {
-        quantity.setCustomValidity('');
-        quantity.classList.remove('is-invalid');
-        error.classList.add('d-none');
-        error.textContent = '';
-    };
-    const showEntryError = message => {
-        quantity.setCustomValidity(message);
-        quantity.classList.add('is-invalid');
-        error.textContent = message;
-        error.classList.remove('d-none');
-    };
-    const validateEntry = () => {
-        const option = selected();
-        const available = availableForEntry();
-        const requested = selectedQuantity();
-
-        quantity.max = String(available);
-        if (!option?.value) {
-            clearEntryError();
-            return false;
-        }
-        if (!Number.isInteger(requested) || requested < 1) {
-            showEntryError('Quantity must be at least 1.');
-            return false;
-        }
-        if (requested > available) {
-            const totalStock = selectedStock();
-            const alreadyAdded = reservedQuantity(product.value, editing);
-            showEntryError(alreadyAdded > 0
-                ? `Insufficient stock. Only ${totalStock} units are available; ${alreadyAdded} already added to this order.`
-                : `Insufficient stock. Only ${totalStock} units are available.`);
-            return false;
-        }
-
-        clearEntryError();
-        return true;
-    };
-    const sync = () => {
-        const option = selected();
-        stock.value = option?.value ? `${option.dataset.stock || 0} ${option.dataset.unit || ''}` : '';
-        price.value = option?.value ? (option.dataset.price || '') : '';
-        total.value = `Rs ${(selectedQuantity() * Number(price.value || 0)).toLocaleString()}`;
-        const hasAvailableStock = !option?.value || availableForEntry() > 0;
-        addButton.disabled = Boolean(option?.value) && !hasAvailableStock;
-        if (option?.value) validateEntry(); else clearEntryError();
-    };
-    const render = () => {
-        rows().forEach((row, index) => {
-            row.querySelector('[data-index]').textContent = index + 1;
-            row.querySelectorAll('[name]').forEach(input => {
-                input.name = input.name.replace(/products\[\d+\]/, `products[${index}]`);
-            });
-        });
-        body.querySelector('[data-sale-empty]')?.classList.toggle('d-none', rows().length > 0);
-        window.updateOrderPreview?.();
-    };
-    const reset = () => {
-        editing = null;
-        product.value = '';
-        quantity.value = 1;
-        quantity.removeAttribute('max');
-        price.value = '';
-        stock.value = '';
-        total.value = 'Rs 0.00';
-        addButton.disabled = false;
-        clearEntryError();
-        window.syncTradeFlowTomSelect?.(product);
-        setTimeout(() => window.getTradeFlowTomSelect?.(product)?.focus(), 0);
-    };
-    const validateAllRows = () => {
-        const requiredByProduct = new Map();
-        rows().forEach(row => {
-            const productId = row.querySelector('[name$="[id]"]')?.value;
-            const lineQuantity = Number(row.querySelector('[data-order-qty]')?.value || 0);
-            requiredByProduct.set(productId, (requiredByProduct.get(productId) || 0) + lineQuantity);
-        });
-
-        for (const [productId, requested] of requiredByProduct) {
-            const option = [...product.options].find(item => item.value === productId);
-            const available = Number(option?.dataset.stock || 0);
-            if (!option || !Number.isInteger(requested) || requested < 1 || requested > available) {
-                showEntryError(`Insufficient stock. Only ${available} units are available.`);
-                return false;
-            }
-        }
-        return true;
-    };
-    const add = () => {
-        if (!selected()?.value) {
-            error.textContent = 'Select a product.';
-            error.classList.remove('d-none');
-            return;
-        }
-        if (!validateEntry()) return;
-
-        const option = selected();
-        const requested = selectedQuantity();
-        const available = selectedStock();
-        const row = editing || document.createElement('tr');
-        row.dataset.orderLine = '';
-        row.dataset.price = price.value;
-        row.innerHTML = `<td data-index></td><td>${option.text}<input type="hidden" name="products[0][id]" value="${product.value}"></td><td>${quantity.value}<input type="hidden" name="products[0][quantity]" value="${quantity.value}" data-order-qty max="${available}"></td><td>Rs ${Number(price.value).toLocaleString()}</td><td>Rs 0.00</td><td>Rs 0.00</td><td>Rs ${(requested * Number(price.value)).toLocaleString()}</td><td><button type="button" class="btn btn-sm btn-outline-primary" data-edit-sale-item>Edit</button></td><td><button type="button" class="btn btn-sm btn-outline-danger" data-delete-sale-item>Delete</button></td>`;
-        if (!editing) body.appendChild(row);
-        render();
-        reset();
-    };
-
-    product.addEventListener('change', sync);
-    quantity.addEventListener('input', sync);
-    addButton.addEventListener('click', add);
-    body.addEventListener('click', event => {
-        const row = event.target.closest('[data-order-line]');
-        if (!row) return;
-
-        if (event.target.closest('[data-delete-sale-item]')) {
-            if (editing === row) reset();
-            row.remove();
-            render();
-            return;
-        }
-        if (event.target.closest('[data-edit-sale-item]')) {
-            editing = row;
-            product.value = row.querySelector('[name$="[id]"]').value;
-            quantity.value = row.querySelector('[data-order-qty]').value;
-            window.syncTradeFlowTomSelect?.(product);
-            sync();
-            window.getTradeFlowTomSelect?.(product)?.focus();
-        }
-    });
-    form.addEventListener('submit', event => {
-        if (!rows().length) {
-            event.preventDefault();
-            error.textContent = 'Add at least one sale item before creating the order.';
-            error.classList.remove('d-none');
-            window.getTradeFlowTomSelect?.(product)?.focus();
-            return;
-        }
-        if (!validateAllRows()) {
-            event.preventDefault();
-            window.getTradeFlowTomSelect?.(product)?.focus();
-        }
-    });
-
-    sync();
-    render();
-});
-</script>
-@endpush
-
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -350,11 +175,50 @@ document.addEventListener('DOMContentLoaded', () => {
             syncEntry();
         }
     }, true);
+    const previousProducts = @json(old('products', []));
+    previousProducts.forEach(line => {
+        const previousOption = [...product.options].find(item => item.value === String(line.id || ''));
+        if (!previousOption) return;
+
+        product.value = previousOption.value;
+        quantity.value = line.quantity || 1;
+        itemDiscount.value = line.discount_rate || 0;
+        itemTax.value = line.tax_rate || 0;
+        syncEntry();
+        saveEntry(new Event('submit', { cancelable: true }));
+    });
+
     form.addEventListener('submit', event => {
-        if (rows().length) return;
-        event.preventDefault();
-        showError('Add at least one sale item before creating the order.');
-    }, true);
+        if (!rows().length) {
+            event.preventDefault();
+            showError('Please add at least one sale item.');
+            window.getTradeFlowTomSelect?.(product)?.focus();
+            return;
+        }
+
+        const isValid = rows().every(row => {
+            const item = [...product.options].find(option => option.value === row.dataset.productId);
+            const lineQuantity = Number(row.querySelector('[data-order-qty]')?.value || 0);
+
+            return item && Number.isInteger(lineQuantity) && lineQuantity > 0 && lineQuantity <= Number(item.dataset.stock || 0);
+        });
+        if (!isValid) {
+            event.preventDefault();
+            showError('One or more sale items no longer have enough stock.');
+            return;
+        }
+        if (form.dataset.submitting === '1') {
+            event.preventDefault();
+            return;
+        }
+
+        form.dataset.submitting = '1';
+        const submit = event.submitter || form.querySelector('button[type="submit"], button:not([type])');
+        if (submit) {
+            submit.disabled = true;
+            submit.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Creating...';
+        }
+    });
     syncEntry();
     render();
 });

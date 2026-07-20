@@ -33,7 +33,7 @@
     @if(!$editing)
         <div class="col-md-4"><label class="form-label" for="ownerEmail">Owner Email {!! $required !!}</label><input id="ownerEmail" name="owner_email" type="email" class="form-control @error('owner_email') is-invalid @enderror" value="{{ old('owner_email') }}" required>@error('owner_email')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
     @else
-        <div class="col-md-4"><label class="form-label">Owner Login Email</label><div class="form-control bg-light text-muted">Protected after company creation</div><small class="tf-muted">The owner controls their own login identifier and password.</small></div>
+        <div class="col-md-4"><label class="form-label" for="ownerLoginEmail">Owner Login Email</label><input id="ownerLoginEmail" type="email" class="form-control bg-light text-muted" value="{{ $company->owner?->email ?? '' }}" readonly aria-readonly="true"><small class="tf-muted">The Business Owner controls this login email. Super Admin can view it but cannot change it.</small></div>
     @endif
     <div class="col-md-4"><label class="form-label" for="ownerPhone">Owner Phone {!! $required !!}</label><input id="ownerPhone" name="owner_phone" type="tel" inputmode="numeric" maxlength="11" class="form-control" value="{{ old('owner_phone', $company->owner?->phone ?? '') }}" required data-tf-phone><small class="tf-muted">Private owner contact; reports use the company phone only.</small></div>
 

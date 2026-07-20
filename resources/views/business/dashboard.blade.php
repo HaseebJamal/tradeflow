@@ -40,9 +40,6 @@
         @if($companyPermissions->allowsUser(auth()->user(), 'dashboard.quick_add_product') && $companyPermissions->allowsUser(auth()->user(), 'products.create'))
             <a href="{{ route('business.products.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>Add Product</a>
         @endif
-        @if($companyPermissions->allowsUser(auth()->user(), 'dashboard.quick_create_sale') && $companyPermissions->allowsUser(auth()->user(), 'sales.create'))
-            <a href="{{ route('business.sales.create') }}" class="btn btn-outline-primary"><i class="bi bi-bag-plus me-1"></i>Create Sale</a>
-        @endif
         @if($companyPermissions->allowsUser(auth()->user(), 'dashboard.quick_pos_sale') && $companyPermissions->allowsUser(auth()->user(), 'pos.create_sale'))
             <a href="{{ route('business.pos.index') }}" class="btn btn-outline-primary"><i class="bi bi-upc-scan me-1"></i>New POS Sale</a>
         @endif

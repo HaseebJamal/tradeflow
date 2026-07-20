@@ -14,7 +14,7 @@ class UpdateCompanyRequest extends FormRequest
             return false;
         }
 
-        if ($this->filled('owner_email') || $this->filled('owner_password') || $this->filled('owner_password_confirmation')) {
+        if ($this->has('owner_email') || $this->has('owner_password') || $this->has('owner_password_confirmation')) {
             $company = $this->route('company');
             AuditLog::create([
                 'user_id' => $this->user()->id,
@@ -28,7 +28,9 @@ class UpdateCompanyRequest extends FormRequest
                 'ip_address' => $this->ip(),
                 'user_agent' => substr((string) $this->userAgent(), 0, 1000),
             ]);
-            abort(403, 'Super Admins cannot update company login credentials.');
+            abort(403, $this->has('owner_email')
+                ? 'Owner login email cannot be changed by Super Admin.'
+                : 'Super Admins cannot update company login credentials.');
         }
 
         return true;

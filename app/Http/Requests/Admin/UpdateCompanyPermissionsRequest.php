@@ -15,7 +15,7 @@ class UpdateCompanyPermissionsRequest extends FormRequest
             'company_id' => ['required', 'exists:businesses,id'],
             'scope' => ['required', Rule::in(['all', 'modules', 'features', 'actions'])],
             'permissions' => ['nullable', 'array'],
-            'permissions.*' => ['string', Rule::exists('permission_definitions', 'permission_key')],
+            'permissions.*' => ['string', Rule::exists('permission_definitions', 'permission_key')->where('status', 'active')],
         ];
     }
 }

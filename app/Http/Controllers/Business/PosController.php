@@ -363,10 +363,10 @@ class PosController extends Controller
 
     public function returns(Order $order)
     {
-        $this->scopedPosOrder($order);
+        $this->scopedReturnAccess($order);
         if (!$this->permissions->allowsUser(auth()->user(), 'sales_returns.view')) {
-            return redirect()->route('business.pos.history')->withErrors([
-                'permission' => 'You do not have permission to process POS returns.',
+            return redirect()->route('business.sales.returns.index')->withErrors([
+                'permission' => 'You do not have permission to process sales returns.',
             ]);
         }
 
@@ -375,7 +375,7 @@ class PosController extends Controller
 
     public function storeReturn(Request $request, Order $order)
     {
-        $this->scopedPosOrder($order);
+        $this->scopedReturnAccess($order);
         $data = $request->validate([
             'reason' => ['required', 'string', 'max:1000'],
             'refund_method' => ['required', 'in:Cash,Store Credit,Bank Transfer'],
@@ -384,8 +384,8 @@ class PosController extends Controller
             'items.*.quantity' => ['required', 'integer', 'min:1'],
         ]);
         if (!$this->permissions->allowsUser(auth()->user(), 'sales_returns.process')) {
-            return redirect()->route('business.pos.history')->withErrors([
-                'permission' => 'You do not have permission to process POS returns.',
+            return redirect()->route('business.sales.returns.index')->withErrors([
+                'permission' => 'You do not have permission to process sales returns.',
             ]);
         }
 
@@ -414,8 +414,8 @@ class PosController extends Controller
                     $fresh = $product->fresh();
                     Inventory::updateOrCreate(['business_id' => $order->business_id, 'product_id' => $product->id], ['available_stock' => $fresh->stock_quantity]);
                     Inventory::where('business_id', $order->business_id)->where('product_id', $product->id)->decrement('sold_stock', $line['quantity']);
-                    StockMovement::create(['business_id' => $order->business_id, 'product_id' => $product->id, 'type' => 'returned', 'quantity' => $line['quantity'], 'reason' => 'POS return', 'note' => 'POS return '.$order->order_number, 'user_id' => auth()->id(), 'created_by' => auth()->id()]);
-                    InventoryMovement::create(['business_id' => $order->business_id, 'product_id' => $product->id, 'type' => 'RETURNED', 'quantity' => $line['quantity'], 'previous_stock' => $fresh->stock_quantity - $line['quantity'], 'new_stock' => $fresh->stock_quantity, 'note' => 'POS return '.$order->order_number, 'created_by' => auth()->id(), 'movement_date' => now()]);
+                    StockMovement::create(['business_id' => $order->business_id, 'product_id' => $product->id, 'type' => 'returned', 'quantity' => $line['quantity'], 'reason' => 'Sales return', 'note' => 'Sales return '.$order->order_number, 'user_id' => auth()->id(), 'created_by' => auth()->id()]);
+                    InventoryMovement::create(['business_id' => $order->business_id, 'product_id' => $product->id, 'type' => 'RETURNED', 'quantity' => $line['quantity'], 'previous_stock' => $fresh->stock_quantity - $line['quantity'], 'new_stock' => $fresh->stock_quantity, 'note' => 'Sales return '.$order->order_number, 'created_by' => auth()->id(), 'movement_date' => now()]);
                 }
                 $refund += $lineRefund;
                 $cost += round((float) ($item->purchase_cost_snapshot ?? 0) * $line['quantity'], 2);
@@ -431,9 +431,8 @@ class PosController extends Controller
                 $order->customer->update(['current_balance' => max(0, (float) $order->customer->current_balance - $refund)]);
             }
             $this->postReturnAccounting($order, $return, $cost);
-            if ($order->items->sum('quantity') === $order->items->sum(fn ($item) => $item->posReturnItems()->sum('quantity'))) {
-                $order->update(['status' => 'Returned']);
-            }
+            $fullyReturned = $order->items->sum('quantity') === $order->items->sum(fn ($item) => $item->posReturnItems()->sum('quantity'));
+            $order->update(['status' => $fullyReturned ? 'Returned' : 'Partially Returned']);
             return $return;
             });
         } catch (ValidationException $exception) {
@@ -541,6 +540,22 @@ class PosController extends Controller
     private function scopedPosOrder(Order $order): void
     {
         abort_unless($order->business_id === $this->businessId() && $order->sale_channel === 'pos', 404);
+    }
+
+    private function scopedReturnOrder(Order $order): void
+    {
+        abort_unless($order->business_id === $this->businessId(), 404);
+    }
+
+    private function scopedReturnAccess(Order $order): void
+    {
+        if (request()->routeIs('business.pos.returns*')) {
+            $this->scopedPosOrder($order);
+
+            return;
+        }
+
+        $this->scopedReturnOrder($order);
     }
 
     private function businessId(): int { return (int) auth()->user()->business_id; }

@@ -13,6 +13,9 @@
 <body>
     @include('components.navbar')
     <main>@yield('content')</main>
+    @if(session('registration_completed'))
+        <div class="d-none" data-tf-registration-completed></div>
+    @endif
     <footer class="tf-footer bg-navy text-white py-5">
         <div class="container">
             <div class="row g-4 align-items-start">
@@ -35,6 +38,32 @@
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="{{ asset('js/tradeflow.js') }}?v={{ filemtime(public_path('js/tradeflow.js')) }}"></script>
+    @if(session('registration_completed'))
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const registrationDraftKeys = [
+                    'tradeflow_business_registration_step',
+                    'tradeflow_business_registration_data',
+                    'tradeflow_business_registration_saved_at',
+                ];
+
+                registrationDraftKeys.forEach((key) => {
+                    sessionStorage.removeItem(key);
+                    localStorage.removeItem(key);
+                });
+
+                window.Swal?.fire({
+                    icon: 'success',
+                    title: 'Registration Completed',
+                    text: 'Your business registration has been submitted successfully. Please wait for Super Admin approval.',
+                    confirmButtonText: 'OK',
+                    timer: 4000,
+                    timerProgressBar: true,
+                    allowOutsideClick: false,
+                });
+            });
+        </script>
+    @endif
     @stack('scripts')
 </body>
 </html>

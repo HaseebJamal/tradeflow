@@ -27,15 +27,12 @@
                         @if ($errors->any())
                             <div class="alert alert-danger">Please correct the highlighted fields and continue from this step.</div>
                         @endif
-                        @if (session('success'))
-                            <div class="alert alert-success d-none" data-tf-registration-complete data-tf-persistent-alert data-redirect-url="{{ route('public.home') }}">{{ session('success') }}</div>
-                        @endif
                         <div class="alert alert-info d-none" data-tf-register-restored data-tf-auto-dismiss>
                             Your saved registration draft has been restored. For security, please re-enter your password and select the verification files again.
                         </div>
 
                         <form method="POST" action="{{ route('register.business.store') }}" enctype="multipart/form-data"
-                            data-tf-register-form data-registration-step="{{ session('registration_step', 1) }}" data-tf-tab-order novalidate>
+                            data-tf-register-form data-registration-step="{{ session('registration_step', 1) }}" data-registration-has-errors="{{ $errors->any() ? '1' : '0' }}" data-tf-tab-order novalidate>
                             @csrf
 
                             <div class="tf-step-panel" data-tf-step-panel="0">

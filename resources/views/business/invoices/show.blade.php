@@ -11,7 +11,7 @@
         @companyCan('sales.invoices')<form method="POST" action="{{ route('business.sales.invoices.issue', $invoice) }}">@csrf @method('PATCH')<button class="btn btn-outline-success">Issue Invoice</button></form>@endcompanyCan
     @elseif(!in_array($invoice->status, ['Void','Cancelled'], true))
         @companyCan('sales.invoices')<button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#creditNoteModal">Credit Note</button>@endcompanyCan
-        @companyCan('sales.invoice_void')<button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#voidInvoiceModal">Void Invoice</button>@endcompanyCan
+        @companyCan('sales.invoices')<button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#voidInvoiceModal">Void Invoice</button>@endcompanyCan
     @endif
     @if(in_array($invoice->status, ['Void','Cancelled'], true))
         @companyCan('sales.invoices')<form method="POST" action="{{ route('business.sales.invoices.reissue', $invoice) }}">@csrf @method('PATCH')<button class="btn btn-outline-success">Reissue Invoice</button></form>@endcompanyCan
