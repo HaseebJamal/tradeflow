@@ -8,6 +8,8 @@ use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AuditLogController extends Controller
@@ -15,12 +17,19 @@ class AuditLogController extends Controller
     public function index(Request $request)
     {
         [$filters, $query] = $this->filteredQuery($request);
+        $businessId = $this->businessId();
+        $metadata = Cache::remember("tradeflow:business:{$businessId}:audit-log-filter-metadata", now()->addMinutes(5), function (): array {
+            return [
+                'modules' => $this->businessLogs()->whereNotNull('module')->distinct()->orderBy('module')->pluck('module')->all(),
+                'actions' => $this->businessLogs()->whereNotNull('action')->distinct()->orderBy('action')->pluck('action')->all(),
+            ];
+        });
 
         return view('business.audit-logs.index', [
-            'logs' => $query->latest('occurred_at')->paginate(30)->withQueryString(),
-            'users' => User::where('business_id', $this->businessId())->orderBy('name')->get(['id', 'name', 'role']),
-            'modules' => $this->businessLogs()->whereNotNull('module')->distinct()->orderBy('module')->pluck('module'),
-            'actions' => $this->businessLogs()->whereNotNull('action')->distinct()->orderBy('action')->pluck('action'),
+            'logs' => $query->orderByDesc('created_at')->paginate(25)->withQueryString(),
+            'users' => User::where('business_id', $businessId)->orderBy('name')->get(['id', 'name', 'role']),
+            'modules' => $metadata['modules'],
+            'actions' => $metadata['actions'],
             'filters' => $filters,
         ]);
     }
@@ -29,15 +38,15 @@ class AuditLogController extends Controller
     {
         $validated = $request->validate(['after_id' => ['nullable', 'integer', 'min:0']]);
         $afterId = max(0, (int) ($validated['after_id'] ?? 0));
-        $canViewDetails = app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'audit_logs.view_details');
-        $logs = $this->businessLogs()
+        [, $query] = $this->filteredQuery($request);
+        $logs = $query
             ->where('id', '>', $afterId)
             ->latest('id')
             ->take(50)
             ->get()
             ->sortBy('id')
             ->values()
-            ->map(fn (AuditLog $log) => $this->payload($log, $canViewDetails));
+            ->map(fn (AuditLog $log) => $this->payload($log, false));
 
         return response()->json(['logs' => $logs, 'last_id' => $logs->last()['id'] ?? $afterId]);
     }
@@ -49,8 +58,8 @@ class AuditLogController extends Controller
 
         return response()->streamDownload(function () use ($query): void {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Date & Time', 'User', 'Role', 'Module', 'Action', 'Description', 'Route', 'IP Address', 'Record']);
-            $query->latest('occurred_at')->chunkById(250, function ($logs) use ($out): void {
+            fputcsv($out, ['Date & Time', 'User', 'Role', 'Module', 'Action', 'IP Address']);
+            $query->chunkById(250, function ($logs) use ($out): void {
                 foreach ($logs as $log) {
                     fputcsv($out, [
                         ($log->occurred_at ?? $log->created_at)
@@ -62,10 +71,7 @@ class AuditLogController extends Controller
                         $log->role ?: $log->actor_role,
                         $log->module,
                         $log->action,
-                        $log->description,
-                        $log->route,
                         $log->ip_address,
-                        trim(($log->record_type ?: '').' #'.($log->record_id ?: '')),
                     ]);
                 }
             });
@@ -76,7 +82,7 @@ class AuditLogController extends Controller
     public function exportPdf(Request $request)
     {
         [, $query] = $this->filteredQuery($request);
-        $logs = $query->latest('occurred_at')->limit(1000)->get();
+        $logs = $query->orderByDesc('created_at')->limit(250)->get();
 
         return Pdf::loadView('business.audit-logs.pdf', compact('logs'))->setPaper('a4', 'landscape')
             ->stream('tradeflow-audit-logs-'.now()->format('Ymd-His').'.pdf');
@@ -86,25 +92,74 @@ class AuditLogController extends Controller
     {
         $filters = $request->validate([
             'user_id' => ['nullable', 'integer'], 'role' => ['nullable', 'string', 'max:100'], 'module' => ['nullable', 'string', 'max:100'],
-            'action' => ['nullable', 'string', 'max:255'], 'date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'action' => ['nullable', 'string', 'max:255'],
+            'date_from' => ['nullable', 'date', 'required_with:date_to'],
+            'date_to' => ['nullable', 'date', 'required_with:date_from', 'after_or_equal:date_from'],
+            'time_from' => ['nullable', 'date_format:H:i'], 'time_to' => ['nullable', 'date_format:H:i'],
+            'month' => ['nullable', 'integer', 'between:1,12', 'required_with:year'],
+            'year' => ['nullable', 'integer', 'between:2000,2100', 'required_with:month'],
             'search' => ['nullable', 'string', 'max:255'], 'ip_address' => ['nullable', 'ip'],
         ]);
-        $filters += ['date_from' => null, 'date_to' => null];
-        if (!$filters['date_from'] && !$filters['date_to']) {
-            $filters['date_from'] = now()->toDateString();
-            $filters['date_to'] = now()->toDateString();
+        $filters = array_replace([
+            'date_from' => null, 'date_to' => null, 'time_from' => null, 'time_to' => null,
+            'month' => null, 'year' => null,
+        ], $filters);
+        $hasDateRange = filled($filters['date_from']) && filled($filters['date_to']);
+        $hasMonthRange = filled($filters['month']) && filled($filters['year']);
+
+        if ((filled($filters['time_from']) || filled($filters['time_to'])) && !$hasDateRange) {
+            throw ValidationException::withMessages(['date_from' => 'Select Date From and Date To before applying a time range.']);
         }
-        $query = $this->businessLogs()->with('user')
+
+        if ($hasDateRange || $hasMonthRange) {
+            [$start, $end] = $this->auditLogPeriod($filters, $hasDateRange);
+        } else {
+            $start = now()->startOfDay();
+            $end = now();
+            $filters['date_from'] = $start->toDateString();
+            $filters['date_to'] = $end->toDateString();
+            $filters['time_to'] = $end->format('H:i');
+        }
+
+        $query = $this->businessLogs()
+            ->select(['id', 'user_id', 'user_name', 'role', 'actor_role', 'business_id', 'module', 'action', 'ip_address', 'occurred_at', 'created_at'])
+            ->with('user:id,name')
             ->when($filters['user_id'] ?? null, fn ($q, $value) => $q->where('user_id', $value))
             ->when($filters['role'] ?? null, fn ($q, $value) => $q->where('role', $value))
             ->when($filters['module'] ?? null, fn ($q, $value) => $q->where('module', $value))
             ->when($filters['action'] ?? null, fn ($q, $value) => $q->where('action', $value))
-            ->when($filters['date_from'] ?? null, fn ($q, $value) => $q->whereDate('occurred_at', '>=', $value))
-            ->when($filters['date_to'] ?? null, fn ($q, $value) => $q->whereDate('occurred_at', '<=', $value))
+            ->whereBetween('created_at', [$start, $end])
             ->when($filters['ip_address'] ?? null, fn ($q, $value) => $q->where('ip_address', $value))
             ->when($filters['search'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner->where('description', 'like', "%{$value}%")->orWhere('route', 'like', "%{$value}%")->orWhere('action', 'like', "%{$value}%")));
 
         return [$filters, $query];
+    }
+
+    private function auditLogPeriod(array $filters, bool $hasDateRange): array
+    {
+        $timezone = config('app.timezone');
+
+        if ($hasDateRange) {
+            $start = Carbon::parse($filters['date_from'], $timezone)->startOfDay();
+            $end = Carbon::parse($filters['date_to'], $timezone)->endOfDay();
+
+            if (filled($filters['time_from'])) {
+                $start = Carbon::createFromFormat('Y-m-d H:i', $filters['date_from'].' '.$filters['time_from'], $timezone);
+            }
+
+            if (filled($filters['time_to'])) {
+                $end = Carbon::createFromFormat('Y-m-d H:i', $filters['date_to'].' '.$filters['time_to'], $timezone);
+            }
+        } else {
+            $start = Carbon::create((int) $filters['year'], (int) $filters['month'], 1, 0, 0, 0, $timezone)->startOfMonth();
+            $end = $start->copy()->endOfMonth();
+        }
+
+        if ($end->lt($start)) {
+            throw ValidationException::withMessages(['time_to' => 'Time To must be after Time From.']);
+        }
+
+        return [$start, $end];
     }
 
     private function businessLogs()

@@ -74,6 +74,17 @@ a:hover { color: #1d4ed8; }
     box-shadow: none;
     transform: none;
 }
+.tf-public-nav .tf-public-register-button {
+    background: var(--tf-blue);
+    border-color: var(--tf-blue);
+    color: #fff;
+}
+.tf-public-nav .tf-public-register-button:hover,
+.tf-public-nav .tf-public-register-button:focus-visible {
+    background: transparent;
+    border-color: var(--tf-blue);
+    color: var(--tf-blue);
+}
 
 .tf-brand {
     color: var(--tf-navy);
@@ -329,6 +340,24 @@ a:hover { color: #1d4ed8; }
 .tf-notification-item--compact .bi { flex: 0 0 auto; font-size: .9rem; }
 .tf-notification-title { flex: 1 1 auto; font-size: .85rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tf-notification-item--compact small { flex: 0 0 auto; font-size: .7rem; }
+.ts-dropdown .option.tf-tom-select-option {
+    align-items: center;
+    display: flex;
+    gap: .5rem;
+    justify-content: space-between;
+    padding-right: .7rem;
+}
+.ts-dropdown [data-value].is-selected,
+.ts-dropdown .option.tf-tom-select-option.is-selected {
+    align-items: center;
+    background: rgba(37, 99, 235, .09);
+    color: var(--tf-blue);
+    display: flex;
+    font-weight: 600;
+    justify-content: space-between;
+}
+.tf-tom-select-option-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-tom-select-option-check { flex: 0 0 auto; font-size: .9rem; font-weight: 700; }
 @media (max-width: 575.98px) {
     .tf-public-nav .tf-public-auth-button { width: 100%; }
     .tf-notification-menu { max-width: calc(100vw - 1rem); }
@@ -749,6 +778,112 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     overflow-wrap: anywhere;
     word-break: break-word;
 }
+
+/* Subscription overview KPIs keep the page summary compact and scannable. */
+.tf-subscription-kpi {
+    min-height: 124px;
+    padding: 1.15rem 1.25rem;
+}
+
+.tf-subscription-kpi .tf-brand-mark {
+    flex: 0 0 42px;
+    height: 42px;
+    margin-right: 0;
+    width: 42px;
+}
+
+.tf-subscription-as-of {
+    color: var(--tf-muted);
+    font-size: .825rem;
+    margin-top: .65rem;
+    text-align: right;
+}
+
+/* Super-admin subscriptions page: full-width horizontal workspace. */
+.tf-subscriptions-page {
+    min-width: 0;
+}
+
+.tf-subscription-tabs-wrap {
+    border-bottom: 1px solid var(--tf-border);
+    margin-bottom: 1.25rem;
+    overflow-x: auto;
+}
+
+.tf-subscription-tabs {
+    border-bottom: 0;
+    flex-wrap: nowrap;
+    gap: .35rem;
+    min-width: max-content;
+}
+
+.tf-subscription-tabs .nav-link {
+    border: 1px solid transparent;
+    border-radius: 8px 8px 0 0;
+    color: var(--tf-muted);
+    font-weight: 600;
+    padding: .7rem 1rem;
+}
+
+.tf-subscription-tabs .nav-link:hover {
+    background: #f8fafc;
+    border-color: transparent;
+    color: var(--tf-blue);
+}
+
+.tf-subscription-tabs .nav-link.active {
+    background: var(--tf-card);
+    border-color: var(--tf-border) var(--tf-border) var(--tf-card);
+    color: var(--tf-blue);
+}
+
+.tf-subscription-summary {
+    margin-bottom: 1.5rem;
+}
+
+.tf-subscription-kpis {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tf-subscription-section-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.tf-subscription-filter-card .row {
+    max-width: 760px;
+}
+
+.tf-subscription-content .tab-pane {
+    min-width: 0;
+}
+
+@media (max-width: 1199.98px) {
+    .tf-subscription-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 575.98px) {
+    .tf-subscription-kpis {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tf-subscription-section-toolbar .btn {
+        width: 100%;
+    }
+
+    .tf-subscription-as-of {
+        text-align: left;
+    }
+}
+
 
 .row > * {
     min-width: 0;

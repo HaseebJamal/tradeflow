@@ -11,7 +11,7 @@
     <a class="btn btn-outline-primary" href="{{ route('admin.companies.edit', $company) }}"><i class="bi bi-pencil me-1"></i>Edit Company</a>
     <a class="btn btn-outline-primary" href="{{ route('admin.permissions.index', ['company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-1"></i>Manage Permissions</a>
     <a class="btn btn-outline-primary" href="{{ route('admin.business-detail-change-requests.index', ['business_id' => $company->id]) }}"><i class="bi bi-pencil-square me-1"></i>Review Detail Requests</a>
-    <a class="btn btn-outline-primary" href="{{ route('admin.subscriptions', ['business_id' => $company->id]) }}"><i class="bi bi-credit-card me-1"></i>Manage Subscription</a>
+    <a class="btn btn-outline-primary" href="{{ route('admin.subscriptions', ['manage_business_id' => $company->id]) }}"><i class="bi bi-credit-card me-1"></i>Manage Subscription</a>
     @if(strtolower((string) $company->status) === 'approved')
         <form method="POST" action="{{ route('admin.companies.open-dashboard', $company) }}">@csrf<button class="btn btn-outline-warning"><i class="bi bi-person-workspace me-1"></i>Open Business Dashboard</button></form>
     @endif

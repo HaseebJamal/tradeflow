@@ -10,5 +10,6 @@
     <nav class="d-grid gap-1">
         <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" title="Dashboard"><i class="bi bi-speedometer2"></i><span class="tf-sidebar-text">Dashboard</span></a>
         <a href="{{ route('admin.companies.index') }}" class="{{ request()->routeIs('admin.companies.*') || request()->routeIs('admin.approvals.*') || request()->routeIs('admin.permissions.*') ? 'active' : '' }}" title="Companies"><i class="bi bi-buildings"></i><span class="tf-sidebar-text">Companies</span></a>
+        <a href="{{ route('admin.subscriptions') }}" class="{{ request()->routeIs('admin.subscriptions*') || request()->routeIs('admin.subscription-plans.*') ? 'active' : '' }}" title="Subscriptions"><i class="bi bi-credit-card"></i><span class="tf-sidebar-text">Subscriptions</span></a>
     </nav>
 </div>

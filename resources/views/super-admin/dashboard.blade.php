@@ -24,7 +24,6 @@
 <div class="row g-4">
     <div class="col-12"><div class="tf-card p-4 h-100"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Platform Operations</h2><small class="tf-muted">Managed from the dashboard</small></div><div class="row g-2">@foreach([
         ['Companies & Approvals', 'admin.companies.index', 'bi-buildings', 'Manage companies'],
-        ['Subscriptions', 'admin.subscriptions', 'bi-credit-card', 'Manage subscriptions'],
         ['Complaints & Support', 'admin.support-tickets', 'bi-life-preserver', 'Review support tickets'],
         ['Audit Logs', 'admin.audit-logs', 'bi-activity', 'Review security activity'],
         ['Payments', 'admin.payments', 'bi-cash-stack', 'Payment records'],

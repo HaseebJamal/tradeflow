@@ -118,6 +118,26 @@ function closeTradeFlowTomSelectDropdowns(except = null) {
     });
 }
 
+function syncTradeFlowTomSelectSelectedOption(control) {
+    if (!control || control.settings.maxItems !== 1 || control.input.dataset.hideSelected === 'true') return;
+
+    const selectedValue = String(control.getValue() ?? '');
+    control.dropdown.querySelectorAll('[data-value]').forEach((option) => {
+        const selected = selectedValue !== '' && String(option.dataset.value) === selectedValue;
+        option.classList.toggle('is-selected', selected);
+
+        let indicator = option.querySelector('.tf-tom-select-option-check');
+        if (selected && !indicator) {
+            indicator = document.createElement('span');
+            indicator.className = 'tf-tom-select-option-check';
+            indicator.setAttribute('aria-hidden', 'true');
+            indicator.textContent = '✓';
+            option.appendChild(indicator);
+        }
+        if (!selected && indicator) indicator.remove();
+    });
+}
+
 window.addEventListener('resize', positionOpenTradeFlowTomSelectDropdowns);
 window.addEventListener('scroll', positionOpenTradeFlowTomSelectDropdowns, { passive: true });
 
@@ -142,7 +162,7 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
 
         if (element.tomselect && !force) return;
         if (element.tomselect && force) element.tomselect.destroy();
-        if (element.disabled && element.dataset.tomSelectDisabled === '1') return;
+        if (element.disabled) return;
 
         const placeholderOption = [...element.options].find((option) => option.value === '');
         const isMultiple = element.multiple;
@@ -160,7 +180,9 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
             maxItems: isMultiple ? null : 1,
             maxOptions: 500,
             closeAfterSelect: true,
-            hideSelected: true,
+            // A normal select must keep its active choice visible when it is
+            // reopened. Item-entry screens can opt into hiding selections.
+            hideSelected: element.dataset.hideSelected === 'true',
             searchField: ['text'],
             placeholder: element.dataset.placeholder || element.getAttribute('placeholder') || placeholderOption?.textContent?.trim() || 'Select an option',
             plugins: {
@@ -175,17 +197,26 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
             position: 'auto',
             render: {
                 no_results: () => '<div class="no-results">No matching records found</div>',
+                option: (data, escape) => `<div class="tf-tom-select-option"><span class="tf-tom-select-option-label">${escape(data.text)}</span></div>`,
             },
         });
 
         // When the menu is portaled to body, lock its width to the originating
         // control so it never inherits the page or sidebar width.
         control.on('dropdown_open', () => {
+            // Re-render so the selected option stays in the list with its
+            // visual indicator after opening an ordinary single-select.
+            if (!isMultiple && element.dataset.hideSelected !== 'true') control.refreshOptions(false);
             document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach((toggle) => {
                 window.bootstrap?.Dropdown?.getInstance(toggle)?.hide();
             });
-            requestAnimationFrame(() => positionTradeFlowTomSelectDropdown(control));
+            requestAnimationFrame(() => {
+                syncTradeFlowTomSelectSelectedOption(control);
+                positionTradeFlowTomSelectDropdown(control);
+            });
         });
+        control.on('item_add', () => requestAnimationFrame(() => syncTradeFlowTomSelectSelectedOption(control)));
+        control.on('item_remove', () => requestAnimationFrame(() => syncTradeFlowTomSelectSelectedOption(control)));
         control.on('dropdown_close', () => control.wrapper.classList.remove('tf-tom-select-up'));
     });
 };

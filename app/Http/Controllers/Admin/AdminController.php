@@ -31,11 +31,13 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminController extends Controller
@@ -351,6 +353,7 @@ class AdminController extends Controller
 
         $filters = $request->validate([
             'business_id' => ['nullable', 'integer', 'exists:businesses,id'],
+            'manage_business_id' => ['nullable', 'integer', 'exists:businesses,id'],
             'subscription_plan_id' => ['nullable', 'integer', 'exists:subscription_plans,id'],
             'status' => ['nullable', 'in:Active,Expired,Cancelled'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
@@ -369,16 +372,28 @@ class AdminController extends Controller
             ->paginate(20)
             ->withQueryString();
 
-        $selectedBusinessId = $filters['business_id'] ?? null;
+        $lockedBusinessId = null;
+        if (! empty($filters['manage_business_id'])) {
+            $lockedBusinessId = (int) $filters['manage_business_id'];
+            $request->session()->put('admin.subscription.locked_business_id', $lockedBusinessId);
+        } else {
+            // A direct visit to the subscriptions module restores the normal,
+            // selectable assignment workflow.
+            $request->session()->forget('admin.subscription.locked_business_id');
+        }
+
+        $lockedBusiness = $lockedBusinessId
+            ? Business::query()->findOrFail($lockedBusinessId)
+            : null;
         $assignableBusinesses = Business::query()
-            ->where(function ($query) use ($selectedBusinessId) {
+            ->where(function ($query) use ($lockedBusinessId) {
                 $query->whereIn('status', ['Approved', 'approved']);
 
                 // A Super Admin may open subscription management from any
                 // company row. Keep that target available even if its current
                 // approval state is not Approved.
-                if ($selectedBusinessId) {
-                    $query->orWhere('id', $selectedBusinessId);
+                if ($lockedBusinessId) {
+                    $query->orWhere('id', $lockedBusinessId);
                 }
             })
             ->orderBy('business_name')
@@ -388,7 +403,13 @@ class AdminController extends Controller
             'plans' => SubscriptionPlan::withCount('subscriptions')->orderBy('price')->get(),
             'businesses' => $assignableBusinesses,
             'subscriptions' => $subscriptions,
-            'selectedBusinessId' => $selectedBusinessId,
+            'billingHistory' => PlatformPayment::query()
+                ->select(['id', 'business_id', 'subscription_id', 'amount', 'method', 'reference_number', 'status', 'paid_at', 'recorded_by'])
+                ->with(['business:id,business_name', 'subscription.plan:id,name', 'recordedBy:id,name'])
+                ->latest('paid_at')
+                ->limit(50)
+                ->get(),
+            'lockedBusiness' => $lockedBusiness,
             'stats' => [
                 'active' => Subscription::where('status', 'Active')->count(),
                 'expired' => Subscription::where('status', 'Expired')->count(),
@@ -441,6 +462,7 @@ class AdminController extends Controller
     {
         $data = $request->validate([
             'business_id' => ['required', 'exists:businesses,id'],
+            'subscription_context_business_id' => ['nullable', 'integer'],
             'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
             'amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
@@ -448,6 +470,16 @@ class AdminController extends Controller
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
             'status' => ['required', 'in:Active,Expired,Cancelled'],
         ]);
+
+        $lockedBusinessId = $request->session()->get('admin.subscription.locked_business_id');
+        if ($lockedBusinessId !== null && (
+            (int) $data['business_id'] !== (int) $lockedBusinessId
+            || (int) ($data['subscription_context_business_id'] ?? 0) !== (int) $lockedBusinessId
+        )) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'business_id' => 'The company selected from the actions menu cannot be changed.',
+            ]);
+        }
 
         $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
         $data['amount'] = $data['amount'] ?? $plan->price;
@@ -659,15 +691,23 @@ class AdminController extends Controller
     public function auditLogs(Request $request)
     {
         [$filters, $query] = $this->filteredAuditLogQuery($request);
+        $metadata = Cache::remember('tradeflow:admin:audit-log-filter-metadata', now()->addMinutes(5), function (): array {
+            return [
+                'modules' => AuditLog::query()->whereNotNull('module')->distinct()->orderBy('module')->pluck('module')->all(),
+                'actions' => AuditLog::query()->whereNotNull('action')->distinct()->orderBy('action')->pluck('action')->all(),
+                'roles' => AuditLog::query()->whereNotNull('role')->distinct()->orderBy('role')->pluck('role')->all(),
+            ];
+        });
 
         return view('super-admin.audit-logs', [
-            'logs' => $query->latest('occurred_at')->paginate(30)->withQueryString(),
-            'modules' => AuditLog::query()->whereNotNull('module')->distinct()->orderBy('module')->pluck('module'),
+            'logs' => $query?->orderByDesc('created_at')->paginate(25)->withQueryString(),
+            'modules' => $metadata['modules'],
             'users' => User::orderBy('name')->get(['id', 'name']),
             'businesses' => Business::orderBy('business_name')->get(['id', 'business_name']),
-            'actions' => AuditLog::query()->whereNotNull('action')->distinct()->orderBy('action')->pluck('action'),
-            'roles' => AuditLog::query()->whereNotNull('role')->distinct()->orderBy('role')->pluck('role'),
+            'actions' => $metadata['actions'],
+            'roles' => $metadata['roles'],
             'filters' => $filters,
+            'hasAuditLogPeriod' => $query !== null,
         ]);
     }
 
@@ -676,6 +716,9 @@ class AdminController extends Controller
         $validated = $request->validate(['after_id' => ['nullable', 'integer', 'min:0']]);
         $afterId = max(0, (int) ($validated['after_id'] ?? 0));
         [, $query] = $this->filteredAuditLogQuery($request);
+        if ($query === null) {
+            return response()->json(['logs' => [], 'last_id' => $afterId]);
+        }
         $logs = $query->where('id', '>', $afterId)->latest('id')->take(50)->get()
             ->sortBy('id')->values()->map(fn (AuditLog $log) => $this->auditLogPayload($log));
 
@@ -685,16 +728,16 @@ class AdminController extends Controller
     public function exportAuditLogsCsv(Request $request): StreamedResponse
     {
         [, $query] = $this->filteredAuditLogQuery($request);
+        $this->ensureAuditLogExportPeriod($query);
 
         return response()->streamDownload(function () use ($query): void {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Date & Time', 'Company', 'User', 'Role', 'Module', 'Action', 'Description', 'Route', 'IP Address', 'Record']);
-            $query->latest('occurred_at')->chunkById(250, function ($logs) use ($out): void {
+            fputcsv($out, ['Date & Time', 'Company', 'User', 'Role', 'Module', 'Action', 'IP Address']);
+            $query->with('business:id,business_name')->chunkById(250, function ($logs) use ($out): void {
                 foreach ($logs as $log) {
                     fputcsv($out, [
                         $this->auditLogDate($log), $log->business?->business_name ?: 'Platform', $log->user_name ?: $log->user?->name ?: 'System',
-                        $log->role ?: $log->actor_role, $log->module, $log->action, $log->description, $log->route, $log->ip_address,
-                        trim(($log->record_type ?: '').' #'.($log->record_id ?: '')),
+                        $log->role ?: $log->actor_role, $log->module, $log->action, $log->ip_address,
                     ]);
                 }
             });
@@ -705,11 +748,12 @@ class AdminController extends Controller
     public function exportAuditLogsPdf(Request $request)
     {
         [, $query] = $this->filteredAuditLogQuery($request);
+        $this->ensureAuditLogExportPeriod($query);
         // Dompdf keeps the complete table layout in memory. A large audit trail
         // can otherwise exceed PHP's memory limit before a response is sent.
         // CSV remains available for complete, unbounded exports.
         $pdfRowLimit = 200;
-        $logs = $query->latest('occurred_at')->limit($pdfRowLimit)->get();
+        $logs = $query->with('business:id,business_name')->orderByDesc('created_at')->limit($pdfRowLimit)->get();
 
         return Pdf::loadView('super-admin.audit-logs-pdf', compact('logs', 'pdfRowLimit'))->setPaper('a4', 'landscape')
             ->stream('tradeflow-platform-audit-logs-'.now()->format('Ymd-His').'.pdf');
@@ -977,18 +1021,40 @@ class AdminController extends Controller
         $filters = $request->validate([
             'user_id' => ['nullable', 'integer', 'exists:users,id'], 'business_id' => ['nullable', 'integer', 'exists:businesses,id'],
             'role' => ['nullable', 'string', 'max:100'], 'module' => ['nullable', 'string', 'max:100'], 'action' => ['nullable', 'string', 'max:255'],
-            'date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'date_from' => ['nullable', 'date', 'required_with:date_to'],
+            'date_to' => ['nullable', 'date', 'required_with:date_from', 'after_or_equal:date_from'],
+            'time_from' => ['nullable', 'date_format:H:i'], 'time_to' => ['nullable', 'date_format:H:i'],
+            'month' => ['nullable', 'integer', 'between:1,12', 'required_with:year'],
+            'year' => ['nullable', 'integer', 'between:2000,2100', 'required_with:month'],
             'search' => ['nullable', 'string', 'max:255'], 'ip_address' => ['nullable', 'ip'],
         ]);
 
-        $query = AuditLog::with(['user', 'business'])
+        $filters = array_replace([
+            'date_from' => null, 'date_to' => null, 'time_from' => null, 'time_to' => null,
+            'month' => null, 'year' => null,
+        ], $filters);
+        $hasDateRange = filled($filters['date_from']) && filled($filters['date_to']);
+        $hasMonthRange = filled($filters['month']) && filled($filters['year']);
+
+        if ((filled($filters['time_from']) || filled($filters['time_to'])) && !$hasDateRange) {
+            throw ValidationException::withMessages(['date_from' => 'Select Date From and Date To before applying a time range.']);
+        }
+
+        if (!$hasDateRange && !$hasMonthRange) {
+            return [$filters, null];
+        }
+
+        [$start, $end] = $this->auditLogPeriod($filters, $hasDateRange);
+
+        $query = AuditLog::query()
+            ->select(['id', 'user_id', 'user_name', 'role', 'actor_role', 'business_id', 'module', 'action', 'ip_address', 'occurred_at', 'created_at'])
+            ->with('user:id,name')
             ->when($filters['user_id'] ?? null, fn ($q, $value) => $q->where('user_id', $value))
             ->when($filters['business_id'] ?? null, fn ($q, $value) => $q->where('business_id', $value))
             ->when($filters['role'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner->where('role', $value)->orWhere('actor_role', $value)))
             ->when($filters['module'] ?? null, fn ($q, $value) => $q->where('module', $value))
             ->when($filters['action'] ?? null, fn ($q, $value) => $q->where('action', $value))
-            ->when($filters['date_from'] ?? null, fn ($q, $value) => $q->whereDate('occurred_at', '>=', $value))
-            ->when($filters['date_to'] ?? null, fn ($q, $value) => $q->whereDate('occurred_at', '<=', $value))
+            ->whereBetween('created_at', [$start, $end])
             ->when($filters['ip_address'] ?? null, fn ($q, $value) => $q->where('ip_address', $value))
             ->when($filters['search'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner
                 ->where('description', 'like', "%{$value}%")
@@ -996,6 +1062,40 @@ class AdminController extends Controller
                 ->orWhere('action', 'like', "%{$value}%")));
 
         return [$filters, $query];
+    }
+
+    private function auditLogPeriod(array $filters, bool $hasDateRange): array
+    {
+        $timezone = config('app.timezone');
+
+        if ($hasDateRange) {
+            $start = Carbon::parse($filters['date_from'], $timezone)->startOfDay();
+            $end = Carbon::parse($filters['date_to'], $timezone)->endOfDay();
+
+            if (filled($filters['time_from'])) {
+                $start = Carbon::createFromFormat('Y-m-d H:i', $filters['date_from'].' '.$filters['time_from'], $timezone);
+            }
+
+            if (filled($filters['time_to'])) {
+                $end = Carbon::createFromFormat('Y-m-d H:i', $filters['date_to'].' '.$filters['time_to'], $timezone);
+            }
+        } else {
+            $start = Carbon::create((int) $filters['year'], (int) $filters['month'], 1, 0, 0, 0, $timezone)->startOfMonth();
+            $end = $start->copy()->endOfMonth();
+        }
+
+        if ($end->lt($start)) {
+            throw ValidationException::withMessages(['time_to' => 'Time To must be after Time From.']);
+        }
+
+        return [$start, $end];
+    }
+
+    private function ensureAuditLogExportPeriod($query): void
+    {
+        if ($query === null) {
+            throw ValidationException::withMessages(['date_from' => 'Select a date range or month and year before exporting audit logs.']);
+        }
     }
 
     private function auditLogPayload(AuditLog $log): array
