@@ -808,6 +808,13 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     border-bottom: 1px solid var(--tf-border);
     margin-bottom: 1.25rem;
     overflow-x: auto;
+    overflow-y: hidden;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.tf-subscription-tabs-wrap::-webkit-scrollbar {
+    display: none;
 }
 
 .tf-subscription-tabs {
