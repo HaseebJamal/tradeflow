@@ -26,7 +26,7 @@
                 <td>{{ $log->role ?: $log->actor_role }}</td>
                 <td><x-activity-label :activity="$log" field="module" /></td>
                 <td><x-activity-label :activity="$log" /></td>
-                <td>{{ $log->ip_address }}</td>
+                <td>{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</td>
             </tr>
         @endforeach
         </tbody>

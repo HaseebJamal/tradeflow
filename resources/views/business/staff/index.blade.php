@@ -38,6 +38,7 @@
     <tbody>
     @forelse($staff as $member)
         @php($hasImage = $member->profile_image && \Illuminate\Support\Facades\Storage::disk('public')->exists($member->profile_image))
+        @php($isCurrentStaffUser = auth()->id() === $member->id)
         <tr>
             <td><div class="d-flex align-items-center gap-2">@if($hasImage)<img src="{{ asset('storage/'.$member->profile_image) }}" class="navbar-avatar" alt="{{ $member->name }}">@else<span class="navbar-avatar tf-avatar-empty"><i class="bi bi-person"></i></span>@endif <strong>{{ $member->name }}</strong></div></td>
             <td><span class="badge text-bg-primary">{{ $member->role === 'custom_staff' ? ($member->staffProfile?->custom_role_name ?: 'Custom Staff') : ($roles[$member->role] ?? $member->role) }}</span></td>
@@ -51,10 +52,13 @@
                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false">Actions</button>
                     <div class="dropdown-menu dropdown-menu-end">
                         <a class="dropdown-item" href="{{ route('business.staff.show', $member) }}">View</a>
-                        <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}">Edit</a>
-                        <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}#permissions">Manage Permissions</a>
-                        <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}#staff-role">Change Role</a>
-                        <a class="dropdown-item" href="{{ route('business.staff.show', $member) }}#reset-password">Reset Password</a>
+                        @if($isCurrentStaffUser)
+                            <span class="dropdown-item-text small text-muted">Manage your profile from Profile Settings.</span>
+                        @else
+                            <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}">Edit</a>
+                            <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}#permissions">Manage Permissions</a>
+                            <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}#staff-role">Change Role</a>
+                            <a class="dropdown-item" href="{{ route('business.staff.show', $member) }}#reset-password">Reset Password</a>
                         @if($member->status === 'archived')
                             <form method="POST" action="{{ route('business.staff.restore', $member) }}">@csrf @method('PATCH')<button class="dropdown-item">Restore as Inactive</button></form>
                             @if($member->can_delete)
@@ -68,6 +72,7 @@
                             @if($member->can_delete)
                                 <form method="POST" action="{{ route('business.staff.destroy', $member) }}" onsubmit="return confirm('Delete this staff account? This cannot be undone.')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>
                             @endif
+                        @endif
                         @endif
                     </div>
                 </div>

@@ -254,10 +254,19 @@ class PurchaseController extends Controller
                 // discount and tax are not lost when goods are sent back.
                 $lineTotal = round(((float) $item->line_total / max(1, (int) $item->quantity)) * $quantity, 2);
                 $previous = (int) $product->stock_quantity;
-                $product->decrement('stock_quantity', $quantity);
-                Inventory::updateOrCreate(['business_id' => $purchase->business_id, 'product_id' => $product->id], ['available_stock' => $previous - $quantity, 'low_stock_alert' => $product->low_stock_alert_qty ?? 10]);
+                $newStock = $previous - $quantity;
+                $product->update(['stock_quantity' => $newStock, 'current_stock' => $newStock]);
+                $inventory = Inventory::firstOrCreate(
+                    ['business_id' => $purchase->business_id, 'product_id' => $product->id],
+                    ['available_stock' => $previous, 'low_stock_alert' => $product->low_stock_alert_qty ?? 10]
+                );
+                $inventory->update([
+                    'available_stock' => $newStock,
+                    'purchase_returned_stock' => (int) $inventory->purchase_returned_stock + $quantity,
+                    'low_stock_alert' => $product->low_stock_alert_qty ?? 10,
+                ]);
                 StockMovement::create(['business_id' => $purchase->business_id, 'product_id' => $product->id, 'type' => 'purchase_return', 'quantity' => -$quantity, 'reason' => 'Purchase return '.$return->return_number, 'user_id' => auth()->id()]);
-                InventoryMovement::create(['business_id' => $purchase->business_id, 'product_id' => $product->id, 'type' => 'PURCHASE_RETURN', 'quantity' => -$quantity, 'previous_stock' => $previous, 'new_stock' => $previous - $quantity, 'note' => 'Purchase return '.$return->return_number, 'created_by' => auth()->id(), 'movement_date' => now()]);
+                InventoryMovement::create(['business_id' => $purchase->business_id, 'product_id' => $product->id, 'type' => 'PURCHASE_RETURN', 'quantity' => $quantity, 'previous_stock' => $previous, 'new_stock' => $newStock, 'note' => 'Purchase return '.$return->return_number, 'created_by' => auth()->id(), 'movement_date' => now()]);
                 $return->items()->create(['purchase_item_id' => $item->id, 'product_id' => $product->id, 'quantity' => $quantity, 'unit_cost' => $item->unit_cost, 'line_total' => $lineTotal]); $total += $lineTotal;
                 $returnedProducts->push($product);
             }
@@ -281,10 +290,12 @@ class PurchaseController extends Controller
         }
 
         $purchase->refresh();
-        $this->activity->record($purchase->business_id, 'Purchases', 'Purchase return processed for '.$purchase->purchase_number, $purchaseReturn->id, null, [
+        $this->activity->record($purchase->business_id, 'Inventory', 'Purchase Return Stock Reduced', $purchaseReturn->id, null, [
             'return_number' => $purchaseReturn->return_number,
+            'returned_quantity' => $purchaseReturn->items()->sum('quantity'),
             'balance' => $purchase->balance,
             'status' => $purchase->status,
+            'inventory_return_history_updated' => true,
             'notification_title' => 'Purchase Return Completed',
             'notification_message' => 'Purchase return '.$purchaseReturn->return_number.' has been processed successfully.',
         ]);

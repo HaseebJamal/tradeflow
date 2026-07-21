@@ -63,7 +63,6 @@ class BusinessNotificationController extends Controller
 
     public function markUnread(Request $request, string $notification)
     {
-        abort_if($request->user()->role === 'custom_staff', 403, 'Staff can only mark notifications as read.');
         $item = $this->notificationForUser($request, $notification);
         if ($item->read_at) {
             $item->update(['read_at' => null]);
@@ -75,7 +74,6 @@ class BusinessNotificationController extends Controller
 
     public function destroy(Request $request, string $notification)
     {
-        abort_if($request->user()->role === 'custom_staff', 403, 'Staff cannot delete notifications.');
         $item = $this->notificationForUser($request, $notification);
         $this->audit($request, 'notification_deleted', $item, 'Notification deleted.');
         $item->delete();

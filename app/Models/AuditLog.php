@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\AuditIpResolver;
 use Illuminate\Database\Eloquent\Model;
 
 class AuditLog extends Model
@@ -29,7 +30,8 @@ class AuditLog extends Model
             $log->business_id ??= $user?->business_id;
             $log->route ??= request()?->route()?->getName();
             if ($log->record_id && !$log->record_type) $log->record_type = $log->module;
-            $log->ip_address ??= request()?->ip();
+            $log->ip_address = app(AuditIpResolver::class)->capture()
+                ?? AuditIpResolver::normalize($log->ip_address);
             $log->user_agent ??= substr((string) request()?->userAgent(), 0, 1000);
             $log->occurred_at ??= now();
             $log->old_values = self::withoutSensitiveValues($log->old_values);

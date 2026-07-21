@@ -7,6 +7,8 @@ use App\Http\Requests\Admin\StoreCompanyRequest;
 use App\Http\Requests\Admin\UpdateCompanyRequest;
 use App\Models\ActivityLog;
 use App\Models\Business;
+use App\Models\Subscription;
+use App\Notifications\SubscriptionStatusNotification;
 use App\Models\BusinessDetailChangeRequest;
 use App\Models\BusinessDocument;
 use App\Models\CompanyApprovalLog;
@@ -149,9 +151,12 @@ class CompanyController extends Controller
     public function store(StoreCompanyRequest $request)
     {
         $data = $request->validated();
+        $ownerImage = $request->hasFile('owner_profile_image')
+            ? $request->file('owner_profile_image')->store('profile_images', 'public')
+            : null;
 
         try {
-            $company = DB::transaction(function () use ($request, $data) {
+            $company = DB::transaction(function () use ($request, $data, $ownerImage) {
                 if (Business::whereRaw('LOWER(business_name) = ?', [mb_strtolower($data['business_name'])])->lockForUpdate()->exists()) {
                     throw ValidationException::withMessages(['business_name' => 'A company with this name already exists.']);
                 }
@@ -164,6 +169,7 @@ class CompanyController extends Controller
                     'role' => 'business_owner',
                     'status' => 'active',
                     'created_by' => auth()->id(),
+                    'profile_image' => $ownerImage,
                 ]);
 
                 $company = Business::create([
@@ -199,6 +205,9 @@ class CompanyController extends Controller
                 return $company;
             });
         } catch (Throwable $exception) {
+            if ($ownerImage) {
+                Storage::disk('public')->delete($ownerImage);
+            }
             \App\Models\AuditLog::create([
                 'user_id' => auth()->id(),
                 'actor_id' => auth()->id(),
@@ -209,7 +218,7 @@ class CompanyController extends Controller
                 // Keep failed-creation diagnostics useful without recording
                 // the owner's login identifier or any credential material.
                 'new_values' => collect($data)->only(['business_name', 'business_type', 'company_phone', 'city', 'owner_name', 'owner_phone', 'permissions'])->all(),
-                'ip_address' => $request->ip(),
+                'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
                 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
             ]);
 
@@ -243,7 +252,7 @@ class CompanyController extends Controller
                 'business.purchase-returns.index', 'business.sales.index', 'business.sales.returns.index',
                 'business.khata', 'business.deliveries', 'business.expenses.index',
                 'business.reports', 'business.staff', 'business.audit-logs.index',
-                'business.settings', 'business.pos.index',
+                'business.settings',
             ])],
         ]);
 
@@ -302,12 +311,24 @@ class CompanyController extends Controller
         $data = $request->validated();
         $old = $company->only(['business_name', 'business_type', 'business_description', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo']);
 
-        DB::transaction(function () use ($request, $company, $data) {
+        $oldOwnerImage = $company->owner?->profile_image;
+        $newOwnerImage = $request->hasFile('owner_profile_image')
+            ? $request->file('owner_profile_image')->store('profile_images', 'public')
+            : null;
+
+        try {
+        DB::transaction(function () use ($request, $company, $data, $newOwnerImage) {
             $company->update(collect($data)->only(['business_name', 'business_type', 'business_description', 'phone', 'address', 'city', 'registration_number', 'tax_number'])->all());
             $company->owner?->update([
                 'name' => $data['owner_name'],
                 'phone' => $data['owner_phone'],
             ]);
+            if ($request->boolean('remove_owner_profile_image') && $company->owner?->profile_image) {
+                $company->owner->update(['profile_image' => null]);
+            }
+            if ($newOwnerImage && $company->owner) {
+                $company->owner->update(['profile_image' => $newOwnerImage]);
+            }
 
             if ($request->boolean('remove_company_logo') && $company->logo) {
                 Storage::disk('public')->delete($company->logo);
@@ -321,6 +342,17 @@ class CompanyController extends Controller
                 BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public')]);
             }
         });
+        } catch (Throwable $exception) {
+            if ($newOwnerImage) {
+                Storage::disk('public')->delete($newOwnerImage);
+            }
+
+            throw $exception;
+        }
+
+        if (($newOwnerImage || $request->boolean('remove_owner_profile_image')) && $oldOwnerImage) {
+            Storage::disk('public')->delete($oldOwnerImage);
+        }
 
         $company->refresh()->load('owner');
         $company->owner?->notify(new BusinessDetailsUpdatedNotification($company, $request->user()));
@@ -443,12 +475,44 @@ class CompanyController extends Controller
 
         DB::transaction(function () use ($company, $oldStatus, $newStatus, $data) {
             $company->update(['status' => ucfirst($newStatus)]);
+            if ($newStatus === 'approved') {
+                $this->startPendingSubscriptionTrial($company);
+            }
             $this->recordApprovalLog($company, $oldStatus, $newStatus, $data['admin_note'] ?? null);
         });
 
         $this->audit($request, 'company status changed', $company, ['status' => $oldStatus], ['status' => $newStatus, 'note' => $data['admin_note'] ?? null]);
 
         return back()->with('success', 'Company status updated.');
+    }
+
+    private function startPendingSubscriptionTrial(Business $company): void
+    {
+        $subscription = Subscription::with('plan')->where('business_id', $company->id)->lockForUpdate()->first();
+        if (! $subscription || $subscription->status !== 'Pending') {
+            return;
+        }
+
+        $trialDays = max(0, (int) ($subscription->plan?->trial_days ?? 14));
+        if ($trialDays === 0) {
+            $subscription->update([
+                'status' => 'Active',
+                'starts_at' => now()->toDateString(),
+                'ends_at' => now()->addMonth()->toDateString(),
+                'payment_status' => 'Pending',
+            ]);
+            return;
+        }
+
+        $subscription->update([
+            'status' => 'Trial',
+            'starts_at' => now()->toDateString(),
+            'trial_start_at' => now()->toDateString(),
+            'trial_end_at' => now()->addDays($trialDays)->toDateString(),
+            'ends_at' => now()->addDays($trialDays)->toDateString(),
+            'payment_status' => 'Pending',
+        ]);
+        $company->owner?->notify(new SubscriptionStatusNotification('Trial Activated', 'Your '.$subscription->plan?->name.' trial is active until '.$subscription->trial_end_at?->format('d M, Y').'.', $company->id));
     }
 
     public function archive(Request $request, Business $company)
@@ -538,7 +602,7 @@ class CompanyController extends Controller
         \App\Models\AuditLog::create([
             'user_id' => auth()->id(), 'actor_id' => auth()->id(), 'actor_role' => auth()->user()?->role,
             'business_id' => $company->id, 'module' => 'Companies', 'action' => $action, 'description' => ucfirst($action).' for '.$company->business_name,
-            'old_values' => $old, 'new_values' => $new, 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+            'old_values' => $old, 'new_values' => $new, 'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
     }
 

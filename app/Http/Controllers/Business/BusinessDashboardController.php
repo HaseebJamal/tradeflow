@@ -11,6 +11,7 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Supplier;
+use App\Models\Subscription;
 use App\Services\CompanyPermissionService;
 use Illuminate\Support\Facades\DB;
 
@@ -23,12 +24,15 @@ class BusinessDashboardController extends Controller
         // are shown only when at least one operational module is enabled.
         $hasOperationalAccess = collect([
             'products', 'inventory', 'suppliers', 'purchases', 'purchase_returns', 'customers',
-            'sales', 'sales_returns', 'pos', 'deliveries', 'accounting',
+            'sales', 'pos', 'sales_returns', 'deliveries', 'accounting',
             'expenses', 'reports', 'staff', 'audit_logs', 'settings',
         ])->contains(fn (string $module) => $companyPermissions->allowsUser(auth()->user(), $module.'.view'));
 
         if (!$hasOperationalAccess) {
-            return view('business.dashboard', ['hasOperationalAccess' => false]);
+            return view('business.dashboard', [
+                'hasOperationalAccess' => false,
+                'subscription' => Subscription::with('plan')->where('business_id', $businessId)->first(),
+            ]);
         }
         $saleBase = Order::where('business_id', $businessId)->whereNotIn('status', ['Cancelled', 'Void', 'Returned']);
         $monthlySales = (clone $saleBase)->whereMonth('order_date', now()->month)->whereYear('order_date', now()->year);
@@ -57,6 +61,7 @@ class BusinessDashboardController extends Controller
             'expenses' => $expenses,
             'profit' => $totalSales - $costOfSales - $totalExpenses,
             'monthlyProfit' => $monthlySalesTotal - $monthlyCostOfSales - $expenses,
+            'subscription' => Subscription::with('plan')->where('business_id', $businessId)->first(),
             'recentOrders' => Order::with('customer')->where('business_id', $businessId)->latest()->take(5)->get(),
             'lowStockProducts' => Product::where('business_id', $businessId)->whereColumn('stock_quantity', '<=', 'low_stock_alert_qty')->take(5)->get(),
         ]);

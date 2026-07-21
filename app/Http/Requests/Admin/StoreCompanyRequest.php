@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\AuditLog;
+use App\Services\AuditIpResolver;
 use App\Models\PermissionDefinition;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
@@ -30,6 +31,7 @@ class StoreCompanyRequest extends FormRequest
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['string', Rule::exists('permission_definitions', 'permission_key')],
             'company_logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'owner_profile_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'business_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
@@ -81,7 +83,7 @@ class StoreCompanyRequest extends FormRequest
                     'address', 'city', 'registration_number', 'tax_number', 'owner_name',
                     'owner_email', 'owner_phone', 'permissions', 'notes',
                 ]),
-                'ip_address' => $this->ip(),
+                'ip_address' => app(AuditIpResolver::class)->capture($this),
                 'user_agent' => substr((string) $this->userAgent(), 0, 1000),
             ]);
         }

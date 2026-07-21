@@ -16,7 +16,7 @@
         <div class="col-md-2"><label class="form-label">City</label><input name="city" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Province</label><input name="province" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Credit Limit</label><input name="credit_limit" type="number" min="0" step="0.01" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Opening Balance</label><input name="opening_balance" type="number" min="0" step="0.01" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Current Balance</label><input name="current_balance" type="number" min="0" step="1" class="form-control js-whole-number"></div>
         <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option>Active</option><option>Blocked</option></select></div>
         <div class="col-md-10"><label class="form-label">Address</label><input name="address" class="form-control"></div>
         <div class="col-12"><button class="btn btn-tf-primary">Save Customer</button></div>

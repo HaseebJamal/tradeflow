@@ -71,7 +71,7 @@ class CompanyPermissionController extends Controller
                         'description' => $key.' changed for '.$company->business_name,
                         'old_values' => ['permission_key' => $key, 'allowed' => $oldValue],
                         'new_values' => ['permission_key' => $key, 'allowed' => $newValue],
-                        'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+                        'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
                     ]);
                 }
             }
@@ -79,7 +79,7 @@ class CompanyPermissionController extends Controller
                 'user_id' => auth()->id(), 'actor_id' => auth()->id(), 'actor_role' => auth()->user()?->role,
                 'business_id' => $company->id, 'module' => 'Permissions', 'action' => 'company permissions updated',
                 'description' => 'Company permissions updated for '.$company->business_name,
-                'new_values' => ['enabled_permissions' => $selected], 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+                'new_values' => ['enabled_permissions' => $selected], 'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
             ]);
             $company->owner?->notify(new CompanyPermissionsUpdatedNotification($company));
         });
@@ -186,7 +186,7 @@ class CompanyPermissionController extends Controller
         \App\Models\AuditLog::create([
             'user_id' => auth()->id(), 'actor_id' => auth()->id(), 'actor_role' => auth()->user()?->role,
             'business_id' => $companyId, 'module' => 'Permissions', 'action' => $action, 'description' => ucfirst($action),
-            'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+            'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request), 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
     }
 }

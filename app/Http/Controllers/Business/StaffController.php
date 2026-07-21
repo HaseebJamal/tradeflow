@@ -74,6 +74,8 @@ class StaffController extends Controller
         $this->ensureStaffCapacity();
         $data = $request->validated();
         $this->assertAssignableRole('custom_staff', 'staff.create');
+        $this->assertCustomRoleName($data['role']);
+        $this->assertRequestedPermissionsAssignable($data['permissions'] ?? []);
         $imagePath = $request->hasFile('profile_image')
             ? $request->file('profile_image')->store('profile_images', 'public')
             : null;
@@ -143,7 +145,10 @@ class StaffController extends Controller
     {
         $staff = $this->scopedStaff($staff);
         $data = $request->validated();
+        $this->guardAgainstSelfAdministration($staff, $data);
         $this->assertAssignableRole('custom_staff', 'staff.edit');
+        $this->assertCustomRoleName($data['role'], $staff);
+        $this->assertRequestedPermissionsAssignable($data['permissions'] ?? [], $staff);
         $oldImage = $staff->profile_image;
         $newImage = $request->hasFile('profile_image')
             ? $request->file('profile_image')->store('profile_images', 'public')
@@ -194,6 +199,7 @@ class StaffController extends Controller
     {
         $staff = $this->scopedStaff($staff);
         $data = $request->validate(['status' => ['required', Rule::in(['active', 'inactive', 'suspended', 'archived'])]]);
+        $this->guardAgainstSelfAdministration($staff, $data);
         $oldStatus = $staff->status;
         $staff->update(['status' => $data['status']]);
         if ($staff->status !== 'active') {
@@ -207,6 +213,7 @@ class StaffController extends Controller
     public function resetPassword(Request $request, User $staff): RedirectResponse
     {
         $staff = $this->scopedStaff($staff);
+        $this->guardAgainstSelfAdministration($staff, [], true);
         $data = $request->validate([
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
         ], ['password.confirmed' => 'Password and confirm password do not match.']);
@@ -220,6 +227,7 @@ class StaffController extends Controller
     public function archive(User $staff): RedirectResponse
     {
         $staff = $this->scopedStaff($staff);
+        $this->guardAgainstSelfAdministration($staff, ['status' => 'archived']);
         $oldStatus = $staff->status;
         $staff->update(['status' => 'archived']);
         $this->invalidateSessions($staff);
@@ -231,6 +239,7 @@ class StaffController extends Controller
     public function restore(User $staff): RedirectResponse
     {
         $staff = $this->scopedStaff($staff);
+        $this->guardAgainstSelfAdministration($staff, ['status' => 'inactive']);
         abort_unless($staff->status === 'archived', 404);
         $staff->update(['status' => 'inactive']);
         $this->audit('staff restored', $staff, ['status' => 'archived'], ['status' => 'inactive']);
@@ -241,6 +250,7 @@ class StaffController extends Controller
     public function destroy(User $staff): RedirectResponse
     {
         $staff = $this->scopedStaff($staff);
+        $this->guardAgainstSelfAdministration($staff, [], true);
 
         if (!$this->canBeSafelyDeleted($staff)) {
             return $this->archive($staff);
@@ -293,21 +303,82 @@ class StaffController extends Controller
         return array_values(array_unique([...$modules, ...$selected]));
     }
 
+    private function assertRequestedPermissionsAssignable(array $selected, ?User $target = null): void
+    {
+        $companyPermissions = app(CompanyPermissionService::class);
+        $actor = auth()->user();
+        $available = $companyPermissions->allowedDefinitionsFor($actor)
+            ->pluck('permission_key')
+            ->map(fn ($permission) => $companyPermissions->normalise((string) $permission))
+            ->all();
+        $requested = collect($selected)
+            ->map(fn ($permission) => $companyPermissions->normalise((string) $permission))
+            ->unique()
+            ->values()
+            ->all();
+        $outsideCeiling = collect($requested)->contains(fn (string $permission) => !in_array($permission, $available, true)
+            || !$this->actorCanGrant($permission));
+
+        if (!$outsideCeiling) {
+            return;
+        }
+
+        $this->audit('Privilege Escalation Blocked', $target ?? $actor, null, ['blocked' => true]);
+        throw ValidationException::withMessages([
+            'permissions' => 'You cannot assign permissions that you do not have.',
+        ]);
+    }
+
     private function actorCanGrant(string $permission): bool
     {
         $actor = auth()->user();
-        if ($actor->role === 'business_owner') {
-            return true;
+        $companyPermissions = app(CompanyPermissionService::class);
+
+        // A staff manager can delegate only permissions that are both enabled
+        // for the company and effective for the manager's own account.
+        return $companyPermissions->allowsUser($actor, 'staff.permissions')
+            && $companyPermissions->allowsUser($actor, $permission);
+    }
+
+    private function guardAgainstSelfAdministration(User $staff, array $data, bool $destructive = false): void
+    {
+        $actor = auth()->user();
+        if (!$actor || $actor->id !== $staff->id) {
+            return;
         }
 
-        $companyPermissions = app(CompanyPermissionService::class);
-        $assigned = collect($actor->permissions ?? [])
-            ->map(fn ($value) => $companyPermissions->normalise((string) $value))
-            ->all();
-        $module = str($permission)->before('.')->toString();
+        if ($destructive || (array_key_exists('status', $data) && $data['status'] !== $staff->status)) {
+            $this->audit('Privilege Escalation Blocked', $staff, null, ['blocked' => true]);
+            throw ValidationException::withMessages([
+                'staff' => 'You cannot change your own account status from Roles & Users.',
+            ]);
+        }
 
-        return in_array($permission, $assigned, true)
-            || (str_ends_with($permission, '.view') && in_array($module, $assigned, true));
+        $requestedRole = trim((string) ($data['role'] ?? ''));
+        $currentRole = trim((string) ($staff->staffProfile?->custom_role_name ?? ''));
+        if ($requestedRole !== '' && $requestedRole !== $currentRole) {
+            $this->audit('Self Role Change Blocked', $staff, null, ['blocked' => true]);
+            throw ValidationException::withMessages(['role' => 'You cannot change your own role.']);
+        }
+
+        if (array_key_exists('permissions', $data)
+            && $this->canonicalPermissions($data['permissions'] ?? []) !== $this->canonicalPermissions($staff->permissions ?? [])) {
+            $this->audit('Self Permission Change Blocked', $staff, null, ['blocked' => true]);
+            throw ValidationException::withMessages(['permissions' => 'You cannot change your own permissions.']);
+        }
+    }
+
+    private function canonicalPermissions(array $permissions): array
+    {
+        $companyPermissions = app(CompanyPermissionService::class);
+
+        return collect($permissions)
+            ->map(fn ($permission) => $companyPermissions->normalise((string) $permission))
+            ->filter(fn (string $permission) => str_contains($permission, '.'))
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
     }
 
     private function companyPermissionGroups(): array
@@ -316,7 +387,7 @@ class StaffController extends Controller
         $grouped = $companyPermissions->allowedDefinitionsFor(auth()->user())
             ->groupBy(fn (PermissionDefinition $definition) => strtolower($definition->module));
 
-        $order = ['dashboard', 'products', 'units', 'categories', 'inventory', 'suppliers', 'purchases', 'purchase_returns', 'customers', 'sales', 'sales_returns', 'pos', 'deliveries', 'accounting', 'expenses', 'reports', 'notifications', 'staff', 'audit_logs', 'settings'];
+        $order = ['dashboard', 'products', 'units', 'categories', 'inventory', 'suppliers', 'purchases', 'purchase_returns', 'customers', 'sales', 'pos', 'sales_returns', 'deliveries', 'accounting', 'expenses', 'reports', 'notifications', 'staff', 'audit_logs', 'settings'];
 
         return collect($order)
             ->filter(fn (string $module) => $grouped->has($module))
@@ -334,10 +405,13 @@ class StaffController extends Controller
     private function scopedStaff(User $staff, string $requiredPermission = 'staff.edit'): User
     {
         $actor = auth()->user();
+        if ($actor && $actor->id === $staff->id && $staff->role === 'business_owner') {
+            $this->audit('Self Role Change Blocked', $staff, null, ['blocked' => true]);
+            throw ValidationException::withMessages(['role' => 'You cannot change your own role.']);
+        }
         $isValidTarget = $staff->business_id === $this->businessId()
             && array_key_exists($staff->role, BusinessStaffRoles::ROLES);
-        $canManageStaff = in_array($actor->role, ['super_admin', 'business_owner'], true)
-            || app(CompanyPermissionService::class)->allowsUser($actor, $requiredPermission);
+        $canManageStaff = app(CompanyPermissionService::class)->allowsUser($actor, $requiredPermission);
 
         if (!$isValidTarget || !$canManageStaff) {
             throw ValidationException::withMessages(['staff' => 'You do not have permission to perform this action.']);
@@ -367,17 +441,32 @@ class StaffController extends Controller
     private function assertAssignableRole(string $role, string $requiredPermission): void
     {
         $actor = auth()->user();
-        $canAssign = BusinessStaffRoles::canBeAssignedBy($actor->role, $role)
-            || app(CompanyPermissionService::class)->allowsUser($actor, $requiredPermission);
+        $canAssign = app(CompanyPermissionService::class)->allowsUser($actor, $requiredPermission);
 
         if (!$canAssign) {
             throw ValidationException::withMessages(['role' => 'You do not have permission to assign this business role.']);
         }
     }
 
+    private function assertCustomRoleName(string $role, ?User $target = null): void
+    {
+        $reservedRoles = ['super admin', 'business owner', 'platform admin', 'platform sub admin', 'administrator', 'admin'];
+        if (!in_array(strtolower(trim($role)), $reservedRoles, true)) {
+            return;
+        }
+
+        $this->audit('Privilege Escalation Blocked', $target ?? auth()->user(), null, ['blocked' => true]);
+        throw ValidationException::withMessages([
+            'role' => 'Protected platform and owner roles cannot be assigned to staff accounts.',
+        ]);
+    }
+
     private function ensureStaffCapacity(): void
     {
         $business = Business::with('subscription.plan')->findOrFail($this->businessId());
+        if ($business->subscription?->plan && !in_array($business->subscription->status, ['Trial', 'Active', 'Expiring'], true)) {
+            throw ValidationException::withMessages(['staff' => 'Your subscription is not active. Please contact your Platform Administrator.']);
+        }
         $limit = $business->subscription?->plan?->staff_limit;
 
         if ($limit && $this->staffQuery()->where('status', '!=', 'archived')->count() >= $limit) {
@@ -431,7 +520,7 @@ class StaffController extends Controller
             'description' => auth()->user()->name.' '.$action.' for '.$staff->name,
             'old_values' => $oldValues,
             'new_values' => $newValues,
-            'ip_address' => request()->ip(),
+            'ip_address' => app(\App\Services\AuditIpResolver::class)->capture(),
             'user_agent' => substr((string) request()->userAgent(), 0, 1000),
         ]);
     }

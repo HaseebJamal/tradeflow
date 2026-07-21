@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use App\Models\AuditLog;
+use App\Services\AuditIpResolver;
 
 class UpdateCompanyRequest extends FormRequest
 {
@@ -25,7 +26,7 @@ class UpdateCompanyRequest extends FormRequest
                 'action' => 'blocked company credential access',
                 'description' => 'Blocked Super Admin company credential update attempt.',
                 'new_values' => ['operation' => 'credential_update'],
-                'ip_address' => $this->ip(),
+                'ip_address' => app(AuditIpResolver::class)->capture($this),
                 'user_agent' => substr((string) $this->userAgent(), 0, 1000),
             ]);
             abort(403, $this->has('owner_email')
@@ -50,6 +51,8 @@ class UpdateCompanyRequest extends FormRequest
             'owner_phone' => ['required', 'regex:/^\d{11}$/'],
             'company_logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_company_logo' => ['nullable', 'boolean'],
+            'owner_profile_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'remove_owner_profile_image' => ['nullable', 'boolean'],
             'business_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ];
     }

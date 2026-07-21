@@ -20,7 +20,6 @@ class StaffDashboardController extends Controller
             ['purchase_returns', 'Purchase Returns', 'bi-arrow-return-left', route('business.purchase-returns.index'), 'Review and process permitted purchase returns.'],
             ['sales', 'Sales', 'bi-bag-check', route('business.sales.index'), 'Create sales, manage invoices, and record customer payments.'],
             ['sales_returns', 'Sales Returns', 'bi-arrow-return-right', route('business.sales.returns.index'), 'Review and process permitted sales returns.'],
-            ['pos', 'Point of Sale', 'bi-upc-scan', route('business.pos.index'), 'Process counter sales and print receipts.'],
             ['accounting', 'Accounting / Ledger', 'bi-journal-text', route('business.khata'), 'Review customer and business ledger work.'],
             ['deliveries', 'Deliveries', 'bi-truck', route('business.deliveries'), 'View and update deliveries.'],
             ['expenses', 'Expenses', 'bi-receipt-cutoff', route('business.expenses.index'), 'Record business expenses.'],
@@ -33,7 +32,7 @@ class StaffDashboardController extends Controller
             return $companyPermissions->allowsUser($user, $moduleKey.'.view');
         })->values();
 
-        $deliveryQuery = Delivery::with('order.customer')->where('business_id', $user->business_id)->where('delivery_staff_id', $user->id);
+        $deliveryQuery = Delivery::with(['invoice.order.customer', 'order.customer'])->where('business_id', $user->business_id)->where('delivery_staff_id', $user->id);
 
         return view('business.staff-dashboard', [
             'user' => $user,

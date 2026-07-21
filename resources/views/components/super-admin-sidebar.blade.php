@@ -1,6 +1,6 @@
 <div class="tf-sidebar-inner p-3" data-super-admin-sidebar>
     <div class="d-flex align-items-center justify-content-between mb-4">
-        <a class="tf-brand text-white d-flex align-items-center mb-0" href="{{ route('admin.dashboard') }}">
+        <a class="tf-brand text-white d-flex align-items-center mb-0" href="{{ route('public.home') }}">
             <span class="tf-brand-mark bg-blue"><i class="bi bi-box-seam"></i></span>
             <span class="tf-sidebar-text">TradeFlow</span>
         </a>

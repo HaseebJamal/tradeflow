@@ -36,7 +36,7 @@ class CompanyPermissionService
             now()->addMinutes(30),
             fn () => CompanyPermission::where('company_id', $business->id)
                 ->get(['permission_key', 'allowed'])
-                ->mapWithKeys(fn ($item) => [strtolower(trim($item->permission_key)) => (bool) $item->allowed])
+                ->mapWithKeys(fn ($item) => [$this->normalise((string) $item->permission_key) => (bool) $item->allowed])
                 ->all()
         );
 
@@ -124,13 +124,26 @@ class CompanyPermissionService
             ->unique()
             ->all();
 
-        if ($permission === 'staff.view'
-            && collect($assigned)->contains(fn (string $assignedPermission) => str_starts_with($assignedPermission, 'staff.'))) {
-            return true;
+        // Customers is an explicit workspace permission: creating a customer
+        // for POS does not by itself grant access to the customer directory.
+        if ($permission === 'customers.view') {
+            return in_array('customers.view', $assigned, true);
         }
 
-        return in_array($permission, $assigned, true)
-            || (str_ends_with($permission, '.view') && in_array($module, $assigned, true));
+        if (str_ends_with($permission, '.view')) {
+            // A module page is the entry point for its granted actions. For
+            // example, products.create must allow a staff member to open the
+            // Products workspace, without implicitly granting products.edit
+            // or any other action. The company module gate above remains the
+            // non-bypassable upper limit.
+            return in_array($permission, $assigned, true)
+                || in_array($module, $assigned, true)
+                || collect($assigned)->contains(
+                    fn (string $assignedPermission) => str_starts_with($assignedPermission, $module.'.')
+                );
+        }
+
+        return in_array($permission, $assigned, true);
     }
 
     public function clear(int $companyId): void
@@ -167,6 +180,8 @@ class CompanyPermissionService
             'products.add' => 'products.create',
             'inventory.add' => 'inventory.add_stock',
             'inventory.adjust' => 'inventory.adjust_stock',
+            'view_customers', 'customer.view', 'customers.index', 'customers.manage' => 'customers.view',
+            'create_customer' => 'customers.create',
             'customers.add' => 'customers.create',
             'suppliers.add' => 'suppliers.create',
             'orders', 'orders.view' => 'sales.view',
@@ -181,8 +196,6 @@ class CompanyPermissionService
             'invoices.void' => 'sales.invoice_void',
             'purchases.return' => 'purchase_returns.process',
             'purchase_returns' => 'purchase_returns.view',
-            'pos.returns' => 'sales_returns.view',
-            'pos.process_return' => 'sales_returns.process',
             'sales_returns' => 'sales_returns.view',
             'deliveries.update' => 'deliveries.update_status',
             'expenses.add' => 'expenses.create',

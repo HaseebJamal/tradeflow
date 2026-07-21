@@ -36,6 +36,20 @@
         <div class="col-md-4"><label class="form-label" for="ownerLoginEmail">Owner Login Email</label><input id="ownerLoginEmail" type="email" class="form-control bg-light text-muted" value="{{ $company->owner?->email ?? '' }}" readonly aria-readonly="true"><small class="tf-muted">The Business Owner controls this login email. Super Admin can view it but cannot change it.</small></div>
     @endif
     <div class="col-md-4"><label class="form-label" for="ownerPhone">Owner Phone {!! $required !!}</label><input id="ownerPhone" name="owner_phone" type="tel" inputmode="numeric" maxlength="11" class="form-control" value="{{ old('owner_phone', $company->owner?->phone ?? '') }}" required data-tf-phone><small class="tf-muted">Private owner contact; reports use the company phone only.</small></div>
+    <div class="col-md-4">
+        <label class="form-label" for="ownerProfileImage">Owner Profile Image <span class="tf-muted">Optional</span></label>
+        <input id="ownerProfileImage" name="owner_profile_image" type="file" accept="image/jpeg,image/png,image/webp" class="form-control @error('owner_profile_image') is-invalid @enderror">
+        <small class="tf-muted">JPG, JPEG, PNG, or WebP. Max 2MB. This is separate from the company logo.</small>
+        @error('owner_profile_image')
+            <div class="invalid-feedback d-block">{{ $message }}</div>
+        @enderror
+        @if($editing && $company->owner?->profile_image)
+            <div class="d-flex align-items-center gap-2 mt-2">
+                <img src="{{ asset('storage/'.$company->owner->profile_image) }}?v={{ $company->owner->updated_at?->timestamp }}" class="navbar-avatar" alt="Current owner profile image">
+                <label class="form-check mb-0"><input class="form-check-input" name="remove_owner_profile_image" value="1" type="checkbox"> Remove and restore default avatar</label>
+            </div>
+        @endif
+    </div>
 
     @if(!$editing)
         <div class="col-md-4"><label class="form-label" for="temporaryPassword">Temporary Password {!! $required !!}</label><div class="input-group"><input id="temporaryPassword" name="temporary_password" type="password" class="form-control @error('temporary_password') is-invalid @enderror" autocomplete="new-password" required data-company-password><button type="button" class="btn btn-outline-secondary tf-password-toggle" data-tf-password-toggle="#temporaryPassword" data-tf-password-icon="#temporaryPasswordIcon" aria-label="Show temporary password"><i id="temporaryPasswordIcon" class="bi bi-eye"></i></button></div><small class="tf-muted">8+ characters with uppercase, lowercase, number, and special character.</small>@error('temporary_password')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>

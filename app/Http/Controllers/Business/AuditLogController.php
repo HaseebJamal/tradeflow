@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Business;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Services\AuditIpResolver;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -71,7 +72,7 @@ class AuditLogController extends Controller
                         $log->role ?: $log->actor_role,
                         $log->module,
                         $log->action,
-                        $log->ip_address,
+                        AuditIpResolver::display($log->ip_address),
                     ]);
                 }
             });
@@ -129,7 +130,7 @@ class AuditLogController extends Controller
             ->when($filters['module'] ?? null, fn ($q, $value) => $q->where('module', $value))
             ->when($filters['action'] ?? null, fn ($q, $value) => $q->where('action', $value))
             ->whereBetween('created_at', [$start, $end])
-            ->when($filters['ip_address'] ?? null, fn ($q, $value) => $q->where('ip_address', $value))
+            ->when($filters['ip_address'] ?? null, fn ($q, $value) => $q->whereIn('ip_address', AuditIpResolver::searchable($value)))
             ->when($filters['search'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner->where('description', 'like', "%{$value}%")->orWhere('route', 'like', "%{$value}%")->orWhere('action', 'like', "%{$value}%")));
 
         return [$filters, $query];
@@ -183,7 +184,7 @@ class AuditLogController extends Controller
                 : '—',
             'user' => $log->user_name ?: $log->user?->name ?: 'System', 'role' => $log->role ?: $log->actor_role ?: 'system',
             'module' => $log->module ?: 'General', 'action' => $log->action, 'description' => $log->description ?: $log->action,
-            'ip_address' => $log->ip_address ?: '—', 'has_details' => $includeDetails,
+            'ip_address' => AuditIpResolver::display($log->ip_address, '—'), 'has_details' => $includeDetails,
             'route' => $includeDetails ? $log->route : null, 'record_type' => $includeDetails ? $log->record_type : null, 'record_id' => $includeDetails ? $log->record_id : null,
             'old_values' => $includeDetails ? $log->old_values : null, 'new_values' => $includeDetails ? $log->new_values : null, 'user_agent' => $includeDetails ? $log->user_agent : null,
         ];

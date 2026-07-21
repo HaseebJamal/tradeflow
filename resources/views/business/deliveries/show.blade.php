@@ -4,14 +4,15 @@
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-@php($order = $delivery->order)
-@php($customer = $order?->customer)
+@php($order = $delivery->sourceOrder())
+@php($invoice = $delivery->sourceInvoice())
+@php($customer = $delivery->customer ?? $order?->customer)
 @php($total = $order?->grand_total ?: $order?->total ?: $delivery->amount)
 @php($paidAmount = $order?->paid_amount ?? $paidAmount ?? 0)
 @php($remaining = $order?->balance ?? max(0, $total - ($paidAmount ?? 0)))
 
 <div class="row g-4 mb-4">
-    <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Order Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Order Number</div><div class="col-6">{{ $order?->order_number }}</div><div class="col-6 tf-muted">Order Date</div><div class="col-6"><x-date-time :value="$order?->order_date ?: $order?->created_at" /></div><div class="col-6 tf-muted">Order Status</div><div class="col-6">{{ $order?->status }}</div><div class="col-6 tf-muted">Total Amount</div><div class="col-6">Rs {{ number_format($total) }}</div></div></div></div>
+    <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">POS Invoice Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Invoice Number</div><div class="col-6">{{ $invoice?->invoice_number ?? $order?->order_number }}</div><div class="col-6 tf-muted">Sale Date</div><div class="col-6"><x-date-time :value="$order?->order_date ?: $order?->created_at" /></div><div class="col-6 tf-muted">Sale Status</div><div class="col-6">{{ $order?->status }}</div><div class="col-6 tf-muted">Total Amount</div><div class="col-6">Rs {{ number_format($total) }}</div></div></div></div>
     <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Customer Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Customer Name</div><div class="col-6">{{ $customer?->name ?? '-' }}</div><div class="col-6 tf-muted">Phone</div><div class="col-6">{{ $customer?->phone ?? '-' }}</div><div class="col-6 tf-muted">Shop Name</div><div class="col-6">{{ $customer?->business_name ?? '-' }}</div><div class="col-6 tf-muted">Address</div><div class="col-6">{{ $customer?->address ?? $delivery->address ?? '-' }}</div><div class="col-6 tf-muted">City</div><div class="col-6">{{ $customer?->city ?? '-' }}</div></div></div></div>
 </div>
 

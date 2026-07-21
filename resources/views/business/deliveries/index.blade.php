@@ -21,7 +21,7 @@
 <form class="tf-card p-4 mb-3">
     <div class="row g-2 align-items-end">
         <div class="col-md-1"><label class="form-label">ID</label><input name="delivery_id" value="{{ request('delivery_id') }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Order Number</label><input name="order_number" value="{{ request('order_number') }}" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Invoice Number</label><input name="order_number" value="{{ request('order_number') }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="">All</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(request('customer_id') == $customer->id)>{{ $customer->display_name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select"><option value="">All</option>@foreach($staff as $member)<option value="{{ $member->id }}" @selected(request('delivery_staff_id') == $member->id)>{{ $member->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option>@foreach(['Pending','Assigned','Picked Up','Out For Delivery','Delivered','Failed','Returned','Cancelled'] as $status)<option @selected(request('status')===$status)>{{ $status }}</option>@endforeach</select></div>
@@ -39,18 +39,20 @@
 </form>
 
 <x-table>
-    <thead><tr><th>Delivery ID</th><th>Order Number</th><th>Customer</th><th>Delivery Staff</th><th>Status</th><th>Payment Status</th><th>Amount</th><th>Assigned At</th><th>Started At</th><th>Delivered At</th><th>Failed At</th><th>Created At</th><th>Actions</th></tr></thead>
+    <thead><tr><th>Delivery ID</th><th>Invoice Number</th><th>Customer</th><th>Delivery Staff</th><th>Status</th><th>Payment Status</th><th>Amount</th><th>Assigned At</th><th>Started At</th><th>Delivered At</th><th>Failed At</th><th>Created At</th><th>Actions</th></tr></thead>
     <tbody>
     @forelse($deliveries ?? [] as $delivery)
-        @php($orderTotal = $delivery->order?->grand_total ?: $delivery->order?->total ?: $delivery->amount)
-        @php($paid = $delivery->order?->paid_amount ?? $delivery->order?->payments?->sum('amount') ?? 0)
-        @php($remaining = $delivery->order ? ($delivery->order->balance ?? max(0, $orderTotal - $paid)) : max(0, ($delivery->amount ?? 0) - $paid))
+        @php($sale = $delivery->sourceOrder())
+        @php($invoice = $delivery->sourceInvoice())
+        @php($orderTotal = $sale?->grand_total ?: $sale?->total ?: $delivery->amount)
+        @php($paid = $sale?->paid_amount ?? $sale?->payments?->sum('amount') ?? 0)
+        @php($remaining = $sale ? ($sale->balance ?? max(0, $orderTotal - $paid)) : max(0, ($delivery->amount ?? 0) - $paid))
         @php($paymentStatus = $remaining <= 0 ? 'Paid' : ($paid > 0 ? 'Partial Rs '.number_format($remaining) : 'Pending Rs '.number_format($remaining)))
         @php($paymentBadge = $remaining <= 0 ? 'text-bg-success' : ($paid > 0 ? 'text-bg-warning' : 'text-bg-danger'))
         <tr>
             <td>#DEL-{{ $delivery->id }}</td>
-            <td>{{ $delivery->order?->order_number }}</td>
-            <td>{{ $delivery->order?->customer?->display_name ?? '-' }}</td>
+            <td>{{ $invoice?->invoice_number ?? $sale?->order_number }}</td>
+            <td>{{ $delivery->customer?->display_name ?? $sale?->customer?->display_name ?? '-' }}</td>
             <td>{{ $delivery->staff?->name ?? '-' }}</td>
             <td><span class="badge {{ $delivery->status === 'Delivered' ? 'text-bg-success' : ($delivery->status === 'Failed' ? 'text-bg-danger' : 'text-bg-warning') }}">{{ $delivery->status }}</span></td>
             <td><span class="badge {{ $paymentBadge }}">{{ $paymentStatus }}</span></td>

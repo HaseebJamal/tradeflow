@@ -1,107 +1,58 @@
 @extends('layouts.dashboard')
-
 @section('page-title', 'POS Sales History')
-@section('page-subtitle', 'Completed counter sales, receipts, and returns')
-
+@section('page-subtitle', 'Completed counter sales')
 @section('content')
-    @if(session('success'))
-        <div class="alert alert-success">{{ session('success') }}</div>
-    @endif
+<div class="d-flex justify-content-end mb-3"><a class="btn btn-tf-primary" href="{{ route('business.pos.index') }}"><i class="bi bi-calculator me-1"></i>Open POS</a></div>
+<x-table>
+    <thead><tr><th>Invoice</th><th>Date & Time</th><th>Customer</th><th>Total</th><th>Paid</th><th>Actions</th></tr></thead>
+    <tbody>
+    @forelse($orders as $order)
+        @php($receiptNumber = $order->invoice?->invoice_number ?? $order->order_number)
+        <tr>
+            <td>{{ $receiptNumber }}</td>
+            <td>{{ $order->order_date?->format('d M Y g:i A') }}</td>
+            <td>{{ $order->customer?->name ?? 'Walk-in Customer' }}</td>
+            <td>Rs {{ number_format($order->grand_total ?: $order->total) }}</td>
+            <td>Rs {{ number_format($order->paid_amount) }}</td>
+            <td>
+                <div class="d-flex flex-wrap gap-1">
+                    @companyCan('pos.print_receipt')
+                        <a class="btn btn-sm btn-outline-primary" href="{{ route('business.pos.receipt.view', ['invoice' => $receiptNumber]) }}" target="_blank" rel="noopener"><i class="bi bi-eye me-1"></i>View</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ route('business.pos.receipt.print', ['invoice' => $receiptNumber]) }}" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Print</a>
+                        <a class="btn btn-sm btn-outline-success" href="{{ route('business.pos.receipt.download', ['invoice' => $receiptNumber]) }}"><i class="bi bi-download me-1"></i>Download</a>
+                    @endcompanyCan
+                    @if($canAssignDelivery && $order->invoice)
+                        <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#assignDelivery{{ $order->invoice->id }}"><i class="bi bi-truck me-1"></i>Assign Delivery</button>
+                    @endif
+                </div>
+            </td>
+        </tr>
+    @empty
+        <tr><td colspan="6" class="text-center text-muted py-5">No POS sales yet.</td></tr>
+    @endforelse
+    </tbody>
+</x-table>
+<div class="mt-3">{{ $orders->links() }}</div>
 
-    @if($errors->any())
-        <div class="alert alert-danger">{{ $errors->first() }}</div>
-    @endif
-
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-        <h2 class="h5 mb-0">Sales Directory</h2>
-        <a href="{{ route('business.pos.index') }}" class="btn btn-tf-primary">
-            <i class="bi bi-upc-scan me-1"></i>New Sale
-        </a>
-    </div>
-
-    <div class="tf-card p-3 mb-3">
-        <form method="GET" class="row g-2 align-items-end">
-            <div class="col-sm-6 col-lg-3">
-                <label class="form-label" for="pos-history-search">Receipt Number</label>
-                <input id="pos-history-search" name="search" class="form-control" value="{{ request('search') }}" placeholder="Search receipt">
+@if($canAssignDelivery)
+    @foreach($orders as $order)
+        @continue(! $order->invoice)
+        <div class="modal fade" id="assignDelivery{{ $order->invoice->id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <form class="modal-content" method="POST" action="{{ route('business.pos.delivery.assign', $order->invoice) }}">
+                    @csrf
+                    <div class="modal-header"><h2 class="modal-title h5">Assign Delivery</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <div class="alert alert-light border py-2"><strong>{{ $order->invoice->invoice_number }}</strong><br><small>{{ $order->customer?->name ?? 'Walk-in Customer' }}</small></div>
+                        <div class="mb-3"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select" data-native-select required><option value="">Select delivery staff</option>@foreach($deliveryStaff as $staff)<option value="{{ $staff->id }}">{{ $staff->name }}</option>@endforeach</select></div>
+                        <div class="mb-3"><label class="form-label">Delivery Address</label><textarea name="address" class="form-control" rows="3" required>{{ $order->customer?->address }}</textarea></div>
+                        <div><label class="form-label">Delivery Notes <span class="text-muted">Optional</span></label><textarea name="note" class="form-control" rows="2"></textarea></div>
+                        @if($deliveryStaff->isEmpty())<div class="alert alert-warning mt-3 mb-0">No active delivery staff are available for this business.</div>@endif
+                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-tf-primary" @disabled($deliveryStaff->isEmpty())>Assign Delivery</button></div>
+                </form>
             </div>
-            <div class="col-sm-6 col-lg-3">
-                <label class="form-label" for="pos-history-from">Date From</label>
-                <input id="pos-history-from" name="date_from" type="date" class="form-control" value="{{ request('date_from', now()->startOfMonth()->toDateString()) }}">
-            </div>
-            <div class="col-sm-6 col-lg-3">
-                <label class="form-label" for="pos-history-to">Date To</label>
-                <input id="pos-history-to" name="date_to" type="date" class="form-control" value="{{ request('date_to', now()->toDateString()) }}">
-            </div>
-            <div class="col-sm-6 col-lg-3 d-flex gap-2">
-                <button class="btn btn-outline-primary flex-fill">Filter</button>
-                <a href="{{ route('business.pos.history') }}" class="btn btn-outline-secondary">Clear</a>
-            </div>
-        </form>
-    </div>
-
-    <x-table>
-        <thead>
-            <tr>
-                <th>Receipt</th>
-                <th>Customer</th>
-                <th>Date & Time</th>
-                <th>Total</th>
-                <th>Paid</th>
-                <th>Status</th>
-                <th class="text-end">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            @forelse($orders as $order)
-                @php
-                    $statusClass = match(strtolower($order->status)) {
-                        'completed', 'paid' => 'tf-badge-success',
-                        'returned', 'void', 'cancelled' => 'tf-badge-danger',
-                        default => 'tf-badge-warning',
-                    };
-                @endphp
-                <tr>
-                    <td><strong>{{ $order->order_number }}</strong></td>
-                    <td>{{ $order->customer?->display_name ?? 'Walk-in Customer' }}</td>
-                    <td><x-date-time :value="$order->order_date" /></td>
-                    <td>Rs {{ number_format($order->grand_total, 2) }}</td>
-                    <td>Rs {{ number_format($order->paid_amount, 2) }}</td>
-                    <td><span class="tf-badge {{ $statusClass }}">{{ $order->status }}</span></td>
-                    <td>
-                        <div class="d-flex flex-wrap justify-content-end gap-1">
-                            <a class="btn btn-sm btn-outline-primary" href="{{ route('business.pos.receipt', $order) }}">View</a>
-
-                            @companyCan('pos.print_receipt')
-                                <a class="btn btn-sm btn-outline-secondary" href="{{ route('business.pos.receipt.pdf', $order) }}" target="_blank" rel="noopener">PDF</a>
-                                <a class="btn btn-sm btn-outline-secondary" href="{{ route('business.pos.receipt.pdf.download', $order) }}">Download</a>
-                            @endcompanyCan
-
-                            @if(in_array($order->status, ['New', 'Accepted'], true))
-                                <a class="btn btn-sm btn-outline-warning" href="{{ route('business.sales.edit', $order) }}">Edit Draft</a>
-
-                                @companyCan('pos.void_sale')
-                                    <form method="POST" action="{{ route('business.pos.void', $order) }}" onsubmit="return confirm('Void this unpaid POS draft and restore stock?')">
-                                        @csrf
-                                        @method('PATCH')
-                                        <button class="btn btn-sm btn-outline-danger">Void</button>
-                                    </form>
-                                @endcompanyCan
-                            @endif
-
-                            @if(!in_array($order->status, ['Void', 'Cancelled'], true))
-                                @companyCan('sales_returns.process')
-                                    <a class="btn btn-sm btn-outline-warning" href="{{ route('business.pos.returns', $order) }}">Return</a>
-                                @endcompanyCan
-                            @endif
-                        </div>
-                    </td>
-                </tr>
-            @empty
-                <tr><td colspan="7" class="text-center tf-muted py-4">No POS sales found for the selected filters.</td></tr>
-            @endforelse
-        </tbody>
-    </x-table>
-
-    <div class="mt-3">{{ $orders->links() }}</div>
+        </div>
+    @endforeach
+@endif
 @endsection

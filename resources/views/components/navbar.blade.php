@@ -12,8 +12,12 @@
                 <li class="nav-item"><a class="nav-link" href="{{ route('public.home') }}#about" data-tf-smooth>About</a></li>
                 <li class="nav-item"><a class="nav-link" href="{{ route('public.home') }}#contact" data-tf-smooth>Contact</a></li>
                 <li class="nav-item"><a class="nav-link" href="{{ route('privacy.security') }}">Privacy & Security</a></li>
-                <li class="nav-item"><a class="btn tf-public-auth-button" href="{{ route('login') }}">Sign In</a></li>
-                <li class="nav-item"><a class="btn tf-public-auth-button tf-public-register-button" href="{{ route('register.business') }}"><i class="bi bi-building-add me-1"></i>Register Business</a></li>
+                @auth
+                    <li class="nav-item"><a class="btn tf-public-auth-button" href="{{ route('dashboard.redirect') }}"><i class="bi bi-speedometer2 me-1"></i>Go to Dashboard</a></li>
+                @else
+                    <li class="nav-item"><a class="btn tf-public-auth-button" href="{{ route('login') }}">Sign In</a></li>
+                    <li class="nav-item"><a class="btn tf-public-auth-button tf-public-register-button" href="{{ route('register.business') }}"><i class="bi bi-building-add me-1"></i>Register Business</a></li>
+                @endauth
             </ul>
         </div>
     </div>

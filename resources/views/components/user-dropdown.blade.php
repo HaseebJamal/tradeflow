@@ -11,21 +11,15 @@
         : ((request()->is('business/*') || request()->is('staff/*') || $isBusinessOwnerNotificationPage)
             ? ($user?->business ?? $user?->ownedBusiness)
             : null);
-    // A business owner's dashboard keeps the company identity, while every
-    // staff account must display the profile image saved on its own user row.
-    // Super Admin business-context viewing remains branded as the selected
-    // company so it never displays the Super Admin's personal image.
+    // Workspace controls remain available for business users, but the compact
+    // profile control must always identify the authenticated person.
     $usesBusinessBranding = (bool) $businessWorkspace
         && ($isBusinessContext || $user?->role === 'business_owner');
-    $displayName = $isBusinessContext ? $contextBusiness->business_name : $user?->name;
-    // The shared business header represents the company workspace. Individual
-    // user identity remains available inside the dropdown itself.
-    $navbarDisplayName = $businessWorkspace?->business_name ?? $displayName;
-    $displayRole = $isBusinessContext ? 'Business workspace' : $user?->role;
-    // Keep the company logo for owner/context branding, but staff always see
-    // their own uploaded profile image in the shared header and menu.
-    $displayImage = $usesBusinessBranding ? $businessWorkspace->logo : $user?->profile_image;
-    $displayUpdatedAt = $usesBusinessBranding ? $businessWorkspace->updated_at : $user?->updated_at;
+    $displayName = $user?->name ?: 'User';
+    $navbarDisplayName = $displayName;
+    $displayRole = str($user?->role ?: 'user')->replace('_', ' ')->title();
+    $displayImage = $user?->profile_image;
+    $displayUpdatedAt = $user?->updated_at;
     // Database values are stored as relative public-disk paths. Normalising
     // legacy public/storage prefixes prevents valid uploads from becoming a
     // broken header image on routes outside the business URL prefix.
@@ -55,7 +49,7 @@
         @if($hasProfileImage)
             <img src="{{ $displayImageUrl }}" class="navbar-avatar" alt="{{ $navbarDisplayName }}">
         @else
-            <span class="navbar-avatar tf-avatar-empty"><i class="bi {{ $usesBusinessBranding ? 'bi-building' : 'bi-person' }}"></i></span>
+            <span class="navbar-avatar tf-avatar-empty"><i class="bi bi-person"></i></span>
         @endif
         <span class="d-none d-md-inline">{{ $navbarDisplayName }}</span>
     </button>
@@ -64,10 +58,13 @@
             @if($hasProfileImage)
                 <img src="{{ $displayImageUrl }}" class="tf-avatar tf-avatar-lg mb-2" alt="{{ $displayName }}">
             @else
-                <span class="tf-avatar tf-avatar-lg tf-avatar-empty mb-2"><i class="bi {{ $usesBusinessBranding ? 'bi-building' : 'bi-person' }}"></i></span>
+                <span class="tf-avatar tf-avatar-lg tf-avatar-empty mb-2"><i class="bi bi-person"></i></span>
             @endif
             <div class="fw-bold">{{ $displayName }}</div>
             <small class="tf-muted">{{ $displayRole }}</small>
+            @if($businessWorkspace)
+                <small class="tf-muted d-block">{{ $businessWorkspace->business_name }}</small>
+            @endif
         </div>
         @if($user?->role === 'super_admin' && !$isBusinessContext)
             <h6 class="dropdown-header">Settings</h6>

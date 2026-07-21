@@ -37,7 +37,7 @@ class BusinessActivityService
             'description' => $action,
             'old_values' => $oldValues,
             'new_values' => $newValues,
-            'ip_address' => request()->ip(),
+            'ip_address' => app(AuditIpResolver::class)->capture(),
             'user_agent' => substr((string) request()->userAgent(), 0, 1000),
         ]);
 

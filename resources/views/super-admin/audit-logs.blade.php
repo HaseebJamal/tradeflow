@@ -35,7 +35,7 @@
         <div class="col-md-2"><label class="form-label">Time To</label><input type="time" name="time_to" value="{{ $auditTimeTo }}" class="form-control"></div>
         <div class="col-md-1"><label class="form-label">Month</label><select name="month" class="form-select"><option value="">All</option>@for($month = 1; $month <= 12; $month++)<option value="{{ $month }}" @selected((int) $auditMonth === $month)>{{ $month }}</option>@endfor</select></div>
         <div class="col-md-1"><label class="form-label">Year</label><input type="number" min="2000" max="2100" step="1" name="year" value="{{ $auditYear }}" class="form-control" placeholder="{{ now()->year }}"></div>
-        <div class="col-md-2"><label class="form-label">IP Address</label><input name="ip_address" value="{{ request('ip_address') }}" class="form-control" placeholder="127.0.0.1"></div>
+        <div class="col-md-2"><label class="form-label">IP Address</label><input name="ip_address" value="{{ request('ip_address') }}" class="form-control" placeholder="IPv4 or IPv6"></div>
         <div class="col-md-2 d-flex gap-2"><button class="btn btn-outline-primary flex-fill">Filter</button><a href="{{ route('admin.audit-logs') }}" class="btn btn-outline-secondary">Clear</a></div>
     </form>
 </div>
@@ -51,7 +51,7 @@
             <td>{{ $log->role ?: $log->actor_role ?: 'system' }}</td>
             <td><x-activity-label :activity="$log" field="module" /></td>
             <td><x-activity-label :activity="$log" /></td>
-            <td>{{ $log->ip_address ?: '-' }}</td>
+            <td>{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</td>
         </tr>
     @empty
         <tr><td colspan="6" class="text-center tf-muted py-4">No audit activity has been recorded yet.</td></tr>

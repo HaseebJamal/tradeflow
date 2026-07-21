@@ -24,6 +24,25 @@
                 @endforeach
             </div>
         </div>
+        @php($inventory = $product->inventory)
+        @php($isReturnMovement = in_array($latestInventoryMovement?->type, ['PURCHASE_RETURN', 'SALES_RETURN'], true))
+        <div class="tf-card p-4 mt-4">
+            <h3 class="h5">Inventory Summary</h3>
+            <div class="row g-3">
+                @foreach(['Current Stock'=>$product->stock_quantity, 'Total Sold'=>$inventory?->sold_stock ?? 0, 'Total Damaged'=>$inventory?->damaged_stock ?? 0, 'Total Sales Returned'=>$inventory?->sales_returned_stock ?? 0, 'Total Purchase Returned'=>$inventory?->purchase_returned_stock ?? 0] as $label => $value)
+                    <div class="col-sm-6 col-xl"><div class="p-3 border rounded h-100"><div class="tf-muted small">{{ $label }}</div><strong>{{ $value }}</strong></div></div>
+                @endforeach
+            </div>
+            <div class="border-top mt-3 pt-3"><div class="tf-muted small mb-1">Latest Stock Movement</div>
+                @if($latestInventoryMovement)
+                    <strong>{{ $latestInventoryMovement->type === 'PURCHASE_RETURN' ? 'Purchase Return' : ($latestInventoryMovement->type === 'SALES_RETURN' ? 'Sales Return' : str_replace('_', ' ', $latestInventoryMovement->type)) }}:</strong>
+                    {{ $latestInventoryMovement->previous_stock }} {{ $latestInventoryMovement->type === 'PURCHASE_RETURN' ? '-' : ($latestInventoryMovement->type === 'SALES_RETURN' ? '+' : '→') }} {{ abs((int) $latestInventoryMovement->quantity) }} {{ $isReturnMovement ? '=' : '→' }} {{ $latestInventoryMovement->new_stock }}
+                    <span class="tf-muted">{{ $latestInventoryMovement->note ? '· '.$latestInventoryMovement->note : '' }} · <x-date-time :value="$latestInventoryMovement->movement_date ?? $latestInventoryMovement->created_at" /></span>
+                @else
+                    <span class="tf-muted">No stock movement has been recorded yet.</span>
+                @endif
+            </div>
+        </div>
     </div>
 </div>
 @endsection

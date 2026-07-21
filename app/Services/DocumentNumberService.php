@@ -7,13 +7,10 @@ use Illuminate\Support\Facades\DB;
 class DocumentNumberService
 {
     private const TYPES = [
-        // POS and standard sales are both customer invoices, so they share
-        // one short, collision-safe INV sequence.
         'sales' => ['scope' => 'invoice', 'prefix' => 'INV', 'sources' => [['orders', 'order_number'], ['invoices', 'invoice_number']]],
-        'pos' => ['scope' => 'invoice', 'prefix' => 'INV', 'sources' => [['orders', 'order_number'], ['invoices', 'invoice_number']]],
         'purchase' => ['scope' => 'purchase_invoice', 'prefix' => 'PINV', 'sources' => [['purchases', 'purchase_number'], ['purchase_invoices', 'invoice_number']]],
         'supplier_invoice' => ['scope' => 'purchase_invoice', 'prefix' => 'PINV', 'sources' => [['purchases', 'purchase_number'], ['purchase_invoices', 'invoice_number']]],
-        'sales_return' => ['scope' => 'sales_return', 'prefix' => 'SRN', 'sources' => [['pos_returns', 'return_number']]],
+        'sales_return' => ['scope' => 'sales_return', 'prefix' => 'SRN', 'sources' => [['sales_returns', 'return_number']]],
         'purchase_return' => ['scope' => 'purchase_return', 'prefix' => 'PRN', 'sources' => [['purchase_returns', 'return_number']]],
         'delivery' => ['scope' => 'delivery', 'prefix' => 'DEL'],
         'payment' => ['scope' => 'payment', 'prefix' => 'PAY'],

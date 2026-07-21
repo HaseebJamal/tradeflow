@@ -29,6 +29,9 @@
         </div>
         @companyCan('customers.edit')<div class="tf-card p-4 mt-4">
             <h3 class="h5">Update Customer</h3>
+            @if($errors->any())
+                <div class="alert alert-danger py-2">{{ $errors->first() }}</div>
+            @endif
             <form method="POST" action="{{ route('business.customers.update', $customer) }}" class="row g-2">
                 @csrf @method('PATCH')
                 <div class="col-12"><input name="name" value="{{ $customer->name }}" class="form-control" placeholder="Owner name"></div>
@@ -39,8 +42,8 @@
                 <div class="col-6"><input name="province" value="{{ $customer->province }}" class="form-control" placeholder="Province"></div>
                 <div class="col-6"><select name="customer_type" class="form-select">@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option @selected($customer->customer_type === $type)>{{ $type }}</option>@endforeach</select></div>
                 <div class="col-6"><select name="status" class="form-select"><option @selected($customer->status === 'Active')>Active</option><option @selected($customer->status === 'Blocked')>Blocked</option><option @selected($customer->status === 'Inactive')>Inactive</option></select></div>
-                <div class="col-6"><label class="form-label small">Credit Limit</label><input name="credit_limit" type="number" min="0" step="0.01" value="{{ $customer->credit_limit }}" class="form-control" placeholder="Credit limit"></div>
-                <div class="col-6"><label class="form-label small">Current Balance</label><input name="current_balance" type="number" min="0" step="0.01" value="{{ $customer->current_balance }}" class="form-control" placeholder="Current balance"></div>
+                <div class="col-6"><label class="form-label small">Credit Limit</label><input name="credit_limit" type="number" min="0" step="1" value="{{ old('credit_limit', (int) $customer->credit_limit) }}" class="form-control js-whole-number" placeholder="Credit limit"></div>
+                <div class="col-6"><label class="form-label small">Current Balance</label><input name="current_balance" type="number" min="0" step="1" value="{{ old('current_balance', (int) $customer->current_balance) }}" class="form-control js-whole-number" placeholder="Current balance"></div>
                 <div class="col-12"><input name="address" value="{{ $customer->address }}" class="form-control" placeholder="Address"></div>
                 <div class="col-12"><button class="btn btn-outline-primary btn-sm">Save Changes</button></div>
             </form>

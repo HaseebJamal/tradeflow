@@ -31,7 +31,7 @@
 
 <div class="tf-card p-4 mb-4">
     <h2 class="h5">Assigned Deliveries</h2>
-    <x-table><thead><tr><th>Delivery ID</th><th>Order</th><th>Customer</th><th>Address</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>@forelse($assignedDeliveries as $delivery)<tr><td>#DEL-{{ $delivery->id }}</td><td>{{ $delivery->order?->order_number }}</td><td>{{ $delivery->order?->customer?->display_name }}</td><td>{{ $delivery->address }}</td><td>Rs {{ number_format($delivery->amount, 2) }}</td><td>{{ $delivery->status }}</td><td><a href="{{ route('business.deliveries.show', $delivery) }}" class="btn btn-sm btn-outline-primary">View Details</a></td></tr>@empty<tr><td colspan="7" class="text-center tf-muted py-4">No assigned deliveries.</td></tr>@endforelse</tbody></x-table>
+    <x-table><thead><tr><th>Delivery ID</th><th>Invoice</th><th>Customer</th><th>Address</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>@forelse($assignedDeliveries as $delivery)<tr><td>#DEL-{{ $delivery->id }}</td><td>{{ $delivery->sourceInvoice()?->invoice_number ?? $delivery->sourceOrder()?->order_number }}</td><td>{{ $delivery->customer?->display_name ?? $delivery->sourceOrder()?->customer?->display_name }}</td><td>{{ $delivery->address }}</td><td>Rs {{ number_format($delivery->amount, 2) }}</td><td>{{ $delivery->status }}</td><td><a href="{{ route('business.deliveries.show', $delivery) }}" class="btn btn-sm btn-outline-primary">View Details</a></td></tr>@empty<tr><td colspan="7" class="text-center tf-muted py-4">No assigned deliveries.</td></tr>@endforelse</tbody></x-table>
 </div>
 @endif
 

@@ -9,7 +9,7 @@ class Order extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['order_number', 'business_id', 'customer_id', 'retailer_id', 'pos_register_id', 'created_by', 'order_date', 'subtotal', 'discount', 'discount_percentage', 'discount_amount', 'tax_rate', 'tax_amount', 'total', 'grand_total', 'paid_amount', 'balance', 'payment_type', 'payment_status', 'sale_channel', 'status', 'stock_restored_at', 'cancelled_at', 'voided_at', 'void_reason'];
+    protected $fillable = ['order_number', 'business_id', 'customer_id', 'retailer_id', 'created_by', 'order_date', 'subtotal', 'discount', 'discount_percentage', 'discount_amount', 'tax_rate', 'tax_amount', 'total', 'grand_total', 'paid_amount', 'cash_received', 'change_amount', 'balance', 'payment_type', 'payment_status', 'sale_channel', 'status', 'stock_restored_at', 'cancelled_at', 'voided_at', 'void_reason'];
 
     protected $casts = [
         'order_date' => 'datetime',
@@ -26,7 +26,5 @@ class Order extends Model
     public function delivery() { return $this->hasOne(Delivery::class); }
     public function invoice() { return $this->hasOne(Invoice::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
-    public function posRegister() { return $this->belongsTo(PosRegister::class); }
-    public function posPayments() { return $this->hasMany(PosPayment::class); }
-    public function posReturns() { return $this->hasMany(PosReturn::class); }
+    public function salesReturns() { return $this->hasMany(SalesReturn::class); }
 }

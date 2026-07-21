@@ -75,12 +75,15 @@
 
 <section id="pricing" class="tf-section">
     <div class="container">
-        <div class="text-center mb-5"><h2 class="fw-bold">Simple Manual Plans</h2><p class="tf-muted">Super admin activates subscriptions manually. No payment gateway required.</p></div>
+        <div class="text-center mb-5"><h2 class="fw-bold">Simple plans for growing businesses</h2><p class="tf-muted">Start with a free trial after your business is approved.</p></div>
         <div class="row g-4">
-            @foreach([['Basic','Rs 0','For small shops getting started',['100 products','3 staff','500 orders']],['Standard','Rs 4,999','For growing distributors',['1,000 products','15 staff','5,000 orders']],['Premium','Rs 12,999','For scaled wholesale teams',['10,000 products','50 staff','50,000 orders']]] as [$plan,$price,$desc,$items])
-            <div class="col-md-4"><div class="tf-card tf-price-card p-4 h-100"><h3 class="h4">{{ $plan }}</h3><div class="display-5 fw-bold my-3">{{ $price }}</div><p class="tf-muted">{{ $desc }}</p>@foreach($items as $item)<p><i class="bi bi-check-circle-fill text-green me-2"></i>{{ $item }}</p>@endforeach<a href="{{ route('subscribe.plan', strtolower($plan)) }}" class="btn btn-tf-primary w-100 mt-2">Choose {{ $plan }}</a></div></div>
-            @endforeach
+            @forelse($pricingPlans as $plan)
+                <div class="col-md-4"><div class="tf-card tf-price-card p-4 h-100 {{ $plan->is_recommended ? 'border-primary' : '' }}"><h3 class="h4">{{ $plan->name }}</h3><div class="display-5 fw-bold my-3">Rs {{ number_format($plan->priceFor('Monthly')) }}</div><p class="tf-muted">{{ $plan->short_description ?: ($plan->trial_days.'-day trial with flexible business limits.') }}</p><p><i class="bi bi-check-circle-fill text-green me-2"></i>{{ number_format($plan->product_limit) }} products</p><p><i class="bi bi-check-circle-fill text-green me-2"></i>{{ number_format($plan->staff_limit) }} staff</p><p><i class="bi bi-check-circle-fill text-green me-2"></i>{{ number_format($plan->order_limit) }} orders</p><a href="{{ route('register.business', ['plan' => $plan->id]) }}" class="btn btn-tf-primary w-100 mt-2">Start Free Trial</a></div></div>
+            @empty
+                <div class="col-12 text-center"><a href="{{ route('public.pricing') }}" class="btn btn-outline-primary">View Pricing</a></div>
+            @endforelse
         </div>
+        <div class="text-center mt-4"><a href="{{ route('public.pricing') }}" class="btn btn-outline-primary">Compare All Plans</a></div>
     </div>
 </section>
 

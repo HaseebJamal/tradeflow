@@ -10,5 +10,5 @@ class OrderItem extends Model
 
     public function order() { return $this->belongsTo(Order::class); }
     public function product() { return $this->belongsTo(Product::class)->withTrashed(); }
-    public function posReturnItems() { return $this->hasMany(PosReturnItem::class); }
+    public function salesReturnItems() { return $this->hasMany(SalesReturnItem::class); }
 }

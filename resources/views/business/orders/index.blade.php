@@ -46,7 +46,7 @@
     @forelse($orders ?? [] as $order)
         <tr>
             <td>{{ $order->order_number }}</td>
-            <td>{{ $order->sale_channel === 'pos' ? 'POS' : 'Normal Sale' }}</td>
+            <td>Sale</td>
             <td>{{ $order->customer?->display_name ?? 'Walk-in' }}</td>
             <td>{{ $order->items->map(fn($item) => ($item->product_name_snapshot ?: $item->product?->name ?: 'Deleted Product').' x '.$item->quantity)->implode(', ') }}</td>
             <td>{{ $order->status }}</td>

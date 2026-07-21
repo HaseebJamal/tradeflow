@@ -4,7 +4,7 @@
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <div><h2 class="h5 mb-0">Sales Returns</h2><p class="tf-muted mb-0">Process returns from completed POS and normal sales.</p></div>
+    <div><h2 class="h5 mb-0">Sales Returns</h2><p class="tf-muted mb-0">Process returns from completed sales.</p></div>
     <div class="d-flex gap-2"><a href="{{ route('business.sales.index') }}" class="btn btn-outline-secondary">All Sales</a><a href="{{ route('business.sales.returns.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>New Return</a></div>
 </div>
 <form class="tf-card p-3 mb-3 row g-2 align-items-end">
@@ -19,7 +19,7 @@
         <tr>
             <td><strong>{{ $return->return_number ?? '-' }}</strong></td>
             <td><strong>{{ $return->order?->invoice?->invoice_number ?? $return->order?->order_number ?? '-' }}</strong></td>
-            <td>{{ $return->order?->sale_channel === 'pos' ? 'POS' : 'Normal Sale' }}</td>
+            <td>Sale</td>
             <td>{{ $return->customer?->name ?? 'Walk-in Customer' }}</td>
             <td><x-date-time :value="$return->returned_at" /></td>
             <td>{{ $return->refund_method }}</td>

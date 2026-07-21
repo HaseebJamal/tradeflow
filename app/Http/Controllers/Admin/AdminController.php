@@ -23,10 +23,13 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
+use App\Models\SubscriptionChangeRequest;
 use App\Models\Supplier;
 use App\Models\SupportTicket;
 use App\Models\TicketMessage;
 use App\Models\User;
+use App\Services\AuditIpResolver;
+use App\Notifications\SubscriptionStatusNotification;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -355,7 +358,8 @@ class AdminController extends Controller
             'business_id' => ['nullable', 'integer', 'exists:businesses,id'],
             'manage_business_id' => ['nullable', 'integer', 'exists:businesses,id'],
             'subscription_plan_id' => ['nullable', 'integer', 'exists:subscription_plans,id'],
-            'status' => ['nullable', 'in:Active,Expired,Cancelled'],
+            'status' => ['nullable', 'in:Pending,Trial,Active,Expiring,Expired,Suspended,Cancelled'],
+            'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
@@ -365,6 +369,7 @@ class AdminController extends Controller
             ->when($filters['business_id'] ?? null, fn ($query, $value) => $query->where('business_id', $value))
             ->when($filters['subscription_plan_id'] ?? null, fn ($query, $value) => $query->where('subscription_plan_id', $value))
             ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
+            ->when($filters['billing_cycle'] ?? null, fn ($query, $value) => $query->where('billing_cycle', $value))
             ->when($filters['payment_method'] ?? null, fn ($query, $value) => $query->where('payment_method', $value))
             ->when($filters['date_from'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '>=', $value))
             ->when($filters['date_to'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '<=', $value))
@@ -400,7 +405,7 @@ class AdminController extends Controller
             ->get();
 
         return view('super-admin.subscriptions', [
-            'plans' => SubscriptionPlan::withCount('subscriptions')->orderBy('price')->get(),
+            'plans' => SubscriptionPlan::withCount('subscriptions')->orderBy('sort_order')->orderBy('price')->get(),
             'businesses' => $assignableBusinesses,
             'subscriptions' => $subscriptions,
             'billingHistory' => PlatformPayment::query()
@@ -409,9 +414,16 @@ class AdminController extends Controller
                 ->latest('paid_at')
                 ->limit(50)
                 ->get(),
+            'changeRequests' => SubscriptionChangeRequest::with(['business:id,business_name', 'currentPlan:id,name', 'requestedPlan:id,name', 'requester:id,name'])
+                ->where('status', 'Pending')->latest()->limit(20)->get(),
             'lockedBusiness' => $lockedBusiness,
             'stats' => [
                 'active' => Subscription::where('status', 'Active')->count(),
+                'trial' => Subscription::where('status', 'Trial')->count(),
+                'expiring' => Subscription::whereIn('status', ['Trial', 'Active', 'Expiring'])->where(function ($query) {
+                    $query->whereBetween('trial_end_at', [now()->toDateString(), now()->addDays(7)->toDateString()])
+                        ->orWhereBetween('ends_at', [now()->toDateString(), now()->addDays(7)->toDateString()]);
+                })->count(),
                 'expired' => Subscription::where('status', 'Expired')->count(),
                 'cancelled' => Subscription::where('status', 'Cancelled')->count(),
                 'monthly_revenue' => Subscription::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('amount'),
@@ -421,9 +433,10 @@ class AdminController extends Controller
 
     public function storePlan(Request $request)
     {
-        $plan = SubscriptionPlan::create($request->validate([
-            'name' => ['required', 'max:100'], 'price' => ['required', 'integer', 'min:0'], 'product_limit' => ['required', 'integer', 'min:0'], 'staff_limit' => ['required', 'integer', 'min:0'], 'order_limit' => ['required', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Inactive'],
-        ]));
+        $data = $this->planData($request);
+        $data['slug'] = \Illuminate\Support\Str::slug($data['name']);
+        $data['price'] = $data['monthly_price'];
+        $plan = SubscriptionPlan::create($data);
         $this->audit('Subscription plan created: '.$plan->name, $request, 'Subscriptions', $plan->id, null, $plan->only(['name', 'price', 'product_limit', 'staff_limit', 'order_limit', 'status']));
 
         return back()->with('success', 'Subscription plan created.');
@@ -431,9 +444,8 @@ class AdminController extends Controller
 
     public function updatePlan(Request $request, SubscriptionPlan $plan)
     {
-        $data = $request->validate([
-            'name' => ['required', 'max:100'], 'price' => ['required', 'integer', 'min:0'], 'product_limit' => ['required', 'integer', 'min:0'], 'staff_limit' => ['required', 'integer', 'min:0'], 'order_limit' => ['required', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Inactive'],
-        ]);
+        $data = $this->planData($request, $plan);
+        $data['price'] = $data['monthly_price'];
         $old = $plan->only(array_keys($data));
         $plan->update($data);
         $this->audit('Subscription plan updated: '.$plan->name, $request, 'Subscriptions', $plan->id, $old, $plan->fresh()->only(array_keys($data)));
@@ -451,11 +463,53 @@ class AdminController extends Controller
             return back()->with('success', 'Plan has subscription history, so it was deactivated instead of deleted.');
         }
 
-        $old = $plan->only(['name', 'price', 'product_limit', 'staff_limit', 'order_limit', 'status']);
+        $old = $plan->only(['name', 'price', 'monthly_price', 'yearly_price', 'trial_days', 'product_limit', 'staff_limit', 'order_limit', 'status']);
         $plan->delete();
         $this->audit('Subscription plan deleted: '.$old['name'], $request, 'Subscriptions', $plan->id, $old);
 
         return back()->with('success', 'Subscription plan deleted.');
+    }
+
+    public function setPlanStatus(Request $request, SubscriptionPlan $plan)
+    {
+        abort_if($plan->archived_at, 422, 'Restore the plan before changing its status.');
+        $data = $request->validate(['status' => ['required', 'in:Active,Inactive']]);
+        $old = $plan->status;
+        $plan->update(['status' => $data['status']]);
+        $this->audit('Subscription plan '.strtolower($data['status']), $request, 'Subscriptions', $plan->id, ['status' => $old], ['status' => $data['status']]);
+        return back()->with('success', 'Plan '.strtolower($data['status']).' successfully.');
+    }
+
+    public function archivePlan(Request $request, SubscriptionPlan $plan)
+    {
+        if ($plan->archived_at) return back()->with('success', 'Plan is already archived.');
+        $plan->update(['archived_at' => now(), 'status' => 'Inactive']);
+        $this->audit('Subscription plan archived', $request, 'Subscriptions', $plan->id);
+        return back()->with('success', 'Plan archived successfully.');
+    }
+
+    public function restorePlan(Request $request, SubscriptionPlan $plan)
+    {
+        abort_unless($plan->archived_at, 404);
+        $plan->update(['archived_at' => null, 'status' => 'Inactive']);
+        $this->audit('Subscription plan restored', $request, 'Subscriptions', $plan->id);
+        return back()->with('success', 'Plan restored successfully. Activate it when ready.');
+    }
+
+    public function togglePlanVisibility(Request $request, SubscriptionPlan $plan)
+    {
+        abort_if($plan->archived_at, 422, 'Archived plans cannot be made public.');
+        $plan->update(['is_public' => ! $plan->is_public]);
+        $this->audit('Subscription plan visibility updated', $request, 'Subscriptions', $plan->id, null, ['is_public' => $plan->is_public]);
+        return back()->with('success', $plan->is_public ? 'Plan is now public.' : 'Plan is now private.');
+    }
+
+    public function togglePlanRecommendation(Request $request, SubscriptionPlan $plan)
+    {
+        abort_if($plan->archived_at, 422, 'Archived plans cannot be recommended.');
+        $plan->update(['is_recommended' => ! $plan->is_recommended]);
+        $this->audit('Subscription plan recommendation updated', $request, 'Subscriptions', $plan->id, null, ['is_recommended' => $plan->is_recommended]);
+        return back()->with('success', $plan->is_recommended ? 'Plan marked as recommended.' : 'Recommended marker removed.');
     }
 
     public function activateSubscription(Request $request)
@@ -464,11 +518,18 @@ class AdminController extends Controller
             'business_id' => ['required', 'exists:businesses,id'],
             'subscription_context_business_id' => ['nullable', 'integer'],
             'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
+            'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
             'amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
+            'payment_reference' => ['nullable', 'string', 'max:120'],
+            'payment_status' => ['nullable', 'in:Pending,Received,Failed'],
+            'trial_start_at' => ['nullable', 'date'],
+            'trial_end_at' => ['nullable', 'date', 'after_or_equal:trial_start_at'],
+            'auto_renew' => ['nullable', 'boolean'],
+            'note' => ['nullable', 'string', 'max:2000'],
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
-            'status' => ['required', 'in:Active,Expired,Cancelled'],
+            'status' => ['required', 'in:Pending,Trial,Active,Expiring,Expired,Suspended,Cancelled'],
         ]);
 
         $lockedBusinessId = $request->session()->get('admin.subscription.locked_business_id');
@@ -481,14 +542,21 @@ class AdminController extends Controller
             ]);
         }
 
+        $data['billing_cycle'] = $data['billing_cycle'] ?? 'Monthly';
         $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
-        $data['amount'] = $data['amount'] ?? $plan->price;
+        $data['amount'] = $plan->priceFor($data['billing_cycle']);
         $data['starts_at'] = $data['starts_at'] ?? now()->toDateString();
         $data['ends_at'] = $data['ends_at'] ?? now()->addMonth()->toDateString();
+        $data['payment_status'] = $data['payment_status'] ?? ($data['status'] === 'Active' ? 'Received' : 'Pending');
         $data['status'] = $this->resolvedSubscriptionStatus($data['status'], $data['ends_at']);
 
+        $existing = Subscription::where('business_id', $data['business_id'])->first();
+        if ($existing && in_array($existing->status, ['Trial', 'Active', 'Expiring'], true)) {
+            throw ValidationException::withMessages(['business_id' => 'This business already has an active subscription. Use Manage, Renew, Upgrade, or Downgrade instead.']);
+        }
         $subscription = Subscription::updateOrCreate(['business_id' => $data['business_id']], $data);
         $this->audit('Subscription created or assigned for business #'.$data['business_id'], $request, 'Subscriptions', $subscription->id, null, $subscription->only(['subscription_plan_id', 'amount', 'payment_method', 'starts_at', 'ends_at', 'status']));
+        $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Assigned', 'Your '.$plan->name.' subscription was assigned successfully.', $subscription->business_id));
 
         return back()->with('success', 'Subscription updated.');
     }
@@ -497,17 +565,27 @@ class AdminController extends Controller
     {
         $data = $request->validate([
             'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
+            'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
             'amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
+            'payment_reference' => ['nullable', 'string', 'max:120'],
+            'payment_status' => ['nullable', 'in:Pending,Received,Failed'],
+            'trial_start_at' => ['nullable', 'date'],
+            'trial_end_at' => ['nullable', 'date', 'after_or_equal:trial_start_at'],
+            'auto_renew' => ['nullable', 'boolean'],
+            'note' => ['nullable', 'string', 'max:2000'],
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
-            'status' => ['required', 'in:Active,Expired,Cancelled'],
+            'status' => ['required', 'in:Pending,Trial,Active,Expiring,Expired,Suspended,Cancelled'],
         ]);
 
-        $data['amount'] = $data['amount'] ?? $subscription->plan?->price ?? 0;
+        $data['billing_cycle'] = $data['billing_cycle'] ?? $subscription->billing_cycle ?? 'Monthly';
+        $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
+        $data['amount'] = $plan->priceFor($data['billing_cycle']);
         $data['starts_at'] = $data['starts_at'] ?? $subscription->starts_at?->toDateString() ?? now()->toDateString();
         $data['ends_at'] = $data['ends_at'] ?? $subscription->ends_at?->toDateString() ?? now()->addMonth()->toDateString();
         $data['status'] = $this->resolvedSubscriptionStatus($data['status'], $data['ends_at']);
+        $this->assertSubscriptionTransition($subscription->status, $data['status']);
         $old = $subscription->only(['subscription_plan_id', 'amount', 'payment_method', 'starts_at', 'ends_at', 'status']);
         $subscription->update($data);
         $this->audit('Subscription updated for business #'.$subscription->business_id, $request, 'Subscriptions', $subscription->id, $old, $subscription->fresh()->only(array_keys($old)));
@@ -522,8 +600,9 @@ class AdminController extends Controller
         }
 
         $old = $subscription->only(['status', 'ends_at']);
-        $subscription->update(['status' => 'Cancelled', 'ends_at' => $subscription->ends_at ?? now()->toDateString()]);
+        $subscription->update(['status' => 'Cancelled', 'cancelled_at' => now(), 'ends_at' => $subscription->ends_at ?? now()->toDateString()]);
         $this->audit('Subscription cancelled for business #'.$subscription->business_id, $request, 'Subscriptions', $subscription->id, $old, $subscription->fresh()->only(array_keys($old)));
+        $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Cancelled', 'Your subscription has been cancelled.', $subscription->business_id));
 
         return back()->with('success', 'Subscription cancelled. The historical record was retained.');
     }
@@ -541,16 +620,81 @@ class AdminController extends Controller
         return back()->with('success', 'Subscription record deleted.');
     }
 
+    public function transitionSubscription(Request $request, Subscription $subscription)
+    {
+        $data = $request->validate(['status' => ['required', 'in:Active,Suspended,Cancelled,Expired']]);
+        $this->assertSubscriptionTransition($subscription->status, $data['status']);
+        $old = $subscription->status;
+        $subscription->update(['status' => $data['status'], 'renewed_at' => $data['status'] === 'Active' ? now() : $subscription->renewed_at]);
+        $this->audit('Subscription '.strtolower($data['status']), $request, 'Subscriptions', $subscription->id, ['status' => $old], ['status' => $data['status']]);
+        $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Subscription '.ucfirst($data['status']), 'Your subscription status is now '.$data['status'].'.', $subscription->business_id));
+        return back()->with('success', 'Subscription '.strtolower($data['status']).' successfully.');
+    }
+
+    public function extendTrial(Request $request, Subscription $subscription)
+    {
+        $data = $request->validate(['days' => ['required', 'integer', 'min:1', 'max:365']]);
+        if (! in_array($subscription->status, ['Trial', 'Expired'], true)) {
+            throw ValidationException::withMessages(['subscription' => 'This action is not valid for the current subscription status.']);
+        }
+        $end = ($subscription->trial_end_at ?? now())->addDays($data['days']);
+        $subscription->update(['status' => 'Trial', 'trial_start_at' => $subscription->trial_start_at ?? now(), 'trial_end_at' => $end, 'ends_at' => $end]);
+        $this->audit('Trial extended', $request, 'Subscriptions', $subscription->id, null, ['trial_end_at' => $end->toDateString()]);
+        $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Trial Extended', 'Your TradeFlow trial was extended until '.$end->format('d M, Y').'.', $subscription->business_id));
+        return back()->with('success', 'Trial extended successfully.');
+    }
+
+    public function reviewSubscriptionChangeRequest(Request $request, SubscriptionChangeRequest $changeRequest)
+    {
+        $data = $request->validate(['decision' => ['required', 'in:Approved,Rejected']]);
+        abort_unless($changeRequest->status === 'Pending', 422, 'This subscription request has already been reviewed.');
+
+        DB::transaction(function () use ($request, $changeRequest, $data) {
+            $changeRequest->update(['status' => $data['decision'], 'reviewed_at' => now(), 'reviewed_by' => $request->user()->id]);
+            if ($data['decision'] === 'Approved') {
+                $plan = $changeRequest->requestedPlan;
+                $subscription = Subscription::firstOrNew(['business_id' => $changeRequest->business_id]);
+                $subscription->fill([
+                    'subscription_plan_id' => $plan->id,
+                    'billing_cycle' => $changeRequest->billing_cycle,
+                    'amount' => $plan->priceFor($changeRequest->billing_cycle),
+                    'payment_method' => $changeRequest->payment_method,
+                    'starts_at' => $subscription->starts_at ?? now()->toDateString(),
+                    'ends_at' => ($changeRequest->billing_cycle === 'Yearly' ? now()->addYear() : now()->addMonth())->toDateString(),
+                    'status' => 'Active',
+                    'renewed_at' => now(),
+                ])->save();
+                $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification('Subscription '.$changeRequest->type.' Approved', 'Your '.$plan->name.' plan is now active.', $changeRequest->business_id));
+            } else {
+                $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Request Rejected', 'Your '.$changeRequest->type.' request was not approved.', $changeRequest->business_id));
+            }
+        });
+
+        $this->audit('Subscription change request '.strtolower($data['decision']), $request, 'Subscriptions', $changeRequest->id, null, ['decision' => $data['decision']]);
+        return back()->with('success', $data['decision'] === 'Approved' ? 'Subscription request approved successfully.' : 'Subscription request rejected.');
+    }
+
     private function expireDueSubscriptions(Request $request): void
     {
-        Subscription::where('status', 'Active')
-            ->whereNotNull('ends_at')
-            ->whereDate('ends_at', '<', now()->toDateString())
+        Subscription::whereIn('status', ['Trial', 'Active', 'Expiring'])
+            ->where(function ($query) {
+                $query->where(function ($trial) {
+                    $trial->where('status', 'Trial')->whereNotNull('trial_end_at')->whereDate('trial_end_at', '<', now()->toDateString());
+                })->orWhere(function ($active) {
+                    $active->whereIn('status', ['Active', 'Expiring'])->whereNotNull('ends_at')->whereDate('ends_at', '<', now()->toDateString());
+                });
+            })
             ->each(function (Subscription $subscription) use ($request): void {
                 $old = ['status' => $subscription->status, 'ends_at' => $subscription->ends_at?->toDateString()];
                 $subscription->update(['status' => 'Expired']);
                 $this->audit('Subscription expired for business #'.$subscription->business_id, $request, 'Subscriptions', $subscription->id, $old, ['status' => 'Expired', 'ends_at' => $old['ends_at']]);
+                $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Expired', 'Your TradeFlow subscription has expired. Renew a plan to restore full access.', $subscription->business_id));
             });
+
+        Subscription::where('status', 'Active')
+            ->whereNotNull('ends_at')
+            ->whereBetween('ends_at', [now()->toDateString(), now()->addDays(7)->toDateString()])
+            ->update(['status' => 'Expiring']);
     }
 
     private function resolvedSubscriptionStatus(string $requestedStatus, ?string $endsAt): string
@@ -558,6 +702,88 @@ class AdminController extends Controller
         return $requestedStatus === 'Active' && $endsAt && now()->startOfDay()->gt(\Carbon\Carbon::parse($endsAt)->startOfDay())
             ? 'Expired'
             : $requestedStatus;
+    }
+
+    private function assertSubscriptionTransition(string $oldStatus, string $newStatus): void
+    {
+        if ($oldStatus === $newStatus) {
+            return;
+        }
+
+        $allowed = [
+            'Pending' => ['Trial', 'Active'],
+            'Trial' => ['Active', 'Expired'],
+            'Active' => ['Expiring', 'Expired', 'Suspended', 'Cancelled'],
+            'Expiring' => ['Active', 'Expired', 'Suspended', 'Cancelled'],
+            'Expired' => ['Active', 'Trial'],
+            'Suspended' => ['Active'],
+            'Cancelled' => ['Active'],
+        ];
+
+        if (! in_array($newStatus, $allowed[$oldStatus] ?? [], true)) {
+            throw ValidationException::withMessages(['status' => 'This subscription status transition is not allowed.']);
+        }
+    }
+
+    private function planData(Request $request, ?SubscriptionPlan $plan = null): array
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'short_description' => ['nullable', 'string', 'max:255'],
+            'price' => ['nullable', 'integer', 'min:0'],
+            'monthly_price' => ['nullable', 'integer', 'min:0'],
+            'yearly_price' => ['nullable', 'integer', 'min:0'],
+            'trial_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'product_limit' => ['required', 'integer', 'min:0'],
+            'staff_limit' => ['required', 'integer', 'min:0'],
+            'order_limit' => ['required', 'integer', 'min:0'],
+            'included_modules' => ['nullable', 'string', 'max:5000'],
+            'features' => ['nullable', 'string', 'max:5000'],
+            'is_public' => ['nullable', 'boolean'],
+            'is_recommended' => ['nullable', 'boolean'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+            'status' => ['required', 'in:Active,Inactive'],
+        ]);
+
+        $data['monthly_price'] = $data['monthly_price'] ?? $data['price'] ?? $plan?->monthly_price ?? $plan?->price ?? 0;
+        $data['yearly_price'] = $data['yearly_price'] ?? $plan?->yearly_price ?? ($data['monthly_price'] * 12);
+        $data['trial_days'] = $data['trial_days'] ?? $plan?->trial_days ?? 14;
+        unset($data['price']);
+        $data['included_modules'] = $request->has('included_modules')
+            ? $this->lineList($data['included_modules'] ?? null)
+            : ($plan?->included_modules ?? []);
+        $data['features'] = $request->has('features')
+            ? $this->lineList($data['features'] ?? null)
+            : ($plan?->features ?? []);
+        $data['is_public'] = $request->has('is_public') ? $request->boolean('is_public') : ($plan?->is_public ?? true);
+        $data['is_recommended'] = $request->has('is_recommended') ? $request->boolean('is_recommended') : ($plan?->is_recommended ?? false);
+        $data['sort_order'] = $data['sort_order'] ?? 0;
+
+        $slug = \Illuminate\Support\Str::slug($data['name']);
+        $data['slug'] = $plan && $plan->slug === $slug ? $slug : $this->uniquePlanSlug($slug, $plan?->id);
+
+        return $data;
+    }
+
+    private function lineList(?string $value): array
+    {
+        return collect(preg_split('/\r\n|\r|\n/', (string) $value))
+            ->map(fn ($item) => trim($item))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function uniquePlanSlug(string $base, ?int $ignoreId = null): string
+    {
+        $base = $base ?: 'plan';
+        $slug = $base;
+        $suffix = 2;
+        while (SubscriptionPlan::query()->where('slug', $slug)->when($ignoreId, fn ($query) => $query->where('id', '<>', $ignoreId))->exists()) {
+            $slug = $base.'-'.$suffix++;
+        }
+
+        return $slug;
     }
 
     public function supportTickets()
@@ -737,7 +963,7 @@ class AdminController extends Controller
                 foreach ($logs as $log) {
                     fputcsv($out, [
                         $this->auditLogDate($log), $log->business?->business_name ?: 'Platform', $log->user_name ?: $log->user?->name ?: 'System',
-                        $log->role ?: $log->actor_role, $log->module, $log->action, $log->ip_address,
+                        $log->role ?: $log->actor_role, $log->module, $log->action, AuditIpResolver::display($log->ip_address),
                     ]);
                 }
             });
@@ -1055,7 +1281,7 @@ class AdminController extends Controller
             ->when($filters['module'] ?? null, fn ($q, $value) => $q->where('module', $value))
             ->when($filters['action'] ?? null, fn ($q, $value) => $q->where('action', $value))
             ->whereBetween('created_at', [$start, $end])
-            ->when($filters['ip_address'] ?? null, fn ($q, $value) => $q->where('ip_address', $value))
+            ->when($filters['ip_address'] ?? null, fn ($q, $value) => $q->whereIn('ip_address', AuditIpResolver::searchable($value)))
             ->when($filters['search'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner
                 ->where('description', 'like', "%{$value}%")
                 ->orWhere('route', 'like', "%{$value}%")
@@ -1104,7 +1330,7 @@ class AdminController extends Controller
             'id' => $log->id, 'occurred_at' => $this->auditLogDate($log), 'company' => $log->business?->business_name ?: 'Platform',
             'user' => $log->user_name ?: $log->user?->name ?: 'System', 'role' => $log->role ?: $log->actor_role ?: 'system',
             'module' => $log->module ?: 'General', 'action' => $log->action, 'description' => $log->description ?: $log->action,
-            'ip_address' => $log->ip_address ?: '—', 'route' => $log->route, 'record_type' => $log->record_type, 'record_id' => $log->record_id,
+            'ip_address' => AuditIpResolver::display($log->ip_address, '—'), 'route' => $log->route, 'record_type' => $log->record_type, 'record_id' => $log->record_id,
             'old_values' => $log->old_values, 'new_values' => $log->new_values, 'user_agent' => $log->user_agent,
         ];
     }
@@ -1128,7 +1354,7 @@ class AdminController extends Controller
             'record_id' => $recordId,
             'old_values' => $old,
             'new_values' => $new,
-            'ip_address' => $request->ip(),
+            'ip_address' => app(AuditIpResolver::class)->capture($request),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
     }
@@ -1147,7 +1373,7 @@ class AdminController extends Controller
             'description' => $description,
             'subject_type' => $subject ? get_class($subject) : null,
             'subject_id' => $subject?->id,
-            'ip_address' => $request->ip(),
+            'ip_address' => app(AuditIpResolver::class)->capture($request),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
             'session_id' => $request->session()->getId(),
             'occurred_at' => now(),

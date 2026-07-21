@@ -8,10 +8,10 @@
     $moduleLabels = [
         'dashboard' => 'Dashboard', 'companies' => 'Companies', 'company' => 'Company',
         'products' => 'Products', 'inventory' => 'Inventory', 'customers' => 'Customers',
-        'suppliers' => 'Suppliers', 'sales' => 'Sales', 'orders' => 'Sales',
+        'suppliers' => 'Suppliers', 'sales' => 'Sales', 'orders' => 'Sales', 'pos' => 'POS',
         'purchases' => 'Purchases', 'purchase returns' => 'Purchase Returns',
         'sales returns' => 'Sales Returns', 'payments' => 'Payments',
-        'deliveries' => 'Deliveries', 'invoices' => 'Invoices', 'pos' => 'POS',
+        'deliveries' => 'Deliveries', 'invoices' => 'Invoices',
         'accounting' => 'Accounting', 'ledger' => 'Accounting', 'reports' => 'Reports',
         'staff' => 'Staff', 'settings' => 'Settings', 'permissions' => 'Permissions',
         'subscriptions' => 'Subscriptions', 'notifications' => 'Notifications',
@@ -42,8 +42,8 @@
             'business.customers.index' => 'Viewed Customers',
             'business.suppliers.index' => 'Viewed Suppliers',
             'business.sales.store' => 'Created Sale',
-            'business.purchases.store' => 'Created Purchase Order',
             'business.pos.index' => 'Opened POS',
+            'business.purchases.store' => 'Created Purchase Order',
         ];
         $actionLabels = [
             'page_visit' => 'Viewed '.$moduleLabel,

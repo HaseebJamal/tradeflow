@@ -42,6 +42,8 @@ class RegisterBusinessRequest extends FormRequest
             'city' => ['required', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'registration_number' => ['nullable', 'string', 'max:100'],
             'tax_number' => ['nullable', 'string', 'max:100'],
+            'selected_plan_id' => ['required', 'integer', Rule::exists('subscription_plans', 'id')->where(fn ($query) => $query->where('status', 'Active')->where('is_public', true)->whereNull('archived_at'))],
+            'billing_cycle' => ['required', Rule::in(['Monthly', 'Yearly'])],
             'cnic_image' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png', 'max:5120'],
             'business_document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png', 'max:5120'],
             'shop_image' => ['required', 'file', 'mimes:jpg,jpeg,png', 'mimetypes:image/jpeg,image/png', 'max:5120'],
@@ -116,8 +118,10 @@ class RegisterBusinessRequest extends FormRequest
             $step = 2;
         } elseif (collect($errors)->contains(fn (string $field) => in_array($field, ['business_name', 'address', 'city', 'registration_number', 'tax_number'], true))) {
             $step = 3;
-        } elseif (collect($errors)->contains(fn (string $field) => in_array($field, ['cnic_image', 'business_document', 'shop_image'], true))) {
+        } elseif (collect($errors)->contains(fn (string $field) => in_array($field, ['selected_plan_id', 'billing_cycle'], true))) {
             $step = 4;
+        } elseif (collect($errors)->contains(fn (string $field) => in_array($field, ['cnic_image', 'business_document', 'shop_image'], true))) {
+            $step = 5;
         }
 
         session()->flash('registration_step', $step);

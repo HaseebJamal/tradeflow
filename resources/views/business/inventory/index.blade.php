@@ -33,11 +33,11 @@
     </form>
 </div>@endcompanyCan
 <x-table>
-    <thead><tr><th>Product</th><th>Available</th><th>Sold</th><th>Damaged</th><th>Returned</th><th>Alert Qty</th><th>Last Updated</th><th>Update Alert</th></tr></thead>
+    <thead><tr><th>Product</th><th>Available</th><th>Sold</th><th>Damaged</th><th>Sales Returned</th><th>Purchase Returned</th><th>Alert Qty</th><th>Last Updated</th><th>Actions</th></tr></thead>
     <tbody>
     @forelse($inventories ?? [] as $inventory)
         <tr>
-            <td>{{ $inventory->product?->name }}</td><td>{{ $inventory->product?->stock_quantity ?? $inventory->available_stock }}</td><td>{{ $inventory->sold_stock }}</td><td>{{ $inventory->damaged_stock }}</td><td>{{ $inventory->returned_stock }}</td><td>{{ $inventory->product?->low_stock_alert_qty ?? $inventory->low_stock_alert }}</td><td><x-date-time :value="$inventory->updated_at" /></td>
+            <td>{{ $inventory->product?->name }}</td><td>{{ $inventory->product?->stock_quantity ?? $inventory->available_stock }}</td><td>{{ $inventory->sold_stock }}</td><td>{{ $inventory->damaged_stock }}</td><td>{{ $inventory->sales_returned_stock ?? 0 }}</td><td>{{ $inventory->purchase_returned_stock ?? 0 }}</td><td>{{ $inventory->product?->low_stock_alert_qty ?? $inventory->low_stock_alert }}</td><td><x-date-time :value="$inventory->updated_at" /></td>
             <td>
                 @companyCan('inventory.low_stock_alerts')
                     @if($inventory->product)
@@ -58,9 +58,9 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="8" class="text-center tf-muted py-4">No inventory records.</td></tr>
+        <tr><td colspan="9" class="text-center tf-muted py-4">No inventory records.</td></tr>
     @endforelse
     </tbody>
 </x-table>
-<div class="tf-card p-4 mt-4"><h2 class="h5">Stock History</h2><x-table><thead><tr><th>Date</th><th>Product</th><th>Type</th><th>Previous</th><th>Qty</th><th>New</th><th>Note</th><th>By</th></tr></thead><tbody>@forelse($movements ?? [] as $move)<tr><td>{{ ($move->movement_date ?? $move->created_at)?->format('M d, Y h:i A') }}</td><td>{{ $move->product?->name ?? 'Deleted Product' }}</td><td>{{ str_replace('_', ' ', $move->type) }}</td><td>{{ $move->previous_stock }}</td><td>{{ $move->quantity }}</td><td>{{ $move->new_stock }}</td><td>{{ $move->note }}</td><td>{{ $move->creator?->name }}</td></tr>@empty<tr><td colspan="8" class="text-center tf-muted py-4">No stock history.</td></tr>@endforelse</tbody></x-table></div>
+<div class="tf-card p-4 mt-4"><h2 class="h5">Stock History</h2><x-table><thead><tr><th>Date &amp; Time</th><th>Product</th><th>Movement Type</th><th>Stock Before</th><th>Quantity</th><th>Operation</th><th>Stock After</th><th>Reference</th><th>User</th></tr></thead><tbody>@forelse($movements ?? [] as $move)@php($isReturn = in_array($move->type, ['PURCHASE_RETURN', 'SALES_RETURN'], true))@php($operation = $move->type === 'PURCHASE_RETURN' ? '-' : ($move->type === 'SALES_RETURN' ? '+' : '—'))<tr><td><x-date-time :value="$move->movement_date ?? $move->created_at" /></td><td>{{ $move->product?->name ?? 'Deleted Product' }}</td><td>{{ $move->type === 'PURCHASE_RETURN' ? 'Purchase Return' : ($move->type === 'SALES_RETURN' ? 'Sales Return' : str_replace('_', ' ', $move->type)) }}</td><td>{{ $move->previous_stock }}</td><td>{{ abs((int) $move->quantity) }}</td><td>{{ $operation }}</td><td>{{ $move->new_stock }}</td><td>{{ $isReturn ? $move->note : '—' }}</td><td>{{ $move->creator?->name ?? 'System' }}</td></tr>@empty<tr><td colspan="9" class="text-center tf-muted py-4">No stock history.</td></tr>@endforelse</tbody></x-table></div>
 @endsection

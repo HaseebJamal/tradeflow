@@ -81,10 +81,10 @@
                             <div class="tf-notification-utility-actions">
                                 @if(!$notification->read_at)
                                     <form method="POST" action="{{ route('notifications.read', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Mark as Read</button></form>
-                                @elseif(!$isStaff)
+                                @else
                                     <form method="POST" action="{{ route('notifications.unread', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Mark as Unread</button></form>
                                 @endif
-                                @if(!$isStaff)<form method="POST" action="{{ route('notifications.destroy', $notification->id) }}" data-tf-confirm-message="Delete this notification?">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" title="Delete notification" aria-label="Delete notification"><i class="bi bi-trash"></i></button></form>@endif
+                                <form method="POST" action="{{ route('notifications.destroy', $notification->id) }}" data-tf-confirm-message="Delete this notification?">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" title="Delete notification" aria-label="Delete notification"><i class="bi bi-trash"></i></button></form>
                             </div>
                         @endif
 

@@ -8,6 +8,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Business\BusinessDashboardController;
 use App\Http\Controllers\Business\BusinessContextController;
 use App\Http\Controllers\Business\BusinessNotificationController;
+use App\Http\Controllers\Business\BusinessSubscriptionController;
 use App\Http\Controllers\Business\AuditLogController;
 use App\Http\Controllers\Business\CategoryController;
 use App\Http\Controllers\Business\CustomerController;
@@ -33,10 +34,19 @@ use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Retailer\RetailerController;
 use Illuminate\Support\Facades\Route;
+use App\Models\SubscriptionPlan;
+use App\Models\Subscription;
 
-Route::view('/', 'public.home')->name('public.home');
+Route::get('/', fn () => view('public.home', [
+    'pricingPlans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->take(3)->get(),
+]))->name('public.home');
 Route::view('/features', 'public.features')->name('public.features');
-Route::view('/pricing', 'public.pricing')->name('public.pricing');
+Route::get('/pricing', fn () => view('public.pricing', [
+    'plans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get(),
+    'currentSubscription' => auth()->user()?->business_id
+        ? Subscription::with('plan')->where('business_id', auth()->user()->business_id)->first()
+        : null,
+]))->name('public.pricing');
 Route::view('/contact', 'public.contact')->name('public.contact');
 Route::view('/privacy-security', 'public.privacy-security')->name('privacy.security');
 Route::get('/subscribe/{plan}', function (string $plan) {
@@ -87,6 +97,8 @@ Route::middleware('auth')->group(function () {
     Route::prefix('business')->name('business.')->middleware(['super_admin.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'track.activity'])->group(function () {
         Route::get('/support', [SupportController::class, 'index'])->name('support');
         Route::post('/support', [SupportController::class, 'store'])->name('support.store');
+        Route::get('/subscription', [BusinessSubscriptionController::class, 'index'])->name('subscription.index');
+        Route::post('/subscription/requests', [BusinessSubscriptionController::class, 'storeRequest'])->name('subscription.requests.store');
     });
 });
 
@@ -152,10 +164,18 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
     Route::post('/subscription-plans', [AdminController::class, 'storePlan'])->name('subscription-plans.store');
     Route::patch('/subscription-plans/{plan}', [AdminController::class, 'updatePlan'])->name('subscription-plans.update');
     Route::delete('/subscription-plans/{plan}', [AdminController::class, 'destroyPlan'])->name('subscription-plans.destroy');
+    Route::patch('/subscription-plans/{plan}/status', [AdminController::class, 'setPlanStatus'])->name('subscription-plans.status');
+    Route::patch('/subscription-plans/{plan}/archive', [AdminController::class, 'archivePlan'])->name('subscription-plans.archive');
+    Route::patch('/subscription-plans/{plan}/restore', [AdminController::class, 'restorePlan'])->name('subscription-plans.restore');
+    Route::patch('/subscription-plans/{plan}/visibility', [AdminController::class, 'togglePlanVisibility'])->name('subscription-plans.visibility');
+    Route::patch('/subscription-plans/{plan}/recommended', [AdminController::class, 'togglePlanRecommendation'])->name('subscription-plans.recommended');
     Route::post('/subscriptions', [AdminController::class, 'activateSubscription'])->name('subscriptions.activate');
     Route::patch('/subscriptions/{subscription}', [AdminController::class, 'updateSubscription'])->name('subscriptions.update');
     Route::patch('/subscriptions/{subscription}/cancel', [AdminController::class, 'cancelSubscription'])->name('subscriptions.cancel');
     Route::delete('/subscriptions/{subscription}', [AdminController::class, 'destroySubscription'])->name('subscriptions.destroy');
+    Route::patch('/subscriptions/{subscription}/transition', [AdminController::class, 'transitionSubscription'])->name('subscriptions.transition');
+    Route::patch('/subscriptions/{subscription}/extend-trial', [AdminController::class, 'extendTrial'])->name('subscriptions.extend-trial');
+    Route::patch('/subscription-change-requests/{changeRequest}', [AdminController::class, 'reviewSubscriptionChangeRequest'])->name('subscription-change-requests.review');
     Route::get('/support-tickets', [AdminController::class, 'supportTickets'])->name('support-tickets');
     Route::patch('/support-tickets/{ticket}', [AdminController::class, 'updateTicket'])->name('support-tickets.update');
     Route::get('/categories', [AdminController::class, 'categories'])->name('categories');
@@ -246,10 +266,28 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     // Sales is the consolidated home for orders, customer payments, and sales invoices.
     Route::get('/sales', [OrderController::class, 'index'])->name('sales.index')->middleware('business.permission:Sales');
     Route::get('/sales/lookup', [OrderController::class, 'lookup'])->name('sales.lookup')->middleware('business.permission:Sales');
-    // POS is the only entry point for new sales. Keep legacy endpoints so old
-    // bookmarks do not fail, but never accept a duplicate normal-sale post.
-    Route::get('/sales/create', fn () => redirect()->route('business.pos.index')->with('info', 'New sales are now created through the POS module.'))->name('sales.create');
-    Route::post('/sales', fn () => redirect()->route('business.pos.index')->with('info', 'New sales are now created through the POS module.'))->name('sales.store');
+    Route::prefix('pos')->name('pos.')->middleware('business.permission:POS')->group(function () {
+        Route::get('/', [PosController::class, 'index'])->name('index');
+        Route::get('/products', [PosController::class, 'products'])->name('products');
+        Route::get('/barcode', [PosController::class, 'barcode'])->name('barcode');
+        Route::post('/register/open', [PosController::class, 'openRegister'])->name('register.open');
+        Route::patch('/register/{register}/close', [PosController::class, 'closeRegister'])->name('register.close');
+        Route::post('/sales', [PosController::class, 'store'])->name('sales.store');
+        Route::get('/history', [PosController::class, 'history'])->name('history');
+        Route::post('/invoices/{invoice}/deliveries', [DeliveryController::class, 'assignFromPosInvoice'])->name('delivery.assign')->middleware('company.permission:deliveries.assign');
+        Route::get('/receipts/{invoice}/view', [PosController::class, 'receiptView'])->name('receipt.view');
+        Route::get('/receipts/{invoice}/download', [PosController::class, 'receiptDownload'])->name('receipt.download');
+        Route::get('/receipts/{invoice}/print', [PosController::class, 'receiptPrint'])->name('receipt.print');
+        // Keep legacy receipt links working for existing bookmarks and notifications.
+        Route::get('/sales/{order}/receipt/pdf', [PosController::class, 'receiptPdf'])->name('receipt.pdf');
+        Route::get('/sales/{order}/receipt', [PosController::class, 'receipt'])->name('receipt');
+        Route::post('/hold', [PosController::class, 'hold'])->name('hold');
+        Route::post('/resume/{heldSale}', [PosController::class, 'resume'])->name('resume');
+    });
+    // New-sale creation is unavailable while sales remain a history and
+    // management module.
+    Route::get('/sales/create', fn () => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('sales.create');
+    Route::post('/sales', fn () => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('sales.store');
     Route::get('/sales/returns', [\App\Http\Controllers\Business\SalesReturnController::class, 'index'])->name('sales.returns.index')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
     Route::get('/sales/returns/create', [\App\Http\Controllers\Business\SalesReturnController::class, 'create'])->name('sales.returns.create')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
     Route::post('/sales/returns/start', [\App\Http\Controllers\Business\SalesReturnController::class, 'start'])->name('sales.returns.start')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
@@ -268,7 +306,6 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::patch('/sales/invoice-records/{invoice}/void', [InvoiceController::class, 'void'])->name('sales.invoices.void')->middleware('business.permission:Sales');
     Route::patch('/sales/invoice-records/{invoice}/reissue', [InvoiceController::class, 'reissue'])->name('sales.invoices.reissue')->middleware('business.permission:Sales');
     Route::post('/sales/invoice-records/{invoice}/credit-notes', [InvoiceController::class, 'creditNote'])->name('sales.invoices.credit-notes.store')->middleware('business.permission:Sales');
-    Route::post('/sales/{order}/assign-delivery', [OrderController::class, 'assignDelivery'])->name('sales.assignDelivery')->middleware(['business.permission:Deliveries', 'company.permission:deliveries.assign']);
     Route::get('/sales/{order}/edit', [OrderController::class, 'edit'])->name('sales.edit')->middleware('business.permission:Sales');
     Route::put('/sales/{order}', [OrderController::class, 'update'])->name('sales.update')->middleware(['business.permission:Sales', 'company.permission:sales.edit']);
     Route::patch('/sales/{order}/cancel', [OrderController::class, 'cancel'])->name('sales.cancel')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
@@ -279,9 +316,8 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
 
     // Legacy order URLs remain available as safe redirects or action aliases.
     Route::get('/orders', fn () => redirect()->route('business.sales.index'))->name('orders.index')->middleware('business.permission:Sales');
-    Route::get('/orders/create', fn () => redirect()->route('business.pos.index')->with('info', 'New sales are now created through the POS module.'))->name('orders.create');
-    Route::post('/orders', fn () => redirect()->route('business.pos.index')->with('info', 'New sales are now created through the POS module.'))->name('orders.store');
-    Route::post('/orders/{order}/assign-delivery', [OrderController::class, 'assignDelivery'])->name('orders.assignDelivery')->middleware(['business.permission:Deliveries', 'company.permission:deliveries.assign']);
+    Route::get('/orders/create', fn () => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('orders.create');
+    Route::post('/orders', fn () => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('orders.store');
     Route::get('/orders/{order}/edit', fn ($order) => redirect()->route('business.sales.edit', $order))->name('orders.edit')->middleware('business.permission:Sales');
     Route::put('/orders/{order}', [OrderController::class, 'update'])->name('orders.update')->middleware(['business.permission:Sales', 'company.permission:sales.edit']);
     Route::patch('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
@@ -289,19 +325,6 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy')->middleware('business.permission:Sales');
     Route::get('/orders/{order}', fn ($order) => redirect()->route('business.sales.show', $order))->name('orders.show')->middleware('business.permission:Sales');
     Route::patch('/orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
-    Route::get('/pos', [PosController::class, 'index'])->name('pos.index')->middleware('business.permission:POS');
-    Route::post('/pos/register/open', [PosController::class, 'openRegister'])->name('pos.register.open')->middleware('business.permission:POS');
-    Route::patch('/pos/register/{register}/close', [PosController::class, 'closeRegister'])->name('pos.register.close')->middleware('business.permission:POS');
-    Route::post('/pos/sales', [PosController::class, 'store'])->name('pos.sales.store')->middleware('business.permission:POS');
-    Route::get('/pos/sales/{order}/completed', [PosController::class, 'completed'])->name('pos.sales.completed')->middleware('business.permission:POS');
-    Route::get('/pos/history', [PosController::class, 'history'])->name('pos.history')->middleware('business.permission:POS');
-    Route::get('/pos/receipt/{order}', [PosController::class, 'receipt'])->name('pos.receipt')->middleware('business.permission:POS');
-    Route::get('/pos/receipt/{order}/pdf', [PosController::class, 'receiptPdf'])->name('pos.receipt.pdf')->middleware('business.permission:POS');
-    Route::get('/pos/receipt/{order}/pdf/download', [PosController::class, 'downloadReceiptPdf'])->name('pos.receipt.pdf.download')->middleware('business.permission:POS');
-    Route::patch('/pos/{order}/void', [PosController::class, 'void'])->name('pos.void')->middleware('business.permission:POS');
-    Route::get('/pos/returns/{order}', [PosController::class, 'returns'])->name('pos.returns')->middleware('business.permission:POS');
-    Route::post('/pos/returns/{order}', [PosController::class, 'storeReturn'])->name('pos.returns.store')->middleware('business.permission:POS');
-    Route::get('/pos/reports', [PosController::class, 'report'])->name('pos.report')->middleware('business.permission:POS');
     Route::get('/payments', fn () => redirect()->route('business.sales.payments.index'))->name('payments')->middleware('business.permission:Sales');
     Route::post('/payments', [PaymentController::class, 'store'])->name('payments.store')->middleware(['business.permission:Sales', 'company.permission:sales.payments']);
     Route::get('/khata', [KhataController::class, 'index'])->name('khata')->middleware('business.permission:Accounting');
@@ -333,19 +356,19 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/audit-logs/live', [AuditLogController::class, 'live'])->name('audit-logs.live')->middleware('business.permission:Audit Logs');
     Route::get('/audit-logs/export/csv', [AuditLogController::class, 'exportCsv'])->name('audit-logs.export.csv')->middleware('business.permission:Audit Logs');
     Route::get('/audit-logs/export/pdf', [AuditLogController::class, 'exportPdf'])->name('audit-logs.export.pdf')->middleware('business.permission:Audit Logs');
-    Route::get('/staff', [StaffController::class, 'index'])->name('staff')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::post('/staff', [StaffController::class, 'store'])->name('staff.store')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::get('/staff/{staff}', [StaffController::class, 'show'])->name('staff.show')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::get('/staff/{staff}/edit', [StaffController::class, 'edit'])->name('staff.edit')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::put('/staff/{staff}', [StaffController::class, 'update'])->name('staff.update')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::patch('/staff/{staff}/status', [StaffController::class, 'updateStatus'])->name('staff.status')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::patch('/staff/{staff}/reset-password', [StaffController::class, 'resetPassword'])->name('staff.reset-password')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::patch('/staff/{staff}/archive', [StaffController::class, 'archive'])->name('staff.archive')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::patch('/staff/{staff}/restore', [StaffController::class, 'restore'])->name('staff.restore')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::delete('/staff/{staff}', [StaffController::class, 'destroy'])->name('staff.destroy')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::get('/settings', [SettingsController::class, 'index'])->name('settings')->middleware('role:super_admin,business_owner,custom_staff');
-    Route::put('/settings/business', [SettingsController::class, 'updateBusiness'])->name('settings.business')->middleware('role:super_admin,business_owner');
-    Route::patch('/settings/logo', [SettingsController::class, 'updateLogo'])->name('settings.logo')->middleware('role:business_owner');
+    Route::get('/staff', [StaffController::class, 'index'])->name('staff');
+    Route::post('/staff', [StaffController::class, 'store'])->name('staff.store');
+    Route::get('/staff/{staff}', [StaffController::class, 'show'])->name('staff.show');
+    Route::get('/staff/{staff}/edit', [StaffController::class, 'edit'])->name('staff.edit');
+    Route::put('/staff/{staff}', [StaffController::class, 'update'])->name('staff.update');
+    Route::patch('/staff/{staff}/status', [StaffController::class, 'updateStatus'])->name('staff.status');
+    Route::patch('/staff/{staff}/reset-password', [StaffController::class, 'resetPassword'])->name('staff.reset-password');
+    Route::patch('/staff/{staff}/archive', [StaffController::class, 'archive'])->name('staff.archive');
+    Route::patch('/staff/{staff}/restore', [StaffController::class, 'restore'])->name('staff.restore');
+    Route::delete('/staff/{staff}', [StaffController::class, 'destroy'])->name('staff.destroy');
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+    Route::put('/settings/business', [SettingsController::class, 'updateBusiness'])->name('settings.business');
+    Route::patch('/settings/logo', [SettingsController::class, 'updateLogo'])->name('settings.logo');
 });
 
 Route::prefix('staff')->name('staff.')->middleware(['auth', 'role:custom_staff', 'business.approved', 'track.activity'])->group(function () {

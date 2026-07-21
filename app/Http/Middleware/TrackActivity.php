@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\ActivityLog;
 use App\Models\AuditLog;
+use App\Services\AuditIpResolver;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -47,7 +48,7 @@ class TrackActivity
                 'route_name' => $routeName,
                 'method' => $request->method(),
                 'description' => $user->name.' opened '.$routeName,
-                'ip_address' => $request->ip(),
+                'ip_address' => app(AuditIpResolver::class)->capture($request),
                 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
                 'session_id' => $sessionId,
                 'occurred_at' => now(),
@@ -63,7 +64,7 @@ class TrackActivity
                     'action' => 'page_visit',
                     'description' => $user->name.' opened '.$routeName,
                     'route' => $routeName,
-                    'ip_address' => $request->ip(),
+                    'ip_address' => app(AuditIpResolver::class)->capture($request),
                     'user_agent' => substr((string) $request->userAgent(), 0, 1000),
                     'occurred_at' => now(),
                 ]);

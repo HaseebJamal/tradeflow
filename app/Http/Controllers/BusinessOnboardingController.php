@@ -7,6 +7,8 @@ use App\Models\Business;
 use App\Models\BusinessDocument;
 use App\Models\CompanyApprovalLog;
 use App\Models\User;
+use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Notifications\CompanyRegistrationNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -14,7 +16,12 @@ use Illuminate\Validation\Rule;
 
 class BusinessOnboardingController extends Controller
 {
-    public function create() { return view('onboarding.register-business'); }
+    public function create()
+    {
+        return view('onboarding.register-business', [
+            'plans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get(),
+        ]);
+    }
 
     public function store(RegisterBusinessRequest $request)
     {
@@ -45,6 +52,17 @@ class BusinessOnboardingController extends Controller
             ]);
 
             $user->update(['business_id' => $business->id]);
+
+            $plan = SubscriptionPlan::publicActive()->findOrFail($data['selected_plan_id']);
+            $cycle = $data['billing_cycle'];
+            Subscription::create([
+                'business_id' => $business->id,
+                'subscription_plan_id' => $plan->id,
+                'billing_cycle' => $cycle,
+                'amount' => $plan->priceFor($cycle),
+                'status' => 'Pending',
+                'payment_status' => 'Pending',
+            ]);
 
             CompanyApprovalLog::create([
                 'company_id' => $business->id,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Business;
 
+use App\Services\CompanyPermissionService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -10,8 +11,10 @@ class UpdateStaffRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->business_id !== null
-            && in_array($this->user()?->role, ['super_admin', 'business_owner'], true);
+        $user = $this->user();
+
+        return $user?->business_id !== null
+            && app(CompanyPermissionService::class)->allowsUser($user, 'staff.edit');
     }
 
     public function rules(): array

@@ -39,7 +39,6 @@ class SettingsController extends Controller
 
         $business = auth()->user()->business;
         abort_unless($business, 404);
-        abort_unless(auth()->user()->role === 'business_owner', 403);
 
         $requestedValues = collect($data)->only(['business_name', 'phone', 'address', 'city', 'category', 'owner_email'])->all();
         if (($requestedValues['owner_email'] ?? null) === $business->owner?->email) {
@@ -83,7 +82,7 @@ class SettingsController extends Controller
             // approval workflow to apply after approval.
             'old_values' => collect($oldValues)->except('owner_email')->all(),
             'new_values' => collect($requestedValues)->except('owner_email')->all(),
-            'ip_address' => $request->ip(),
+            'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
 
@@ -102,7 +101,6 @@ class SettingsController extends Controller
 
         $business = auth()->user()->business;
         abort_unless($business, 404);
-        abort_unless(auth()->user()->role === 'business_owner', 403);
 
         if (!$request->hasFile('logo') && !$request->boolean('remove_logo')) {
             return back()->withErrors(['logo' => 'Choose a logo to upload or select Remove Logo.']);
@@ -131,7 +129,7 @@ class SettingsController extends Controller
             'description' => auth()->user()->name.' updated the company logo.',
             'old_values' => ['logo_present' => (bool) $oldLogo],
             'new_values' => ['logo_present' => (bool) $newLogo],
-            'ip_address' => $request->ip(),
+            'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
 

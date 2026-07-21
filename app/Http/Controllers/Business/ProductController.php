@@ -15,6 +15,7 @@ use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\Unit;
 use App\Services\BarcodeService;
+use App\Services\SubscriptionLimitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -88,6 +89,7 @@ class ProductController extends Controller
     public function store(StoreProductsRequest $request)
     {
         $businessId = (int) $request->user()->business_id;
+        app(SubscriptionLimitService::class)->assertCanCreateProducts($businessId, count($request->validated('products')));
         $storedImages = [];
 
         try {
@@ -168,7 +170,10 @@ class ProductController extends Controller
             ->where('business_id', auth()->user()->business_id)
             ->findOrFail($product);
         $this->authorizeBusiness($product->business_id);
-        return view('business.products.show', ['product' => $product->load(['category', 'inventory', 'movements'])]);
+        return view('business.products.show', [
+            'product' => $product->load(['category', 'inventory', 'movements']),
+            'latestInventoryMovement' => $product->inventoryMovements()->latest('movement_date')->first(),
+        ]);
     }
 
     public function edit(Product $product)

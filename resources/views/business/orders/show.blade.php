@@ -10,9 +10,6 @@
     $canManageOrder = $access->allowsUser($user, 'orders.update_status');
     $canEditOrder = $access->allowsUser($user, 'orders.edit');
     $editableStatus = in_array($order->status, ['New', 'Accepted', 'Packing'], true);
-    $canAssignDelivery = $access->allowsUser($user, 'deliveries.assign')
-        && in_array($order->status, ['New', 'Accepted', 'Packing', 'Ready'], true)
-        && !$order->delivery;
 @endphp
 
 <div class="tf-card p-4 mb-4">
@@ -47,8 +44,6 @@
             @endif
             @if($order->delivery)
                 <a class="btn btn-outline-success" href="{{ route('business.deliveries.show', $order->delivery) }}"><i class="bi bi-truck me-1"></i>View Delivery</a>
-            @elseif($canAssignDelivery)
-                <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#assignDeliveryModal"><i class="bi bi-truck me-1"></i>Assign Delivery</button>
             @endif
             @companyCan('sales.invoices')<a class="btn btn-tf-primary" href="{{ route('business.sales.invoices.show', $order) }}"><i class="bi bi-receipt me-1"></i>View Invoice</a>@endcompanyCan
             @companyCan('sales.invoice_export')<a class="btn btn-outline-primary" target="_blank" rel="noopener" href="{{ route('business.sales.invoices.pdf', $order) }}"><i class="bi bi-filetype-pdf me-1"></i>View PDF</a>@endcompanyCan
@@ -65,48 +60,6 @@
 <div class="tf-card p-4 mt-4">
     <h2 class="h5">Journal Entries</h2>
     <x-table><thead><tr><th>Date</th><th>Voucher</th><th>Description</th><th>Status</th></tr></thead><tbody>@foreach($journalEntries as $entry)<tr><td>{{ $entry->entry_date?->format('M d, Y') }}</td><td>{{ $entry->voucher_number }}</td><td>{{ $entry->description }}</td><td>{{ ucfirst($entry->status) }}</td></tr>@endforeach</tbody></x-table>
-</div>
-@endif
-
-@if($canAssignDelivery)
-<div class="modal fade" id="assignDeliveryModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title h5">Assign Delivery</h2>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form method="POST" action="{{ route('business.sales.assignDelivery', $order) }}">
-                @csrf
-                <div class="modal-body">
-                    <div class="row g-3">
-                        <div class="col-md-6"><label class="form-label">Order Number</label><input class="form-control" value="{{ $order->order_number }}" readonly></div>
-                        <div class="col-md-6"><label class="form-label">Customer</label><input class="form-control" value="{{ $order->customer?->display_name ?? 'Walk-in Customer' }}" readonly></div>
-                        <div class="col-md-8"><label class="form-label">Address</label><input name="address" class="form-control" value="{{ old('address', $order->customer?->address) }}" required></div>
-                        <div class="col-md-4"><label class="form-label">Amount</label><input class="form-control" value="Rs {{ number_format($order->grand_total ?: $order->total) }}" readonly></div>
-                        <div class="col-md-12">
-                            <label class="form-label">Delivery Staff</label>
-                            @if(($deliveryStaff ?? collect())->isEmpty())
-                                <div class="alert alert-warning mb-0">No active delivery staff found. Please create delivery staff first.</div>
-                            @else
-                                <select name="delivery_staff_id" class="form-select" required>
-                                    <option value="">Select delivery staff</option>
-                                    @foreach($deliveryStaff as $staff)
-                                        <option value="{{ $staff->id }}">{{ $staff->name }} - {{ $staff->phone }}</option>
-                                    @endforeach
-                                </select>
-                            @endif
-                        </div>
-                        <div class="col-12"><label class="form-label">Note</label><textarea name="note" class="form-control" rows="3"></textarea></div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button class="btn btn-tf-primary" @disabled(($deliveryStaff ?? collect())->isEmpty())>Assign Delivery</button>
-                </div>
-            </form>
-        </div>
-    </div>
 </div>
 @endif
 

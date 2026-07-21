@@ -31,14 +31,14 @@
                 <div class="col-md-6">
                     <label class="form-label">Upload New Image</label>
                     <input name="profile_image" type="file" class="form-control" accept="image/jpeg,image/png,image/webp" data-tf-profile-input>
-                    <small class="tf-muted">JPG, PNG, or WebP. Max 2MB.</small>
+                    <small class="tf-muted">JPG, JPEG, PNG, or WebP. Max 2MB. Profile images are updated immediately.</small>
                 </div>
                 @if($hasProfileImage)
                     <div class="col-12"><small class="tf-muted">Saved image: {{ $user->profile_image }}</small></div>
                     <div class="col-12"><label class="form-check"><input name="remove_image" value="1" type="checkbox" class="form-check-input" data-tf-profile-remove> Remove Image</label></div>
                 @endif
                 @if($requiresOwnerApproval)
-                    <div class="col-12"><label class="form-label">Reason for Change</label><textarea name="reason" class="form-control" rows="3" minlength="10" maxlength="2000" required placeholder="Explain why these profile details need to change.">{{ old('reason', $pendingProfileRequest?->reason) }}</textarea></div>
+                    <div class="col-12"><label class="form-label">Reason for Change</label><textarea name="reason" class="form-control" rows="3" minlength="10" maxlength="2000" placeholder="Required only when changing your name, email, or phone.">{{ old('reason', $pendingProfileRequest?->reason) }}</textarea></div>
                 @endif
                 <div class="col-12"><button class="btn btn-tf-primary" @if($requiresOwnerApproval) data-tf-confirm-message="Submit this profile-change request to your Business Owner?" @endif>{{ $requiresOwnerApproval ? 'Submit Change Request' : 'Save Profile Changes' }}</button></div>
             </form>

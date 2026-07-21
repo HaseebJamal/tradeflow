@@ -453,7 +453,7 @@ window.initTradeFlowCodeLookups = initTradeFlowCodeLookups;
 initTradeFlowCodeLookups();
 
 function initNonNegativeNumberGuards(root = document) {
-    const selector = 'input[type="number"]:not([data-allow-negative]), [data-non-negative]';
+    const selector = 'input[type="number"]:not([data-allow-negative]):not([data-allow-decimal]), [data-non-negative]';
     const fields = root.matches?.(selector)
         ? [root]
         : [...(root.querySelectorAll?.(selector) || [])];
@@ -524,7 +524,7 @@ function initNonNegativeNumberGuards(root = document) {
 
 initNonNegativeNumberGuards();
 
-// Delegation also covers dynamically added sale, purchase, POS, and return
+// Delegation also covers dynamically added sale, purchase, and return
 // rows. Only a wheel event on the focused transactional input is prevented,
 // so regular page scrolling remains available everywhere else.
 document.addEventListener('wheel', (event) => {

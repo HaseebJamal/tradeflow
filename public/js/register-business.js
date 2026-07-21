@@ -237,7 +237,7 @@
 
             const step = Number(sessionStorage.getItem(storage.step));
             restored?.classList.remove('d-none');
-            return { restored: true, step: Number.isInteger(step) && step >= 1 && step <= 4 ? step - 1 : 0 };
+            return { restored: true, step: Number.isInteger(step) && step >= 1 && step <= panels.length ? step - 1 : 0 };
         } catch (_) {
             clearDraft();
             return { restored: false, step: 0 };
@@ -291,7 +291,7 @@
     };
 
     const draft = restoreDraft();
-    const serverStep = Math.max(1, Math.min(4, Number(wizard.dataset.registrationStep || 1))) - 1;
+    const serverStep = Math.max(1, Math.min(panels.length, Number(wizard.dataset.registrationStep || 1))) - 1;
     showStep(hasServerErrors ? serverStep : draft.step, false);
     window.applyTradeFlowTabOrder?.(wizard, true);
     syncOwnerName();
@@ -317,7 +317,7 @@
             else {
                 event.target.dataset.registerFileState = '';
                 event.target.dataset.registerFileMessage = '';
-                validateStep(3, false);
+                validateStep(panels.length - 1, false);
             }
         }
         if (event.target.type !== 'file') saveDraft();

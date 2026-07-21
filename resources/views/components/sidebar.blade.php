@@ -27,7 +27,8 @@
                 ['Purchase Returns', 'bi-arrow-return-left', route('business.purchase-returns.index'), 'purchase_returns'],
                 ['Sales', 'bi-bag-check', route('business.sales.index'), 'sales'],
                 ['Sales Returns', 'bi-arrow-return-right', route('business.sales.returns.index'), 'sales_returns'],
-                ['POS', 'bi-upc-scan', route('business.pos.index'), 'pos'],
+                ['Customers', 'bi-people', route('business.customers.index'), 'customers'],
+                ['POS', 'bi-calculator', route('business.pos.index'), 'pos'],
                 ['Deliveries', 'bi-truck', route('business.deliveries'), 'deliveries'],
                 ['Accounting / Ledger', 'bi-journal-text', route('business.khata'), 'accounting'],
                 ['Expenses', 'bi-receipt-cutoff', route('business.expenses.index'), 'expenses'],
@@ -111,7 +112,6 @@
     $businessGroupsByKey = collect($businessGroups)->keyBy('key');
     $businessItemRoutePatterns = [
         'inventory' => ['business.inventory', 'business.inventory.*'],
-        'pos' => ['business.pos.*'],
         'deliveries' => ['business.deliveries*'],
         'suppliers' => ['business.suppliers.*'],
         'reports' => ['business.reports*'],
@@ -120,7 +120,9 @@
         'units' => ['business.units.*'],
         'categories' => ['business.categories.*'],
         'sales_returns' => ['business.sales.returns.*'],
+        'pos' => ['business.pos.*'],
         'purchase_returns' => ['business.purchase-returns.*'],
+        'customers' => ['business.customers.*'],
     ];
     $isBusinessItemActive = static function (array $item) use ($businessItemRoutePatterns): bool {
         $module = $item[3] ?? null;
@@ -132,6 +134,7 @@
         ['type' => 'group', 'value' => $businessGroupsByKey->get('products')],
         ['type' => 'item', 'value' => $businessItemsByModule->get('inventory')],
         ['type' => 'group', 'value' => $businessGroupsByKey->get('sales')],
+        ['type' => 'item', 'value' => $businessItemsByModule->get('customers')],
         ['type' => 'item', 'value' => $businessItemsByModule->get('pos')],
         ['type' => 'item', 'value' => $businessItemsByModule->get('deliveries')],
         ['type' => 'group', 'value' => $businessGroupsByKey->get('purchases')],

@@ -60,36 +60,45 @@ class ProfileController extends Controller
         ]);
 
         if ($this->requiresOwnerApproval($user)) {
-            $data = $request->validate([
-                'reason' => ['required', 'string', 'min:10', 'max:2000'],
-            ]);
-
-            $oldValues = $user->only(['name', 'email', 'phone', 'profile_image']);
+            $oldValues = $user->only(['name', 'email', 'phone']);
             $requestedValues = $request->only(['name', 'email', 'phone']);
-            $requestedValues['remove_image'] = $request->boolean('remove_image');
-            $pendingRequest = UserDetailChangeRequest::where('user_id', $user->id)->where('status', 'Pending')->first();
+            $hasDetailChanges = collect(['name', 'email', 'phone'])->contains(
+                fn (string $field) => (string) ($requestedValues[$field] ?? '') !== (string) ($oldValues[$field] ?? '')
+            );
+            $hasImageChange = $request->hasFile('profile_image') || ($request->boolean('remove_image') && $user->profile_image);
 
-            if ($request->hasFile('profile_image')) {
-                $requestedValues['profile_image'] = $request->file('profile_image')->store('user-detail-change-requests', 'public');
+            $data = $hasDetailChanges ? $request->validate([
+                'reason' => ['required', 'string', 'min:10', 'max:2000'],
+            ]) : [];
+
+            // Profile images are personal account data. Staff can manage their
+            // own avatar immediately; only identity/contact changes require
+            // Business Owner review.
+            if ($hasImageChange) {
+                $oldImage = $user->profile_image;
+                if ($request->hasFile('profile_image')) {
+                    $user->profile_image = $request->file('profile_image')->store('profile_images', 'public');
+                } elseif ($request->boolean('remove_image')) {
+                    $user->profile_image = null;
+                }
+                $user->save();
+                if ($oldImage && $oldImage !== $user->profile_image) {
+                    Storage::disk('public')->delete($oldImage);
+                }
             }
 
-            $hasChanges = collect(['name', 'email', 'phone'])->contains(
-                fn (string $field) => (string) ($requestedValues[$field] ?? '') !== (string) ($oldValues[$field] ?? '')
-            ) || !empty($requestedValues['profile_image']) || ($requestedValues['remove_image'] && !empty($oldValues['profile_image']));
-
-            if (! $hasChanges) {
-                if (!empty($requestedValues['profile_image'])) {
-                    Storage::disk('public')->delete($requestedValues['profile_image']);
+            if (! $hasDetailChanges) {
+                if ($hasImageChange) {
+                    return back()->with('success', 'Profile image updated.');
                 }
-
                 return back()->withErrors(['profile' => 'Enter at least one profile change before submitting your request.']);
             }
 
+            $pendingRequest = UserDetailChangeRequest::where('user_id', $user->id)->where('status', 'Pending')->first();
+
             if ($pendingRequest?->requested_values['profile_image'] ?? false) {
                 $oldRequestImage = $pendingRequest->requested_values['profile_image'];
-                if ($oldRequestImage !== ($requestedValues['profile_image'] ?? null)) {
-                    Storage::disk('public')->delete($oldRequestImage);
-                }
+                Storage::disk('public')->delete($oldRequestImage);
             }
 
             $changeRequest = UserDetailChangeRequest::updateOrCreate(
@@ -362,7 +371,7 @@ class ProfileController extends Controller
             'description' => $description,
             'old_values' => $oldValues,
             'new_values' => $newValues,
-            'ip_address' => $request->ip(),
+            'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
     }
@@ -378,7 +387,7 @@ class ProfileController extends Controller
             'record_id' => $passwordRequest->id,
             'description' => $description,
             'new_values' => ['status' => $passwordRequest->status],
-            'ip_address' => $request->ip(),
+            'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
     }

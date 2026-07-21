@@ -851,7 +851,7 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
 .tf-subscription-kpis {
     display: grid;
     gap: 1rem;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .tf-subscription-section-toolbar {
@@ -871,6 +871,102 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     min-width: 0;
 }
 
+/* Keep the subscription plan forms inside the viewport without affecting other modals. */
+#createSubscriptionPlanModal .modal-dialog,
+[id^="editPlanModal-"] .modal-dialog {
+    height: calc(100vh - 40px);
+    margin: 20px auto;
+    max-height: calc(100vh - 40px);
+    max-width: min(1140px, calc(100vw - 2rem));
+}
+
+#createSubscriptionPlanModal .modal-content,
+[id^="editPlanModal-"] .modal-content {
+    height: 100%;
+    max-height: calc(100vh - 40px);
+    overflow: hidden;
+}
+
+#createSubscriptionPlanModal form,
+[id^="editPlanModal-"] form {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#createSubscriptionPlanModal .modal-header,
+#createSubscriptionPlanModal .modal-footer,
+[id^="editPlanModal-"] .modal-header,
+[id^="editPlanModal-"] .modal-footer {
+    background: var(--tf-card);
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 1;
+}
+
+#createSubscriptionPlanModal .modal-body,
+[id^="editPlanModal-"] .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+#createSubscriptionPlanModal .modal-footer,
+[id^="editPlanModal-"] .modal-footer {
+    border-top: 1px solid var(--tf-border);
+}
+
+#createSubscriptionPlanModal textarea,
+[id^="editPlanModal-"] textarea {
+    min-height: 88px;
+    resize: vertical;
+}
+
+#createSubscriptionPlanModal .ts-dropdown,
+[id^="editPlanModal-"] .ts-dropdown {
+    z-index: 1080;
+}
+
+/* Public plan selection stays deliberately scoped to pricing surfaces. */
+.tf-pricing-cycle {
+    background: #eef4ff;
+    border: 1px solid #d7e4ff;
+    border-radius: 10px;
+    display: flex;
+    gap: .25rem;
+    margin-inline: auto;
+    padding: .25rem;
+    width: fit-content;
+}
+
+.tf-pricing-cycle button {
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+    color: var(--tf-muted);
+    font-weight: 600;
+    padding: .55rem .9rem;
+}
+
+.tf-pricing-cycle button.active { background: #fff; box-shadow: 0 1px 4px rgba(15, 35, 64, .14); color: var(--tf-blue); }
+.tf-pricing-save { background: #dff8ee; border-radius: 999px; color: #087f5b; font-size: .72rem; margin-left: .3rem; padding: .15rem .35rem; }
+.tf-pricing-card { border: 1px solid var(--tf-border); overflow: hidden; position: relative; }
+.tf-pricing-card.is-recommended { background: #f7faff; border-color: #9dbdff; box-shadow: 0 10px 28px rgba(31, 94, 255, .12); }
+.tf-pricing-recommended { background: var(--tf-blue); color: #fff; font-size: .75rem; font-weight: 700; letter-spacing: .02em; padding: .35rem 1rem; text-align: center; }
+.tf-pricing-price { color: var(--tf-text); font-size: 2rem; font-weight: 750; line-height: 1.1; }
+.tf-pricing-price small { color: var(--tf-muted); font-size: .9rem; font-weight: 500; }
+.tf-pricing-trial { color: #087f5b; font-size: .85rem; font-weight: 600; }
+.tf-pricing-trial i, .tf-pricing-list i { color: #0bae72; margin-right: .5rem; }
+.tf-pricing-list { display: grid; gap: .6rem; font-size: .9rem; }
+.tf-pricing-compare { background: #fff; border: 1px solid var(--tf-border); border-radius: 10px; padding: 1.25rem; }
+.tf-pricing-compare th { white-space: nowrap; }
+
+.tf-plan-option { border: 1px solid var(--tf-border); border-radius: 8px; cursor: pointer; display: block; height: 100%; padding: 1rem; }
+.tf-plan-option:has(input:checked) { background: #f4f8ff; border-color: var(--tf-blue); box-shadow: 0 0 0 2px rgba(31, 94, 255, .12); }
+.tf-plan-option input { position: absolute; opacity: 0; }
+
 @media (max-width: 1199.98px) {
     .tf-subscription-kpis {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -878,6 +974,29 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
 }
 
 @media (max-width: 575.98px) {
+    #createSubscriptionPlanModal .modal-dialog,
+    [id^="editPlanModal-"] .modal-dialog {
+        height: calc(100vh - 1rem);
+        margin: .5rem auto;
+        max-height: calc(100vh - 1rem);
+        max-width: calc(100vw - 1rem);
+    }
+
+    #createSubscriptionPlanModal .modal-content,
+    [id^="editPlanModal-"] .modal-content {
+        max-height: calc(100vh - 1rem);
+    }
+
+    #createSubscriptionPlanModal .modal-footer,
+    [id^="editPlanModal-"] .modal-footer {
+        gap: .5rem;
+    }
+
+    #createSubscriptionPlanModal .modal-footer .btn,
+    [id^="editPlanModal-"] .modal-footer .btn {
+        flex: 1 1 0;
+    }
+
     .tf-subscription-kpis {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -941,83 +1060,6 @@ body.tf-company-delete-modal-open { overflow: hidden !important; overscroll-beha
 
 .tf-table {
     min-width: 640px;
-}
-
-/* POS workspace: products, cart, and checkout stay visible together on desktop. */
-.pos-screen, .pos-sale-form, .pos-workspace { min-height: 0; min-width: 0; }
-.pos-workspace-header { align-items: center; display: flex; flex-wrap: wrap; gap: .85rem; justify-content: space-between; }
-.pos-workspace-search { display: grid; gap: .55rem; grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr); }
-.pos-workspace-meta, .pos-workspace-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .55rem; }
-.pos-workspace-actions { justify-content: flex-end; }
-.pos-workspace { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.pos-products-panel, .pos-cart-panel, .pos-checkout-panel { min-height: 0; min-width: 0; }
-.pos-products-panel, .pos-cart-panel { display: flex; flex-direction: column; min-height: 0; }
-.pos-checkout-panel { align-self: stretch; display: flex; flex-direction: column; }
-.pos-checkout-body { display: grid; flex: 1 1 auto; gap: .5rem; min-height: 0; overflow-x: visible; overflow-y: auto; padding-right: .2rem; scroll-padding-block: .65rem; }
-.pos-checkout-footer { background: #fff; border-top: 1px solid var(--tf-border); flex: 0 0 auto; margin-top: 0; padding-top: .65rem; position: sticky; bottom: 0; z-index: 2; }
-.pos-checkout-footer #pos-complete-sale { margin-top: 0 !important; }
-.pos-checkout-panel .pos-totals { margin-bottom: 0; }
-.pos-workspace .ts-wrapper { min-width: 0; }
-.pos-category-chips { display: flex; flex-wrap: wrap; gap: .45rem; }
-.pos-category-chips .btn { border-radius: 999px; white-space: nowrap; }
-.pos-products-panel { grid-column: 1 / -1; }
-.pos-product-grid { align-content: start; display: grid; flex: 1 1 auto; gap: .75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; overflow-y: auto; padding-right: .25rem; }
-.pos-product-grid > .text-center { grid-column: 1 / -1; }
-.pos-product-card { background: #fff; border: 1px solid var(--tf-border); border-radius: 10px; display: grid; gap: .35rem; min-height: 100%; padding: .7rem; text-align: left; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; width: 100%; }
-.pos-product-card:hover:not(:disabled) { border-color: var(--tf-blue); box-shadow: 0 10px 24px rgba(37,99,235,.13); transform: translateY(-2px); }
-.pos-product-card:disabled { cursor: not-allowed; opacity: .58; }
-.pos-product-image { background: #eef4ff; border-radius: 8px; height: 92px; object-fit: cover; width: 100%; }
-.pos-product-image-placeholder { align-items: center; color: var(--tf-blue); display: flex; font-size: 1.75rem; justify-content: center; }
-.pos-product-name { color: var(--tf-text); font-size: .92rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
-.pos-product-code, .pos-product-stock { font-size: .75rem; }
-.pos-product-code { color: var(--tf-muted); overflow-wrap: anywhere; }
-.pos-product-price { color: var(--tf-navy); font-size: .92rem; font-weight: 800; }
-.pos-quick-entry { background: #f8fafc; }
-.pos-cart-panel, .pos-quick-entry { max-width: 100%; min-width: 0; overflow: visible; }
-.pos-cart-table { border: 1px solid var(--tf-border); border-radius: 8px; flex: 1 1 auto; min-height: 0; overflow: auto; }
-.pos-cart-table .table { min-width: 640px; }
-.pos-cart-table thead { background: #f8fafc; position: sticky; top: 0; z-index: 1; }
-.pos-quantity-control { flex-wrap: nowrap; min-width: 112px; }
-.pos-quantity-control .form-control { min-width: 42px; padding-left: .25rem; padding-right: .25rem; }
-.pos-totals { border-top: 1px solid var(--tf-border); display: grid; gap: .4rem; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: .65rem; }
-.pos-totals > div { background: #f8fafc; border-radius: 6px; display: grid; font-size: .8rem; gap: .1rem; min-width: 0; padding: .4rem .5rem; }
-.pos-totals span { color: var(--tf-muted); }
-.pos-grand-total { border-top: 1px dashed var(--tf-border); color: var(--tf-navy); font-size: 1rem !important; grid-column: 1 / -1; margin-top: .1rem; padding-top: .5rem; }
-.pos-grand-total span, .pos-grand-total strong { color: var(--tf-navy); font-weight: 800; }
-
-@media (min-width: 1280px) {
-    body:has(.pos-screen) { overflow: hidden; }
-    .dashboard-page:has(.pos-screen) { height: calc(100vh - 77px); overflow: hidden; padding-bottom: 1rem; }
-    .pos-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-    .pos-sale-form { display: flex; flex: 1 1 auto; min-height: 0; }
-    .pos-workspace { flex: 1 1 auto; grid-template-columns: minmax(260px, .9fr) minmax(345px, 1.15fr) minmax(275px, .85fr); min-height: 0; overflow: hidden; }
-    .pos-products-panel { grid-column: auto; }
-    .pos-checkout-panel { overflow: hidden; padding: .75rem !important; }
-    .pos-checkout-body .mb-3 { margin-bottom: .45rem !important; }
-    .pos-checkout-body .row { --bs-gutter-x: .45rem; --bs-gutter-y: .35rem; }
-    .pos-checkout-panel .form-label { font-size: .76rem; margin-bottom: .12rem; }
-    .pos-checkout-panel .form-control, .pos-checkout-panel .form-select { min-height: 34px; padding-bottom: .28rem; padding-top: .28rem; }
-    .pos-checkout-panel .pos-totals { gap: .3rem; margin-top: .35rem !important; }
-    .pos-checkout-panel .payment-row { margin-top: .25rem !important; }
-}
-
-@media (max-width: 1279.98px) {
-    .pos-product-grid { max-height: 480px; }
-    .pos-cart-table { max-height: 380px; }
-    .pos-checkout-panel { max-height: min(42rem, 78vh); }
-    .pos-workspace-actions { justify-content: flex-start; }
-}
-
-@media (max-width: 767.98px) {
-    .pos-workspace { grid-template-columns: minmax(0, 1fr); }
-    .pos-products-panel { grid-column: auto; }
-    .pos-product-grid { grid-template-columns: minmax(0, 1fr); }
-    .pos-workspace-search { grid-template-columns: 1fr; }
-    .pos-workspace-actions .btn { flex: 1 1 auto; }
-    .pos-product-image { height: 70px; }
-    .pos-product-name { font-size: .84rem; }
-    .pos-cart-table { max-height: 300px; }
-    .pos-checkout-panel { max-height: 74vh; }
 }
 
 .staff-filter-card {
@@ -1471,4 +1513,86 @@ body.tf-company-delete-modal-open { overflow: hidden !important; overscroll-beha
     .tf-notification-utility-actions {
         justify-content: flex-start;
     }
+}
+/* Keyboard-first POS: scoped so the rest of the dashboard remains unchanged. */
+.tf-pos { height: calc(100dvh - 92px); min-height: 0; display: flex; flex-direction: column; gap: .75rem; overflow: hidden; }
+.tf-pos-register-bar { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem 1rem; border: 1px solid var(--tf-border, #dbe3ef); border-radius: 8px; background: #fff; font-size: .875rem; }
+.tf-pos-status { color: #9a3412; font-weight: 700; }.tf-pos-status i { font-size: .65rem; margin-right: .35rem; }.tf-pos-status.is-open { color: #047857; }
+.tf-pos-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }.tf-pos-actions .btn { white-space: nowrap; }
+.tf-pos-workspace { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(250px, .78fr) minmax(500px, 1.55fr) minmax(260px, .82fr); gap: .75rem; overflow: hidden; }
+.tf-pos-panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--tf-border, #dbe3ef); border-radius: 8px; background: #fff; overflow: hidden; }
+.tf-pos-panel-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem 1rem .75rem; border-bottom: 1px solid #edf1f6; }.tf-pos-panel-head h2 { font-size: 1.08rem; margin: 0; }.tf-pos-panel-head small { color: #64748b; }
+.tf-pos-searches { flex: 0 0 auto; display: grid; gap: .5rem; padding: .75rem 1rem; }.tf-pos-categories { flex: 0 0 auto; display: flex; gap: .4rem; overflow-x: auto; padding: 0 1rem .75rem; }.tf-pos-categories button { flex: 0 0 auto; border: 1px solid #cbd5e1; border-radius: 999px; background: #fff; color: #334155; font-size: .8rem; padding: .28rem .62rem; }.tf-pos-categories button.active { border-color: #2563eb; background: #2563eb; color: #fff; }
+.tf-pos-product-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: .65rem; padding: 0 1rem 1rem; }.tf-pos-product-card { min-width: 0; text-align: left; border: 1px solid #dbe3ef; border-radius: 7px; background: #fff; padding: .6rem; color: #172033; }.tf-pos-product-card:hover, .tf-pos-product-card.is-keyboard-active { border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }.tf-pos-product-image { height: 76px; display: grid; place-items: center; margin-bottom: .5rem; border-radius: 6px; background: #eff6ff; color: #2563eb; font-size: 1.8rem; overflow: hidden; }.tf-pos-product-image img { width: 100%; height: 100%; object-fit: cover; }.tf-pos-product-card strong, .tf-pos-product-card small, .tf-pos-product-card span, .tf-pos-product-card em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tf-pos-product-card strong { font-size: .85rem; }.tf-pos-product-card small { color: #64748b; font-size: .72rem; }.tf-pos-product-card span { color: #0f4cbb; font-weight: 700; margin-top: .25rem; }.tf-pos-product-card em { color: #047857; font-size: .72rem; font-style: normal; }
+.tf-pos-cart-scroll, .tf-pos-checkout-scroll { min-height: 0; overflow-y: auto; }.tf-pos-cart-scroll { flex: 1 1 auto; overflow-x: auto; padding: 0 .75rem .75rem; }.tf-pos-cart-table { min-width: 760px; margin: 0; font-size: .78rem; }.tf-pos-cart-table th { position: sticky; top: 0; z-index: 1; background: #fff; white-space: nowrap; }.tf-pos-cart-table td { vertical-align: middle; }.tf-pos-cart-table tbody tr.is-selected { outline: 2px solid #bfdbfe; outline-offset: -2px; }.tf-pos-cart-table input { min-width: 52px; }.tf-pos-cart-table .tf-pos-product-cell { min-width: 118px; }.tf-pos-cart-table .tf-pos-line-total { white-space: nowrap; }.tf-pos-cart-table .btn { white-space: nowrap; }.tf-pos-cart-table th:last-child, .tf-pos-cart-table td:last-child { position: sticky; right: 0; z-index: 1; background: #fff; box-shadow: -4px 0 8px rgba(15, 23, 42, .05); }.tf-pos-cart-table tbody tr.is-selected td:last-child { background: #eff6ff; }
+.tf-pos-checkout-scroll { flex: 1 1 auto; padding: .75rem 1rem; }.tf-pos-checkout-scroll .form-label { font-size: .8rem; margin-bottom: .25rem; }.tf-pos-quick-customer { border-top: 1px solid #edf1f6; margin-top: .7rem; padding-top: .15rem; }.tf-pos-payable { margin-top: 1rem; border: 1px solid #bfdbfe; border-radius: 7px; background: #eff6ff; padding: .7rem .8rem; }.tf-pos-payable span, .tf-pos-payable strong { display: block; }.tf-pos-payable span { color: #475569; font-size: .78rem; }.tf-pos-payable strong { color: #0f4cbb; font-size: 1.25rem; }.tf-pos-cash-input::-webkit-outer-spin-button, .tf-pos-cash-input::-webkit-inner-spin-button { appearance: none; margin: 0; }.tf-pos-cash-input { appearance: textfield; }.tf-pos-complete { position: sticky; bottom: 0; z-index: 2; flex: 0 0 auto; padding: .75rem 1rem; border-top: 1px solid #edf1f6; background: #fff; box-shadow: 0 -6px 12px rgba(15, 23, 42, .04); }.tf-pos-complete kbd { font-size: .65rem; }
+@media (min-width: 992px) { body:has(.tf-pos) { overflow: hidden; } body:has(.tf-pos) .dashboard-page { height: calc(100vh - 92px); padding-bottom: .75rem; overflow: hidden; } }
+@media (max-width: 1199.98px) { .tf-pos { height: auto; min-height: 0; overflow: visible; }.tf-pos-workspace { grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }.tf-pos-checkout-panel { grid-column: 1 / -1; max-height: 620px; }.tf-pos-products-panel, .tf-pos-cart-panel { min-height: 560px; } }
+@media (max-width: 767.98px) { .tf-pos-register-bar { align-items: flex-start; flex-direction: column; }.tf-pos-actions { justify-content: flex-start; }.tf-pos-actions .btn span { display: none; }.tf-pos-workspace { grid-template-columns: 1fr; }.tf-pos-products-panel, .tf-pos-cart-panel, .tf-pos-checkout-panel { min-height: 480px; max-height: 70vh; }.tf-pos-product-grid { grid-template-columns: 1fr; }.tf-pos { gap: .5rem; }.tf-pos-panel-head, .tf-pos-searches { padding-left: .75rem; padding-right: .75rem; } }
+/* POS register dialog: scoped so other SweetAlert dialogs retain their layout. */
+.swal2-popup.tf-pos-register-modal {
+    width: min(32rem, calc(100vw - 2rem));
+    padding: 1.5rem;
+    border-radius: .75rem;
+}
+
+.tf-pos-register-modal .swal2-title {
+    margin: 0 0 1.25rem;
+    color: #1d2939;
+    font-size: 1.25rem;
+    text-align: left;
+}
+
+.tf-pos-register-dialog {
+    display: grid;
+    gap: 1rem;
+    text-align: left;
+}
+
+.tf-pos-register-dialog label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: .4rem;
+    color: #344054;
+    font-size: .875rem;
+    font-weight: 600;
+}
+
+.tf-pos-register-dialog label span {
+    color: #667085;
+    font-weight: 400;
+}
+
+.tf-pos-register-dialog .swal2-input,
+.tf-pos-register-dialog .swal2-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    border: 1px solid #d0d5dd;
+    border-radius: .375rem;
+    box-shadow: none;
+    font-size: .9375rem;
+}
+
+.tf-pos-register-dialog .swal2-input {
+    height: 2.75rem;
+    padding: .625rem .75rem;
+}
+
+.tf-pos-register-dialog .swal2-textarea {
+    min-height: 5.5rem;
+    padding: .625rem .75rem;
+}
+
+.tf-pos-register-actions {
+    width: 100%;
+    justify-content: flex-end;
+    gap: .75rem;
+    margin: 1.5rem 0 0;
+}
+
+.tf-pos-register-actions .btn {
+    min-height: 2.5rem;
+    margin: 0;
 }

@@ -10,6 +10,7 @@
     $confirmId = $editing ? 'staffPasswordConfirm'.$staffMember->id : 'staffPasswordConfirmCreate';
     $confirmIconId = $editing ? 'staffPasswordConfirmIcon'.$staffMember->id : 'staffPasswordConfirmCreateIcon';
     $currentRole = old('role', $editing ? ($staffMember?->staffProfile?->custom_role_name ?: 'Custom Role') : '');
+    $isSelfManagedStaff = $editing && auth()->id() === $staffMember->id;
 @endphp
 
 <form method="POST" action="{{ $editing ? route('business.staff.update', $staffMember) : route('business.staff.store') }}" enctype="multipart/form-data" class="row g-3" data-staff-form data-company-permission-form novalidate>
@@ -19,6 +20,9 @@
     <div class="col-12 d-flex flex-wrap align-items-center justify-content-between gap-2">
         <p class="small tf-muted mb-0">Fields marked <span class="text-danger" aria-hidden="true">*</span> are required.</p>
     </div>
+    @if($isSelfManagedStaff)
+        <div class="col-12"><div class="alert alert-info mb-0">Your role and permissions can only be changed by the Business Owner or another authorized administrator.</div></div>
+    @endif
 
     <div class="col-12"><h3 class="h6 mb-0">Personal Information</h3></div>
     <div class="col-md-3">
@@ -37,14 +41,14 @@
     <div class="col-12 mt-2"><h3 class="h6 mb-0">Job Information</h3></div>
     <div class="col-md-3">
         <label for="staff-role" class="form-label">Role <span class="text-danger" aria-hidden="true">*</span></label>
-        <input id="staff-role" name="role" list="staff-role-options" class="form-control @error('role') is-invalid @enderror" value="{{ $currentRole }}" maxlength="100" autocomplete="off" required>
+        <input id="staff-role" name="role" list="staff-role-options" class="form-control @error('role') is-invalid @enderror" value="{{ $currentRole }}" maxlength="100" autocomplete="off" required @readonly($isSelfManagedStaff)>
         <datalist id="staff-role-options">@foreach($customRoleNames ?? [] as $roleName)<option value="{{ $roleName }}">@endforeach</datalist>
         @error('role')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
     <div class="col-md-3"><label for="staff-employment-type" class="form-label">Employment Type <span class="text-danger" aria-hidden="true">*</span></label><select id="staff-employment-type" name="employment_type" class="form-select @error('employment_type') is-invalid @enderror" required>@foreach(['Full Time','Part Time','Temporary'] as $type)<option @selected(old('employment_type', $staffMember?->staffProfile?->employment_type ?? 'Full Time') === $type)>{{ $type }}</option>@endforeach</select>@error('employment_type')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
     <div class="col-md-3"><label for="staff-joining-date" class="form-label">Joining Date <span class="text-danger" aria-hidden="true">*</span></label><input id="staff-joining-date" name="joining_date" type="date" class="form-control @error('joining_date') is-invalid @enderror" value="{{ old('joining_date', $editing ? optional($staffMember?->staffProfile?->joining_date)->format('Y-m-d') : now()->toDateString()) }}" required>@error('joining_date')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
     <div class="col-md-3"><label for="staff-salary" class="form-label">Salary <span class="tf-muted small">Optional</span></label><input id="staff-salary" name="salary" type="number" min="0" step="0.01" class="form-control @error('salary') is-invalid @enderror" value="{{ old('salary', $staffMember?->staffProfile?->salary ?? '') }}">@error('salary')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
-    <div class="col-md-3"><label for="staff-status" class="form-label">Status <span class="text-danger" aria-hidden="true">*</span></label><select id="staff-status" name="status" class="form-select @error('status') is-invalid @enderror" required>@foreach($editing ? ['active'=>'Active','inactive'=>'Inactive','suspended'=>'Suspended','archived'=>'Archived'] : ['active'=>'Active','inactive'=>'Inactive','suspended'=>'Suspended'] as $value=>$label)<option value="{{ $value }}" @selected(old('status', $staffMember->status ?? 'active') === $value)>{{ $label }}</option>@endforeach</select>@error('status')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+    <div class="col-md-3"><label for="staff-status" class="form-label">Status <span class="text-danger" aria-hidden="true">*</span></label>@if($isSelfManagedStaff)<input class="form-control" value="{{ ucfirst($staffMember->status) }}" readonly><input type="hidden" name="status" value="{{ $staffMember->status }}">@else<select id="staff-status" name="status" class="form-select @error('status') is-invalid @enderror" required>@foreach($editing ? ['active'=>'Active','inactive'=>'Inactive','suspended'=>'Suspended','archived'=>'Archived'] : ['active'=>'Active','inactive'=>'Inactive','suspended'=>'Suspended'] as $value=>$label)<option value="{{ $value }}" @selected(old('status', $staffMember->status ?? 'active') === $value)>{{ $label }}</option>@endforeach</select>@endif @error('status')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
 
     <div class="col-12 mt-2"><h3 class="h6 mb-0">Login Information</h3></div>
     @if($editing)<div class="col-12"><small class="tf-muted">Leave password fields empty to keep the current password.</small></div>@endif
@@ -61,6 +65,10 @@
     </div>
 
     <div class="col-12 mt-2" id="permissions">
+        @if($isSelfManagedStaff)
+            @foreach($selectedPermissions as $permission)<input type="hidden" name="permissions[]" value="{{ $permission }}">@endforeach
+            <div class="alert alert-light border mb-0">Role and permission controls are locked for your own account.</div>
+        @else
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><h3 class="h6 mb-0">Role &amp; User Permissions</h3><small class="tf-muted">Only permissions enabled for this business can be assigned.</small></div>
         <label class="form-check border rounded p-3 mb-3 fw-semibold"><input class="form-check-input ms-0 me-2" type="checkbox" data-permission-master> Select All Permissions <span class="tf-muted" data-permission-total-selected></span></label>
         <div class="row g-3">
@@ -70,6 +78,7 @@
                 <div class="col-12"><div class="alert alert-warning mb-0">No company permissions are enabled for role and user assignment yet.</div></div>
             @endforelse
         </div>
+        @endif
     </div>
 
     <div class="col-12"><button class="btn btn-tf-primary" data-staff-submit>{{ $editing ? 'Update User Account' : 'Create User Account' }}</button>@if($editing)<a href="{{ route('business.staff.show', $staffMember) }}" class="btn btn-outline-secondary">Cancel</a>@endif</div>

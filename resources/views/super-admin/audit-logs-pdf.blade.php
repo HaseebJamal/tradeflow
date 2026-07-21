@@ -28,7 +28,7 @@
                 <td>{{ \Illuminate\Support\Str::limit($log->role ?: $log->actor_role, 30) }}</td>
                 <td><x-activity-label :activity="$log" field="module" /></td>
                 <td><x-activity-label :activity="$log" /></td>
-                <td>{{ \Illuminate\Support\Str::limit($log->ip_address, 40) }}</td>
+                <td>{{ \Illuminate\Support\Str::limit(\App\Services\AuditIpResolver::display($log->ip_address), 40) }}</td>
             </tr>
         @endforeach
         </tbody>

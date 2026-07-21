@@ -37,14 +37,16 @@ class CustomerController extends Controller
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'phone' => ['nullable', 'regex:/^\d{11}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable'], 'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'province' => ['nullable', 'max:100'], 'customer_type' => ['required', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
-            'credit_limit' => ['nullable', 'integer', 'min:0'], 'opening_balance' => ['nullable', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Blocked'],
+            'credit_limit' => ['nullable', 'integer', 'min:0'], 'current_balance' => ['nullable', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Blocked'],
         ]);
         $data['business_name'] = $data['shop_name'] ?? $data['business_name'] ?? null;
         unset($data['shop_name']);
         $data['business_id'] = auth()->user()->business_id;
         $data['created_by'] = auth()->id();
-        $data['opening_balance'] = $data['opening_balance'] ?? 0;
-        $data['current_balance'] = $data['opening_balance'];
+        $data['current_balance'] = $data['current_balance'] ?? 0;
+        // Keep the original opening balance as the creation baseline while the
+        // form uses the business-facing current-balance terminology.
+        $data['opening_balance'] = $data['current_balance'];
         Customer::create($data);
         return back()->with('success', 'Customer saved.');
     }
