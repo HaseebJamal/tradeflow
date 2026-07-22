@@ -28,7 +28,7 @@ class PurchaseReturnController extends Controller
                 ->orWhereHas('purchase', fn ($purchases) => $purchases->where('purchase_number', 'like', "%{$value}%"))))
             ->where('created_at', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
             ->where('created_at', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
-            ->latest('created_at')->paginate(20)->withQueryString();
+            ->latest('created_at')->paginate(12)->withQueryString();
 
         return view('business.purchase-returns.index', compact('returns'));
     }

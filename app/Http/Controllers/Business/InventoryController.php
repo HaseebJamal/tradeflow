@@ -20,7 +20,7 @@ class InventoryController extends Controller
     {
         $businessId = auth()->user()->business_id;
         return view('business.inventory.index', [
-            'inventories' => Inventory::with('product')->where('business_id', $businessId)->whereHas('product')->paginate(20),
+            'inventories' => Inventory::with('product')->where('business_id', $businessId)->whereHas('product')->paginate(12),
             'lowStockProducts' => Product::where('business_id', $businessId)
                 ->whereColumn('stock_quantity', '<=', 'low_stock_alert_qty')
                 ->get(),

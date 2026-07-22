@@ -52,7 +52,7 @@ class StaffController extends Controller
             $query->where('status', '!=', 'archived');
         }
 
-        $staff = $query->latest()->paginate(15)->withQueryString();
+        $staff = $query->latest()->paginate(12)->withQueryString();
         $staff->getCollection()->each(function (User $member): void {
             $member->setAttribute('can_delete', $this->canBeSafelyDeleted($member));
         });

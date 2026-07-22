@@ -91,7 +91,7 @@ class AdminController extends Controller
         $this->applyAdminFilters($query, $request);
 
         return view('super-admin.administration.platform-admins', [
-            'admins' => $query->latest()->paginate(20)->withQueryString(),
+            'admins' => $query->latest()->paginate(12)->withQueryString(),
             'permissions' => $this->platformPermissions(),
         ]);
     }
@@ -102,7 +102,7 @@ class AdminController extends Controller
         $this->applyAdminFilters($query, $request);
 
         return view('super-admin.administration.platform-sub-admins', [
-            'subAdmins' => $query->latest()->paginate(20)->withQueryString(),
+            'subAdmins' => $query->latest()->paginate(12)->withQueryString(),
             'platformAdmins' => User::where('role', 'platform_admin')->where('status', 'active')->orderBy('name')->get(),
             'permissions' => $this->platformPermissions(),
         ]);
@@ -181,7 +181,7 @@ class AdminController extends Controller
     public function businessAssignments(Request $request)
     {
         return view('super-admin.administration.business-assignments', [
-            'assignments' => BusinessUserAssignment::with(['business.owner', 'user', 'assigner'])->where('status', 'Active')->latest()->paginate(25),
+            'assignments' => BusinessUserAssignment::with(['business.owner', 'user', 'assigner'])->where('status', 'Active')->latest()->paginate(12),
             'businesses' => Business::orderBy('business_name')->get(),
             'admins' => User::whereIn('role', ['platform_admin', 'platform_sub_admin', 'business_owner'])->orderBy('name')->get(),
         ]);
@@ -230,7 +230,7 @@ class AdminController extends Controller
     public function adminActivity(Request $request)
     {
         return view('super-admin.administration.admin-activity', [
-            'activities' => ActivityLog::with(['actor', 'business'])->whereIn('actor_role', ['super_admin', 'platform_admin', 'platform_sub_admin'])->latest('occurred_at')->paginate(30)->withQueryString(),
+            'activities' => ActivityLog::with(['actor', 'business'])->whereIn('actor_role', ['super_admin', 'platform_admin', 'platform_sub_admin'])->latest('occurred_at')->paginate(12)->withQueryString(),
         ]);
     }
 
@@ -246,7 +246,7 @@ class AdminController extends Controller
             ->when($request->date_to, fn ($q, $value) => $q->whereDate('occurred_at', '<=', $value));
 
         return view('super-admin.live-activity', [
-            'activities' => $query->latest('occurred_at')->paginate(40)->withQueryString(),
+            'activities' => $query->latest('occurred_at')->paginate(12)->withQueryString(),
             'businesses' => Business::orderBy('business_name')->get(),
         ]);
     }
@@ -263,7 +263,7 @@ class AdminController extends Controller
             'businesses' => Business::with(['owner', 'documents', 'subscription.plan', 'assignments.user'])
                 ->withCount(['users', 'customers', 'orders'])
                 ->latest()
-                ->paginate(15),
+                ->paginate(12),
         ]);
     }
 
@@ -300,7 +300,7 @@ class AdminController extends Controller
             ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
 
         return view('super-admin.users', [
-            'users' => $query->latest()->paginate(20)->withQueryString(),
+            'users' => $query->latest()->paginate(12)->withQueryString(),
             'businesses' => Business::orderBy('business_name')->get(['id', 'business_name']),
             'roles' => User::query()->select('role')->distinct()->orderBy('role')->pluck('role'),
             'counts' => [
@@ -374,7 +374,7 @@ class AdminController extends Controller
             ->when($filters['date_from'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '>=', $value))
             ->when($filters['date_to'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '<=', $value))
             ->latest('updated_at')
-            ->paginate(20)
+            ->paginate(12, ['*'], 'subscriptions_page')
             ->withQueryString();
 
         $lockedBusinessId = null;
@@ -415,10 +415,13 @@ class AdminController extends Controller
                 ->select(['id', 'business_id', 'subscription_id', 'amount', 'method', 'reference_number', 'status', 'paid_at', 'recorded_by'])
                 ->with(['business:id,business_name', 'subscription.plan:id,name', 'recordedBy:id,name'])
                 ->latest('paid_at')
-                ->limit(50)
-                ->get(),
+                ->paginate(12, ['*'], 'billing_page')
+                ->withQueryString(),
             'changeRequests' => SubscriptionChangeRequest::with(['business:id,business_name', 'currentPlan:id,name', 'requestedPlan:id,name', 'requester:id,name'])
-                ->where('status', 'Pending')->latest()->limit(20)->get(),
+                ->whereIn('status', ['Pending', 'Changes Requested'])
+                ->latest()
+                ->paginate(12, ['*'], 'requests_page')
+                ->withQueryString(),
             'lockedBusiness' => $lockedBusiness,
             'stats' => [
                 'active' => Subscription::where('status', 'Active')->count(),
@@ -670,34 +673,103 @@ class AdminController extends Controller
         return back()->with('success', 'Trial extended successfully.');
     }
 
+    public function subscriptionChangeRequestReview(SubscriptionChangeRequest $changeRequest)
+    {
+        return view('super-admin.subscriptions.review-request', [
+            'changeRequest' => $changeRequest->load(['business.owner', 'subscription.plan', 'currentPlan', 'requestedPlan', 'requester']),
+            'plans' => SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->orderBy('sort_order')->orderBy('name')->get(),
+        ]);
+    }
+
+    public function updateSubscriptionChangeRequestReview(Request $request, SubscriptionChangeRequest $changeRequest)
+    {
+        abort_unless(in_array($changeRequest->status, ['Pending', 'Changes Requested'], true), 422, 'This subscription request can no longer be updated.');
+
+        $data = $request->validate([
+            'requested_plan_id' => ['required', 'integer'],
+            'billing_cycle' => ['required', 'in:Monthly,Yearly'],
+            'trial_eligible' => ['nullable', 'boolean'],
+            'trial_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'starts_at' => ['nullable', 'date'],
+            'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
+            'admin_note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $plan = SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->findOrFail($data['requested_plan_id']);
+        $trialEligible = $request->boolean('trial_eligible');
+        $trialDays = $trialEligible ? (int) ($data['trial_days'] ?? $plan->trial_days) : 0;
+        $startsAt = $data['starts_at'] ?? now()->toDateString();
+        $endsAt = $data['ends_at'] ?? ($data['billing_cycle'] === 'Yearly' ? Carbon::parse($startsAt)->addYear()->toDateString() : Carbon::parse($startsAt)->addMonth()->toDateString());
+
+        $old = $changeRequest->only(['requested_plan_id', 'billing_cycle', 'expected_amount', 'trial_eligible', 'trial_days', 'starts_at', 'ends_at']);
+        $changeRequest->update([
+            'requested_plan_id' => $plan->id,
+            'billing_cycle' => $data['billing_cycle'],
+            'expected_amount' => $plan->priceFor($data['billing_cycle']),
+            'trial_eligible' => $trialEligible,
+            'trial_days' => $trialDays,
+            'starts_at' => $startsAt,
+            'ends_at' => $endsAt,
+            'admin_note' => $data['admin_note'] ?? null,
+        ]);
+
+        $this->audit('Subscription request review updated', $request, 'Subscriptions', $changeRequest->id, $old, $changeRequest->fresh()->only(array_keys($old)));
+        $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Request Updated', 'TradeFlow updated the review details for your subscription request.', $changeRequest->business_id));
+
+        return back()->with('success', 'Subscription request review details updated.');
+    }
+
     public function reviewSubscriptionChangeRequest(Request $request, SubscriptionChangeRequest $changeRequest)
     {
-        $data = $request->validate(['decision' => ['required', 'in:Approved,Rejected']]);
-        abort_unless($changeRequest->status === 'Pending', 422, 'This subscription request has already been reviewed.');
+        $data = $request->validate([
+            'decision' => ['required', 'in:Approved,Activate,Rejected,Changes Requested'],
+            'admin_note' => ['nullable', 'string', 'max:2000'],
+        ]);
+        abort_unless(in_array($changeRequest->status, ['Pending', 'Changes Requested'], true), 422, 'This subscription request has already been reviewed.');
 
         DB::transaction(function () use ($request, $changeRequest, $data) {
-            $changeRequest->update(['status' => $data['decision'], 'reviewed_at' => now(), 'reviewed_by' => $request->user()->id]);
-            if ($data['decision'] === 'Approved') {
-                $plan = $changeRequest->requestedPlan;
-                $subscription = Subscription::firstOrNew(['business_id' => $changeRequest->business_id]);
+            $requestStatus = $data['decision'] === 'Activate' ? 'Active' : $data['decision'];
+            $changeRequest->update([
+                'status' => $requestStatus,
+                'admin_note' => $data['admin_note'] ?? null,
+                'reviewed_at' => now(),
+                'reviewed_by' => $request->user()->id,
+            ]);
+            if (in_array($data['decision'], ['Approved', 'Activate'], true)) {
+                $plan = SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->findOrFail($changeRequest->requested_plan_id);
+                $subscription = Subscription::where('business_id', $changeRequest->business_id)->lockForUpdate()->first() ?: new Subscription(['business_id' => $changeRequest->business_id]);
+                $start = $changeRequest->starts_at ?? now();
+                $end = $changeRequest->ends_at ?? ($changeRequest->billing_cycle === 'Yearly' ? Carbon::parse($start)->addYear() : Carbon::parse($start)->addMonth());
+                $trial = $data['decision'] === 'Approved' && $changeRequest->trial_eligible && (int) $changeRequest->trial_days > 0;
                 $subscription->fill([
                     'subscription_plan_id' => $plan->id,
                     'billing_cycle' => $changeRequest->billing_cycle,
                     'amount' => $plan->priceFor($changeRequest->billing_cycle),
                     'payment_method' => $changeRequest->payment_method,
-                    'starts_at' => $subscription->starts_at ?? now()->toDateString(),
-                    'ends_at' => ($changeRequest->billing_cycle === 'Yearly' ? now()->addYear() : now()->addMonth())->toDateString(),
-                    'status' => 'Active',
-                    'renewed_at' => now(),
+                    'starts_at' => Carbon::parse($start)->toDateString(),
+                    'ends_at' => $trial ? Carbon::parse($start)->addDays((int) $changeRequest->trial_days)->toDateString() : Carbon::parse($end)->toDateString(),
+                    'trial_start_at' => $trial ? Carbon::parse($start)->toDateString() : null,
+                    'trial_end_at' => $trial ? Carbon::parse($start)->addDays((int) $changeRequest->trial_days)->toDateString() : null,
+                    'status' => $trial ? 'Trial' : ($data['decision'] === 'Activate' ? 'Active' : 'Pending'),
+                    'payment_status' => $data['decision'] === 'Activate' ? 'Received' : 'Pending',
+                    'renewed_at' => $data['decision'] === 'Activate' ? now() : $subscription->renewed_at,
                 ])->save();
-                $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification('Subscription '.$changeRequest->type.' Approved', 'Your '.$plan->name.' plan is now active.', $changeRequest->business_id));
+                $title = $trial ? 'Trial Activated' : ($data['decision'] === 'Activate' ? 'Subscription Activated' : 'Subscription Approved');
+                $message = $trial ? 'Your '.$plan->name.' trial is now active.' : ($data['decision'] === 'Activate' ? 'Your '.$plan->name.' subscription is now active.' : 'Your '.$plan->name.' request was approved and is awaiting payment confirmation.');
+                $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification($title, $message, $changeRequest->business_id));
+            } elseif ($data['decision'] === 'Changes Requested') {
+                $message = 'TradeFlow requested changes to your '.$changeRequest->type.' request.';
+                if (filled($data['admin_note'] ?? null)) {
+                    $message .= ' Note: '.$data['admin_note'];
+                }
+                $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification('Changes Requested', $message, $changeRequest->business_id));
             } else {
                 $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Request Rejected', 'Your '.$changeRequest->type.' request was not approved.', $changeRequest->business_id));
             }
         });
 
         $this->audit('Subscription change request '.strtolower($data['decision']), $request, 'Subscriptions', $changeRequest->id, null, ['decision' => $data['decision']]);
-        return back()->with('success', $data['decision'] === 'Approved' ? 'Subscription request approved successfully.' : 'Subscription request rejected.');
+        return back()->with('success', in_array($data['decision'], ['Approved', 'Activate'], true) ? 'Subscription request processed successfully.' : ($data['decision'] === 'Changes Requested' ? 'Changes requested from the business owner.' : 'Subscription request rejected.'));
     }
 
     private function expireDueSubscriptions(Request $request): void
@@ -818,7 +890,7 @@ class AdminController extends Controller
     public function supportTickets()
     {
         return view('super-admin.support-tickets', [
-            'tickets' => SupportTicket::with(['business', 'user', 'assignedAdmin', 'assignedSubAdmin', 'messages.sender'])->latest()->paginate(20),
+            'tickets' => SupportTicket::with(['business', 'user', 'assignedAdmin', 'assignedSubAdmin', 'messages.sender'])->latest()->paginate(12),
         ]);
     }
 
@@ -865,7 +937,7 @@ class AdminController extends Controller
 
     public function categories()
     {
-        return view('super-admin.categories', ['categories' => Category::whereNull('business_id')->latest()->paginate(20)]);
+        return view('super-admin.categories', ['categories' => Category::whereNull('business_id')->latest()->paginate(12)]);
     }
 
     public function storeCategory(Request $request)
@@ -899,7 +971,7 @@ class AdminController extends Controller
             ->when($filters['date_from'] ?? null, fn ($query, $value) => $query->where('paid_at', '>=', Carbon::parse($value)->startOfDay()))
             ->when($filters['date_to'] ?? null, fn ($query, $value) => $query->where('paid_at', '<=', Carbon::parse($value)->endOfDay()))
             ->latest('paid_at')
-            ->paginate(25)
+            ->paginate(12)
             ->withQueryString();
 
         return view('super-admin.payments', [
@@ -934,7 +1006,7 @@ class AdminController extends Controller
 
     public function notifications()
     {
-        return view('super-admin.notifications', ['announcements' => Announcement::latest()->paginate(20), 'businesses' => Business::all()]);
+        return view('super-admin.notifications', ['announcements' => Announcement::latest()->paginate(12), 'businesses' => Business::all()]);
     }
 
     public function storeAnnouncement(Request $request)
@@ -955,7 +1027,7 @@ class AdminController extends Controller
         });
 
         return view('super-admin.audit-logs', [
-            'logs' => $query?->orderByDesc('created_at')->paginate(25)->withQueryString(),
+            'logs' => $query?->orderByDesc('created_at')->paginate(12)->withQueryString(),
             'modules' => $metadata['modules'],
             'users' => User::orderBy('name')->get(['id', 'name']),
             'businesses' => Business::orderBy('business_name')->get(['id', 'business_name']),
@@ -1043,14 +1115,14 @@ class AdminController extends Controller
             ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
         $this->applyBusinessReportPeriod($expenses, 'expense_date', $request);
         $companySummaries = $this->companyPerformanceQuery($request)
-            ->paginate(20, ['*'], 'company_page')
+            ->paginate(12, ['*'], 'company_page')
             ->withQueryString();
         $purchases = Purchase::query()
             ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
         $this->applyBusinessReportPeriod($purchases, 'purchase_date', $request);
 
         return view('super-admin.business-reports.index', [
-            'reports' => $query->latest()->paginate(20)->withQueryString(),
+            'reports' => $query->latest()->paginate(12)->withQueryString(),
             'businesses' => Business::all(),
             'totalBusinesses' => Business::count(),
             'activeBusinesses' => Business::whereIn('status', ['Approved', 'approved'])->count(),
@@ -1359,7 +1431,7 @@ class AdminController extends Controller
             'id' => $log->id, 'occurred_at' => $this->auditLogDate($log), 'company' => $log->business?->business_name ?: 'Platform',
             'user' => $log->user_name ?: $log->user?->name ?: 'System', 'role' => $log->role ?: $log->actor_role ?: 'system',
             'module' => $log->module ?: 'General', 'action' => $log->action, 'description' => $log->description ?: $log->action,
-            'ip_address' => AuditIpResolver::display($log->ip_address, '—'), 'route' => $log->route, 'record_type' => $log->record_type, 'record_id' => $log->record_id,
+            'ip_address' => AuditIpResolver::display($log->ip_address, 'â€”'), 'route' => $log->route, 'record_type' => $log->record_type, 'record_id' => $log->record_id,
             'old_values' => $log->old_values, 'new_values' => $log->new_values, 'user_agent' => $log->user_agent,
         ];
     }
@@ -1368,7 +1440,7 @@ class AdminController extends Controller
     {
         $date = $log->occurred_at ?? $log->created_at;
 
-        return $date ? Carbon::parse($date)->timezone(config('app.timezone'))->format('d M, Y h:i A') : '—';
+        return $date ? Carbon::parse($date)->timezone(config('app.timezone'))->format('d M, Y h:i A') : 'â€”';
     }
 
     private function audit(string $action, Request $request, string $module = 'Admin', ?int $recordId = null, ?array $old = null, ?array $new = null): void

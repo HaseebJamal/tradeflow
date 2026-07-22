@@ -100,8 +100,9 @@ Route::middleware('auth')->group(function () {
     Route::prefix('business')->name('business.')->middleware(['super_admin.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'track.activity'])->group(function () {
         Route::get('/support', [SupportController::class, 'index'])->name('support');
         Route::post('/support', [SupportController::class, 'store'])->name('support.store');
-        Route::get('/subscription', [BusinessSubscriptionController::class, 'index'])->name('subscription.index');
-        Route::post('/subscription/requests', [BusinessSubscriptionController::class, 'storeRequest'])->name('subscription.requests.store');
+        Route::get('/subscription', [BusinessSubscriptionController::class, 'index'])->name('subscription.index')->middleware('business.permission:Subscriptions');
+        Route::post('/subscription/requests', [BusinessSubscriptionController::class, 'storeRequest'])->name('subscription.requests.store')->middleware('business.permission:Subscriptions');
+        Route::patch('/subscription/requests/{changeRequest}/cancel', [BusinessSubscriptionController::class, 'cancelRequest'])->name('subscription.requests.cancel')->middleware('business.permission:Subscriptions');
     });
 });
 
@@ -119,6 +120,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
     Route::get('/companies/{company}/edit', [CompanyController::class, 'edit'])->name('companies.edit');
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->name('companies.update');
     Route::patch('/companies/{company}/status', [CompanyController::class, 'updateStatus'])->name('companies.status');
+    Route::patch('/companies/{company}/registration-plan', [CompanyController::class, 'updateRegistrationPlan'])->name('companies.registration-plan.update');
     Route::patch('/companies/{company}/archive', [CompanyController::class, 'archive'])->name('companies.archive');
     Route::patch('/companies/{company}/restore', [CompanyController::class, 'restore'])->name('companies.restore');
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->name('companies.destroy');
@@ -178,6 +180,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
     Route::delete('/subscriptions/{subscription}', [AdminController::class, 'destroySubscription'])->name('subscriptions.destroy');
     Route::patch('/subscriptions/{subscription}/transition', [AdminController::class, 'transitionSubscription'])->name('subscriptions.transition');
     Route::patch('/subscriptions/{subscription}/extend-trial', [AdminController::class, 'extendTrial'])->name('subscriptions.extend-trial');
+    Route::get('/subscription-change-requests/{changeRequest}/review', [AdminController::class, 'subscriptionChangeRequestReview'])->name('subscription-change-requests.show');
+    Route::patch('/subscription-change-requests/{changeRequest}/review-details', [AdminController::class, 'updateSubscriptionChangeRequestReview'])->name('subscription-change-requests.review-details');
     Route::patch('/subscription-change-requests/{changeRequest}', [AdminController::class, 'reviewSubscriptionChangeRequest'])->name('subscription-change-requests.review');
     Route::get('/support-tickets', [AdminController::class, 'supportTickets'])->name('support-tickets');
     Route::patch('/support-tickets/{ticket}', [AdminController::class, 'updateTicket'])->name('support-tickets.update');

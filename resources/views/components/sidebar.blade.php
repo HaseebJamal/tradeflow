@@ -6,6 +6,15 @@
         $prefix === 'retailer' || $role === 'retailer' => 'retailer',
         default => 'business',
     };
+    $sidebarUser = auth()->user();
+    $sidebarBusiness = $area === 'business' && $sidebarUser?->role !== 'super_admin'
+        ? ($sidebarUser?->business ?? $sidebarUser?->ownedBusiness)
+        : null;
+    $sidebarBusinessName = $sidebarBusiness?->business_name;
+    $sidebarLogoPath = ltrim((string) ($sidebarBusiness?->logo ?? ''), '/');
+    $sidebarLogoPath = preg_replace('#^(?:public/|storage/)#', '', $sidebarLogoPath);
+    $hasSidebarBusinessLogo = filled($sidebarLogoPath)
+        && \Illuminate\Support\Facades\Storage::disk('public')->exists($sidebarLogoPath);
 
     $items = $area === 'admin'
         ? []
@@ -33,6 +42,7 @@
                 ['Accounting / Ledger', 'bi-journal-text', route('business.khata'), 'accounting'],
                 ['Expenses', 'bi-receipt-cutoff', route('business.expenses.index'), 'expenses'],
                 ['Reports', 'bi-graph-up', route('business.reports'), 'reports'],
+                ['Subscription', 'bi-credit-card', route('business.subscription.index'), 'subscriptions'],
                 ['Roles & Users', 'bi-person-badge', route('business.staff'), 'staff'],
                 ['Audit Logs', 'bi-activity', route('business.audit-logs.index'), 'audit_logs'],
             ]);
@@ -115,6 +125,7 @@
         'deliveries' => ['business.deliveries*'],
         'suppliers' => ['business.suppliers.*'],
         'reports' => ['business.reports*'],
+        'subscriptions' => ['business.subscription.*'],
         'staff' => ['business.staff', 'business.staff.*'],
         'audit_logs' => ['business.audit-logs.*'],
         'units' => ['business.units.*'],
@@ -141,6 +152,7 @@
         ['type' => 'item', 'value' => $businessItemsByModule->get('suppliers')],
         ['type' => 'group', 'value' => $businessGroupsByKey->get('accounting')],
         ['type' => 'item', 'value' => $businessItemsByModule->get('reports')],
+        ['type' => 'item', 'value' => $businessItemsByModule->get('subscriptions')],
         ['type' => 'item', 'value' => $businessItemsByModule->get('staff')],
         ['type' => 'item', 'value' => $businessItemsByModule->get('audit_logs')],
     ];
@@ -152,8 +164,14 @@
 <div class="tf-sidebar-inner p-3">
     <div class="d-flex align-items-center justify-content-between mb-3">
         <a class="tf-brand text-white d-flex align-items-center mb-0" href="{{ route('public.home') }}">
-            <span class="tf-brand-mark bg-blue"><i class="bi bi-box-seam"></i></span>
-            <span class="tf-sidebar-text">TradeFlow</span>
+            <span class="tf-brand-mark bg-blue tf-sidebar-company-mark">
+                @if($hasSidebarBusinessLogo)
+                    <img src="{{ asset('storage/'.$sidebarLogoPath) }}" alt="{{ $sidebarBusinessName }} logo">
+                @else
+                    <i class="bi bi-box-seam"></i>
+                @endif
+            </span>
+            <span class="tf-sidebar-text tf-sidebar-company-name" title="{{ $sidebarBusinessName ?: 'TradeFlow' }}">{{ $sidebarBusinessName ?: 'TradeFlow' }}</span>
         </a>
         <button type="button" class="btn btn-sm btn-outline-light tf-sidebar-toggle tf-sidebar-toggle-inside d-none d-lg-inline-flex" data-tf-sidebar-toggle aria-label="Toggle sidebar" title="Toggle sidebar"><i class="bi bi-list"></i></button>
         <button type="button" class="btn btn-sm btn-outline-light tf-sidebar-close d-lg-none" data-tf-sidebar-close aria-label="Close sidebar"><i class="bi bi-x-lg"></i></button>

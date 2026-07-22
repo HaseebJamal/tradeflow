@@ -83,7 +83,7 @@ class DeliveryController extends Controller
             ->when(!$hasDateRange && ($filters['year'] ?? null), fn ($q, $value) => $q->whereYear($dateColumn, $value))
             ->when($filters['amount_from'] ?? null, fn ($q, $value) => $q->where('amount', '>=', $value))
             ->when($filters['amount_to'] ?? null, fn ($q, $value) => $q->where('amount', '<=', $value));
-        $deliveries = $query->latest()->paginate(20);
+        $deliveries = $query->latest()->paginate(12);
         $deliveries->getCollection()->transform(function (Delivery $delivery) {
             if ($order = $delivery->sourceOrder()) {
                 $synced = $this->finance->syncOrderPaymentSummary($order);

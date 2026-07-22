@@ -73,7 +73,7 @@ class OrderController extends Controller
             ->when($filters['amount_to'] ?? null, fn ($q, $value) => $q->where('grand_total', '<=', $value));
 
         return view('business.orders.index', [
-            'orders' => $query->latest()->paginate(15)->withQueryString(),
+            'orders' => $query->latest()->paginate(12)->withQueryString(),
             'customers' => Customer::where('business_id', $businessId)->orderBy('name')->get(),
             'products' => Product::where('business_id', $businessId)->orderBy('name')->get(),
             'creators' => User::where('business_id', $businessId)->orderBy('name')->get(),

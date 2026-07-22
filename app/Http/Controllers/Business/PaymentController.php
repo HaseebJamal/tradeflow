@@ -38,7 +38,7 @@ class PaymentController extends Controller
         $payments->where('payment_date', '>=', \Illuminate\Support\Carbon::parse($dateFrom, config('app.timezone'))->startOfDay());
         $payments->where('payment_date', '<=', \Illuminate\Support\Carbon::parse($dateTo, config('app.timezone'))->endOfDay());
         return view('business.payments.index', [
-            'payments' => $payments->latest()->paginate(20)->withQueryString(),
+            'payments' => $payments->latest()->paginate(12)->withQueryString(),
             'customers' => Customer::where('business_id', $businessId)->get(),
             'orders' => Order::where('business_id', $businessId)->latest()->get(),
         ]);

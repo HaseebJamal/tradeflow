@@ -18,7 +18,7 @@ class SalesQuotationController extends Controller
     {
         $businessId = $this->businessId();
         return view('business.sales.quotations.index', [
-            'quotations' => SalesQuotation::with('customer')->where('business_id', $businessId)->latest('quotation_date')->paginate(20),
+            'quotations' => SalesQuotation::with('customer')->where('business_id', $businessId)->latest('quotation_date')->paginate(12),
         ]);
     }
 

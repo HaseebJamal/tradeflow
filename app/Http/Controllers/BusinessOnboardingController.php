@@ -6,6 +6,7 @@ use App\Http\Requests\Auth\RegisterBusinessRequest;
 use App\Models\Business;
 use App\Models\BusinessDocument;
 use App\Models\CompanyApprovalLog;
+use App\Models\AuditLog;
 use App\Models\User;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
@@ -39,7 +40,7 @@ class BusinessOnboardingController extends Controller
     {
         $data = $request->validated();
 
-        DB::transaction(function () use ($request, $data, &$user, &$business) {
+        DB::transaction(function () use ($request, $data, &$user, &$business, &$plan) {
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -51,6 +52,13 @@ class BusinessOnboardingController extends Controller
 
             $business = Business::create([
                 'owner_id' => $user->id,
+                'selected_plan_id' => $data['selected_plan_id'],
+                'selected_billing_cycle' => $data['billing_cycle'],
+                'selected_plan_price' => 0,
+                'trial_eligible' => true,
+                'requested_trial_days' => 0,
+                'subscription_request_status' => 'Pending Review',
+                'plan_selected_at' => now(),
                 'business_name' => $data['business_name'],
                 'business_type' => $data['business_type'],
                 'business_description' => $data['business_description'] ?? null,
@@ -67,11 +75,17 @@ class BusinessOnboardingController extends Controller
 
             $plan = SubscriptionPlan::publicActive()->findOrFail($data['selected_plan_id']);
             $cycle = $data['billing_cycle'];
+            $amount = $plan->priceFor($cycle);
+            $business->update([
+                'selected_plan_price' => $amount,
+                'requested_trial_days' => (int) $plan->trial_days,
+                'selected_plan_snapshot' => $this->planSnapshot($plan, $cycle, $amount),
+            ]);
             Subscription::create([
                 'business_id' => $business->id,
                 'subscription_plan_id' => $plan->id,
                 'billing_cycle' => $cycle,
-                'amount' => $plan->priceFor($cycle),
+                'amount' => $amount,
                 'status' => 'Pending',
                 'payment_status' => 'Pending',
             ]);
@@ -99,9 +113,38 @@ class BusinessOnboardingController extends Controller
 
         User::where('role', 'super_admin')->where('status', 'active')->get()
             ->each(fn (User $admin) => $admin->notify(new CompanyRegistrationNotification($business)));
+        AuditLog::create([
+            'user_id' => $user->id,
+            'actor_id' => $user->id,
+            'actor_role' => 'business_owner',
+            'business_id' => $business->id,
+            'module' => 'Subscriptions',
+            'action' => 'registration plan selected',
+            'description' => $plan->name.' '.$cycle.' plan selected during business registration.',
+            'record_type' => 'Subscription',
+            'record_id' => $business->subscription?->id,
+            'new_values' => ['plan_id' => $plan->id, 'billing_cycle' => $cycle, 'amount' => $business->selected_plan_price],
+        ]);
+        $business->owner?->notify(new \App\Notifications\SubscriptionStatusNotification('Plan Selection Received', 'Your '.$plan->name.' '.$cycle.' plan selection was received and is pending review.', $business->id));
 
         $request->session()->forget(['registration_step', 'registration_draft']);
 
         return redirect()->route('public.home')->with('registration_completed', true);
+    }
+
+    private function planSnapshot(SubscriptionPlan $plan, string $cycle, int $amount): array
+    {
+        return [
+            'plan_name' => $plan->name,
+            'billing_cycle' => $cycle,
+            'selected_price' => $amount,
+            'monthly_price' => $plan->priceFor('Monthly'),
+            'yearly_price' => $plan->priceFor('Yearly'),
+            'trial_days' => (int) $plan->trial_days,
+            'product_limit' => (int) $plan->product_limit,
+            'staff_limit' => (int) $plan->staff_limit,
+            'order_limit' => (int) $plan->order_limit,
+            'included_modules' => $plan->included_modules ?? [],
+        ];
     }
 }

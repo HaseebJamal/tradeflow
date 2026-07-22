@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Business;
+use App\Models\SubscriptionChangeRequest;
 use Illuminate\Http\Request;
 
 class AdminNotificationController extends Controller
@@ -20,7 +21,7 @@ class AdminNotificationController extends Controller
             ->when($category === 'registrations', fn ($query) => $query->where('data', 'like', '%company_registration%'))
             ->when($category === 'alerts', fn ($query) => $query->where('data', 'like', '%system_alert%'))
             ->latest()
-            ->paginate(25)
+            ->paginate(12)
             ->withQueryString();
 
         return view('super-admin.notification-center', [
@@ -45,7 +46,7 @@ class AdminNotificationController extends Controller
 
     public function markAllRead(Request $request)
     {
-        $request->user()->unreadNotifications->markAsRead();
+        $request->user()->unreadNotifications()->update(['read_at' => now()]);
 
         return back()->with('success', 'All notifications marked as read.');
     }
@@ -79,6 +80,18 @@ class AdminNotificationController extends Controller
             return redirect()->route('admin.business-detail-change-requests.index', [
                 'business_id' => data_get($item->data, 'business_id'),
             ]);
+        }
+
+        if ($category === 'subscription' && data_get($item->data, 'subscription_request_id')) {
+            $changeRequest = SubscriptionChangeRequest::whereKey(data_get($item->data, 'subscription_request_id'))
+                ->where('business_id', data_get($item->data, 'business_id'))
+                ->firstOrFail();
+
+            if (! $item->read_at) {
+                $item->markAsRead();
+            }
+
+            return redirect()->route('admin.subscription-change-requests.show', $changeRequest);
         }
 
         abort_unless($category === 'company_registration', 404);

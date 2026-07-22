@@ -23,7 +23,7 @@ class InvoiceController extends Controller
     public function index()
     {
         return view('business.invoices.index', [
-            'orders' => Order::with(['customer', 'invoice'])->where('business_id', auth()->user()->business_id)->latest()->paginate(20),
+            'orders' => Order::with(['customer', 'invoice'])->where('business_id', auth()->user()->business_id)->latest()->paginate(12),
         ]);
     }
 

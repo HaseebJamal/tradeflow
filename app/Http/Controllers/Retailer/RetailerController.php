@@ -26,7 +26,7 @@ class RetailerController extends Controller
 
     public function products()
     {
-        return view('retailer.products', ['products' => Product::with('business')->where('status', 'Active')->latest()->paginate(18), 'businesses' => Business::whereIn('status', ['Approved', 'approved'])->get()]);
+        return view('retailer.products', ['products' => Product::with('business')->where('status', 'Active')->latest()->paginate(12), 'businesses' => Business::whereIn('status', ['Approved', 'approved'])->get()]);
     }
 
     public function cart()
@@ -94,12 +94,12 @@ class RetailerController extends Controller
 
     public function orders()
     {
-        return view('retailer.orders', ['orders' => Order::with('business')->where('retailer_id', auth()->id())->latest()->paginate(15)]);
+        return view('retailer.orders', ['orders' => Order::with('business')->where('retailer_id', auth()->id())->latest()->paginate(12)]);
     }
 
     public function creditBalance()
     {
         $customers = Customer::where('phone', auth()->user()->phone)->pluck('id');
-        return view('retailer.credit-balance', ['balance' => Customer::whereIn('id', $customers)->sum('current_balance'), 'ledgers' => KhataLedger::with('customer.business')->whereIn('customer_id', $customers)->latest()->paginate(20)]);
+        return view('retailer.credit-balance', ['balance' => Customer::whereIn('id', $customers)->sum('current_balance'), 'ledgers' => KhataLedger::with('customer.business')->whereIn('customer_id', $customers)->latest()->paginate(12)]);
     }
 }

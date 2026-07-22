@@ -28,7 +28,7 @@ class CustomerController extends Controller
             ->when($request->date_from, fn ($q, $value) => $q->whereDate('created_at', '>=', $value))
             ->when($request->date_to, fn ($q, $value) => $q->whereDate('created_at', '<=', $value));
 
-        return view('business.customers.index', ['customers' => $query->latest()->paginate(15)->withQueryString()]);
+        return view('business.customers.index', ['customers' => $query->latest()->paginate(12)->withQueryString()]);
     }
 
     public function store(Request $request)

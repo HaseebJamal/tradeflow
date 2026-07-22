@@ -10,6 +10,7 @@ use App\Models\SubscriptionChangeRequest;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Notifications\SubscriptionStatusNotification;
+use App\Services\CompanyPermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -18,45 +19,65 @@ class BusinessSubscriptionController extends Controller
 {
     public function index(Request $request)
     {
-        $business = Business::with('subscription.plan')->findOrFail($request->user()->business_id);
-        abort_unless($request->user()->role === 'business_owner', 403);
+        $business = $this->businessFor($request);
+        $this->assertPermission($request, 'subscriptions.view', $business);
 
         return view('business.subscription.index', [
             'business' => $business,
             'subscription' => $business->subscription,
             'plans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get(),
-            'requests' => SubscriptionChangeRequest::with(['currentPlan', 'requestedPlan'])->where('business_id', $business->id)->latest()->paginate(10),
+            'requests' => SubscriptionChangeRequest::with(['currentPlan', 'requestedPlan'])
+                ->where('business_id', $business->id)
+                ->latest()
+                ->paginate(12)
+                ->withQueryString(),
         ]);
     }
 
     public function storeRequest(Request $request)
     {
-        $business = Business::with('subscription.plan')->findOrFail($request->user()->business_id);
-        abort_unless($request->user()->role === 'business_owner', 403);
+        $business = $this->businessFor($request);
         $data = $request->validate([
             'requested_plan_id' => ['required', 'integer', 'exists:subscription_plans,id'],
             'billing_cycle' => ['required', 'in:Monthly,Yearly'],
-            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
+            'payment_method' => ['required', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
             'note' => ['nullable', 'string', 'max:2000'],
         ]);
         $plan = SubscriptionPlan::publicActive()->findOrFail($data['requested_plan_id']);
         $subscription = $business->subscription;
-        $type = $this->requestType($subscription?->plan, $plan);
+        $type = $this->requestType($subscription, $plan);
         if ($type === 'Current') {
-            throw ValidationException::withMessages(['requested_plan_id' => 'This is already your current plan.']);
+            throw ValidationException::withMessages(['requested_plan_id' => 'This plan is already active for your business.']);
         }
+        $this->assertPermission($request, 'subscriptions.'.strtolower($type), $business, $type === 'Subscription' ? 'subscriptions.request' : null);
         if ($type === 'Downgrade') $this->assertDowngradeFits($business, $plan);
 
-        $change = DB::transaction(function () use ($request, $business, $subscription, $plan, $data, $type) {
+        DB::transaction(function () use ($request, $business, $plan, $data, $type) {
+            $lockedBusiness = Business::whereKey($business->id)->lockForUpdate()->firstOrFail();
+            $lockedSubscription = $lockedBusiness->subscription()->with('plan')->lockForUpdate()->first();
+            if (SubscriptionChangeRequest::where('business_id', $lockedBusiness->id)->where('status', 'Pending')->lockForUpdate()->exists()) {
+                throw ValidationException::withMessages(['subscription' => 'A subscription request is already pending.']);
+            }
+            if ($lockedSubscription
+                && $lockedSubscription->subscription_plan_id === $plan->id
+                && in_array($lockedSubscription->status, ['Trial', 'Active', 'Expiring'], true)) {
+                throw ValidationException::withMessages(['requested_plan_id' => 'This plan is already active for your business.']);
+            }
+
             $change = SubscriptionChangeRequest::create([
-                'business_id' => $business->id, 'subscription_id' => $subscription?->id,
-                'current_plan_id' => $subscription?->subscription_plan_id, 'requested_plan_id' => $plan->id,
+                'business_id' => $lockedBusiness->id, 'subscription_id' => $lockedSubscription?->id,
+                'current_plan_id' => $lockedSubscription?->subscription_plan_id, 'requested_plan_id' => $plan->id,
                 'requested_by' => $request->user()->id, 'type' => $type, 'billing_cycle' => $data['billing_cycle'],
-                'expected_amount' => $plan->priceFor($data['billing_cycle']), 'payment_method' => $data['payment_method'] ?? null,
+                'expected_amount' => $plan->priceFor($data['billing_cycle']), 'payment_method' => $data['payment_method'],
+                'trial_eligible' => ! $lockedSubscription && (int) $plan->trial_days > 0,
+                'trial_days' => ! $lockedSubscription ? (int) $plan->trial_days : null,
+                'starts_at' => now()->toDateString(),
+                'ends_at' => ($data['billing_cycle'] === 'Yearly' ? now()->addYear() : now()->addMonth())->toDateString(),
                 'note' => $data['note'] ?? null,
             ]);
             User::where('role', 'super_admin')->where('status', 'active')->get()
-                ->each(fn (User $admin) => $admin->notify(new SubscriptionStatusNotification($type.' Requested', $business->business_name.' requested the '.$plan->name.' plan.', $business->id)));
+                ->each(fn (User $admin) => $admin->notify(new SubscriptionStatusNotification($type === 'Subscription' ? 'New Subscription Request' : $type.' Request', $lockedBusiness->business_name.' requested the '.$plan->name.' plan.', $lockedBusiness->id, $change->id)));
+            $lockedBusiness->owner?->notify(new SubscriptionStatusNotification('Subscription Request Submitted', 'Your '.$plan->name.' subscription request was submitted for review.', $lockedBusiness->id));
             return $change;
         });
 
@@ -65,10 +86,45 @@ class BusinessSubscriptionController extends Controller
 
     private function requestType($current, SubscriptionPlan $requested): string
     {
-        if (! $current) return 'Subscription';
-        $currentPrice = $current->priceFor('Monthly');
+        if (! $current?->plan) return 'Subscription';
+        if ($current->subscription_plan_id === $requested->id && in_array($current->status, ['Expired', 'Cancelled'], true)) {
+            return 'Renew';
+        }
+
+        $currentPrice = $current->plan->priceFor('Monthly');
         $requestedPrice = $requested->priceFor('Monthly');
-        return $currentPrice === $requestedPrice ? 'Current' : ($requestedPrice > $currentPrice ? 'Upgrade' : 'Downgrade');
+        if ($currentPrice === $requestedPrice) {
+            return 'Current';
+        }
+
+        return $requestedPrice > $currentPrice ? 'Upgrade' : 'Downgrade';
+    }
+
+    public function cancelRequest(Request $request, SubscriptionChangeRequest $changeRequest)
+    {
+        $business = $this->businessFor($request);
+        $this->assertPermission($request, 'subscriptions.cancel', $business);
+        abort_unless($changeRequest->business_id === $business->id, 403);
+        abort_unless($changeRequest->status === 'Pending', 422, 'Only pending subscription requests can be cancelled.');
+
+        $changeRequest->update(['status' => 'Cancelled', 'reviewed_at' => now(), 'reviewed_by' => $request->user()->id]);
+
+        return back()->with('success', 'Subscription request cancelled.');
+    }
+
+    private function businessFor(Request $request): Business
+    {
+        return Business::with('subscription.plan')->findOrFail($request->user()->business_id);
+    }
+
+    private function assertPermission(Request $request, string $permission, Business $business, ?string $fallback = null): void
+    {
+        $permissions = app(CompanyPermissionService::class);
+        if ($permissions->allowsUser($request->user(), $permission, $business)) {
+            return;
+        }
+
+        abort_unless($fallback && $permissions->allowsUser($request->user(), $fallback, $business), 403);
     }
 
     private function assertDowngradeFits(Business $business, SubscriptionPlan $plan): void

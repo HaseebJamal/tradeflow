@@ -104,6 +104,25 @@ a:hover { color: #1d4ed8; }
     width: 34px;
 }
 
+.tf-sidebar-company-mark {
+    overflow: hidden;
+}
+
+.tf-sidebar-company-mark img {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+}
+
+.tf-sidebar-company-name {
+    display: block;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .tf-hero {
     background:
         linear-gradient(120deg, rgba(11,31,58,.96), rgba(37,99,235,.78)),

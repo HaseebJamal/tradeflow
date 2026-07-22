@@ -55,7 +55,7 @@ class PurchaseController extends Controller
                 ->orWhere('notes', 'like', '%'.$request->search.'%')))
             ->where('purchase_date', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
             ->where('purchase_date', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
-            ->latest('purchase_date')->paginate(20)->withQueryString();
+            ->latest('purchase_date')->paginate(12)->withQueryString();
 
         return view('business.purchases.index', [
             'purchases' => $purchases,

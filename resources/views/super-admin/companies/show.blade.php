@@ -31,6 +31,12 @@
         'suspended' => ['approved' => 'Activate'],
         'rejected' => ['pending' => 'Move to Pending'],
     ][$currentStatus] ?? [];
+    $registrationPlan = $company->selectedPlan;
+    $registrationSnapshot = $company->selected_plan_snapshot ?? [];
+    $planName = $registrationSnapshot['plan_name'] ?? $registrationPlan?->name;
+    $planCycle = $registrationSnapshot['billing_cycle'] ?? $company->selected_billing_cycle;
+    $planPrice = $registrationSnapshot['selected_price'] ?? $company->selected_plan_price;
+    $planModules = $registrationSnapshot['included_modules'] ?? $registrationPlan?->included_modules ?? [];
 @endphp
 
 <div class="row g-4">
@@ -43,6 +49,51 @@
                 @endforeach
                 <div class="col-md-6"><div class="border rounded p-3"><small class="tf-muted">Created At</small><strong class="d-block"><x-date-time :value="$company->created_at" /></strong></div></div>
             </div>
+        </div>
+
+        <div class="tf-card p-4 mt-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+                <div>
+                    <h2 class="h5 mb-1">Selected Subscription Plan</h2>
+                    <p class="tf-muted mb-0">Plan information submitted with this registration.</p>
+                </div>
+                <span class="badge text-bg-{{ $company->subscription_request_status === 'Activated' ? 'success' : ($company->subscription_request_status === 'Rejected' ? 'danger' : 'secondary') }}">{{ $company->subscription_request_status ?? 'Pending Review' }}</span>
+            </div>
+
+            @if($planName)
+                <div class="row g-3">
+                    <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted">Plan</small><strong class="d-block">{{ $planName }}</strong>@if($registrationPlan?->is_recommended)<span class="badge text-bg-primary mt-1">Recommended</span>@endif</div></div>
+                    <div class="col-md-3"><div class="border rounded p-3 h-100"><small class="tf-muted">Billing Cycle</small><strong class="d-block">{{ $planCycle ?: 'Not recorded' }}</strong></div></div>
+                    <div class="col-md-3"><div class="border rounded p-3 h-100"><small class="tf-muted">Expected Amount</small><strong class="d-block">Rs {{ number_format((int) $planPrice) }}</strong></div></div>
+                    <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted">Trial</small><strong class="d-block">{{ $company->trial_eligible ? ((int) ($company->requested_trial_days ?? $registrationSnapshot['trial_days'] ?? 0)).'-day trial' : 'Payment required' }}</strong></div></div>
+                    <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted">Limits</small><strong class="d-block">{{ number_format((int) ($registrationSnapshot['product_limit'] ?? $registrationPlan?->product_limit ?? 0)) }} products, {{ number_format((int) ($registrationSnapshot['staff_limit'] ?? $registrationPlan?->staff_limit ?? 0)) }} staff</strong><small class="tf-muted">{{ number_format((int) ($registrationSnapshot['order_limit'] ?? $registrationPlan?->order_limit ?? 0)) }} orders</small></div></div>
+                    <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted">Selected At</small><strong class="d-block"><x-date-time :value="$company->plan_selected_at" /></strong></div></div>
+                    @if(count($planModules))
+                        <div class="col-12"><div class="border rounded p-3"><small class="tf-muted d-block mb-2">Included Modules</small><div class="d-flex flex-wrap gap-2">@foreach($planModules as $module)<span class="badge text-bg-light border text-dark">{{ $module }}</span>@endforeach</div></div></div>
+                    @endif
+                </div>
+            @else
+                <div class="alert alert-warning mb-0">No plan selection recorded. Assign and confirm a plan before approving this registration.</div>
+            @endif
+
+            @if($currentStatus === 'pending')
+                <hr class="my-4">
+                <h3 class="h6 mb-3">Review Plan Selection</h3>
+                <form method="POST" action="{{ route('admin.companies.registration-plan.update', $company) }}" data-registration-plan-review>
+                    @csrf @method('PATCH')
+                    <div class="row g-3">
+                        <div class="col-md-4"><label class="form-label">Review Action</label><select name="plan_action" class="form-select" data-registration-plan-action><option value="keep">Keep Selected Plan</option><option value="change">Change Plan</option><option value="require_selection">Require Plan Selection</option></select></div>
+                        <div class="col-md-4"><label class="form-label">Plan</label><select name="selected_plan_id" class="form-select" data-registration-plan-select>@foreach($adminPlans as $plan)<option value="{{ $plan->id }}" data-monthly="{{ $plan->priceFor('Monthly') }}" data-yearly="{{ $plan->priceFor('Yearly') }}" data-trial-days="{{ $plan->trial_days }}" @selected(old('selected_plan_id', $company->selected_plan_id ?? $company->subscription?->subscription_plan_id) == $plan->id)>{{ $plan->name }}{{ $plan->is_public ? '' : ' (Private)' }}</option>@endforeach</select></div>
+                        <div class="col-md-4"><label class="form-label">Billing Cycle</label><select name="billing_cycle" class="form-select" data-registration-billing-cycle><option value="Monthly" @selected(old('billing_cycle', $company->selected_billing_cycle ?? $company->subscription?->billing_cycle) === 'Monthly')>Monthly</option><option value="Yearly" @selected(old('billing_cycle', $company->selected_billing_cycle ?? $company->subscription?->billing_cycle) === 'Yearly')>Yearly</option></select></div>
+                        <div class="col-md-4"><label class="form-label">Confirmed Amount</label><div class="input-group"><span class="input-group-text">Rs</span><input class="form-control" value="{{ number_format((int) $planPrice) }}" readonly data-registration-plan-amount></div></div>
+                        <div class="col-md-4"><label class="form-label">Trial Days</label><input type="number" name="requested_trial_days" class="form-control" min="0" max="365" step="1" value="{{ old('requested_trial_days', $company->requested_trial_days ?? $registrationSnapshot['trial_days'] ?? 0) }}" data-registration-trial-days></div>
+                        <div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input type="hidden" name="trial_eligible" value="0"><input class="form-check-input" type="checkbox" name="trial_eligible" value="1" id="trialEligible" @checked(old('trial_eligible', $company->trial_eligible))><label class="form-check-label" for="trialEligible">Approve free trial</label></div></div>
+                        <div class="col-md-6"><label class="form-label">Change Reason <span class="tf-muted">(required when changing plan or billing)</span></label><textarea name="change_reason" class="form-control" rows="3" maxlength="2000" placeholder="Explain the plan or billing change">{{ old('change_reason') }}</textarea></div>
+                        <div class="col-md-6"><label class="form-label">Admin Note</label><textarea name="admin_note" class="form-control" rows="3" maxlength="3000" placeholder="Optional note for the business owner">{{ old('admin_note', $company->subscription_admin_note) }}</textarea></div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-3"><button class="btn btn-tf-primary" type="submit">Save Plan Review</button><a class="btn btn-outline-primary" href="{{ route('admin.subscriptions', ['manage_business_id' => $company->id]) }}">Manage Subscription</a></div>
+                </form>
+            @endif
         </div>
 
         <div class="tf-card p-4 mt-4">
@@ -89,6 +140,7 @@
                     <label class="form-label">Select Status</label><select name="status" class="form-select mb-3">@foreach($nextStatuses as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach</select>
                     <label class="form-label">Admin Note</label><textarea name="admin_note" class="form-control mb-3" rows="3" placeholder="Reason or follow-up note"></textarea>
                     <button class="btn btn-tf-primary w-100">Save Status</button>
+                    @if($currentStatus === 'pending')<button class="btn btn-outline-secondary w-100 mt-2" name="decision" value="request_changes">Request Changes</button>@endif
                 </form>
             @else
                 <p class="tf-muted mb-0">No status transition is available. Use Restore for archived companies.</p>
@@ -99,3 +151,28 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const review = document.querySelector('[data-registration-plan-review]');
+    if (!review) return;
+
+    const planSelect = review.querySelector('[data-registration-plan-select]');
+    const billingCycle = review.querySelector('[data-registration-billing-cycle]');
+    const amount = review.querySelector('[data-registration-plan-amount]');
+    const trialDays = review.querySelector('[data-registration-trial-days]');
+
+    const refreshPlanSummary = function () {
+        const option = planSelect.options[planSelect.selectedIndex];
+        if (!option) return;
+        const price = billingCycle.value === 'Yearly' ? option.dataset.yearly : option.dataset.monthly;
+        amount.value = new Intl.NumberFormat().format(Number(price || 0));
+        trialDays.value = option.dataset.trialDays || 0;
+    };
+
+    planSelect.addEventListener('change', refreshPlanSummary);
+    billingCycle.addEventListener('change', refreshPlanSummary);
+});
+</script>
+@endpush

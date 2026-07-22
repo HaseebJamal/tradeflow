@@ -29,7 +29,7 @@ class UnitController extends Controller
         }
 
         return view('business.units.index', [
-            'units' => $query->latest()->paginate(15)->withQueryString(),
+            'units' => $query->latest()->paginate(12)->withQueryString(),
         ]);
     }
 

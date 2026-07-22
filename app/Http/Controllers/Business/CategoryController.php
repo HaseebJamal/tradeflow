@@ -21,7 +21,7 @@ class CategoryController extends Controller
         }
         if ($request->filled('search')) $query->where('name', 'like', '%'.$request->input('search').'%');
 
-        return view('business.categories.index', ['categories' => $query->latest()->paginate(15)->withQueryString()]);
+        return view('business.categories.index', ['categories' => $query->latest()->paginate(12)->withQueryString()]);
     }
 
     public function create()

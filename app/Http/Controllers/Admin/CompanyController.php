@@ -8,6 +8,8 @@ use App\Http\Requests\Admin\UpdateCompanyRequest;
 use App\Models\ActivityLog;
 use App\Models\Business;
 use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
+use App\Models\SubscriptionChangeRequest;
 use App\Notifications\SubscriptionStatusNotification;
 use App\Models\BusinessDetailChangeRequest;
 use App\Models\BusinessDocument;
@@ -91,7 +93,7 @@ class CompanyController extends Controller
         };
 
         return view('super-admin.companies.index', [
-            'companies' => $query->paginate(20)->withQueryString(),
+            'companies' => $query->paginate(12)->withQueryString(),
             'statusFilter' => $status,
             'businessTypes' => collect(['Manufacturer', 'Distributor', 'Wholesaler', 'Retail Shop', 'Other'])
                 ->merge(Business::query()->whereNotNull('business_type')->distinct()->pluck('business_type'))
@@ -135,7 +137,7 @@ class CompanyController extends Controller
             ->when($filters['search'] ?? null, fn ($q, $value) => $q->where('note', 'like', "%{$value}%"));
 
         return view('super-admin.approvals.history', [
-            'histories' => $query->latest('changed_at')->paginate(20)->withQueryString(),
+            'histories' => $query->latest('changed_at')->paginate(12)->withQueryString(),
             'companies' => Business::with('owner')->orderBy('business_name')->get(),
             'owners' => User::where('role', 'business_owner')->orderBy('name')->get(),
             'admins' => User::whereIn('role', ['super_admin', 'platform_admin', 'platform_sub_admin'])->orderBy('name')->get(),
@@ -237,7 +239,8 @@ class CompanyController extends Controller
         $this->audit($request, 'company viewed', $company, null, null);
 
         return view('super-admin.companies.show', [
-            'company' => $company->load(['owner', 'users.staffProfile', 'documents', 'subscription.plan', 'approvalLogs.changedBy', 'companyPermissions']),
+            'company' => $company->load(['owner', 'users.staffProfile', 'documents', 'selectedPlan', 'subscription.plan', 'approvalLogs.changedBy', 'companyPermissions']),
+            'adminPlans' => SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->orderBy('sort_order')->orderBy('name')->get(),
             'activity' => ActivityLog::with('actor')->where('business_id', $company->id)->latest('occurred_at')->take(20)->get(),
             'loginHistory' => ActivityLog::with('actor')->where('business_id', $company->id)->latest('occurred_at')->take(10)->get(),
         ]);
@@ -367,7 +370,7 @@ class CompanyController extends Controller
             ->when($request->integer('business_id'), fn ($query, int $businessId) => $query->where('business_id', $businessId))
             ->when($request->filled('status'), fn ($query, string $status) => $query->where('status', ucfirst(strtolower($status))))
             ->latest()
-            ->paginate(20)
+            ->paginate(12)
             ->withQueryString();
 
         return view('super-admin.companies.detail-change-requests', [
@@ -449,8 +452,21 @@ class CompanyController extends Controller
     {
         $data = $request->validate([
             'status' => ['required', Rule::in(['pending', 'approved', 'rejected', 'suspended'])],
+            'decision' => ['nullable', Rule::in(['status', 'request_changes'])],
             'admin_note' => ['nullable', 'string', 'max:3000'],
         ]);
+
+        if (($data['decision'] ?? 'status') === 'request_changes') {
+            if (blank($data['admin_note'] ?? null)) {
+                throw ValidationException::withMessages(['admin_note' => 'Provide a note when requesting registration changes.']);
+            }
+
+            $company->update(['subscription_request_status' => 'Changes Requested', 'subscription_admin_note' => $data['admin_note']]);
+            $company->owner?->notify(new SubscriptionStatusNotification('Changes Requested', 'TradeFlow requested changes to your registration: '.$data['admin_note'], $company->id));
+            $this->audit($request, 'registration changes requested', $company, null, ['note' => $data['admin_note']]);
+
+            return back()->with('success', 'Registration changes requested. The business owner has been notified.');
+        }
 
         $oldStatus = strtolower((string) $company->status);
         $newStatus = strtolower($data['status']);
@@ -473,10 +489,23 @@ class CompanyController extends Controller
             return back()->withErrors(['status' => $message]);
         }
 
+        if ($newStatus === 'approved' && ! $this->hasConfirmedRegistrationPlan($company)) {
+            throw ValidationException::withMessages(['status' => 'Select or confirm a subscription plan before approving this business.']);
+        }
+
+        if ($newStatus === 'rejected' && blank($data['admin_note'] ?? null)) {
+            throw ValidationException::withMessages(['admin_note' => 'Provide a reason when rejecting a registration.']);
+        }
+
         DB::transaction(function () use ($company, $oldStatus, $newStatus, $data) {
             $company->update(['status' => ucfirst($newStatus)]);
             if ($newStatus === 'approved') {
                 $this->startPendingSubscriptionTrial($company);
+                $company->owner?->notify(new SubscriptionStatusNotification('Registration Approved', 'Your business registration has been approved.', $company->id));
+            } elseif ($newStatus === 'rejected') {
+                Subscription::where('business_id', $company->id)->where('status', 'Pending')->update(['status' => 'Cancelled']);
+                $company->update(['subscription_request_status' => 'Rejected', 'subscription_admin_note' => $data['admin_note'] ?? null]);
+                $company->owner?->notify(new SubscriptionStatusNotification('Registration Rejected', 'Your business registration was rejected.'.(!empty($data['admin_note']) ? ' Reason: '.$data['admin_note'] : ''), $company->id));
             }
             $this->recordApprovalLog($company, $oldStatus, $newStatus, $data['admin_note'] ?? null);
         });
@@ -493,14 +522,16 @@ class CompanyController extends Controller
             return;
         }
 
-        $trialDays = max(0, (int) ($subscription->plan?->trial_days ?? 14));
-        if ($trialDays === 0) {
+        $trialDays = max(0, (int) ($company->requested_trial_days ?? $subscription->plan?->trial_days ?? 14));
+        if (! $company->trial_eligible || $trialDays === 0) {
             $subscription->update([
-                'status' => 'Active',
+                'status' => 'Pending',
                 'starts_at' => now()->toDateString(),
                 'ends_at' => now()->addMonth()->toDateString(),
                 'payment_status' => 'Pending',
             ]);
+            $company->update(['subscription_request_status' => 'Approved']);
+            $company->owner?->notify(new SubscriptionStatusNotification('Payment Required', 'Your registration is approved. Payment confirmation is required before subscription activation.', $company->id));
             return;
         }
 
@@ -512,7 +543,125 @@ class CompanyController extends Controller
             'ends_at' => now()->addDays($trialDays)->toDateString(),
             'payment_status' => 'Pending',
         ]);
+        $company->update(['subscription_request_status' => 'Activated']);
         $company->owner?->notify(new SubscriptionStatusNotification('Trial Activated', 'Your '.$subscription->plan?->name.' trial is active until '.$subscription->trial_end_at?->format('d M, Y').'.', $company->id));
+    }
+
+    public function updateRegistrationPlan(Request $request, Business $company)
+    {
+        abort_unless(strtolower((string) $company->status) === 'pending', 422, 'Only pending registrations can have their plan review updated.');
+
+        $data = $request->validate([
+            'plan_action' => ['required', Rule::in(['keep', 'change', 'require_selection'])],
+            'selected_plan_id' => ['nullable', 'integer'],
+            'billing_cycle' => ['nullable', Rule::in(['Monthly', 'Yearly'])],
+            'trial_eligible' => ['nullable', 'boolean'],
+            'requested_trial_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'change_reason' => ['nullable', 'string', 'max:2000'],
+            'admin_note' => ['nullable', 'string', 'max:3000'],
+        ]);
+
+        $subscription = Subscription::where('business_id', $company->id)->lockForUpdate()->first();
+        $oldPlanId = $company->selected_plan_id ?? $subscription?->subscription_plan_id;
+
+        if ($data['plan_action'] === 'require_selection') {
+            DB::transaction(function () use ($company, $data) {
+                Subscription::where('business_id', $company->id)
+                    ->where('status', 'Pending')
+                    ->update(['status' => 'Cancelled']);
+
+                $company->update([
+                    'selected_plan_id' => null,
+                    'selected_billing_cycle' => null,
+                    'selected_plan_price' => null,
+                    'selected_plan_snapshot' => null,
+                    'subscription_request_status' => 'Pending Review',
+                    'subscription_admin_note' => $data['admin_note'] ?? 'Plan selection required before approval.',
+                ]);
+            });
+            $company->owner?->notify(new SubscriptionStatusNotification('Plan Selection Required', 'TradeFlow requires a subscription plan selection before your registration can be approved.', $company->id));
+            $this->audit($request, 'registration plan removed', $company, ['selected_plan_id' => $oldPlanId], ['selected_plan_id' => null]);
+
+            return back()->with('success', 'Plan selection was cleared. Approval will remain blocked until a plan is confirmed.');
+        }
+
+        $planId = (int) ($data['selected_plan_id'] ?? $oldPlanId);
+        if ($planId < 1) {
+            throw ValidationException::withMessages(['selected_plan_id' => 'Select an active subscription plan before confirming the registration.']);
+        }
+        $plan = SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->findOrFail($planId);
+        $cycle = $data['billing_cycle'] ?? $company->selected_billing_cycle ?? $subscription?->billing_cycle ?? 'Monthly';
+        $amount = $plan->priceFor($cycle);
+        $planChanged = $oldPlanId !== null
+            && ($oldPlanId !== $plan->id || ($company->selected_billing_cycle ?? $subscription?->billing_cycle) !== $cycle);
+        if ($planChanged && blank($data['change_reason'] ?? null)) {
+            throw ValidationException::withMessages(['change_reason' => 'Provide a reason when changing the registration plan or billing cycle.']);
+        }
+
+        DB::transaction(function () use ($company, $subscription, $plan, $cycle, $amount, $data, $oldPlanId, $planChanged, $request) {
+            $trialDays = $request->boolean('trial_eligible') ? (int) ($data['requested_trial_days'] ?? $plan->trial_days) : 0;
+            $company->update([
+                'selected_plan_id' => $plan->id,
+                'selected_billing_cycle' => $cycle,
+                'selected_plan_price' => $amount,
+                'selected_plan_snapshot' => $this->planSnapshot($plan, $cycle, $amount),
+                'trial_eligible' => $request->boolean('trial_eligible'),
+                'requested_trial_days' => $trialDays,
+                'subscription_request_status' => $planChanged ? 'Changed by Admin' : 'Approved',
+                'subscription_admin_note' => $data['admin_note'] ?? null,
+                'plan_selected_at' => $company->plan_selected_at ?? now(),
+            ]);
+
+            if ($subscription) {
+                $subscription->update([
+                    'subscription_plan_id' => $plan->id,
+                    'billing_cycle' => $cycle,
+                    'amount' => $amount,
+                    'status' => $subscription->status === 'Cancelled' ? 'Pending' : $subscription->status,
+                ]);
+            } else {
+                $subscription = Subscription::create(['business_id' => $company->id, 'subscription_plan_id' => $plan->id, 'billing_cycle' => $cycle, 'amount' => $amount, 'status' => 'Pending', 'payment_status' => 'Pending']);
+            }
+
+            if ($planChanged) {
+                SubscriptionChangeRequest::create([
+                    'business_id' => $company->id,
+                    'subscription_id' => $subscription->id,
+                    'current_plan_id' => $oldPlanId,
+                    'requested_plan_id' => $plan->id,
+                    'requested_by' => $request->user()->id,
+                    'type' => 'Registration Change',
+                    'billing_cycle' => $cycle,
+                    'expected_amount' => $amount,
+                    'note' => $data['change_reason'],
+                    'status' => 'Changed by Admin',
+                    'reviewed_by' => $request->user()->id,
+                    'reviewed_at' => now(),
+                ]);
+            }
+        });
+
+        if ($planChanged) {
+            $company->owner?->notify(new SubscriptionStatusNotification('Subscription Plan Updated', 'TradeFlow updated your registration plan to '.$plan->name.'.', $company->id));
+        } else {
+            $company->owner?->notify(new SubscriptionStatusNotification('Plan Selection Confirmed', 'Your '.$plan->name.' plan selection was confirmed.', $company->id));
+        }
+        $this->audit($request, $planChanged ? 'registration plan changed' : 'registration plan confirmed', $company, ['selected_plan_id' => $oldPlanId], ['selected_plan_id' => $plan->id, 'billing_cycle' => $cycle, 'amount' => $amount]);
+        $this->audit($request, $request->boolean('trial_eligible') ? 'trial approved' : 'trial disabled', $company, null, ['trial_days' => $request->boolean('trial_eligible') ? (int) ($data['requested_trial_days'] ?? $plan->trial_days) : 0]);
+
+        return back()->with('success', $planChanged ? 'Registration plan updated and the owner has been notified.' : 'Registration plan confirmed.');
+    }
+
+    private function hasConfirmedRegistrationPlan(Business $company): bool
+    {
+        $planId = $company->selected_plan_id;
+
+        return SubscriptionPlan::query()->whereKey($planId)->where('status', 'Active')->whereNull('archived_at')->exists();
+    }
+
+    private function planSnapshot(SubscriptionPlan $plan, string $cycle, int $amount): array
+    {
+        return ['plan_name' => $plan->name, 'billing_cycle' => $cycle, 'selected_price' => $amount, 'monthly_price' => $plan->priceFor('Monthly'), 'yearly_price' => $plan->priceFor('Yearly'), 'trial_days' => (int) $plan->trial_days, 'product_limit' => (int) $plan->product_limit, 'staff_limit' => (int) $plan->staff_limit, 'order_limit' => (int) $plan->order_limit, 'included_modules' => $plan->included_modules ?? []];
     }
 
     public function archive(Request $request, Business $company)

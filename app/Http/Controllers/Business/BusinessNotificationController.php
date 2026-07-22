@@ -22,7 +22,7 @@ class BusinessNotificationController extends Controller
             $query->where('data', 'not like', '%business_activity%');
         }
 
-        $notifications = $query->latest()->paginate(20)->withQueryString();
+        $notifications = $query->latest()->paginate(12)->withQueryString();
         $profileRequests = collect();
         $passwordRequests = collect();
 
@@ -85,7 +85,7 @@ class BusinessNotificationController extends Controller
     {
         $this->ensureAccess($request);
         $count = $request->user()->unreadNotifications()->count();
-        $request->user()->unreadNotifications->markAsRead();
+        $request->user()->unreadNotifications()->update(['read_at' => now()]);
 
         if ($count) {
             AuditLog::create([

@@ -30,8 +30,8 @@
             <section class="tf-pricing-compare mt-5">
                 <h2 class="h4 mb-3">Compare plans</h2>
                 <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Feature</th>@foreach($plans as $plan)<th>{{ $plan->name }}</th>@endforeach</tr></thead><tbody>
-                    @foreach(['Products' => 'product_limit', 'Staff' => 'staff_limit', 'Orders' => 'order_limit', 'Included modules' => 'included_modules'] as $label => $field)
-                        <tr><th>{{ $label }}</th>@foreach($plans as $plan)<td>@if($field === 'included_modules'){{ count($plan->included_modules ?? []) ? implode(', ', $plan->included_modules) : 'Included modules configured by administrator' }}@else{{ number_format($plan->{$field}) }}@endif</td>@endforeach</tr>
+                    @foreach(['Products' => 'product_limit', 'Staff' => 'staff_limit', 'Orders' => 'order_limit'] as $label => $field)
+                        <tr><th>{{ $label }}</th>@foreach($plans as $plan)<td>{{ number_format($plan->{$field}) }}</td>@endforeach</tr>
                     @endforeach
                 </tbody></table></div>
             </section>

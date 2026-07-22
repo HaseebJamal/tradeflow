@@ -18,7 +18,7 @@ class SupportController extends Controller
             ->where('business_id', $user->business_id)
             ->when($user->role !== 'business_owner', fn ($query) => $query->where('user_id', $user->id))
             ->latest()
-            ->paginate(15);
+            ->paginate(12);
 
         return view('business.support.index', compact('tickets'));
     }

@@ -49,7 +49,7 @@ class SalesReturnController extends Controller
                 Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay(),
                 Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay(),
             ])
-            ->latest('returned_at')->paginate(20)->withQueryString();
+            ->latest('returned_at')->paginate(12)->withQueryString();
 
         return view('business.sales-returns.index', compact('returns'));
     }

@@ -90,7 +90,7 @@ class KhataController extends Controller
             'accounts' => $accounts,
             'customers' => $customers,
             'suppliers' => $suppliers,
-            'ledgerLines' => $lineQuery->latest()->paginate(30)->withQueryString(),
+            'ledgerLines' => $lineQuery->latest()->paginate(12)->withQueryString(),
             'trialBalance' => $trialBalance,
             'customerSummaries' => $customerSummaries,
             'supplierSummaries' => $supplierSummaries,
