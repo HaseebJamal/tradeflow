@@ -131,14 +131,14 @@
                                 <h2 class="h4 fw-bold">Choose Plan <span class="text-danger" aria-hidden="true">*</span></h2>
                                 <p class="tf-muted small">Start with a free trial. Your trial begins after Super Admin approves your business.</p>
                                 <div class="btn-group mb-3" role="group" aria-label="Billing cycle">
-                                    <input type="radio" class="btn-check" name="billing_cycle" id="registrationMonthly" value="Monthly" @checked(old('billing_cycle', request('billing_cycle', 'Monthly')) === 'Monthly')>
+                                    <input type="radio" class="btn-check" name="billing_cycle" id="registrationMonthly" value="Monthly" @checked(old('billing_cycle', $selectedBillingCycle ?? 'Monthly') === 'Monthly')>
                                     <label class="btn btn-outline-primary" for="registrationMonthly">Monthly</label>
-                                    <input type="radio" class="btn-check" name="billing_cycle" id="registrationYearly" value="Yearly" @checked(old('billing_cycle', request('billing_cycle')) === 'Yearly')>
+                                    <input type="radio" class="btn-check" name="billing_cycle" id="registrationYearly" value="Yearly" @checked(old('billing_cycle', $selectedBillingCycle ?? 'Monthly') === 'Yearly')>
                                     <label class="btn btn-outline-primary" for="registrationYearly">Yearly <span class="small">Save 20%</span></label>
                                 </div>
                                 <div class="row g-3">
                                     @forelse($plans as $plan)
-                                        @php($selectedPlan = (string) old('selected_plan_id', request('plan')) === (string) $plan->id)
+                                        @php($selectedPlan = (string) old('selected_plan_id', $selectedPlanId ?? null) === (string) $plan->id)
                                         <div class="col-md-6">
                                             <label class="tf-plan-option">
                                                 <input type="radio" name="selected_plan_id" value="{{ $plan->id }}" required @checked($selectedPlan)>

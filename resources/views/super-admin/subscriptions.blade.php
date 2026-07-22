@@ -37,18 +37,52 @@
             <div><h2 class="h5 mb-1">Subscription Plans</h2><p class="tf-muted small mb-0">Create, review, and maintain your subscription plans.</p></div>
             <button class="btn btn-tf-primary" type="button" data-bs-toggle="modal" data-bs-target="#createSubscriptionPlanModal"><i class="bi bi-plus-lg me-1"></i>Create Plan</button>
         </div>
+        <div class="tf-pricing-cycle mb-3" data-subscription-pricing>
+            <button type="button" class="active" data-cycle="Monthly">Monthly</button>
+            <button type="button" data-cycle="Yearly">Yearly</button>
+        </div>
         <div class="tf-card tf-subscription-filter-card p-3 mb-3">
             <div class="row g-2 align-items-end">
-                <div class="col-md-5"><label class="form-label">Search Plans</label><input class="form-control" data-plan-search placeholder="Plan name"></div>
-                <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" data-plan-status><option value="">All statuses</option><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+                <div class="col-md-4"><label class="form-label">Search Plans</label><input class="form-control" data-plan-search placeholder="Plan name"></div>
+                <div class="col-md-2"><label class="form-label">Status</label><select class="form-select" data-plan-status><option value="">All statuses</option><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+                <div class="col-md-3"><label class="form-label">Visibility</label><select class="form-select" data-plan-visibility><option value="">All visibility</option><option value="Public">Public</option><option value="Private">Private</option></select></div>
+                <div class="col-md-3"><label class="form-label">Billing</label><select class="form-select" data-plan-billing><option value="">All plans</option><option value="yes">Yearly available</option><option value="no">Monthly only</option></select></div>
             </div>
+        </div>
+        <div class="row g-4 mb-4" data-plan-grid>
+            @forelse($plans as $plan)
+                <div class="col-md-6 col-xl-4" data-plan-item>
+                    <x-subscription-plan-card :plan="$plan" context="admin">
+                        <x-slot:actions>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-primary w-100 dropdown-toggle" type="button" data-bs-toggle="dropdown">Manage Plan</button>
+                                <ul class="dropdown-menu dropdown-menu-end w-100">
+                                    <li><button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#editPlanModal-{{ $plan->id }}"><i class="bi bi-pencil-square me-2"></i>View / Edit</button></li>
+                                    @if($plan->archived_at)
+                                        <li><form method="POST" action="{{ route('admin.subscription-plans.restore', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item"><i class="bi bi-arrow-counterclockwise me-2"></i>Restore</button></form></li>
+                                        @if(! $plan->subscriptions_count)<li><form method="POST" action="{{ route('admin.subscription-plans.destroy', $plan) }}" onsubmit="return confirm('Permanently delete this unused plan?')">@csrf @method('DELETE')<button class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Delete</button></form></li>@endif
+                                    @else
+                                        <li><form method="POST" action="{{ route('admin.subscription-plans.status', $plan) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="{{ $plan->status === 'Active' ? 'Inactive' : 'Active' }}"><button class="dropdown-item">{{ $plan->status === 'Active' ? 'Deactivate' : 'Activate' }}</button></form></li>
+                                        <li><form method="POST" action="{{ route('admin.subscription-plans.visibility', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">Make {{ $plan->is_public ? 'Private' : 'Public' }}</button></form></li>
+                                        @if($plan->status === 'Active')<li><form method="POST" action="{{ route('admin.subscription-plans.recommended', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">{{ $plan->is_recommended ? 'Remove Recommended' : 'Mark Recommended' }}</button></form></li>@endif
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><form method="POST" action="{{ route('admin.subscription-plans.archive', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning">Archive</button></form></li>
+                                    @endif
+                                </ul>
+                            </div>
+                        </x-slot:actions>
+                    </x-subscription-plan-card>
+                </div>
+            @empty
+                <div class="col-12"><div class="tf-card p-5 text-center text-muted">No subscription plans created yet.</div></div>
+            @endforelse
         </div>
         <div class="tf-card p-0">
             <x-table><thead><tr><th>Plan</th><th>Monthly</th><th>Yearly</th><th>Trial</th><th>Product Limit</th><th>Staff Limit</th><th>Order Limit</th><th>Businesses</th><th>Visibility</th><th>Status</th><th class="text-end">Actions</th></tr></thead><tbody data-plan-table>
             @forelse($plans as $plan)
-                <tr data-plan-row data-plan-name="{{ strtolower($plan->name) }}" data-plan-status="{{ $plan->status }}">
+                <tr data-plan-row data-plan-name="{{ strtolower($plan->name) }}" data-plan-status="{{ $plan->status }}" data-plan-visibility="{{ $plan->is_public ? 'Public' : 'Private' }}" data-plan-yearly="{{ (int) $plan->yearly_price > 0 ? 'yes' : 'no' }}">
                     <td><strong>{{ $plan->name }}</strong><small class="d-block tf-muted">{{ $plan->short_description }}</small></td><td>Rs {{ number_format($plan->priceFor('Monthly')) }}</td><td>Rs {{ number_format($plan->priceFor('Yearly')) }}</td><td>{{ $plan->trial_days }} days</td><td>{{ number_format($plan->product_limit) }}</td><td>{{ number_format($plan->staff_limit) }}</td><td>{{ number_format($plan->order_limit) }}</td><td>{{ $plan->subscriptions_count }}</td><td>{{ $plan->is_public ? 'Public' : 'Private' }}{{ $plan->is_recommended ? ' · Recommended' : '' }}</td><td><span class="tf-badge {{ $plan->status === 'Active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $plan->status }}</span></td>
-                    <td class="text-end text-nowrap"><div class="dropdown"><button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">Actions</button><ul class="dropdown-menu dropdown-menu-end"><li><button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#editPlanModal-{{ $plan->id }}">View / Edit</button></li>@if($plan->archived_at)<li><form method="POST" action="{{ route('admin.subscription-plans.restore', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">Restore</button></form></li>@if(!$plan->subscriptions_count)<li><form method="POST" action="{{ route('admin.subscription-plans.destroy', $plan) }}" onsubmit="return confirm('Permanently delete this unused plan?')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form></li>@endif@else<li><form method="POST" action="{{ route('admin.subscription-plans.status', $plan) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="{{ $plan->status === 'Active' ? 'Inactive' : 'Active' }}"><button class="dropdown-item">{{ $plan->status === 'Active' ? 'Deactivate' : 'Activate' }}</button></form></li><li><form method="POST" action="{{ route('admin.subscription-plans.visibility', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">Make {{ $plan->is_public ? 'Private' : 'Public' }}</button></form></li><li><form method="POST" action="{{ route('admin.subscription-plans.recommended', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">{{ $plan->is_recommended ? 'Remove Recommended' : 'Mark Recommended' }}</button></form></li><li><hr class="dropdown-divider"></li><li><form method="POST" action="{{ route('admin.subscription-plans.archive', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning">Archive</button></form></li>@endif</ul></div></td>
+                    <td class="text-end text-nowrap"><div class="dropdown"><button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">Actions</button><ul class="dropdown-menu dropdown-menu-end"><li><button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#editPlanModal-{{ $plan->id }}">View / Edit</button></li>@if($plan->archived_at)<li><form method="POST" action="{{ route('admin.subscription-plans.restore', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">Restore</button></form></li>@if(!$plan->subscriptions_count)<li><form method="POST" action="{{ route('admin.subscription-plans.destroy', $plan) }}" onsubmit="return confirm('Permanently delete this unused plan?')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form></li>@endif@else<li><form method="POST" action="{{ route('admin.subscription-plans.status', $plan) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="{{ $plan->status === 'Active' ? 'Inactive' : 'Active' }}"><button class="dropdown-item">{{ $plan->status === 'Active' ? 'Deactivate' : 'Activate' }}</button></form></li><li><form method="POST" action="{{ route('admin.subscription-plans.visibility', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">Make {{ $plan->is_public ? 'Private' : 'Public' }}</button></form></li>@if($plan->status === 'Active')<li><form method="POST" action="{{ route('admin.subscription-plans.recommended', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">{{ $plan->is_recommended ? 'Remove Recommended' : 'Mark Recommended' }}</button></form></li>@endif<li><hr class="dropdown-divider"></li><li><form method="POST" action="{{ route('admin.subscription-plans.archive', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning">Archive</button></form></li>@endif</ul></div></td>
                 </tr>
             @empty<tr><td colspan="11" class="text-center tf-muted py-4">No subscription plans created yet.</td></tr>@endforelse
             </tbody></x-table>
@@ -140,15 +174,35 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const pricingRoot = document.querySelector('[data-subscription-pricing]');
+    if (pricingRoot && !pricingRoot.dataset.ready) {
+        pricingRoot.dataset.ready = '1';
+        pricingRoot.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-cycle]');
+            if (!button) return;
+            const yearly = button.dataset.cycle === 'Yearly';
+            pricingRoot.querySelectorAll('[data-cycle]').forEach((item) => item.classList.toggle('active', item === button));
+            document.querySelectorAll('[data-plan-monthly-price], [data-plan-monthly-label]').forEach((item) => item.classList.toggle('d-none', yearly));
+            document.querySelectorAll('[data-plan-yearly-price], [data-plan-yearly-label]').forEach((item) => item.classList.toggle('d-none', !yearly));
+        });
+    }
+
     const search = document.querySelector('[data-plan-search]');
     const status = document.querySelector('[data-plan-status]');
-    const filterPlans = () => document.querySelectorAll('[data-plan-row]').forEach((row) => {
-        const nameMatches = !search?.value || row.dataset.planName.includes(search.value.trim().toLowerCase());
-        const statusMatches = !status?.value || row.dataset.planStatus === status.value;
-        row.classList.toggle('d-none', !(nameMatches && statusMatches));
+    const visibility = document.querySelector('[data-plan-visibility]');
+    const billing = document.querySelector('[data-plan-billing]');
+    const filterPlans = () => document.querySelectorAll('[data-plan-card], [data-plan-row]').forEach((plan) => {
+        const nameMatches = !search?.value || plan.dataset.planName.includes(search.value.trim().toLowerCase());
+        const statusMatches = !status?.value || plan.dataset.planStatus === status.value;
+        const visibilityMatches = !visibility?.value || plan.dataset.planVisibility === visibility.value;
+        const billingMatches = !billing?.value || plan.dataset.planYearly === billing.value;
+        const target = plan.closest('[data-plan-item]') || plan;
+        target.classList.toggle('d-none', !(nameMatches && statusMatches && visibilityMatches && billingMatches));
     });
     search?.addEventListener('input', filterPlans);
     status?.addEventListener('change', filterPlans);
+    visibility?.addEventListener('change', filterPlans);
+    billing?.addEventListener('change', filterPlans);
 
     const form = document.querySelector('[data-subscription-assignment-form]');
     const plan = form?.querySelector('[data-subscription-plan]');

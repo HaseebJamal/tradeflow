@@ -6,7 +6,7 @@
     <h2 class="h5 mb-3">Record Business Payment</h2>
     <form method="POST" action="{{ route('admin.payments.store') }}" class="row g-3" data-tf-tab-order>@csrf
         <div class="col-md-4"><label class="form-label">Business</label><select name="business_id" class="form-select js-select2" required><option value="">Select business</option>@foreach($businesses as $business)<option value="{{ $business->id }}">{{ $business->business_name }}{{ $business->subscription?->plan ? ' — '.$business->subscription->plan->name : '' }}</option>@endforeach</select></div>
-        <div class="col-md-2"><label class="form-label">Amount</label><input name="amount" type="number" min="0.01" step="0.01" class="form-control" required></div>
+        <div class="col-md-2"><label class="form-label">Amount</label><input name="amount" type="number" min="1" step="1" inputmode="numeric" class="form-control js-whole-number" required></div>
         <div class="col-md-2"><label class="form-label">Method</label><select name="method" class="form-select" required>@foreach(['Cash','Bank Transfer','JazzCash','Easypaisa','Cheque','Other'] as $method)<option>{{ $method }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select" required>@foreach(['Received','Pending','Rejected','Refunded'] as $status)<option>{{ $status }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Paid At</label><input name="paid_at" type="datetime-local" value="{{ now()->format('Y-m-d\\TH:i') }}" class="form-control" required></div>

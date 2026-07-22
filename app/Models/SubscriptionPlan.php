@@ -22,9 +22,12 @@ class SubscriptionPlan extends Model
 
     public function priceFor(string $cycle): int
     {
-        return (int) ($cycle === 'Yearly'
-            ? ($this->yearly_price ?? ((int) $this->price * 12))
-            : ($this->monthly_price ?? $this->price));
+        $monthly = (int) ($this->monthly_price ?? $this->price ?? 0);
+        $yearly = (int) ($this->yearly_price ?? 0);
+
+        return $cycle === 'Yearly'
+            ? ($yearly > 0 ? $yearly : ($monthly * 12))
+            : $monthly;
     }
 
     public function scopePublicActive($query)

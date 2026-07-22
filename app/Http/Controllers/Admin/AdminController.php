@@ -405,7 +405,10 @@ class AdminController extends Controller
             ->get();
 
         return view('super-admin.subscriptions', [
-            'plans' => SubscriptionPlan::withCount('subscriptions')->orderBy('sort_order')->orderBy('price')->get(),
+            'plans' => SubscriptionPlan::withCount([
+                'subscriptions',
+                'subscriptions as active_subscriptions_count' => fn ($query) => $query->whereIn('status', ['Trial', 'Active', 'Expiring']),
+            ])->orderBy('sort_order')->orderBy('price')->get(),
             'businesses' => $assignableBusinesses,
             'subscriptions' => $subscriptions,
             'billingHistory' => PlatformPayment::query()
@@ -434,9 +437,14 @@ class AdminController extends Controller
     public function storePlan(Request $request)
     {
         $data = $this->planData($request);
-        $data['slug'] = \Illuminate\Support\Str::slug($data['name']);
         $data['price'] = $data['monthly_price'];
-        $plan = SubscriptionPlan::create($data);
+        $plan = DB::transaction(function () use ($data) {
+            if ($data['is_recommended']) {
+                SubscriptionPlan::where('is_recommended', true)->update(['is_recommended' => false]);
+            }
+
+            return SubscriptionPlan::create($data);
+        });
         $this->audit('Subscription plan created: '.$plan->name, $request, 'Subscriptions', $plan->id, null, $plan->only(['name', 'price', 'product_limit', 'staff_limit', 'order_limit', 'status']));
 
         return back()->with('success', 'Subscription plan created.');
@@ -447,7 +455,13 @@ class AdminController extends Controller
         $data = $this->planData($request, $plan);
         $data['price'] = $data['monthly_price'];
         $old = $plan->only(array_keys($data));
-        $plan->update($data);
+        DB::transaction(function () use ($plan, $data) {
+            if ($data['is_recommended']) {
+                SubscriptionPlan::where('id', '<>', $plan->id)->where('is_recommended', true)->update(['is_recommended' => false]);
+            }
+
+            $plan->update($data);
+        });
         $this->audit('Subscription plan updated: '.$plan->name, $request, 'Subscriptions', $plan->id, $old, $plan->fresh()->only(array_keys($data)));
 
         return back()->with('success', 'Subscription plan updated.');
@@ -475,7 +489,10 @@ class AdminController extends Controller
         abort_if($plan->archived_at, 422, 'Restore the plan before changing its status.');
         $data = $request->validate(['status' => ['required', 'in:Active,Inactive']]);
         $old = $plan->status;
-        $plan->update(['status' => $data['status']]);
+        $plan->update([
+            'status' => $data['status'],
+            'is_recommended' => $data['status'] === 'Active' ? $plan->is_recommended : false,
+        ]);
         $this->audit('Subscription plan '.strtolower($data['status']), $request, 'Subscriptions', $plan->id, ['status' => $old], ['status' => $data['status']]);
         return back()->with('success', 'Plan '.strtolower($data['status']).' successfully.');
     }
@@ -483,7 +500,7 @@ class AdminController extends Controller
     public function archivePlan(Request $request, SubscriptionPlan $plan)
     {
         if ($plan->archived_at) return back()->with('success', 'Plan is already archived.');
-        $plan->update(['archived_at' => now(), 'status' => 'Inactive']);
+        $plan->update(['archived_at' => now(), 'status' => 'Inactive', 'is_recommended' => false]);
         $this->audit('Subscription plan archived', $request, 'Subscriptions', $plan->id);
         return back()->with('success', 'Plan archived successfully.');
     }
@@ -507,7 +524,16 @@ class AdminController extends Controller
     public function togglePlanRecommendation(Request $request, SubscriptionPlan $plan)
     {
         abort_if($plan->archived_at, 422, 'Archived plans cannot be recommended.');
-        $plan->update(['is_recommended' => ! $plan->is_recommended]);
+        abort_unless($plan->status === 'Active', 422, 'Only active plans can be recommended.');
+        DB::transaction(function () use ($plan) {
+            if ($plan->is_recommended) {
+                $plan->update(['is_recommended' => false]);
+                return;
+            }
+
+            SubscriptionPlan::where('id', '<>', $plan->id)->where('is_recommended', true)->update(['is_recommended' => false]);
+            $plan->update(['is_recommended' => true]);
+        });
         $this->audit('Subscription plan recommendation updated', $request, 'Subscriptions', $plan->id, null, ['is_recommended' => $plan->is_recommended]);
         return back()->with('success', $plan->is_recommended ? 'Plan marked as recommended.' : 'Recommended marker removed.');
     }
@@ -728,7 +754,7 @@ class AdminController extends Controller
     private function planData(Request $request, ?SubscriptionPlan $plan = null): array
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
+            'name' => ['required', 'string', 'max:100', Rule::unique('subscription_plans', 'name')->ignore($plan?->id)],
             'short_description' => ['nullable', 'string', 'max:255'],
             'price' => ['nullable', 'integer', 'min:0'],
             'monthly_price' => ['nullable', 'integer', 'min:0'],
@@ -747,6 +773,9 @@ class AdminController extends Controller
 
         $data['monthly_price'] = $data['monthly_price'] ?? $data['price'] ?? $plan?->monthly_price ?? $plan?->price ?? 0;
         $data['yearly_price'] = $data['yearly_price'] ?? $plan?->yearly_price ?? ($data['monthly_price'] * 12);
+        if ((int) $data['yearly_price'] <= 0 && (int) $data['monthly_price'] > 0) {
+            $data['yearly_price'] = (int) $data['monthly_price'] * 12;
+        }
         $data['trial_days'] = $data['trial_days'] ?? $plan?->trial_days ?? 14;
         unset($data['price']);
         $data['included_modules'] = $request->has('included_modules')

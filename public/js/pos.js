@@ -44,8 +44,9 @@
     const openingCash = $('[data-pos-opening-cash]');
     const registerAction = $('[data-pos-register-action]');
     const registerRequired = $('[data-pos-register-required]');
-    const focusElement = (element, select = false) => requestAnimationFrame(() => {
+    const focusElement = (element, select = false, allowModalFocus = false) => requestAnimationFrame(() => {
         if (!element) return;
+        if (!allowModalFocus && document.querySelector('.swal2-container')) return;
 
         const checkoutPanel = element.closest('.tf-pos-checkout-panel');
         const scrollContainer = element.closest('.tf-pos-checkout-scroll')
@@ -79,8 +80,86 @@
     const cashIsValid = () => /^\d+(?:\.\d{1,2})?$/.test(cash.value.trim());
     const csrfHeaders = { 'X-CSRF-TOKEN': config.csrf, Accept: 'application/json', 'Content-Type': 'application/json' };
     const flash = (icon, title, text = '') => window.Swal
-        ? Swal.fire({ icon, title, text, timer: icon === 'success' ? 1800 : undefined, showConfirmButton: icon !== 'success' })
+        ? Swal.fire({
+            icon,
+            title,
+            text,
+            timer: icon === 'success' ? 1800 : undefined,
+            showConfirmButton: icon !== 'success',
+            allowEnterKey: true,
+            focusConfirm: icon !== 'success',
+            didOpen: (popup) => {
+                if (icon === 'success') return;
+                const confirm = Swal.getConfirmButton();
+                if (!confirm) return;
+                confirm.focus({ preventScroll: true });
+                popup.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    Swal.clickConfirm();
+                });
+            },
+        })
         : window.alert(`${title}${text ? `\n${text}` : ''}`);
+    const showReceiptActions = async (payload) => {
+        const historyUrl = payload.history_url || config.historyUrl;
+        if (!window.Swal) {
+            window.location.assign(historyUrl);
+            return;
+        }
+
+        const result = await Swal.fire({
+            icon: 'success',
+            title: 'Sale completed',
+            text: payload.order?.order_number || 'Your POS sale has been completed.',
+            html: `<div class="tf-pos-receipt-actions">
+                <button type="button" class="btn btn-outline-primary" data-pos-receipt-view><i class="bi bi-eye"></i>View Receipt</button>
+                <button type="button" class="btn btn-outline-secondary" data-pos-receipt-print><i class="bi bi-printer"></i>Print Receipt</button>
+                <a class="btn btn-outline-success" href="${escapeHtml(payload.receipt_download_url || '#')}" data-pos-receipt-download><i class="bi bi-download"></i>Download PDF</a>
+            </div>`,
+            showCancelButton: true,
+            showConfirmButton: false,
+            cancelButtonText: 'Sales History',
+            buttonsStyling: false,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            customClass: {
+                popup: 'tf-pos-receipt-modal',
+                actions: 'tf-pos-receipt-modal-actions',
+                cancelButton: 'btn btn-outline-secondary',
+            },
+            didOpen: (popup) => {
+                const viewButton = popup.querySelector('[data-pos-receipt-view]');
+                const printButton = popup.querySelector('[data-pos-receipt-print]');
+                const downloadButton = popup.querySelector('[data-pos-receipt-download]');
+                const historyButton = Swal.getCancelButton();
+                const actions = [viewButton, printButton, downloadButton, historyButton].filter(Boolean);
+
+                viewButton?.addEventListener('click', () => {
+                    window.open(payload.receipt_url, '_blank', 'noopener');
+                });
+                printButton?.addEventListener('click', () => {
+                    window.open(payload.receipt_print_url, '_blank', 'noopener');
+                });
+                actions[0]?.focus({ preventScroll: true });
+
+                popup.addEventListener('keydown', (event) => {
+                    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+                    event.preventDefault();
+
+                    const currentIndex = Math.max(0, actions.indexOf(document.activeElement));
+                    let nextIndex = currentIndex;
+                    if (event.key === 'ArrowRight') nextIndex = Math.min(actions.length - 1, currentIndex + 1);
+                    if (event.key === 'ArrowLeft') nextIndex = Math.max(0, currentIndex - 1);
+                    if (event.key === 'ArrowDown' && currentIndex < 3) nextIndex = Math.min(3, actions.length - 1);
+                    if (event.key === 'ArrowUp' && currentIndex === 3) nextIndex = 0;
+                    actions[nextIndex]?.focus({ preventScroll: true });
+                });
+            },
+        });
+
+        if (result.dismiss === Swal.DismissReason.cancel) window.location.assign(historyUrl);
+    };
     const request = async (url, method = 'GET', body = null) => {
         const response = await fetch(url, {
             method,
@@ -343,8 +422,7 @@
         updateTotals();
         try {
             const payload = await request(config.saleUrl, 'POST', checkoutPayload());
-            flash('success', 'Sale completed', payload.order.order_number);
-            setTimeout(() => window.location.assign(payload.history_url || config.historyUrl), 900);
+            await showReceiptActions(payload);
         } catch (error) {
             flash('error', 'Sale not completed', error.message);
         } finally {
@@ -403,7 +481,7 @@
             cancelButtonText: 'Cancel',
             buttonsStyling: false,
             focusConfirm: false,
-            didOpen: () => focusElement(document.getElementById('pos-opening-cash'), true),
+            didOpen: () => focusElement(document.getElementById('pos-opening-cash'), true, true),
             customClass: {
                 popup: 'tf-pos-register-modal',
                 actions: 'tf-pos-register-actions',
@@ -458,7 +536,7 @@
             cancelButtonText: 'Cancel',
             buttonsStyling: false,
             focusConfirm: false,
-            didOpen: () => focusElement(document.getElementById('pos-closing-cash'), true),
+            didOpen: () => focusElement(document.getElementById('pos-closing-cash'), true, true),
             customClass: {
                 popup: 'tf-pos-register-modal',
                 actions: 'tf-pos-register-actions',

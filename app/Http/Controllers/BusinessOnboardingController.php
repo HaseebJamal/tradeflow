@@ -12,14 +12,26 @@ use App\Models\SubscriptionPlan;
 use App\Notifications\CompanyRegistrationNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class BusinessOnboardingController extends Controller
 {
-    public function create()
+    public function create(Request $request)
     {
+        $billingCycle = $request->query('billing_cycle', 'Monthly');
+        abort_unless(in_array($billingCycle, ['Monthly', 'Yearly'], true), 404);
+
+        $plans = SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get();
+        $selectedPlanId = $request->integer('plan');
+        if ($selectedPlanId) {
+            abort_unless($plans->contains('id', $selectedPlanId), 404);
+        }
+
         return view('onboarding.register-business', [
-            'plans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get(),
+            'plans' => $plans,
+            'selectedPlanId' => $selectedPlanId,
+            'selectedBillingCycle' => $billingCycle,
         ]);
     }
 

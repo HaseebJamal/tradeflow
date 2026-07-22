@@ -39,6 +39,9 @@ use App\Models\Subscription;
 
 Route::get('/', fn () => view('public.home', [
     'pricingPlans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->take(3)->get(),
+    'currentSubscription' => auth()->user()?->business_id
+        ? Subscription::with('plan')->where('business_id', auth()->user()->business_id)->first()
+        : null,
 ]))->name('public.home');
 Route::view('/features', 'public.features')->name('public.features');
 Route::get('/pricing', fn () => view('public.pricing', [

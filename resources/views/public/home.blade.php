@@ -76,9 +76,13 @@
 <section id="pricing" class="tf-section">
     <div class="container">
         <div class="text-center mb-5"><h2 class="fw-bold">Simple plans for growing businesses</h2><p class="tf-muted">Start with a free trial after your business is approved.</p></div>
+        <div class="tf-pricing-cycle mb-4" data-subscription-pricing>
+            <button type="button" class="active" data-cycle="Monthly">Monthly</button>
+            <button type="button" data-cycle="Yearly">Yearly</button>
+        </div>
         <div class="row g-4">
             @forelse($pricingPlans as $plan)
-                <div class="col-md-4"><div class="tf-card tf-price-card p-4 h-100 {{ $plan->is_recommended ? 'border-primary' : '' }}"><h3 class="h4">{{ $plan->name }}</h3><div class="display-5 fw-bold my-3">Rs {{ number_format($plan->priceFor('Monthly')) }}</div><p class="tf-muted">{{ $plan->short_description ?: ($plan->trial_days.'-day trial with flexible business limits.') }}</p><p><i class="bi bi-check-circle-fill text-green me-2"></i>{{ number_format($plan->product_limit) }} products</p><p><i class="bi bi-check-circle-fill text-green me-2"></i>{{ number_format($plan->staff_limit) }} staff</p><p><i class="bi bi-check-circle-fill text-green me-2"></i>{{ number_format($plan->order_limit) }} orders</p><a href="{{ route('register.business', ['plan' => $plan->id]) }}" class="btn btn-tf-primary w-100 mt-2">Start Free Trial</a></div></div>
+                <div class="col-md-6 col-xl-4"><x-subscription-plan-card :plan="$plan" context="landing" :current-subscription="$currentSubscription" /></div>
             @empty
                 <div class="col-12 text-center"><a href="{{ route('public.pricing') }}" class="btn btn-outline-primary">View Pricing</a></div>
             @endforelse
@@ -86,6 +90,29 @@
         <div class="text-center mt-4"><a href="{{ route('public.pricing') }}" class="btn btn-outline-primary">Compare All Plans</a></div>
     </div>
 </section>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const root = document.querySelector('[data-subscription-pricing]');
+    if (!root || root.dataset.ready) return;
+    root.dataset.ready = '1';
+    root.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-cycle]');
+        if (!button) return;
+        const yearly = button.dataset.cycle === 'Yearly';
+        root.querySelectorAll('[data-cycle]').forEach((item) => item.classList.toggle('active', item === button));
+        document.querySelectorAll('[data-plan-monthly-price], [data-plan-monthly-label]').forEach((item) => item.classList.toggle('d-none', yearly));
+        document.querySelectorAll('[data-plan-yearly-price], [data-plan-yearly-label]').forEach((item) => item.classList.toggle('d-none', !yearly));
+        document.querySelectorAll('[data-plan-cta]').forEach((link) => {
+            const url = new URL(link.href, window.location.origin);
+            url.searchParams.set('billing_cycle', yearly ? 'Yearly' : 'Monthly');
+            link.href = url.toString();
+        });
+    });
+});
+</script>
+@endpush
 
 <section id="faq" class="tf-section bg-white">
     <div class="container">
