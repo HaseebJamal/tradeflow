@@ -22,7 +22,7 @@ class StoreStaffRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'father_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'phone' => ['required', 'regex:/^\d{11}$/'],
+            'phone' => ['required', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'cnic' => ['nullable', 'regex:/^\d{13}$/'],
             'address' => ['nullable', 'string', 'max:1000'],

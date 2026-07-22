@@ -8,7 +8,7 @@
         @csrf @method('PUT')
         <div class="col-md-4"><label class="form-label">Supplier Name</label><input name="supplier_name" value="{{ old('supplier_name', $supplier->supplier_name) }}" class="form-control" required></div>
         <div class="col-md-4"><label class="form-label">Company Name</label><input name="company_name" value="{{ old('company_name', $supplier->company_name) }}" class="form-control"></div>
-        <div class="col-md-4"><label class="form-label">Phone</label><input name="phone" value="{{ old('phone', $supplier->phone) }}" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label">Phone</label><x-phone-input name="phone" :value="old('phone', $supplier->phone)" :error="$errors->first('phone')" /></div>
         <div class="col-md-4"><label class="form-label">Email</label><input name="email" type="email" value="{{ old('email', $supplier->email) }}" class="form-control"></div>
         <div class="col-md-4"><label class="form-label">City</label><input name="city" value="{{ old('city', $supplier->city) }}" class="form-control"></div>
         <div class="col-md-4"><label class="form-label">Opening Balance</label><input name="opening_balance" type="number" step="0.01" min="0" value="{{ old('opening_balance', $supplier->opening_balance ?? 0) }}" class="form-control"></div>

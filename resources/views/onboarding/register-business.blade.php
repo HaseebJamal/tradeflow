@@ -45,7 +45,7 @@
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label" for="business-owner-phone">Phone <span class="text-danger" aria-hidden="true">*</span></label>
-                                        <input id="business-owner-phone" name="phone" type="tel" autocomplete="tel" inputmode="numeric" maxlength="11" class="form-control @error('phone') is-invalid @enderror" value="{{ old('phone') }}" placeholder="03001234567" required data-tf-phone>
+                                        <x-phone-input name="phone" id="business-owner-phone" :value="old('phone')" :required="true" :error="$errors->first('phone')" />
                                         <div class="invalid-feedback" data-register-error="phone">@error('phone'){{ $message }}@enderror</div>
                                     </div>
                                     <div class="col-md-6">

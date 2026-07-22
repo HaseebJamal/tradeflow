@@ -113,7 +113,7 @@ class AdminController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'phone' => ['nullable', 'string', 'max:30'],
+            'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'role' => ['required', Rule::in(['platform_admin', 'platform_sub_admin'])],
             'parent_user_id' => ['nullable', 'exists:users,id'],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
@@ -152,7 +152,7 @@ class AdminController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:30'],
+            'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'status' => ['required', 'in:active,inactive,suspended'],
             'parent_user_id' => ['nullable', 'exists:users,id'],
             'permissions' => ['nullable', 'array'],
@@ -1093,7 +1093,7 @@ class AdminController extends Controller
 
     public function updateSettings(Request $request)
     {
-        $data = $request->validate(['company_name' => ['required'], 'support_email' => ['nullable','email'], 'support_phone' => ['nullable'], 'trial_days' => ['required','integer','min:0'], 'default_plan_id' => ['nullable','exists:subscription_plans,id'], 'max_upload_size' => ['required','integer','min:1'], 'logo' => ['nullable','image','mimes:jpg,jpeg,png,webp','max:2048']]);
+        $data = $request->validate(['company_name' => ['required'], 'support_email' => ['nullable','email'], 'support_phone' => ['nullable','regex:/^\\+[1-9]\\d{7,14}$/'], 'trial_days' => ['required','integer','min:0'], 'default_plan_id' => ['nullable','exists:subscription_plans,id'], 'max_upload_size' => ['required','integer','min:1'], 'logo' => ['nullable','image','mimes:jpg,jpeg,png,webp','max:2048']]);
         if ($request->hasFile('logo')) $data['logo'] = $request->file('logo')->store('platform', 'public');
         PlatformSetting::firstOrCreate([])->update($data);
         $this->audit('Settings updated', $request);

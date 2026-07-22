@@ -17,22 +17,14 @@ class RegisterBusinessRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $phone = preg_replace('/[\s-]+/', '', (string) $this->input('phone'));
-
-        if (str_starts_with($phone, '+92')) {
-            $phone = '0'.substr($phone, 3);
-        } elseif (str_starts_with($phone, '92')) {
-            $phone = '0'.substr($phone, 2);
-        }
-
-        $this->merge(['phone' => $phone]);
+        $this->merge(['phone' => trim((string) $this->input('phone'))]);
     }
 
     public function rules(): array
     {
         return [
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'phone' => ['required', 'regex:/^03\d{9}$/'],
+            'phone' => ['required', 'regex:/^\+[1-9]\d{7,14}$/'],
             'email' => ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
             'business_type' => ['required', Rule::in(['Manufacturer', 'Distributor', 'Wholesaler', 'Retail Shop', 'Other'])],
@@ -53,7 +45,7 @@ class RegisterBusinessRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'phone.regex' => 'Enter a valid Pakistani phone number, for example 03001234567.',
+            'phone.regex' => 'Enter a valid international phone number including its country code.',
             'name.regex' => 'Name may contain letters and spaces only.',
             'business_name.regex' => 'Business name may contain letters and spaces only.',
             'city.regex' => 'City may contain letters and spaces only.',

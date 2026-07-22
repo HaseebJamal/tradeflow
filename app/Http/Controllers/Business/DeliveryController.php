@@ -213,7 +213,7 @@ class DeliveryController extends Controller
             'proof_image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'signature_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'receiver_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'receiver_phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'receiver_phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'note' => ['nullable', 'string'],
             'collected_amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer Manual,JazzCash Manual,Easypaisa Manual,Cheque'],

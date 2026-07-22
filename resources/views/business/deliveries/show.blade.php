@@ -67,7 +67,7 @@
                 <div class="col-md-6"><label class="form-label">Delivery Proof Image</label><input name="proof_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control" required></div>
                 <div class="col-md-6"><label class="form-label">Customer Signature Image Optional</label><input name="signature_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control"></div>
                 <div class="col-md-6"><label class="form-label">Receiver Name</label><input name="receiver_name" class="form-control" required></div>
-                <div class="col-md-6"><label class="form-label">Receiver Phone Optional</label><input name="receiver_phone" class="form-control"></div>
+                <div class="col-md-6"><label class="form-label">Receiver Phone Optional</label><x-phone-input name="receiver_phone" :value="old('receiver_phone')" :error="$errors->first('receiver_phone')" /></div>
                 <div class="col-md-4"><label class="form-label">Collected Amount</label><input name="collected_amount" type="number" min="0" step="0.01" max="{{ $remaining }}" class="form-control" value="{{ $remaining > 0 ? $remaining : '' }}"></div>
                 <div class="col-md-4"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select"><option value="">No Collection</option>@foreach(['Cash','Bank Transfer Manual','JazzCash Manual','Easypaisa Manual','Cheque'] as $method)<option>{{ $method }}</option>@endforeach</select></div>
                 <div class="col-md-4"><label class="form-label">Reference Number Optional</label><input name="payment_reference" class="form-control"></div>

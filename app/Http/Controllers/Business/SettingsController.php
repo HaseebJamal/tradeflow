@@ -29,7 +29,7 @@ class SettingsController extends Controller
     {
         $data = $request->validate([
             'business_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'phone' => ['required', 'regex:/^\d{11}$/'],
+            'phone' => ['required', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'address' => ['required', 'string', 'max:1000'],
             'city' => ['required', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'category' => ['nullable', 'string', 'max:100'],

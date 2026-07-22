@@ -563,6 +563,8 @@ class CompanyController extends Controller
 
         $subscription = Subscription::where('business_id', $company->id)->lockForUpdate()->first();
         $oldPlanId = $company->selected_plan_id ?? $subscription?->subscription_plan_id;
+        $oldBillingCycle = $company->selected_billing_cycle ?? $subscription?->billing_cycle;
+        $oldAmount = $company->selected_plan_price ?? $subscription?->amount;
 
         if ($data['plan_action'] === 'require_selection') {
             DB::transaction(function () use ($company, $data) {
@@ -646,7 +648,10 @@ class CompanyController extends Controller
         } else {
             $company->owner?->notify(new SubscriptionStatusNotification('Plan Selection Confirmed', 'Your '.$plan->name.' plan selection was confirmed.', $company->id));
         }
-        $this->audit($request, $planChanged ? 'registration plan changed' : 'registration plan confirmed', $company, ['selected_plan_id' => $oldPlanId], ['selected_plan_id' => $plan->id, 'billing_cycle' => $cycle, 'amount' => $amount]);
+        if ($request->boolean('trial_eligible')) {
+            $company->owner?->notify(new SubscriptionStatusNotification('Trial Approved', 'Your registration includes a '.(int) ($data['requested_trial_days'] ?? $plan->trial_days).'-day trial after approval.', $company->id));
+        }
+        $this->audit($request, $planChanged ? 'registration plan changed' : 'registration plan confirmed', $company, ['selected_plan_id' => $oldPlanId, 'billing_cycle' => $oldBillingCycle, 'amount' => $oldAmount], ['selected_plan_id' => $plan->id, 'billing_cycle' => $cycle, 'amount' => $amount, 'reason' => $data['change_reason'] ?? null]);
         $this->audit($request, $request->boolean('trial_eligible') ? 'trial approved' : 'trial disabled', $company, null, ['trial_days' => $request->boolean('trial_eligible') ? (int) ($data['requested_trial_days'] ?? $plan->trial_days) : 0]);
 
         return back()->with('success', $planChanged ? 'Registration plan updated and the owner has been notified.' : 'Registration plan confirmed.');
@@ -661,7 +666,7 @@ class CompanyController extends Controller
 
     private function planSnapshot(SubscriptionPlan $plan, string $cycle, int $amount): array
     {
-        return ['plan_name' => $plan->name, 'billing_cycle' => $cycle, 'selected_price' => $amount, 'monthly_price' => $plan->priceFor('Monthly'), 'yearly_price' => $plan->priceFor('Yearly'), 'trial_days' => (int) $plan->trial_days, 'product_limit' => (int) $plan->product_limit, 'staff_limit' => (int) $plan->staff_limit, 'order_limit' => (int) $plan->order_limit, 'included_modules' => $plan->included_modules ?? []];
+        return ['plan_name' => $plan->name, 'billing_cycle' => $cycle, 'selected_price' => $amount, 'monthly_price' => $plan->priceFor('Monthly'), 'yearly_price' => $plan->priceFor('Yearly'), 'trial_days' => (int) $plan->trial_days, 'product_limit' => (int) $plan->product_limit, 'staff_limit' => (int) $plan->staff_limit, 'order_limit' => (int) $plan->order_limit, 'plan_status' => $plan->status, 'included_modules' => $plan->included_modules ?? []];
     }
 
     public function archive(Request $request, Business $company)

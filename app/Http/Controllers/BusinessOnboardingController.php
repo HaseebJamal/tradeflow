@@ -39,8 +39,9 @@ class BusinessOnboardingController extends Controller
     public function store(RegisterBusinessRequest $request)
     {
         $data = $request->validated();
+        $billingCycle = $data['billing_cycle'];
 
-        DB::transaction(function () use ($request, $data, &$user, &$business, &$plan) {
+        DB::transaction(function () use ($request, $data, $billingCycle, &$user, &$business, &$plan) {
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -74,17 +75,17 @@ class BusinessOnboardingController extends Controller
             $user->update(['business_id' => $business->id]);
 
             $plan = SubscriptionPlan::publicActive()->findOrFail($data['selected_plan_id']);
-            $cycle = $data['billing_cycle'];
-            $amount = $plan->priceFor($cycle);
+            $amount = $plan->priceFor($billingCycle);
             $business->update([
                 'selected_plan_price' => $amount,
+                'trial_eligible' => (int) $plan->trial_days > 0,
                 'requested_trial_days' => (int) $plan->trial_days,
-                'selected_plan_snapshot' => $this->planSnapshot($plan, $cycle, $amount),
+                'selected_plan_snapshot' => $this->planSnapshot($plan, $billingCycle, $amount),
             ]);
             Subscription::create([
                 'business_id' => $business->id,
                 'subscription_plan_id' => $plan->id,
-                'billing_cycle' => $cycle,
+                'billing_cycle' => $billingCycle,
                 'amount' => $amount,
                 'status' => 'Pending',
                 'payment_status' => 'Pending',
@@ -120,12 +121,12 @@ class BusinessOnboardingController extends Controller
             'business_id' => $business->id,
             'module' => 'Subscriptions',
             'action' => 'registration plan selected',
-            'description' => $plan->name.' '.$cycle.' plan selected during business registration.',
+            'description' => $plan->name.' '.$billingCycle.' plan selected during business registration.',
             'record_type' => 'Subscription',
             'record_id' => $business->subscription?->id,
-            'new_values' => ['plan_id' => $plan->id, 'billing_cycle' => $cycle, 'amount' => $business->selected_plan_price],
+            'new_values' => ['plan_id' => $plan->id, 'billing_cycle' => $billingCycle, 'amount' => $business->selected_plan_price],
         ]);
-        $business->owner?->notify(new \App\Notifications\SubscriptionStatusNotification('Plan Selection Received', 'Your '.$plan->name.' '.$cycle.' plan selection was received and is pending review.', $business->id));
+        $business->owner?->notify(new \App\Notifications\SubscriptionStatusNotification('Plan Selection Received', 'Your '.$plan->name.' '.$billingCycle.' plan selection was received and is pending review.', $business->id));
 
         $request->session()->forget(['registration_step', 'registration_draft']);
 
@@ -144,6 +145,7 @@ class BusinessOnboardingController extends Controller
             'product_limit' => (int) $plan->product_limit,
             'staff_limit' => (int) $plan->staff_limit,
             'order_limit' => (int) $plan->order_limit,
+            'plan_status' => $plan->status,
             'included_modules' => $plan->included_modules ?? [],
         ];
     }

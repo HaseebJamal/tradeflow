@@ -27,7 +27,7 @@
                 </div>
                 <div class="col-md-6"><label class="form-label">{{ $requiresOwnerApproval ? 'Requested Name' : 'Name' }}</label><input name="name" class="form-control" value="{{ old('name', $pendingProfileRequest?->requested_values['name'] ?? $user->name) }}" required></div>
                 <div class="col-md-6"><label class="form-label">{{ $requiresOwnerApproval ? 'Requested Email' : 'Email' }}</label><input name="email" type="email" class="form-control" value="{{ old('email', $pendingProfileRequest?->requested_values['email'] ?? $user->email) }}" required></div>
-                <div class="col-md-6"><label class="form-label">{{ $requiresOwnerApproval ? 'Requested Phone' : 'Phone' }}</label><input name="phone" class="form-control" inputmode="numeric" maxlength="11" value="{{ old('phone', $pendingProfileRequest?->requested_values['phone'] ?? $user->phone) }}"></div>
+                <div class="col-md-6"><label class="form-label">{{ $requiresOwnerApproval ? 'Requested Phone' : 'Phone' }}</label><x-phone-input name="phone" :value="old('phone', $pendingProfileRequest?->requested_values['phone'] ?? $user->phone)" :error="$errors->first('phone')" /></div>
                 <div class="col-md-6">
                     <label class="form-label">Upload New Image</label>
                     <input name="profile_image" type="file" class="form-control" accept="image/jpeg,image/png,image/webp" data-tf-profile-input>

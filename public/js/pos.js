@@ -368,7 +368,7 @@
         customer_id: isQuickCustomer() ? null : customer.value || null,
         quick_customer: isQuickCustomer() ? {
             name: quickCustomerName?.value.trim() || '',
-            phone: quickCustomerPhone?.value.trim() || '',
+            phone: window.TradeFlowPhone?.e164(quickCustomerPhone) || quickCustomerPhone?.value.trim() || '',
             city: quickCustomerCity?.value.trim() || '',
             address: quickCustomerAddress?.value.trim() || '',
         } : null,

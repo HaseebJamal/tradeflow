@@ -559,7 +559,12 @@ function initTradeFlowFieldGuards(root = document) {
     const fields = root.querySelectorAll?.('input, textarea') || [];
     fields.forEach((field) => {
         const name = (field.name || '').toLowerCase();
-        const isPhone = field.matches('[data-tf-phone]') || name.includes('phone');
+        // International phone components submit their normalized E.164 value
+        // through a hidden field. Never turn that transport field back into a
+        // visible legacy telephone input based only on its name.
+        const isPhone = field.type !== 'hidden'
+            && !field.matches('[data-tf-phone-visible], [data-tf-phone-value], [data-tf-phone-standalone]')
+            && (field.matches('[data-tf-phone]') || name.includes('phone'));
         const isCnic = field.matches('[data-tf-cnic]') || name === 'cnic' || name.endsWith('_cnic');
         const isName = field.matches('[data-tf-name-only]') || [
             'name', 'owner_name', 'father_name', 'customer_name', 'supplier_name',

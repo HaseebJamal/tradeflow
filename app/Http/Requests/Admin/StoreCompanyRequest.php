@@ -20,11 +20,11 @@ class StoreCompanyRequest extends FormRequest
             'business_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u', 'unique:businesses,business_name'],
             'business_type' => ['required', Rule::in(['Manufacturer', 'Distributor', 'Wholesaler', 'Retail Shop', 'Other'])],
             'business_description' => ['nullable', 'string', 'max:1000', 'required_if:business_type,Other'],
-            'company_phone' => ['required', 'regex:/^\d{11}$/'],
+            'company_phone' => ['required', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'address' => ['required', 'string', 'max:500'], 'city' => ['required', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'registration_number' => ['nullable', 'string', 'max:100'], 'tax_number' => ['nullable', 'string', 'max:100'],
             'owner_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'owner_email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'owner_phone' => ['required', 'regex:/^\d{11}$/'],
+            'owner_phone' => ['required', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'temporary_password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
             // Company modules are optional at creation time. Super Admin can
             // assign or change them later from Company Permissions.
@@ -45,8 +45,8 @@ class StoreCompanyRequest extends FormRequest
             'business_name.regex' => 'Company name may contain letters and spaces only.',
             'owner_name.regex' => 'Owner name may contain letters and spaces only.',
             'city.regex' => 'City may contain letters and spaces only.',
-            'company_phone.regex' => 'Company phone must contain exactly 11 digits.',
-            'owner_phone.regex' => 'Owner phone must contain exactly 11 digits.',
+            'company_phone.regex' => 'Company phone must be a valid international number including its country code.',
+            'owner_phone.regex' => 'Owner phone must be a valid international number including its country code.',
             'business_description.required_if' => 'Describe the business when selecting Other.',
             'temporary_password.confirmed' => 'Password and confirm password do not match.',
         ];

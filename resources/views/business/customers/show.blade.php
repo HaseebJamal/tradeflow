@@ -36,7 +36,7 @@
                 @csrf @method('PATCH')
                 <div class="col-12"><input name="name" value="{{ $customer->name }}" class="form-control" placeholder="Owner name"></div>
                 <div class="col-12"><input name="business_name" value="{{ $customer->business_name }}" class="form-control" placeholder="Shop name"></div>
-                <div class="col-6"><input name="phone" value="{{ $customer->phone }}" class="form-control" placeholder="Phone"></div>
+                <div class="col-6"><x-phone-input name="phone" :value="old('phone', $customer->phone)" :error="$errors->first('phone')" /></div>
                 <div class="col-6"><input name="email" value="{{ $customer->email }}" class="form-control" placeholder="Email"></div>
                 <div class="col-6"><input name="city" value="{{ $customer->city }}" class="form-control" placeholder="City"></div>
                 <div class="col-6"><input name="province" value="{{ $customer->province }}" class="form-control" placeholder="Province"></div>

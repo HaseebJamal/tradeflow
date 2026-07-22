@@ -54,7 +54,7 @@ class ProfileController extends Controller
         $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'profile_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_image' => ['nullable', 'boolean'],
         ]);
@@ -174,7 +174,7 @@ class ProfileController extends Controller
         validator($requested, [
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
         ])->validate();
 
         $oldValues = $user->only(['name', 'email', 'phone', 'profile_image']);

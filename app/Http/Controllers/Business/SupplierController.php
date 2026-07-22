@@ -24,7 +24,7 @@ class SupplierController extends Controller
         $filters = $request->validate([
             'name' => ['nullable', 'string', 'max:255'],
             'company' => ['nullable', 'string', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:50'],
+            'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'status' => ['nullable', 'in:Active,Inactive,Archived'],
             'city' => ['nullable', 'string', 'max:100'],
             'created_by' => ['nullable', 'integer'],
@@ -168,7 +168,7 @@ class SupplierController extends Controller
         return $request->validate([
             'supplier_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'company_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string'],
             'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],

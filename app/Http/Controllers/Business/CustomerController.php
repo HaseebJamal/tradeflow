@@ -34,7 +34,7 @@ class CustomerController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable'], 'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'province' => ['nullable', 'max:100'], 'customer_type' => ['required', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
             'credit_limit' => ['nullable', 'integer', 'min:0'], 'current_balance' => ['nullable', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Blocked'],
@@ -78,7 +78,7 @@ class CustomerController extends Controller
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable'],
             'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],

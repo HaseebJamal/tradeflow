@@ -24,7 +24,7 @@ class StorePosSaleRequest extends FormRequest
             'reference' => ['nullable', 'string', 'max:255'],
             'quick_customer' => ['nullable', 'array'],
             'quick_customer.name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'quick_customer.phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'quick_customer.phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'quick_customer.city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'quick_customer.address' => ['nullable', 'string', 'max:500'],
             'items' => ['required', 'array', 'min:1'],

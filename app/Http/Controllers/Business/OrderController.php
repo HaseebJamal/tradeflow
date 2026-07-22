@@ -112,7 +112,7 @@ class OrderController extends Controller
             'customer_id' => ['nullable', 'string'],
             'new_customer_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'new_customer_shop' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'new_customer_phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'new_customer_phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'new_customer_city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'new_customer_address' => ['nullable', 'string'],
             'new_customer_type' => ['nullable', 'in:Retail Shop,Dealer,Distributor,Retailer,Wholesaler'],

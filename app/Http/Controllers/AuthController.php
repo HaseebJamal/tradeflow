@@ -137,7 +137,7 @@ class AuthController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')],
-            'phone' => ['nullable', 'regex:/^\d{11}$/'],
+            'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'password' => ['required', 'confirmed', PasswordRule::min(8)->mixedCase()->numbers()->symbols()],
             'role' => ['nullable', Rule::in(['retailer', 'business_owner'])],
         ]);

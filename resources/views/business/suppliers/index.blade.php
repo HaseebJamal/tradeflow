@@ -11,7 +11,7 @@
         @csrf
         <div class="col-md-3"><input name="supplier_name" class="form-control" placeholder="Supplier name" required></div>
         <div class="col-md-3"><input name="company_name" class="form-control" placeholder="Company name"></div>
-        <div class="col-md-2"><input name="phone" class="form-control" placeholder="Phone"></div>
+        <div class="col-md-2"><x-phone-input name="phone" :value="old('phone')" :error="$errors->first('phone')" /></div>
         <div class="col-md-2"><input name="city" class="form-control" placeholder="City"></div>
         <div class="col-md-2"><input name="email" type="email" class="form-control" placeholder="Email"></div>
         <div class="col-md-3"><input name="opening_balance" type="number" step="0.01" min="0" value="{{ old('opening_balance', 0) }}" class="form-control" placeholder="Opening balance"></div>

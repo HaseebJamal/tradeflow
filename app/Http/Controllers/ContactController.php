@@ -11,7 +11,7 @@ class ContactController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:30'],
+            'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'message' => ['required', 'string', 'max:2000'],
         ]);
