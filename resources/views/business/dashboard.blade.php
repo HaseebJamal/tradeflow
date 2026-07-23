@@ -36,7 +36,7 @@
             <div><div class="tf-muted small">Current Plan</div><strong>{{ $subscription->plan->name }}</strong> <span class="tf-badge {{ in_array($subscription->status, ['Trial', 'Active'], true) ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $subscription->status }}</span></div>
             <div><div class="tf-muted small">{{ $subscription->status === 'Trial' ? 'Trial ends' : 'Subscription expiry' }}</div><strong>{{ $expiry?->format('d M, Y') ?? 'Not scheduled' }}</strong></div>
             <div><div class="tf-muted small">Plan usage</div><strong>{{ $productsCount ?? 0 }} / {{ number_format($subscription->plan->product_limit) }} Products</strong></div>
-            <a class="btn btn-outline-primary" href="{{ route('business.support') }}">Upgrade Plan</a>
+            <a class="btn btn-outline-primary" href="{{ route('business.subscription.index') }}">Upgrade Plan</a>
         </div>
     </section>
 @endif

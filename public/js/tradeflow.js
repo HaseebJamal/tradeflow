@@ -1763,3 +1763,55 @@ document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreat
         if (input) normalize(input);
     });
 })();
+
+// Laravel returns invalid fields after a failed submission. Once the user
+// starts correcting one of those fields, clear only that field's stale
+// server-side warning; the next submit still runs the normal browser and
+// backend validation rules.
+(() => {
+    const fieldSelector = 'input, select, textarea';
+
+    const feedbackScope = (field) => {
+        if (field.matches('[data-tf-phone-visible]')) {
+            return field.closest('[data-tf-phone-field]');
+        }
+
+        return field.closest('.input-group')?.parentElement || field.parentElement;
+    };
+
+    const markServerFeedback = (field) => {
+        if (!field.classList.contains('is-invalid')) return;
+
+        field.dataset.tfServerInvalid = '1';
+        feedbackScope(field)?.querySelectorAll('.invalid-feedback').forEach((feedback) => {
+            feedback.dataset.tfServerFeedback = '1';
+        });
+    };
+
+    const clearServerFeedback = (field) => {
+        if (field.dataset.tfServerInvalid !== '1') return;
+
+        field.classList.remove('is-invalid');
+        delete field.dataset.tfServerInvalid;
+
+        feedbackScope(field)?.querySelectorAll('[data-tf-server-feedback="1"]').forEach((feedback) => {
+            feedback.classList.remove('d-block');
+            feedback.classList.add('d-none');
+            delete feedback.dataset.tfServerFeedback;
+        });
+    };
+
+    const initialise = () => {
+        document.querySelectorAll(fieldSelector + '.is-invalid').forEach(markServerFeedback);
+    };
+
+    document.addEventListener('DOMContentLoaded', initialise);
+    if (document.readyState !== 'loading') initialise();
+
+    ['input', 'change'].forEach((eventName) => {
+        document.addEventListener(eventName, (event) => {
+            const field = event.target.closest?.(fieldSelector);
+            if (field) clearServerFeedback(field);
+        });
+    });
+})();

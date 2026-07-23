@@ -16,7 +16,7 @@
         <div class="col-md-2"><x-phone-input name="phone" :value="old('phone')" :error="$errors->first('phone')" /></div>
         <div class="col-md-2"><input name="city" class="form-control" placeholder="City"></div>
         <div class="col-md-2"><input name="email" type="email" class="form-control" placeholder="Email"></div>
-        <div class="col-md-3"><input name="opening_balance" type="number" step="0.01" min="0" value="{{ old('opening_balance', 0) }}" class="form-control" placeholder="Opening balance"></div>
+        <div class="col-md-3"><input name="opening_balance" type="number" step="1" min="0" value="{{ old('opening_balance') }}" class="form-control js-whole-number" placeholder="Opening balance"><small class="text-muted">Optional - defaults to Rs 0</small></div>
         <div class="col-md-3"><select name="status" class="form-select"><option>Active</option><option>Inactive</option></select></div>
         <div class="col-md-4"><input name="address" class="form-control" placeholder="Address"></div>
         <div class="col-md-2"><button class="btn btn-tf-primary w-100">Save Supplier</button></div>

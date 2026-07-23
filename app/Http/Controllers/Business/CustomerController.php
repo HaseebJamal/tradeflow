@@ -8,7 +8,10 @@ use App\Models\Delivery;
 use App\Models\JournalEntryLine;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Services\CustomerFinancialFieldService;
+use App\Services\CustomerOpeningBalanceService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CustomerController extends Controller
 {
@@ -31,23 +34,28 @@ class CustomerController extends Controller
         return view('business.customers.index', ['customers' => $query->latest()->paginate(12)->withQueryString()]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, CustomerFinancialFieldService $financialFields, CustomerOpeningBalanceService $openingBalances)
     {
+        $financialFields->normalizeRequest($request, true);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable'], 'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'province' => ['nullable', 'max:100'], 'customer_type' => ['required', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
-            'credit_limit' => ['nullable', 'integer', 'min:0'], 'current_balance' => ['nullable', 'integer', 'min:0'], 'status' => ['required', 'in:Active,Blocked'],
+            'credit_limit' => $financialFields->wholeNumberRules(),
+            'opening_balance' => $financialFields->wholeNumberRules(),
+            'status' => ['required', 'in:Active,Blocked'],
         ]);
         $data['business_name'] = $data['shop_name'] ?? $data['business_name'] ?? null;
         unset($data['shop_name']);
         $data['business_id'] = auth()->user()->business_id;
         $data['created_by'] = auth()->id();
-        $data['current_balance'] = $data['current_balance'] ?? 0;
-        // Keep the original opening balance as the creation baseline while the
-        // form uses the business-facing current-balance terminology.
-        $data['opening_balance'] = $data['current_balance'];
-        Customer::create($data);
+        $data['current_balance'] = (int) $data['opening_balance'];
+
+        DB::transaction(function () use ($data, $openingBalances): void {
+            $customer = Customer::create($data);
+            $openingBalances->recordFor($customer);
+        });
+
         return back()->with('success', 'Customer saved.');
     }
 
@@ -71,9 +79,10 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function update(Request $request, Customer $customer)
+    public function update(Request $request, Customer $customer, CustomerFinancialFieldService $financialFields)
     {
         abort_unless($customer->business_id === auth()->user()->business_id, 403);
+        $financialFields->normalizeRequest($request);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
@@ -84,7 +93,8 @@ class CustomerController extends Controller
             'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'province' => ['nullable', 'max:100'],
             'customer_type' => ['nullable', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
-            'credit_limit' => ['nullable', 'integer', 'min:0'],
+            'credit_limit' => $request->has('credit_limit') ? $financialFields->wholeNumberRules() : ['sometimes'],
+            'opening_balance' => $request->has('opening_balance') ? $financialFields->wholeNumberRules() : ['sometimes'],
             'current_balance' => ['nullable', 'integer', 'min:0'],
             'status' => ['required', 'in:Active,Blocked,Inactive'],
         ]);

@@ -116,7 +116,7 @@ class OrderController extends Controller
             'new_customer_city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'new_customer_address' => ['nullable', 'string'],
             'new_customer_type' => ['nullable', 'in:Retail Shop,Dealer,Distributor,Retailer,Wholesaler'],
-            'new_customer_credit_limit' => ['nullable', 'integer', 'min:0'],
+            'new_customer_credit_limit' => ['nullable', 'regex:/^\d+$/', 'integer', 'min:0'],
             'discount' => ['nullable', 'integer', 'min:0', 'max:100'],
             'tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
             'payment_type' => ['nullable', 'in:Cash,Credit,Partial'],
@@ -148,6 +148,8 @@ class OrderController extends Controller
                 'address' => $data['new_customer_address'] ?? null,
                 'customer_type' => $data['new_customer_type'] ?? 'Retailer',
                 'credit_limit' => $data['new_customer_credit_limit'] ?? 0,
+                'opening_balance' => 0,
+                'current_balance' => 0,
                 'status' => 'Active',
             ]);
         }

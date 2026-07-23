@@ -175,6 +175,14 @@ class PosSaleService
             $cashReceivedRaw = (float) ($data['cash_received'] ?? 0);
             $cashReceived = $this->roundCash($cashReceivedRaw);
             $paid = $paymentType === 'Credit' ? 0 : min($cashReceived, $grandTotal);
+            if ($paymentType === 'Credit' && $customer) {
+                $availableCredit = max(0, (int) $customer->credit_limit - (int) $customer->current_balance);
+                if ($grandTotal > $availableCredit) {
+                    throw ValidationException::withMessages([
+                        'customer_id' => 'This customer does not have sufficient credit available for this sale.',
+                    ]);
+                }
+            }
             if ($paymentType === 'Cash' && $cashReceived < $grandTotal) {
                 throw ValidationException::withMessages(['cash_received' => 'Insufficient cash received. Required amount is Rs '.$grandTotal.'.']);
             }
@@ -284,6 +292,7 @@ class PosSaleService
                 'address' => trim((string) ($quickCustomer['address'] ?? '')) ?: null,
                 'customer_type' => 'Retailer',
                 'status' => 'Active',
+                'credit_limit' => 0,
                 'opening_balance' => 0,
                 'current_balance' => 0,
             ]);

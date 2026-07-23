@@ -71,11 +71,11 @@ class SupplierController extends Controller
             Business::query()->lockForUpdate()->findOrFail($businessId);
             $validated = $this->normaliseSupplierFields($this->validated($request));
             $this->ensureUniqueSupplier($businessId, $validated);
-            $supplier = Supplier::create($validated + [
+            $supplier = Supplier::create(array_merge($validated, [
                 'opening_balance' => $validated['opening_balance'] ?? 0,
                 'business_id' => $businessId,
                 'created_by' => auth()->id(),
-            ]);
+            ]));
 
             $this->postOpeningBalance($supplier);
         });
@@ -125,7 +125,7 @@ class SupplierController extends Controller
         DB::transaction(function () use ($supplier, $validated) {
             Business::query()->lockForUpdate()->findOrFail($supplier->business_id);
             $this->ensureUniqueSupplier($supplier->business_id, $validated, $supplier->id);
-            $supplier->update($validated + ['opening_balance' => $validated['opening_balance'] ?? 0]);
+            $supplier->update(array_merge($validated, ['opening_balance' => $validated['opening_balance'] ?? 0]));
             $this->syncOpeningBalance($supplier->fresh());
         });
 
@@ -251,6 +251,8 @@ class SupplierController extends Controller
         if (array_key_exists('phone', $data) && $data['phone'] !== null) {
             $data['phone'] = $this->normalisePhoneForComparison($data['phone']);
         }
+
+        $data['opening_balance'] = $data['opening_balance'] ?? 0;
 
         return $data;
     }
