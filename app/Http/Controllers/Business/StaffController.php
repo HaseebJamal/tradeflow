@@ -294,6 +294,8 @@ class StaffController extends Controller
             ->values()
             ->all();
 
+        $selected = $companyPermissions->withRequiredPermissions($selected);
+
         $modules = collect($selected)
             ->map(fn (string $permission) => str($permission)->before('.')->toString())
             ->unique()

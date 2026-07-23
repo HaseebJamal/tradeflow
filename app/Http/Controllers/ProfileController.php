@@ -3,16 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
+use App\Models\EmailChangeRequest;
 use App\Models\StaffPasswordChangeRequest;
 use App\Models\UserDetailChangeRequest;
+use App\Models\User;
+use App\Notifications\StaffEmailChangeDecisionNotification;
+use App\Notifications\StaffEmailChangeRequestedNotification;
 use App\Notifications\StaffPasswordChangeDecisionNotification;
 use App\Notifications\StaffPasswordChangeRequestedNotification;
 use App\Notifications\UserDetailsChangeDecisionNotification;
 use App\Notifications\UserDetailsChangeRequestedNotification;
+use App\Services\CompanyPermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
@@ -21,14 +28,15 @@ class ProfileController extends Controller
     public function edit()
     {
         $user = auth()->user();
+        $canApproveEmailChanges = $this->canApproveEmailChanges($user);
 
         return view('profile.edit', [
             'user' => $user,
             'pendingProfileRequest' => $this->requiresOwnerApproval($user)
                 ? UserDetailChangeRequest::where('user_id', $user->id)->where('status', 'Pending')->latest()->first()
                 : null,
-            'pendingPasswordRequest' => $this->requiresOwnerApproval($user)
-                ? StaffPasswordChangeRequest::where('user_id', $user->id)->where('status', 'Pending')->latest('requested_at')->first()
+            'pendingEmailChangeRequest' => $this->requiresOwnerApproval($user)
+                ? EmailChangeRequest::where('user_id', $user->id)->where('status', 'Pending')->latest()->first()
                 : null,
             'profileChangeRequests' => $user->role === 'business_owner'
                 ? UserDetailChangeRequest::with('user')
@@ -37,13 +45,14 @@ class ProfileController extends Controller
                     ->latest()
                     ->get()
                 : collect(),
-            'staffPasswordChangeRequests' => $user->role === 'business_owner'
-                ? StaffPasswordChangeRequest::with('user')
+            'emailChangeRequests' => $canApproveEmailChanges
+                ? EmailChangeRequest::with('user')
                     ->where('business_id', $user->business_id)
-                    ->whereIn('status', ['Pending', 'Approved', 'Rejected'])
-                    ->latest('requested_at')
+                    ->whereIn('status', ['Pending', 'Changes Requested'])
+                    ->latest()
                     ->get()
                 : collect(),
+            'canApproveEmailChanges' => $canApproveEmailChanges,
         ]);
     }
 
@@ -51,18 +60,27 @@ class ProfileController extends Controller
     {
         $user = auth()->user();
 
-        $request->validate([
+        $rules = [
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'profile_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_image' => ['nullable', 'boolean'],
-        ]);
+        ];
+        if (! $this->requiresOwnerApproval($user)) {
+            $rules['email'] = ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)];
+        }
+        $data = $request->validate($rules);
 
         if ($this->requiresOwnerApproval($user)) {
             $oldValues = $user->only(['name', 'email', 'phone']);
-            $requestedValues = $request->only(['name', 'email', 'phone']);
-            $hasDetailChanges = collect(['name', 'email', 'phone'])->contains(
+            // Staff email is intentionally excluded from this profile path.
+            // It can only change through the separately authorized request.
+            $requestedValues = [
+                'name' => $data['name'],
+                'email' => $user->email,
+                'phone' => $data['phone'] ?? null,
+            ];
+            $hasDetailChanges = collect(['name', 'phone'])->contains(
                 fn (string $field) => (string) ($requestedValues[$field] ?? '') !== (string) ($oldValues[$field] ?? '')
             );
             $hasImageChange = $request->hasFile('profile_image') || ($request->boolean('remove_image') && $user->profile_image);
@@ -138,12 +156,167 @@ class ProfileController extends Controller
             $user->profile_image = $path;
         }
 
-        $user->name = $request->name;
-        $user->email = $request->email;
-        $user->phone = $request->phone;
+        $user->name = $data['name'];
+        $user->email = $data['email'];
+        $user->phone = $data['phone'] ?? null;
         $user->save();
 
         return back()->with('success', 'Profile updated.');
+    }
+
+    public function requestEmailChange(Request $request)
+    {
+        $user = $request->user();
+        abort_unless($this->requiresOwnerApproval($user), 403);
+
+        $data = $request->validate([
+            'current_email' => ['required', 'email', 'max:255'],
+            'requested_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
+            'reason' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        $currentEmail = strtolower(trim($data['current_email']));
+        $requestedEmail = strtolower(trim($data['requested_email']));
+
+        if ($currentEmail !== strtolower((string) $user->email)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'current_email' => 'The current email does not match your account.',
+            ]);
+        }
+        if ($requestedEmail === $currentEmail) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'requested_email' => 'Enter a different email address.',
+            ]);
+        }
+
+        $changeRequest = DB::transaction(function () use ($user, $currentEmail, $requestedEmail, $data) {
+            User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+            $pending = EmailChangeRequest::where('business_id', $user->business_id)
+                ->where('user_id', $user->id)
+                ->where('status', 'Pending')
+                ->lockForUpdate()
+                ->first();
+
+            if ($pending) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'requested_email' => 'An email-change request is already awaiting review.',
+                ]);
+            }
+
+            $revision = EmailChangeRequest::where('business_id', $user->business_id)
+                ->where('user_id', $user->id)
+                ->where('status', 'Changes Requested')
+                ->lockForUpdate()
+                ->latest()
+                ->first();
+
+            if ($revision) {
+                $revision->update([
+                    'current_email' => $currentEmail,
+                    'requested_email' => $requestedEmail,
+                    'reason' => $data['reason'],
+                    'status' => 'Pending',
+                    'reviewed_by' => null,
+                    'reviewed_at' => null,
+                    'review_note' => null,
+                ]);
+
+                return $revision->fresh('user');
+            }
+
+            return EmailChangeRequest::create([
+                'business_id' => $user->business_id,
+                'user_id' => $user->id,
+                'current_email' => $currentEmail,
+                'requested_email' => $requestedEmail,
+                'reason' => $data['reason'],
+                'status' => 'Pending',
+            ])->load('user');
+        });
+
+        $this->emailApprovers($user)->each(
+            fn (User $approver) => $approver->notify(new StaffEmailChangeRequestedNotification($changeRequest))
+        );
+        $this->auditEmailChange($request, $changeRequest, 'email_change_requested', $user->name.' requested a login email change.');
+
+        return back()->with('success', 'Your email-change request was sent for review.');
+    }
+
+    public function approveEmailChangeRequest(Request $request, EmailChangeRequest $changeRequest)
+    {
+        $this->ensureEmailChangeApprover($changeRequest);
+        $data = $request->validate(['review_note' => ['nullable', 'string', 'max:2000']]);
+
+        [$changeRequest, $staff] = DB::transaction(function () use ($changeRequest, $data) {
+            $lockedRequest = EmailChangeRequest::where('business_id', auth()->user()->business_id)
+                ->lockForUpdate()
+                ->findOrFail($changeRequest->id);
+            abort_unless($lockedRequest->status === 'Pending', 422, 'Only pending email-change requests can be approved.');
+
+            $staff = User::where('business_id', $lockedRequest->business_id)
+                ->lockForUpdate()
+                ->findOrFail($lockedRequest->user_id);
+            abort_unless($staff->role !== 'business_owner' && ! $staff->isSuperAdmin(), 404);
+
+            if (strtolower((string) $staff->email) !== strtolower((string) $lockedRequest->current_email)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'email_change' => 'The staff email changed after this request. Ask the staff member to submit a new request.',
+                ]);
+            }
+
+            validator(['email' => $lockedRequest->requested_email], [
+                'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($staff->id)],
+            ])->validate();
+
+            $staff->update(['email' => strtolower(trim($lockedRequest->requested_email))]);
+            $lockedRequest->update([
+                'status' => 'Approved',
+                'reviewed_by' => auth()->id(),
+                'reviewed_at' => now(),
+                'review_note' => $data['review_note'] ?? null,
+            ]);
+
+            return [$lockedRequest->fresh('user'), $staff->fresh()];
+        });
+
+        $this->auditEmailChange($request, $changeRequest, 'email_change_approved', auth()->user()->name.' approved a staff login email change.');
+        $staff->notify(new StaffEmailChangeDecisionNotification($changeRequest));
+
+        return back()->with('success', 'Email-change request approved and the staff member was notified.');
+    }
+
+    public function rejectEmailChangeRequest(Request $request, EmailChangeRequest $changeRequest)
+    {
+        $this->ensureEmailChangeApprover($changeRequest);
+        $data = $request->validate(['review_note' => ['required', 'string', 'max:2000']]);
+
+        $changeRequest->update([
+            'status' => 'Rejected',
+            'reviewed_by' => auth()->id(),
+            'reviewed_at' => now(),
+            'review_note' => $data['review_note'],
+        ]);
+        $this->auditEmailChange($request, $changeRequest, 'email_change_rejected', auth()->user()->name.' rejected a staff login email-change request.');
+        $changeRequest->user?->notify(new StaffEmailChangeDecisionNotification($changeRequest->fresh()));
+
+        return back()->with('success', 'Email-change request rejected and the staff member was notified.');
+    }
+
+    public function requestEmailChangeChanges(Request $request, EmailChangeRequest $changeRequest)
+    {
+        $this->ensureEmailChangeApprover($changeRequest);
+        $data = $request->validate(['review_note' => ['required', 'string', 'max:2000']]);
+        abort_unless($changeRequest->status === 'Pending', 422, 'Only pending email-change requests can be revised.');
+
+        $changeRequest->update([
+            'status' => 'Changes Requested',
+            'reviewed_by' => auth()->id(),
+            'reviewed_at' => now(),
+            'review_note' => $data['review_note'],
+        ]);
+        $this->auditEmailChange($request, $changeRequest, 'email_change_changes_requested', auth()->user()->name.' requested changes to a staff login email request.');
+        $changeRequest->user?->notify(new StaffEmailChangeDecisionNotification($changeRequest->fresh()));
+
+        return back()->with('success', 'Requested changes were sent to the staff member.');
     }
 
     public function approveUserDetailChangeRequest(Request $request, UserDetailChangeRequest $changeRequest)
@@ -327,23 +500,70 @@ class ProfileController extends Controller
 
     public function password(Request $request)
     {
-        if ($this->requiresOwnerApproval(auth()->user())) {
-            return back()->withErrors(['password' => 'Password changes require approval from your Business Owner.']);
-        }
-
         $data = $request->validate([
             'current_password' => ['required', 'current_password'],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
         ]);
+        $user = $request->user();
 
-        auth()->user()->update(['password' => Hash::make($data['password'])]);
+        $user->forceFill([
+            'password' => Hash::make($data['password']),
+            'remember_token' => Str::random(60),
+        ])->save();
+        if (Schema::hasTable('sessions') && Schema::hasColumn('sessions', 'user_id')) {
+            DB::table('sessions')
+                ->where('user_id', $user->id)
+                ->where('id', '!=', $request->session()->getId())
+                ->delete();
+        }
+        $this->auditPasswordChanged($request, $user);
 
-        return back()->with('success', 'Password changed.');
+        return back()->with('success', 'Password changed successfully.');
     }
 
     private function requiresOwnerApproval($user): bool
     {
         return (bool) $user->business_id && $user->role !== 'business_owner' && ! $user->isSuperAdmin();
+    }
+
+    private function canApproveEmailChanges(User $user): bool
+    {
+        if (! $user->business_id) {
+            return false;
+        }
+
+        if ($user->role === 'business_owner') {
+            return true;
+        }
+
+        return app(CompanyPermissionService::class)->allowsUser($user, 'users.approve_email_change', $user->business);
+    }
+
+    private function ensureEmailChangeApprover(EmailChangeRequest $changeRequest): void
+    {
+        $approver = auth()->user();
+        abort_unless($approver && $approver->business_id === $changeRequest->business_id, 403);
+        abort_unless($this->canApproveEmailChanges($approver), 403);
+        abort_unless($changeRequest->user && $changeRequest->user->business_id === $approver->business_id, 404);
+    }
+
+    private function emailApprovers(User $requester)
+    {
+        $business = $requester->business;
+        if (! $business) {
+            return collect();
+        }
+
+        $permissions = app(CompanyPermissionService::class);
+
+        return User::where('business_id', $requester->business_id)
+            ->where('status', 'active')
+            ->where('id', '!=', $requester->id)
+            ->get()
+            ->filter(fn (User $candidate) => $candidate->role === 'business_owner'
+                || $permissions->allowsUser($candidate, 'users.approve_email_change', $business))
+            ->unique('id')
+            ->values();
     }
 
     private function ensureOwnerControlsRequest(UserDetailChangeRequest $changeRequest): void
@@ -387,6 +607,43 @@ class ProfileController extends Controller
             'record_id' => $passwordRequest->id,
             'description' => $description,
             'new_values' => ['status' => $passwordRequest->status],
+            'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+        ]);
+    }
+
+    private function auditPasswordChanged(Request $request, User $user): void
+    {
+        AuditLog::create([
+            'user_id' => $user->id,
+            'actor_id' => $user->id,
+            'actor_role' => $user->role,
+            'business_id' => $user->business_id,
+            'target_user_id' => $user->id,
+            'module' => 'Profile',
+            'action' => 'password_changed',
+            'record_type' => 'User',
+            'record_id' => $user->id,
+            'description' => $user->name.' changed their password.',
+            'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+        ]);
+    }
+
+    private function auditEmailChange(Request $request, EmailChangeRequest $changeRequest, string $action, string $description): void
+    {
+        AuditLog::create([
+            'user_id' => auth()->id(),
+            'actor_id' => auth()->id(),
+            'actor_role' => auth()->user()?->role,
+            'business_id' => $changeRequest->business_id,
+            'target_user_id' => $changeRequest->user_id,
+            'module' => 'Roles & Users',
+            'action' => $action,
+            'record_type' => 'EmailChangeRequest',
+            'record_id' => $changeRequest->id,
+            'description' => $description,
+            'new_values' => ['status' => $changeRequest->status],
             'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);

@@ -67,18 +67,16 @@
                     <a href="{{ route('business.deliveries.show', $delivery) }}" class="btn btn-sm btn-outline-primary">View</a>
                     <a href="{{ route('business.deliveries.sheet', $delivery) }}" target="_blank" class="btn btn-sm btn-outline-secondary">Sheet</a>
                     @companyCan('deliveries.update_status')
-                        @if(in_array($delivery->status, ['Pending','Assigned'], true))
-                            <form method="POST" action="{{ route('business.deliveries.start', $delivery) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-success">Pick Up</button></form>
-                        @endif
-                        @if($delivery->status === 'Picked Up')
-                            <a href="{{ route('business.deliveries.show', $delivery) }}" class="btn btn-sm btn-outline-primary">Dispatch</a>
-                        @endif
-                        @if($delivery->status === 'Failed')
-                            <form method="POST" action="{{ route('business.deliveries.reopen', $delivery) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-success">Reopen</button></form>
+                        @if(in_array($delivery->status, ['Pending','Assigned','Picked Up'], true))
+                            <form method="POST" action="{{ route('business.deliveries.start', $delivery) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-success">Start Delivery</button></form>
                         @endif
                         @if($delivery->status === 'Out For Delivery')
-                            @companyCan('deliveries.upload_proof')<a href="{{ route('business.deliveries.show', $delivery) }}#deliver" class="btn btn-sm btn-outline-success">Deliver</a>@endcompanyCan
-                            <a href="{{ route('business.deliveries.show', $delivery) }}#fail" class="btn btn-sm btn-outline-danger">Fail</a>
+                            <a href="{{ route('business.deliveries.show', $delivery) }}" class="btn btn-sm btn-outline-primary">Update Status</a>
+                        @endif
+                    @endcompanyCan
+                    @companyCan('deliveries.edit')
+                        @if($delivery->status === 'Failed')
+                            <form method="POST" action="{{ route('business.deliveries.reopen', $delivery) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-success">Reopen</button></form>
                         @endif
                     @endcompanyCan
                 </div>

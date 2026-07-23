@@ -10,6 +10,12 @@
 @php($total = $order?->grand_total ?: $order?->total ?: $delivery->amount)
 @php($paidAmount = $order?->paid_amount ?? $paidAmount ?? 0)
 @php($remaining = $order?->balance ?? max(0, $total - ($paidAmount ?? 0)))
+@php($permissions = app(\App\Services\CompanyPermissionService::class))
+@php($canEdit = $permissions->allowsUser(auth()->user(), 'deliveries.edit'))
+@php($canAssign = $permissions->allowsUser(auth()->user(), 'deliveries.assign'))
+@php($canUpdateStatus = $permissions->allowsUser(auth()->user(), 'deliveries.update_status'))
+@php($canUploadProof = $permissions->allowsUser(auth()->user(), 'deliveries.upload_proof'))
+@php($canRecordCollection = $permissions->allowsUser(auth()->user(), 'deliveries.record_collection'))
 
 <div class="row g-4 mb-4">
     <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">POS Invoice Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Invoice Number</div><div class="col-6">{{ $invoice?->invoice_number ?? $order?->order_number }}</div><div class="col-6 tf-muted">Sale Date</div><div class="col-6"><x-date-time :value="$order?->order_date ?: $order?->created_at" /></div><div class="col-6 tf-muted">Sale Status</div><div class="col-6">{{ $order?->status }}</div><div class="col-6 tf-muted">Total Amount</div><div class="col-6">Rs {{ number_format($total) }}</div></div></div></div>
@@ -22,72 +28,81 @@
 </div>
 
 <div class="row g-4 mb-4">
-    <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Payment Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Payment Type</div><div class="col-6">{{ $order?->payment_type ?? '-' }}</div><div class="col-6 tf-muted">Paid Amount</div><div class="col-6">Rs {{ number_format($paidAmount ?? 0) }}</div><div class="col-6 tf-muted">Remaining Balance</div><div class="col-6">Rs {{ number_format($remaining) }}</div><div class="col-6 tf-muted">Collection Required</div><div class="col-6">{{ $remaining > 0 ? 'Yes' : 'No' }}</div></div></div></div>
+    <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Payment Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Payment Type</div><div class="col-6">{{ $order?->payment_type ?? '-' }}</div><div class="col-6 tf-muted">Paid Amount</div><div class="col-6">Rs {{ number_format($paidAmount ?? 0) }}</div><div class="col-6 tf-muted">Remaining Balance</div><div class="col-6">Rs {{ number_format($remaining) }}</div><div class="col-6 tf-muted">Cash To Collect</div><div class="col-6">Rs {{ number_format($remaining) }}</div></div></div></div>
     <div class="col-lg-6"><div class="tf-card p-4 h-100"><h2 class="h5">Delivery Information</h2><div class="row g-2 small"><div class="col-6 tf-muted">Assigned Staff</div><div class="col-6">{{ $delivery->staff?->name ?? '-' }}</div><div class="col-6 tf-muted">Delivery Status</div><div class="col-6">{{ $delivery->status }}</div><div class="col-6 tf-muted">Assigned Date</div><div class="col-6"><x-date-time :value="$delivery->assigned_at" /></div><div class="col-6 tf-muted">Started At</div><div class="col-6"><x-date-time :value="$delivery->started_at" /></div><div class="col-6 tf-muted">Delivered At</div><div class="col-6"><x-date-time :value="$delivery->delivered_at" /></div><div class="col-6 tf-muted">Failed At</div><div class="col-6"><x-date-time :value="$delivery->failed_at" /></div><div class="col-6 tf-muted">Note</div><div class="col-6">{{ $delivery->note ?? '-' }}</div></div></div></div>
 </div>
 
 <div class="d-flex flex-wrap gap-2 mb-4">
     <a href="{{ route('business.deliveries.sheet', $delivery) }}" target="_blank" class="btn btn-outline-primary"><i class="bi bi-printer me-1"></i>Print Delivery Sheet</a>
-    @companyCan('deliveries.update_status')
-    @if($delivery->status === 'Failed')
-        <form method="POST" action="{{ route('business.deliveries.reopen', $delivery) }}">@csrf @method('PATCH')<button class="btn btn-outline-success">Reopen Failed Delivery</button></form>
+    @if($canEdit && $delivery->status === 'Failed')
+        <form method="POST" action="{{ route('business.deliveries.reopen', $delivery) }}">@csrf @method('PATCH')<button class="btn btn-outline-success">Reopen Delivery</button></form>
     @endif
-    @if(!in_array($delivery->status, ['Delivered','Cancelled'], true))
+    @if($canEdit && !in_array($delivery->status, ['Delivered', 'Cancelled'], true))
         <form method="POST" action="{{ route('business.deliveries.cancel', $delivery) }}">@csrf @method('PATCH')<button class="btn btn-outline-danger">Cancel Delivery</button></form>
     @endif
-    @endcompanyCan
 </div>
 
-@if($delivery->status !== 'Delivered' && app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.update_status'))
+@if($canEdit && !in_array($delivery->status, ['Delivered', 'Cancelled'], true))
 <div class="tf-card p-4 mb-4">
-    <h2 class="h5">Edit Delivery</h2>
-    <form method="POST" action="{{ route('business.deliveries.update', $delivery) }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PATCH')
-        <div class="col-md-4"><label class="form-label">Status</label><select name="status" class="form-select">@foreach(['Assigned','Picked Up','Out For Delivery','Failed','Returned','Cancelled'] as $status)<option @selected($delivery->status === $status)>{{ $status }}</option>@endforeach</select></div>
-        @if(app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.assign') || app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.edit'))
-            <div class="col-md-4"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select"><option value="">Keep current staff</option>@foreach($deliveryStaff ?? [] as $member)<option value="{{ $member->id }}" @selected($delivery->delivery_staff_id === $member->id)>{{ $member->name }}</option>@endforeach</select></div>
-        @endif
-        <div class="col-md-8"><label class="form-label">Address</label><input name="address" value="{{ $delivery->address }}" class="form-control"></div>
+    <h2 class="h5">Edit Delivery Details</h2>
+    <form method="POST" action="{{ route('business.deliveries.update', $delivery) }}" class="row g-3">@csrf @method('PATCH')
+        @if($canAssign)<div class="col-md-4"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select"><option value="">Keep current staff</option>@foreach($deliveryStaff ?? [] as $member)<option value="{{ $member->id }}" @selected($delivery->delivery_staff_id === $member->id)>{{ $member->name }}</option>@endforeach</select></div>@endif
+        <div @class(['col-md-8' => $canAssign, 'col-12' => !$canAssign])><label class="form-label">Address</label><input name="address" value="{{ $delivery->address }}" class="form-control" required></div>
         <div class="col-12"><label class="form-label">Note</label><textarea name="note" class="form-control">{{ $delivery->note }}</textarea></div>
         <div class="col-12"><button class="btn btn-outline-primary">Save Delivery Changes</button></div>
     </form>
 </div>
 @endif
 
-@if(in_array($delivery->status, ['Pending','Assigned'], true) && app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.update_status'))
-    <form method="POST" action="{{ route('business.deliveries.start', $delivery) }}" class="mb-4">@csrf @method('PATCH')<button class="btn btn-tf-primary"><i class="bi bi-box-seam me-1"></i>Mark Picked Up</button></form>
+@if(in_array($delivery->status, ['Pending', 'Assigned', 'Picked Up'], true) && $canUpdateStatus)
+    <form method="POST" action="{{ route('business.deliveries.start', $delivery) }}" class="mb-4">@csrf @method('PATCH')<button class="btn btn-tf-primary"><i class="bi bi-truck me-1"></i>Start Delivery</button></form>
 @endif
 
-@if($delivery->status === 'Out For Delivery' && app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'deliveries.update_status'))
-<div class="row g-4">
-        @companyCan('deliveries.upload_proof')
-        <div class="col-lg-7">
-        <div class="tf-card p-4" id="deliver">
-            <h2 class="h5">Mark Delivered</h2>
-            <form method="POST" action="{{ route('business.deliveries.deliver', $delivery) }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PATCH')
+@if($delivery->status === 'Out For Delivery')
+<div class="row g-4 mb-4">
+    @if($canUploadProof)
+    <div class="col-lg-6">
+        <div class="tf-card p-4">
+            <h2 class="h5">Upload Delivery Proof</h2>
+            <form method="POST" action="{{ route('business.deliveries.proof', $delivery) }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PATCH')
                 <div class="col-md-6"><label class="form-label">Delivery Proof Image</label><input name="proof_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control" required></div>
-                <div class="col-md-6"><label class="form-label">Customer Signature Image Optional</label><input name="signature_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control"></div>
-                <div class="col-md-6"><label class="form-label">Receiver Name</label><input name="receiver_name" class="form-control" required></div>
-                <div class="col-md-6"><label class="form-label">Receiver Phone Optional</label><x-phone-input name="receiver_phone" :value="old('receiver_phone')" :error="$errors->first('receiver_phone')" /></div>
-                <div class="col-md-4"><label class="form-label">Collected Amount</label><input name="collected_amount" type="number" min="0" step="0.01" max="{{ $remaining }}" class="form-control" value="{{ $remaining > 0 ? $remaining : '' }}"></div>
-                <div class="col-md-4"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select"><option value="">No Collection</option>@foreach(['Cash','Bank Transfer Manual','JazzCash Manual','Easypaisa Manual','Cheque'] as $method)<option>{{ $method }}</option>@endforeach</select></div>
-                <div class="col-md-4"><label class="form-label">Reference Number Optional</label><input name="payment_reference" class="form-control"></div>
-                <div class="col-md-6"><label class="form-label">Payment Proof Image Optional</label><input name="payment_proof_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control"></div>
-                <div class="col-md-6"><label class="form-label">Delivery Note Optional</label><textarea name="note" class="form-control" rows="2"></textarea></div>
-                <div class="col-12"><button class="btn btn-tf-primary">Mark Delivered</button></div>
+                <div class="col-md-6"><label class="form-label">Customer Signature Optional</label><input name="signature_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control"></div>
+                <div class="col-md-6"><label class="form-label">Receiver Name</label><input name="receiver_name" value="{{ $delivery->receiver_name }}" class="form-control" required></div>
+                <div class="col-md-6"><label class="form-label">Receiver Phone Optional</label><x-phone-input name="receiver_phone" :value="old('receiver_phone', $delivery->receiver_phone)" :error="$errors->first('receiver_phone')" /></div>
+                <div class="col-12"><label class="form-label">Delivery Note Optional</label><textarea name="note" class="form-control" rows="2">{{ $delivery->note }}</textarea></div>
+                <div class="col-12"><button class="btn btn-outline-primary">Upload Proof</button></div>
             </form>
         </div>
-        @endcompanyCan
     </div>
-    <div class="col-lg-5">
-        <div class="tf-card p-4" id="fail">
-            <h2 class="h5">Mark Failed</h2>
+    @endif
+    @if($canUpdateStatus)
+    <div class="col-lg-6">
+        <div class="tf-card p-4 h-100">
+            <h2 class="h5">Delivery Status</h2>
+            <p class="tf-muted">Upload proof before completing this delivery.</p>
+            @if($canUploadProof)<form method="POST" action="{{ route('business.deliveries.deliver', $delivery) }}" class="mb-3">@csrf @method('PATCH')<button class="btn btn-tf-primary">Mark Delivered</button></form>@endif
             <form method="POST" action="{{ route('business.deliveries.fail', $delivery) }}" class="row g-3">@csrf @method('PATCH')
-                <div class="col-12"><label class="form-label">Failure Reason</label><textarea name="failure_reason" class="form-control" rows="4" required></textarea></div>
+                <div class="col-12"><label class="form-label">Failure Reason</label><textarea name="failure_reason" class="form-control" rows="3" required></textarea></div>
                 <div class="col-12"><label class="form-label">Note Optional</label><textarea name="note" class="form-control" rows="2"></textarea></div>
                 <div class="col-12"><button class="btn btn-outline-danger">Mark Failed</button></div>
             </form>
         </div>
     </div>
+    @endif
+</div>
+@endif
+
+@if($canRecordCollection && $remaining > 0 && !in_array($delivery->status, ['Cancelled', 'Failed', 'Returned'], true))
+<div class="tf-card p-4 mb-4">
+    <h2 class="h5">Record Collection</h2>
+    <p class="tf-muted">Cash to collect: <strong>Rs {{ number_format($remaining) }}</strong></p>
+    <form method="POST" action="{{ route('business.deliveries.collection', $delivery) }}" enctype="multipart/form-data" class="row g-3">@csrf
+        <div class="col-md-3"><label class="form-label">Amount Collected</label><input name="collected_amount" type="number" min="1" max="{{ $remaining }}" step="1" class="form-control" required></div>
+        <div class="col-md-3"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select" required>@foreach(['Cash', 'Bank Transfer Manual', 'JazzCash Manual', 'Easypaisa Manual', 'Cheque'] as $method)<option>{{ $method }}</option>@endforeach</select></div>
+        <div class="col-md-3"><label class="form-label">Reference Optional</label><input name="payment_reference" class="form-control"></div>
+        <div class="col-md-3"><label class="form-label">Payment Proof Optional</label><input name="payment_proof_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control"></div>
+        <div class="col-12"><button class="btn btn-tf-primary">Record Collection</button></div>
+    </form>
 </div>
 @endif
 @endsection

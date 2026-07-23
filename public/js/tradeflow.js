@@ -1543,6 +1543,23 @@ function initPermissionHierarchy(form) {
     const master = form.querySelector('[data-permission-master]');
     const groups = [...form.querySelectorAll('[data-permission-group]')];
 
+    const syncDeliveryViewDependency = () => {
+        const deliveryGroup = groups.find((group) => group.querySelector('[data-permission-child][value="deliveries.view"]'));
+        if (!deliveryGroup) return;
+
+        const view = deliveryGroup.querySelector('[data-permission-child][value="deliveries.view"]');
+        const dependentActions = [
+            'deliveries.record_collection',
+            'deliveries.update_status',
+            'deliveries.upload_proof',
+        ].map((permission) => deliveryGroup.querySelector(`[data-permission-child][value="${permission}"]`)).filter(Boolean);
+        const hasDependentAction = dependentActions.some((input) => input.checked);
+
+        if (hasDependentAction) view.checked = true;
+        view.disabled = hasDependentAction;
+        deliveryGroup.querySelector('[data-delivery-view-dependency]')?.classList.toggle('d-none', !hasDependentAction);
+    };
+
     const syncGroup = (group) => {
         const parent = group.querySelector('[data-permission-module]');
         const children = [...group.querySelectorAll('[data-permission-child]')];
@@ -1564,6 +1581,7 @@ function initPermissionHierarchy(form) {
     };
 
     const syncAll = () => {
+        syncDeliveryViewDependency();
         groups.forEach(syncGroup);
         syncMaster();
     };

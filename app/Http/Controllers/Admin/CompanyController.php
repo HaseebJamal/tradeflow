@@ -790,10 +790,7 @@ class CompanyController extends Controller
     private function applyInitialPermissions(Business $company, array $permissions): void
     {
         $permissionService = app(\App\Services\CompanyPermissionService::class);
-        $selected = collect($permissions)
-            ->map(fn ($key) => $permissionService->normalise((string) $key))
-            ->unique()
-            ->all();
+        $selected = $permissionService->withRequiredPermissions($permissions);
         $definitions = $permissionService->activeDefinitions();
         $enabledModules = $definitions
             ->filter(fn (PermissionDefinition $definition) => $definition->permission_key === strtolower($definition->module).'.view')

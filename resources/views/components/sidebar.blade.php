@@ -49,12 +49,16 @@
 
     if ($area === 'business') {
         $companyPermissions = app(\App\Services\CompanyPermissionService::class);
-        $items = array_values(array_filter($items, function ($item) use ($companyPermissions, $role) {
+        $subscriptionAccess = app(\App\Services\SubscriptionManagementAccessService::class);
+        $items = array_values(array_filter($items, function ($item) use ($companyPermissions, $subscriptionAccess) {
             $module = $item[3] ?? null;
             if ($module === 'purchase_returns' && !$companyPermissions->allowsUser(auth()->user(), 'purchases.view')) {
                 return false;
             }
             if ($module === 'sales_returns' && !$companyPermissions->allowsUser(auth()->user(), 'sales.view')) {
+                return false;
+            }
+            if ($module === 'subscriptions' && !$subscriptionAccess->canManage(auth()->user())) {
                 return false;
             }
             $visibilityPermissions = $module === 'staff'

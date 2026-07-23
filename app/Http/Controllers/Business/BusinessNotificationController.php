@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Business;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
-use App\Models\StaffPasswordChangeRequest;
+use App\Models\EmailChangeRequest;
 use App\Models\UserDetailChangeRequest;
 use App\Services\CompanyPermissionService;
 use Illuminate\Http\Request;
@@ -24,30 +24,36 @@ class BusinessNotificationController extends Controller
 
         $notifications = $query->latest()->paginate(12)->withQueryString();
         $profileRequests = collect();
-        $passwordRequests = collect();
+        $emailChangeRequests = collect();
+        $canApproveEmailChanges = $user->business_id
+            && ($user->role === 'business_owner'
+                || app(CompanyPermissionService::class)->allowsUser($user, 'users.approve_email_change', $user->business));
 
         if ($user->role === 'business_owner' && $user->business_id) {
             $items = $notifications->getCollection();
             $profileIds = $items->filter(fn ($notification) => data_get($notification->data, 'category') === 'user_detail_change_request'
                     && (int) data_get($notification->data, 'business_id') === (int) $user->business_id)
                 ->pluck('data.change_request_id')->filter()->unique()->values();
-            $passwordIds = $items->filter(fn ($notification) => data_get($notification->data, 'category') === 'staff_password_change_request'
-                    && (int) data_get($notification->data, 'business_id') === (int) $user->business_id)
-                ->pluck('data.password_change_request_id')->filter()->unique()->values();
-
             $profileRequests = UserDetailChangeRequest::with('user')
                 ->where('business_id', $user->business_id)
                 ->whereIn('id', $profileIds)
                 ->get()
                 ->keyBy('id');
-            $passwordRequests = StaffPasswordChangeRequest::with('user')
+        }
+
+        if ($canApproveEmailChanges) {
+            $emailRequestIds = $notifications->getCollection()
+                ->filter(fn ($notification) => data_get($notification->data, 'category') === 'staff_email_change_request'
+                    && (int) data_get($notification->data, 'business_id') === (int) $user->business_id)
+                ->pluck('data.email_change_request_id')->filter()->unique()->values();
+            $emailChangeRequests = EmailChangeRequest::with('user')
                 ->where('business_id', $user->business_id)
-                ->whereIn('id', $passwordIds)
+                ->whereIn('id', $emailRequestIds)
                 ->get()
                 ->keyBy('id');
         }
 
-        return view('auth.notifications', compact('notifications', 'profileRequests', 'passwordRequests'));
+        return view('auth.notifications', compact('notifications', 'profileRequests', 'emailChangeRequests', 'canApproveEmailChanges'));
     }
 
     public function markRead(Request $request, string $notification)

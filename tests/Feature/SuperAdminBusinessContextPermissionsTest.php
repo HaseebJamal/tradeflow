@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Business;
 use App\Models\User;
 use App\Services\CompanyPermissionService;
+use App\Services\SubscriptionManagementAccessService;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
@@ -160,6 +161,112 @@ class SuperAdminBusinessContextPermissionsTest extends TestCase
         $this->assertSame('customers.create', $permissions->normalise('create_customer'));
     }
 
+    public function test_delivery_actions_automatically_include_the_delivery_workspace_permission(): void
+    {
+        $permissions = app(CompanyPermissionService::class);
+
+        $this->assertSame(
+            ['deliveries.update_status', 'deliveries.view'],
+            $permissions->withRequiredPermissions(['deliveries.update_status'])
+        );
+    }
+
+    public function test_legacy_delivery_action_assignment_keeps_staff_access_scoped_to_delivery_view(): void
+    {
+        $business = new Business;
+        $business->setRawAttributes(['id' => 10]);
+        $staff = new User([
+            'role' => 'custom_staff',
+            'business_id' => $business->id,
+            'status' => 'active',
+            'permissions' => ['deliveries.update_status'],
+        ]);
+        $configured = ['deliveries.update_status' => true];
+        $definitions = [
+            'modules' => ['deliveries' => 'deliveries.view'],
+            'permissions' => [
+                'deliveries.view' => 'deliveries.view',
+                'deliveries.update_status' => 'deliveries.update_status',
+            ],
+        ];
+        Cache::shouldReceive('remember')->andReturnUsing(
+            fn (string $key) => $key === 'tradeflow.company-permissions.10' ? $configured : $definitions,
+        );
+
+        $permissions = app(CompanyPermissionService::class);
+
+        $this->assertTrue($permissions->allowsUser($staff, 'deliveries.view', $business));
+        $this->assertTrue($permissions->allowsUser($staff, 'deliveries.update_status', $business));
+        $this->assertFalse($permissions->allowsUser($staff, 'deliveries.edit', $business));
+    }
+
+    public function test_subscription_summary_requires_an_owner_or_explicit_subscription_management_action(): void
+    {
+        $business = new Business;
+        $business->setRawAttributes(['id' => 10]);
+        $this->mockSubscriptionPermissionCache();
+
+        $owner = new User(['role' => 'business_owner', 'business_id' => $business->id, 'status' => 'active']);
+        $viewOnlyStaff = new User([
+            'role' => 'custom_staff',
+            'business_id' => $business->id,
+            'status' => 'active',
+            'permissions' => ['subscriptions.view'],
+        ]);
+        $manager = new User([
+            'role' => 'custom_staff',
+            'business_id' => $business->id,
+            'status' => 'active',
+            'permissions' => ['subscriptions.view', 'subscriptions.upgrade'],
+        ]);
+        $previewingSuperAdmin = new User([
+            'role' => 'super_admin',
+            'business_id' => $business->id,
+            'status' => 'active',
+        ]);
+
+        $access = app(SubscriptionManagementAccessService::class);
+
+        $this->assertTrue($access->canManage($owner, $business));
+        $this->assertFalse($access->canManage($viewOnlyStaff, $business));
+        $this->assertTrue($access->canManage($manager, $business));
+        $this->assertTrue($access->canManage($previewingSuperAdmin, $business));
+    }
+
+    public function test_email_change_approval_permission_is_scoped_to_the_staff_module(): void
+    {
+        $business = new Business;
+        $business->setRawAttributes(['id' => 10]);
+        $staffAdmin = new User([
+            'role' => 'custom_staff',
+            'business_id' => $business->id,
+            'status' => 'active',
+            'permissions' => ['users.approve_email_change'],
+        ]);
+        $configured = [
+            'staff.view' => true,
+            'users.approve_email_change' => true,
+        ];
+        $definitions = [
+            'modules' => ['staff' => 'staff.view'],
+            'permissions' => [
+                'staff.view' => 'staff.view',
+                'users.approve_email_change' => 'users.approve_email_change',
+            ],
+            'permission_modules' => [
+                'staff.view' => 'staff',
+                'users.approve_email_change' => 'staff',
+            ],
+        ];
+        Cache::shouldReceive('remember')->andReturnUsing(
+            fn (string $key) => $key === 'tradeflow.company-permissions.10' ? $configured : $definitions,
+        );
+
+        $this->assertTrue(
+            app(CompanyPermissionService::class)->allowsUser($staffAdmin, 'users.approve_email_change', $business)
+        );
+    }
+
     private function mockPermissionCache(array $configuredPermissions): void
     {
         Cache::shouldReceive('remember')->twice()->andReturn(
@@ -190,6 +297,26 @@ class SuperAdminBusinessContextPermissionsTest extends TestCase
                     'customers.restore' => 'customers.restore',
                 ],
             ];
+
+        Cache::shouldReceive('remember')->andReturnUsing(
+            fn (string $key) => $key === 'tradeflow.company-permissions.10' ? $configured : $definitions,
+        );
+    }
+
+    private function mockSubscriptionPermissionCache(): void
+    {
+        $configured = [
+            'subscriptions.view' => true,
+            'subscriptions.request' => true,
+            'subscriptions.upgrade' => true,
+            'subscriptions.downgrade' => true,
+            'subscriptions.renew' => true,
+            'subscriptions.cancel' => true,
+        ];
+        $definitions = [
+            'modules' => ['subscriptions' => 'subscriptions.view'],
+            'permissions' => array_combine(array_keys($configured), array_keys($configured)),
+        ];
 
         Cache::shouldReceive('remember')->andReturnUsing(
             fn (string $key) => $key === 'tradeflow.company-permissions.10' ? $configured : $definitions,

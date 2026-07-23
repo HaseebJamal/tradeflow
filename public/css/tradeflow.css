@@ -2462,3 +2462,59 @@ body.tf-company-delete-modal-open {
 .iti__country-list {
     z-index: 1080;
 }
+.tf-adjustment-group {
+    flex-wrap: nowrap;
+}
+
+.tf-adjustment-type {
+    flex: 0 0 52px;
+    width: 52px;
+    max-width: 52px;
+    min-width: 52px;
+    white-space: nowrap;
+}
+
+.tf-adjustment-group > .form-control {
+    min-width: 0;
+}
+
+.tf-quotation-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: end;
+    gap: 1rem;
+}
+
+.tf-quotation-notes {
+    min-width: 0;
+}
+
+.tf-quotation-total {
+    min-width: 100px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.tf-quotation-actions {
+    display: flex;
+    gap: .5rem;
+}
+
+.tf-quotation-actions .btn {
+    min-width: 120px;
+    white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+    .tf-quotation-footer {
+        grid-template-columns: 1fr;
+    }
+
+    .tf-quotation-total {
+        text-align: left;
+    }
+
+    .tf-quotation-actions .btn {
+        flex: 1 1 0;
+    }
+}

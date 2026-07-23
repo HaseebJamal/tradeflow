@@ -79,9 +79,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::match(['post', 'put'], '/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
-    Route::post('/profile/staff-password-change-requests', [ProfileController::class, 'requestStaffPasswordChange'])->name('profile.staff-password-change-requests.store');
-    Route::patch('/profile/staff-password-change-requests/{passwordRequest}/approve', [ProfileController::class, 'approveStaffPasswordChangeRequest'])->name('profile.staff-password-change-requests.approve');
-    Route::patch('/profile/staff-password-change-requests/{passwordRequest}/reject', [ProfileController::class, 'rejectStaffPasswordChangeRequest'])->name('profile.staff-password-change-requests.reject');
+    Route::post('/profile/email-change-requests', [ProfileController::class, 'requestEmailChange'])->name('profile.email-change-requests.store');
+    Route::patch('/profile/email-change-requests/{changeRequest}/approve', [ProfileController::class, 'approveEmailChangeRequest'])->name('profile.email-change-requests.approve');
+    Route::patch('/profile/email-change-requests/{changeRequest}/reject', [ProfileController::class, 'rejectEmailChangeRequest'])->name('profile.email-change-requests.reject');
+    Route::patch('/profile/email-change-requests/{changeRequest}/request-changes', [ProfileController::class, 'requestEmailChangeChanges'])->name('profile.email-change-requests.request-changes');
     Route::patch('/profile/user-detail-change-requests/{changeRequest}/approve', [ProfileController::class, 'approveUserDetailChangeRequest'])->name('profile.user-detail-change-requests.approve');
     Route::patch('/profile/user-detail-change-requests/{changeRequest}/apply', [ProfileController::class, 'applyUserDetailChangeRequest'])->name('profile.user-detail-change-requests.apply');
     Route::patch('/profile/user-detail-change-requests/{changeRequest}/reject', [ProfileController::class, 'rejectUserDetailChangeRequest'])->name('profile.user-detail-change-requests.reject');
@@ -281,7 +282,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
         Route::patch('/register/{register}/close', [PosController::class, 'closeRegister'])->name('register.close');
         Route::post('/sales', [PosController::class, 'store'])->name('sales.store');
         Route::get('/history', [PosController::class, 'history'])->name('history');
-        Route::post('/invoices/{invoice}/deliveries', [DeliveryController::class, 'assignFromPosInvoice'])->name('delivery.assign')->middleware('company.permission:deliveries.assign');
+        Route::post('/invoices/{invoice}/deliveries', [DeliveryController::class, 'assignFromPosInvoice'])->name('delivery.assign');
         Route::get('/receipts/{invoice}/view', [PosController::class, 'receiptView'])->name('receipt.view');
         Route::get('/receipts/{invoice}/download', [PosController::class, 'receiptDownload'])->name('receipt.download');
         Route::get('/receipts/{invoice}/print', [PosController::class, 'receiptPrint'])->name('receipt.print');
@@ -340,8 +341,10 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/deliveries/{delivery}', [DeliveryController::class, 'show'])->name('deliveries.show')->middleware('business.permission:Deliveries');
     Route::patch('/deliveries/{delivery}', [DeliveryController::class, 'update'])->name('deliveries.update')->middleware('business.permission:Deliveries');
     Route::patch('/deliveries/{delivery}/start', [DeliveryController::class, 'start'])->name('deliveries.start')->middleware('business.permission:Deliveries');
-    Route::patch('/deliveries/{delivery}/deliver', [DeliveryController::class, 'deliver'])->name('deliveries.deliver')->middleware(['business.permission:Deliveries', 'company.permission:deliveries.upload_proof']);
+    Route::patch('/deliveries/{delivery}/proof', [DeliveryController::class, 'uploadProof'])->name('deliveries.proof')->middleware('business.permission:Deliveries');
+    Route::patch('/deliveries/{delivery}/deliver', [DeliveryController::class, 'deliver'])->name('deliveries.deliver')->middleware('business.permission:Deliveries');
     Route::patch('/deliveries/{delivery}/fail', [DeliveryController::class, 'fail'])->name('deliveries.fail')->middleware('business.permission:Deliveries');
+    Route::post('/deliveries/{delivery}/collection', [DeliveryController::class, 'recordCollection'])->name('deliveries.collection')->middleware('business.permission:Deliveries');
     Route::patch('/deliveries/{delivery}/reopen', [DeliveryController::class, 'reopen'])->name('deliveries.reopen')->middleware('business.permission:Deliveries');
     Route::patch('/deliveries/{delivery}/cancel', [DeliveryController::class, 'cancel'])->name('deliveries.cancel')->middleware('business.permission:Deliveries');
     Route::get('/deliveries/{delivery}/sheet', [DeliveryController::class, 'sheet'])->name('deliveries.sheet')->middleware('business.permission:Deliveries');

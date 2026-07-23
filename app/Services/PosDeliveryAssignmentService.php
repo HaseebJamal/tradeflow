@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\Delivery;
+use App\Models\Business;
 use App\Models\Invoice;
 use App\Models\User;
+use App\Notifications\BusinessActivityNotification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -39,7 +41,7 @@ class PosDeliveryAssignmentService
             throw ValidationException::withMessages(['permission' => 'You do not have permission to assign deliveries.']);
         }
 
-        return DB::transaction(function () use ($actor, $invoiceId, $data): Delivery {
+        $delivery = DB::transaction(function () use ($actor, $invoiceId, $data): Delivery {
             $invoice = Invoice::query()
                 ->with(['order.items', 'customer'])
                 ->where('business_id', $actor->business_id)
@@ -84,15 +86,34 @@ class PosDeliveryAssignmentService
                 'created_by' => $actor->id,
             ]);
 
-            $this->activity->record($invoice->business_id, 'Deliveries', 'Delivery Assigned', $delivery->id, null, [
-                'invoice_number' => $invoice->invoice_number,
-                'delivery_staff_id' => $staff->id,
-                'notification_title' => 'Delivery Assigned',
-                'notification_message' => 'Invoice '.$invoice->invoice_number.' assigned to '.$staff->name.' for delivery.',
-            ]);
-
             return $delivery;
         });
+
+        $assignedStaffName = User::whereKey($delivery->delivery_staff_id)->value('name') ?? 'delivery staff';
+        $details = [
+            'invoice_number' => $delivery->invoice?->invoice_number,
+            'delivery_staff_id' => $delivery->delivery_staff_id,
+            'notification_title' => 'Delivery Assigned',
+            'notification_message' => 'Invoice '.($delivery->invoice?->invoice_number ?? '#'.$delivery->invoice_id).' assigned to '.$assignedStaffName.' for delivery.',
+        ];
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery Assigned', $delivery->id, null, $details);
+
+        // BusinessActivityService notifies users with Notifications access.
+        // Delivery staff and the owner still receive this assignment alert when
+        // their role deliberately has no Notifications module permission.
+        $business = Business::find($delivery->business_id);
+        $recipients = User::query()
+            ->where('business_id', $delivery->business_id)
+            ->whereIn('id', array_filter([$delivery->delivery_staff_id, $business?->owner_id]))
+            ->where('status', 'active')
+            ->get();
+        foreach ($recipients as $recipient) {
+            if (!$this->permissions->allowsUser($recipient, 'notifications.view', $business)) {
+                $recipient->notify(new BusinessActivityNotification($business, 'Deliveries', 'Delivery Assigned', $delivery->id, $details));
+            }
+        }
+
+        return $delivery;
     }
 
     private function isDeliveryStaff(User $staff): bool

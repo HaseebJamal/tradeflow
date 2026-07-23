@@ -11,6 +11,7 @@ use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Notifications\SubscriptionStatusNotification;
 use App\Services\CompanyPermissionService;
+use App\Services\SubscriptionManagementAccessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -20,7 +21,7 @@ class BusinessSubscriptionController extends Controller
     public function index(Request $request)
     {
         $business = $this->businessFor($request);
-        $this->assertPermission($request, 'subscriptions.view', $business);
+        $this->assertSubscriptionManager($request, $business);
 
         return view('business.subscription.index', [
             'business' => $business,
@@ -37,6 +38,7 @@ class BusinessSubscriptionController extends Controller
     public function storeRequest(Request $request)
     {
         $business = $this->businessFor($request);
+        $this->assertSubscriptionManager($request, $business);
         $data = $request->validate([
             'requested_plan_id' => ['required', 'integer', 'exists:subscription_plans,id'],
             'billing_cycle' => ['required', 'in:Monthly,Yearly'],
@@ -103,6 +105,7 @@ class BusinessSubscriptionController extends Controller
     public function cancelRequest(Request $request, SubscriptionChangeRequest $changeRequest)
     {
         $business = $this->businessFor($request);
+        $this->assertSubscriptionManager($request, $business);
         $this->assertPermission($request, 'subscriptions.cancel', $business);
         abort_unless($changeRequest->business_id === $business->id, 403);
         abort_unless($changeRequest->status === 'Pending', 422, 'Only pending subscription requests can be cancelled.');
@@ -125,6 +128,14 @@ class BusinessSubscriptionController extends Controller
         }
 
         abort_unless($fallback && $permissions->allowsUser($request->user(), $fallback, $business), 403);
+    }
+
+    private function assertSubscriptionManager(Request $request, Business $business): void
+    {
+        abort_unless(
+            app(SubscriptionManagementAccessService::class)->canManage($request->user(), $business),
+            403
+        );
     }
 
     private function assertDowngradeFits(Business $business, SubscriptionPlan $plan): void

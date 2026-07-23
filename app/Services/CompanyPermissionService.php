@@ -44,10 +44,19 @@ class CompanyPermissionService
             return false;
         }
 
-        $module = str($permission)->before('.')->toString();
         $definitions = $this->definitionKeys();
-        $moduleKey = $definitions['modules'][$module] ?? null;
         $requestedKey = $definitions['permissions'][$permission] ?? $permission;
+        $module = ($definitions['permission_modules'] ?? [])[$requestedKey]
+            ?? str($permission)->before('.')->toString();
+        $moduleKey = $definitions['modules'][$module] ?? null;
+
+        // Legacy company permission sets may contain a delivery action without
+        // its required workspace key. Treat the action as a view dependency so
+        // existing delivery staff are not locked out while the next save writes
+        // the canonical deliveries.view record.
+        $deliveryActions = ['deliveries.record_collection', 'deliveries.update_status', 'deliveries.upload_proof'];
+        $deliveryActionEnabled = $module === 'deliveries'
+            && collect($deliveryActions)->contains(fn (string $key) => ($configuredPermissions[$key] ?? false) === true);
 
         // Module access is the hard ceiling. A stale child action can never
         // keep a disabled module visible or reachable.
@@ -56,7 +65,8 @@ class CompanyPermissionService
             // while current definitions use "categories.view". Treat both as
             // the same module gate without widening access beyond saved data.
             if (($configuredPermissions[$moduleKey] ?? false) !== true
-                && ($configuredPermissions[$module] ?? false) !== true) {
+                && ($configuredPermissions[$module] ?? false) !== true
+                && !$deliveryActionEnabled) {
                 return false;
             }
         } elseif (($configuredPermissions[$module] ?? false) !== true
@@ -130,6 +140,12 @@ class CompanyPermissionService
             return in_array('customers.view', $assigned, true);
         }
 
+        if ($permission === 'deliveries.view'
+            && collect(['deliveries.record_collection', 'deliveries.update_status', 'deliveries.upload_proof'])
+                ->intersect($assigned)->isNotEmpty()) {
+            return true;
+        }
+
         if (str_ends_with($permission, '.view')) {
             // A module page is the entry point for its granted actions. For
             // example, products.create must allow a staff member to open the
@@ -163,6 +179,9 @@ class CompanyPermissionService
                     ->all(),
                 'permissions' => $definitions
                     ->mapWithKeys(fn (PermissionDefinition $definition) => [$this->normalise($definition->permission_key) => strtolower($definition->permission_key)])
+                    ->all(),
+                'permission_modules' => $definitions
+                    ->mapWithKeys(fn (PermissionDefinition $definition) => [strtolower($definition->permission_key) => strtolower($definition->module)])
                     ->all(),
             ];
         });
@@ -202,5 +221,33 @@ class CompanyPermissionService
             'settings.manage' => 'settings.update',
             default => str_contains($permission, '.') ? $permission : $permission.'.view',
         };
+    }
+
+    /**
+     * Keep permission dependencies in one place for both company and staff
+     * assignment flows. Delivery actions cannot be used without entering the
+     * delivery workspace first.
+     *
+     * @param array<int, string> $permissions
+     * @return array<int, string>
+     */
+    public function withRequiredPermissions(array $permissions): array
+    {
+        $permissions = collect($permissions)
+            ->map(fn ($permission) => $this->normalise((string) $permission))
+            ->unique()
+            ->values();
+
+        $deliveryActions = [
+            'deliveries.record_collection',
+            'deliveries.update_status',
+            'deliveries.upload_proof',
+        ];
+
+        if ($permissions->intersect($deliveryActions)->isNotEmpty()) {
+            $permissions->push('deliveries.view');
+        }
+
+        return $permissions->unique()->values()->all();
     }
 }

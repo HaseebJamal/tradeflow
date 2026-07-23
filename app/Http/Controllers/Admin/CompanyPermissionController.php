@@ -32,17 +32,18 @@ class CompanyPermissionController extends Controller
         }
         $scopeDefinitions = $this->definitionsForScope($data['scope']);
         $permissionService = app(CompanyPermissionService::class);
-        $selected = collect($data['permissions'] ?? [])
-            ->map(fn ($permission) => $permissionService->normalise((string) $permission))
-            ->unique()
-            ->values()
-            ->all();
+        $selected = $permissionService->withRequiredPermissions($data['permissions'] ?? []);
 
         $company = Business::findOrFail($data['company_id']);
         DB::transaction(function () use ($request, $company, $data, $selected, $scopeDefinitions) {
             $definitions = in_array($data['scope'], ['modules', 'all'], true)
                 ? app(CompanyPermissionService::class)->activeDefinitions()
                 : $scopeDefinitions;
+            if (in_array('deliveries.view', $selected, true) && !$definitions->contains('permission_key', 'deliveries.view')) {
+                $definitions = $definitions->push(
+                    app(CompanyPermissionService::class)->activeDefinitions()->firstWhere('permission_key', 'deliveries.view')
+                )->filter()->values();
+            }
             $current = CompanyPermission::where('company_id', $company->id)->whereIn('permission_key', $definitions->pluck('permission_key'))->pluck('allowed', 'permission_key')->map(fn ($value) => (bool) $value)->all();
             $moduleDefinitions = $definitions->filter(fn (PermissionDefinition $definition) => $definition->permission_key === strtolower($definition->module).'.view');
             $enabledModules = $moduleDefinitions
@@ -120,10 +121,9 @@ class CompanyPermissionController extends Controller
     {
         $data = $request->validate(['company_id' => ['required', 'exists:businesses,id']]);
         $permissionService = app(CompanyPermissionService::class);
-        $selected = $template->items()->where('allowed', true)->pluck('permission_key')
-            ->map(fn ($permission) => $permissionService->normalise((string) $permission))
-            ->unique()
-            ->all();
+        $selected = $permissionService->withRequiredPermissions(
+            $template->items()->where('allowed', true)->pluck('permission_key')->all()
+        );
         $allKeys = $permissionService->activeDefinitions()->pluck('permission_key')->all();
 
         foreach ($allKeys as $key) {

@@ -66,11 +66,12 @@ class SalesQuotationController extends Controller
                 $tax += $lineTax;
                 $prepared[] = compact('product', 'lineTotal', 'lineDiscount', 'lineTax') + $item;
             }
+            $grandTotal = array_sum(array_column($prepared, 'lineTotal'));
             $quote = SalesQuotation::create([
                 'business_id' => $businessId, 'customer_id' => $data['customer_id'] ?? null, 'created_by' => auth()->id(),
                 'quotation_number' => $this->numbers->next('quotation'),
                 'quotation_date' => $data['quotation_date'], 'valid_until' => $data['valid_until'] ?? null, 'status' => $data['status'],
-                'subtotal' => $subtotal, 'discount_amount' => $discount, 'tax_amount' => $tax, 'grand_total' => round($subtotal - $discount + $tax, 2), 'notes' => $data['notes'] ?? null,
+                'subtotal' => $subtotal, 'discount_amount' => $discount, 'tax_amount' => $tax, 'grand_total' => $grandTotal, 'notes' => $data['notes'] ?? null,
             ]);
             foreach ($prepared as $item) $quote->items()->create([
                 'product_id' => $item['product_id'],
@@ -116,7 +117,7 @@ class SalesQuotationController extends Controller
         $tax = $item['tax_type'] === 'percentage'
             ? round($taxable * $taxValue / 100, 2)
             : (float) $taxValue;
-        $total = round($taxable + $tax, 2);
+        $total = (float) round($taxable + $tax, 0, PHP_ROUND_HALF_UP);
 
         if ($total < 0) {
             throw ValidationException::withMessages(['items' => 'Item total cannot be negative.']);

@@ -4,9 +4,10 @@
 @section('content')
 @php
     $profileRequests = $profileRequests ?? collect();
-    $passwordRequests = $passwordRequests ?? collect();
+    $emailChangeRequests = $emailChangeRequests ?? collect();
+    $passwordRequest = null;
     $isBusinessOwner = auth()->user()?->role === 'business_owner';
-    $isStaff = auth()->user()?->role === 'custom_staff';
+    $canApproveEmailChanges = $canApproveEmailChanges ?? false;
     $readOnlyNotifications = $readOnlyNotifications ?? false;
 @endphp
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
@@ -30,8 +31,8 @@
             @php
                 $category = data_get($notification->data, 'category');
                 $profileRequest = $category === 'user_detail_change_request' ? $profileRequests->get(data_get($notification->data, 'change_request_id')) : null;
-                $passwordRequest = $category === 'staff_password_change_request' ? $passwordRequests->get(data_get($notification->data, 'password_change_request_id')) : null;
-                $requestStatus = $profileRequest?->status ?? $passwordRequest?->status;
+                $emailChangeRequest = $category === 'staff_email_change_request' ? $emailChangeRequests->get(data_get($notification->data, 'email_change_request_id')) : null;
+                $requestStatus = $profileRequest?->status ?? $emailChangeRequest?->status;
                 $pending = $requestStatus === 'Pending';
                 $statusClass = $requestStatus === 'Pending' ? 'tf-badge-warning' : ($requestStatus === 'Rejected' ? 'tf-badge-danger' : 'tf-badge-success');
             @endphp
@@ -57,8 +58,8 @@
                                     <div class="col-12"><strong>Reason:</strong> {{ $profileRequest->reason }}</div>
                                 </div>
                             </details>
-                        @elseif($passwordRequest)
-                            <details class="mt-3"><summary class="text-primary">View Details</summary><p class="mb-0 mt-2"><strong>Staff member:</strong> {{ $passwordRequest->user?->name }}<br><strong>Reason:</strong> {{ $passwordRequest->reason }}</p></details>
+                        @elseif($emailChangeRequest)
+                            <details class="mt-3"><summary class="text-primary">View Details</summary><p class="mb-0 mt-2"><strong>Staff member:</strong> {{ $emailChangeRequest->user?->name }}<br><strong>Current Email:</strong> {{ $emailChangeRequest->current_email }}<br><strong>Requested Email:</strong> {{ $emailChangeRequest->requested_email }}<br><strong>Reason:</strong> {{ $emailChangeRequest->reason }}</p></details>
                         @endif
                     </div>
 
@@ -71,9 +72,10 @@
                             <form method="POST" action="{{ route('profile.user-detail-change-requests.apply', $profileRequest) }}" data-tf-confirm-message="Apply these approved changes and notify the staff member?">@csrf @method('PATCH')<button class="btn btn-sm btn-success">Apply Changes</button></form>
                         @endif
 
-                        @if($isBusinessOwner && $passwordRequest && $pending)
-                            <button class="btn btn-sm btn-success" type="button" data-bs-toggle="collapse" data-bs-target="#notificationApprove{{ $notification->id }}" aria-expanded="false" aria-controls="notificationApprove{{ $notification->id }}">Approve</button>
-                            <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#notificationPasswordReject{{ $notification->id }}" aria-expanded="false" aria-controls="notificationPasswordReject{{ $notification->id }}">Reject</button>
+                        @if($canApproveEmailChanges && $emailChangeRequest && $pending)
+                            <form method="POST" action="{{ route('profile.email-change-requests.approve', $emailChangeRequest) }}" data-tf-confirm-message="Approve and update this staff login email now?">@csrf @method('PATCH')<input type="hidden" name="review_note" value=""><button class="btn btn-sm btn-success">Approve</button></form>
+                            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#notificationEmailChanges{{ $notification->id }}" aria-expanded="false">Request Changes</button>
+                            <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#notificationEmailReject{{ $notification->id }}" aria-expanded="false">Reject</button>
                         @endif
                         </div>
 
@@ -108,6 +110,14 @@
                             </div>
                             <div id="notificationPasswordReject{{ $notification->id }}" class="collapse tf-notification-action-panel" data-bs-parent="#notification-actions-{{ $notification->id }}">
                                 <form method="POST" action="{{ route('profile.staff-password-change-requests.reject', $passwordRequest) }}">@csrf @method('PATCH')<label class="form-label" for="notificationPasswordRejectNote{{ $notification->id }}">Optional rejection note</label><div class="input-group"><input id="notificationPasswordRejectNote{{ $notification->id }}" name="review_note" class="form-control form-control-sm" maxlength="2000" placeholder="Optional rejection note"><button class="btn btn-sm btn-outline-danger">Reject Request</button></div></form>
+                            </div>
+                        @endif
+                        @if($canApproveEmailChanges && $emailChangeRequest && $pending)
+                            <div id="notificationEmailChanges{{ $notification->id }}" class="collapse tf-notification-action-panel" data-bs-parent="#notification-actions-{{ $notification->id }}">
+                                <form method="POST" action="{{ route('profile.email-change-requests.request-changes', $emailChangeRequest) }}">@csrf @method('PATCH')<label class="form-label">Required changes</label><div class="input-group"><input name="review_note" class="form-control form-control-sm" maxlength="2000" required><button class="btn btn-sm btn-outline-primary">Send</button></div></form>
+                            </div>
+                            <div id="notificationEmailReject{{ $notification->id }}" class="collapse tf-notification-action-panel" data-bs-parent="#notification-actions-{{ $notification->id }}">
+                                <form method="POST" action="{{ route('profile.email-change-requests.reject', $emailChangeRequest) }}">@csrf @method('PATCH')<label class="form-label">Reason for rejection</label><div class="input-group"><input name="review_note" class="form-control form-control-sm" maxlength="2000" required><button class="btn btn-sm btn-outline-danger">Reject</button></div></form>
                             </div>
                         @endif
                     </div>

@@ -136,19 +136,17 @@ class DeliveryController extends Controller
 
     public function update(Request $request, Delivery $delivery)
     {
+        $this->requirePermission('deliveries.edit');
         $delivery = $this->scopedDelivery($delivery);
         $data = $request->validate([
             'delivery_staff_id' => ['nullable', 'exists:users,id'],
-            'address' => ['nullable'],
-            'amount' => ['nullable', 'integer', 'min:0'],
-            'status' => ['required', 'in:Pending,Assigned,Picked Up,Out for Delivery,Out For Delivery,Delivered,Failed,Returned,Cancelled'],
-            'proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'note' => ['nullable'],
+            'address' => ['required', 'string', 'max:1000'],
+            'note' => ['nullable', 'string', 'max:2000'],
         ]);
 
         if (!empty($data['delivery_staff_id'])) {
-            if (!$this->canManageAllDeliveries(auth()->user()) && (int) $data['delivery_staff_id'] !== (int) $delivery->delivery_staff_id) {
-                return back()->withErrors(['delivery_staff_id' => 'You can only update deliveries assigned to you.']);
+            if ((int) $data['delivery_staff_id'] !== (int) $delivery->delivery_staff_id) {
+                $this->requirePermission('deliveries.assign');
             }
             $staff = $this->posDeliveryAssignments->eligibleStaff(auth()->user())
                 ->firstWhere('id', (int) $data['delivery_staff_id']);
@@ -157,167 +155,91 @@ class DeliveryController extends Controller
             }
             $data['delivery_staff_id'] = $staff->id;
         }
-        if (($data['status'] ?? null) === 'Out for Delivery') {
-            $data['status'] = 'Out For Delivery';
-        }
-        if (!$this->canTransition($delivery->status, $data['status'])) {
-            return back()->withErrors(['status' => 'This delivery cannot move from '.$delivery->status.' to '.$data['status'].'.']);
-        }
-        if (($data['status'] ?? null) === 'Delivered' && (!$delivery->proof_image || !$delivery->receiver_name) && !$request->hasFile('proof_image')) {
-            return back()->withErrors(['proof_image' => 'Delivery proof and receiver name are required before marking delivered.']);
-        }
-        if ($request->hasFile('proof_image')) {
-            $data['proof_image'] = $request->file('proof_image')->store('delivery_proofs', 'public');
-        }
-
-        if ($delivery->status === 'Delivered') {
-            return back()->withErrors(['status' => 'Delivered delivery cannot be directly edited.']);
-        }
-        if (($data['status'] ?? null) === 'Assigned' && is_null($delivery->assigned_at)) $data['assigned_at'] = now();
         if (!empty($data['delivery_staff_id']) && (int) $data['delivery_staff_id'] !== (int) $delivery->delivery_staff_id && is_null($delivery->assigned_at)) $data['assigned_at'] = now();
-        if (in_array($data['status'] ?? null, ['Picked Up', 'Out For Delivery'], true) && is_null($delivery->started_at)) $data['started_at'] = now();
-        if (($data['status'] ?? null) === 'Delivered' && is_null($delivery->delivered_at)) $data['delivered_at'] = now();
-        if (($data['status'] ?? null) === 'Failed' && is_null($delivery->failed_at)) $data['failed_at'] = now();
-        if (($data['status'] ?? null) === 'Returned' && is_null($delivery->returned_at)) $data['returned_at'] = now();
-        if (($data['status'] ?? null) === 'Cancelled' && is_null($delivery->cancelled_at)) $data['cancelled_at'] = now();
         $delivery->update($data);
-        if ($delivery->status === 'Out For Delivery') {
-            $delivery->sourceOrder()?->update(['status' => 'Out For Delivery']);
-        } elseif ($delivery->status === 'Delivered') {
-            $delivery->sourceOrder()?->update(['status' => 'Delivered']);
-        } elseif (in_array($delivery->status, ['Failed', 'Returned'], true)) {
-            $delivery->sourceOrder()?->update(['status' => $delivery->status]);
-        }
-        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery updated to '.$delivery->status, $delivery->id, null, ['invoice_id' => $delivery->invoice_id, 'status' => $delivery->status]);
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery details updated', $delivery->id, null, ['invoice_id' => $delivery->invoice_id]);
 
-        return back()->with('success', 'Delivery updated.');
+        return back()->with('success', 'Delivery details updated.');
     }
 
     public function start(Delivery $delivery)
     {
+        $this->requirePermission('deliveries.update_status');
         $delivery = $this->scopedDelivery($delivery);
-        if (!in_array($delivery->status, ['Pending', 'Assigned'], true)) {
-            return back()->withErrors(['status' => 'Only assigned deliveries can be picked up.']);
+        if (!in_array($delivery->status, ['Pending', 'Assigned', 'Picked Up'], true)) {
+            return back()->withErrors(['status' => 'Only assigned deliveries can be started.']);
         }
-        $delivery->update(['status' => 'Picked Up', 'started_at' => $delivery->started_at ?? now()]);
-        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery picked up', $delivery->id, null, ['invoice_id' => $delivery->invoice_id]);
+        $delivery->update(['status' => 'Out For Delivery', 'started_at' => $delivery->started_at ?? now()]);
+        $delivery->sourceOrder()?->update(['status' => 'Out For Delivery']);
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery started', $delivery->id, null, ['invoice_id' => $delivery->invoice_id]);
 
-        return back()->with('success', 'Delivery marked as picked up.');
+        return back()->with('success', 'Delivery marked as out for delivery.');
     }
 
-    public function deliver(Request $request, Delivery $delivery)
+    public function uploadProof(Request $request, Delivery $delivery)
     {
+        $this->requirePermission('deliveries.upload_proof');
         $delivery = $this->scopedDelivery($delivery);
-        abort_unless($delivery->status === 'Out For Delivery', 403);
         $data = $request->validate([
             'proof_image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'signature_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'receiver_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'receiver_phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'note' => ['nullable', 'string'],
-            'collected_amount' => ['nullable', 'integer', 'min:0'],
-            'payment_method' => ['nullable', 'in:Cash,Bank Transfer Manual,JazzCash Manual,Easypaisa Manual,Cheque'],
-            'payment_reference' => ['nullable', 'string', 'max:255'],
-            'payment_proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
 
-        DB::transaction(function () use ($request, $delivery, $data) {
-            $proofPath = $request->file('proof_image')->store('delivery_proofs', 'public');
-            $signaturePath = $request->hasFile('signature_image') ? $request->file('signature_image')->store('delivery_proofs', 'public') : null;
-            $paymentProofPath = $request->hasFile('payment_proof_image') ? $request->file('payment_proof_image')->store('delivery_proofs', 'public') : null;
-            $sourceOrder = $delivery->sourceOrder();
-            if ($sourceOrder) $sourceOrder = $this->finance->syncOrderPaymentSummary($sourceOrder);
-            $collected = (float) ($data['collected_amount'] ?? 0);
+        if (!in_array($delivery->status, ['Assigned', 'Out For Delivery'], true)) {
+            return back()->withErrors(['proof_image' => 'Proof can only be uploaded for an active delivery.']);
+        }
 
-            if ($collected > 0) {
-                $remaining = $sourceOrder
-                    ? $this->finance->calculateBalance((float) ($sourceOrder->grand_total ?: $sourceOrder->total), $this->finance->calculatePaidAmount($sourceOrder))
-                    : (float) $delivery->amount;
+        $proofPath = $request->file('proof_image')->store('delivery_proofs', 'public');
+        $signaturePath = $request->hasFile('signature_image') ? $request->file('signature_image')->store('delivery_proofs', 'public') : null;
+        $delivery->update([
+            'proof_image' => $proofPath,
+            'signature_image' => $signaturePath,
+            'receiver_name' => $data['receiver_name'],
+            'receiver_phone' => $data['receiver_phone'] ?? null,
+            'note' => $data['note'] ?? $delivery->note,
+        ]);
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery proof uploaded', $delivery->id, null, ['invoice_id' => $delivery->invoice_id]);
 
-                if ($collected > $remaining) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'collected_amount' => 'Collected amount cannot exceed remaining balance of Rs '.number_format($remaining).'.',
-                    ]);
-                }
+        return back()->with('success', 'Delivery proof uploaded successfully.');
+    }
 
-                $method = $data['payment_method'] ?? 'Cash';
-                $payment = Payment::create([
-                    'business_id' => $delivery->business_id,
-                    'order_id' => $sourceOrder?->id,
-                    'customer_id' => $delivery->customer_id,
-                    'method' => $method,
-                    'amount' => $collected,
-                    'payment_date' => now()->toDateString(),
-                    'reference_number' => $data['payment_reference'] ?? null,
-                    'transaction_reference' => $data['payment_reference'] ?? null,
-                    'proof_image' => $paymentProofPath,
-                    'status' => 'Paid',
-                ]);
+    public function deliver(Delivery $delivery)
+    {
+        $this->requirePermission('deliveries.update_status');
+        $this->requirePermission('deliveries.upload_proof');
+        $delivery = $this->scopedDelivery($delivery);
+        if ($delivery->status !== 'Out For Delivery') {
+            return back()->withErrors(['status' => 'Only out-for-delivery records can be marked delivered.']);
+        }
+        if (!$delivery->proof_image || !$delivery->receiver_name) {
+            return back()->withErrors(['proof_image' => 'Upload delivery proof and receiver details before marking delivered.']);
+        }
 
-                if ($delivery->customer) {
-                    $balance = max(0, $delivery->customer->current_balance - $collected);
-                    $delivery->customer->update(['current_balance' => $balance]);
-                    KhataLedger::create([
-                        'business_id' => $delivery->business_id,
-                        'customer_id' => $delivery->customer_id,
-                        'order_id' => $sourceOrder?->id,
-                        'payment_id' => $payment->id,
-                        'entry_type' => 'payment',
-                        'type' => 'debit',
-                        'amount' => $collected,
-                        'customer_debit' => $collected,
-                        'customer_credit' => 0,
-                        'business_debit' => $collected,
-                        'business_credit' => 0,
-                        'payment_method' => $method,
-                        'description' => 'Payment received via '.$method.' on delivery',
-                        'balance' => $balance,
-                        'balance_after' => $balance,
-                        'entry_date' => now()->toDateString(),
-                    ]);
-                }
-
-                if ($sourceOrder) {
-                    $synced = $this->finance->syncOrderPaymentSummary($sourceOrder);
-                    $payment->update(['status' => $synced->payment_status]);
-                    $this->postPaymentAccounting($payment, $delivery);
-                }
+        DB::transaction(function () use ($delivery) {
+            $locked = Delivery::where('business_id', $delivery->business_id)->lockForUpdate()->findOrFail($delivery->id);
+            if ($locked->status !== 'Out For Delivery') {
+                throw \Illuminate\Validation\ValidationException::withMessages(['status' => 'This delivery has already been updated.']);
             }
-
-            $delivery->update([
-                'status' => 'Delivered',
-                'proof_image' => $proofPath,
-                'signature_image' => $signaturePath,
-                'receiver_name' => $data['receiver_name'],
-                'receiver_phone' => $data['receiver_phone'] ?? null,
-                'note' => $data['note'] ?? null,
-                'collected_amount' => $collected ?: null,
-                'payment_method' => $data['payment_method'] ?? null,
-                'payment_reference' => $data['payment_reference'] ?? null,
-                'payment_proof_image' => $paymentProofPath,
-                'payment_proof' => $paymentProofPath,
-                'received_amount' => $collected ?: null,
-                'received_by' => $collected > 0 ? auth()->id() : null,
-                'received_at' => $collected > 0 ? now() : null,
-                'payment_status' => $collected > 0 ? 'Partial' : null,
-                'delivered_at' => $delivery->delivered_at ?? now(),
-            ]);
-            if ($sourceOrder) {
-                $sourceOrder->update(['status' => 'Delivered']);
-                $syncedOrder = $this->finance->syncOrderPaymentSummary($sourceOrder->fresh());
-                $delivery->update(['payment_status' => $syncedOrder->payment_status]);
-            }
+            $locked->update(['status' => 'Delivered', 'delivered_at' => $locked->delivered_at ?? now()]);
+            $locked->load(['invoice.order', 'order']);
+            $locked->sourceOrder()?->update(['status' => 'Delivered']);
         });
         $delivery->refresh();
-        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery completed', $delivery->id, null, ['invoice_id' => $delivery->invoice_id, 'collected_amount' => $delivery->collected_amount]);
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery completed', $delivery->id, null, ['invoice_id' => $delivery->invoice_id]);
 
         return redirect()->route('business.deliveries.show', $delivery)->with('success', 'Delivery marked delivered.');
     }
 
     public function fail(Request $request, Delivery $delivery)
     {
+        $this->requirePermission('deliveries.update_status');
         $delivery = $this->scopedDelivery($delivery);
-        abort_unless($delivery->status === 'Out For Delivery', 403);
+        if ($delivery->status !== 'Out For Delivery') {
+            return back()->withErrors(['status' => 'Only out-for-delivery records can be marked failed.']);
+        }
         $data = $request->validate(['failure_reason' => ['required', 'string'], 'note' => ['nullable', 'string']]);
         $delivery->update(['status' => 'Failed', 'failed_at' => $delivery->failed_at ?? now(), 'failure_reason' => $data['failure_reason'], 'note' => $data['note'] ?? $delivery->note]);
         if (in_array($delivery->sourceOrder()?->status, ['Out For Delivery', 'Failed'], true)) {
@@ -330,6 +252,7 @@ class DeliveryController extends Controller
 
     public function reopen(Delivery $delivery)
     {
+        $this->requirePermission('deliveries.edit');
         $delivery = $this->scopedDelivery($delivery);
         abort_unless($delivery->status === 'Failed', 403);
         $delivery->update(['status' => 'Assigned', 'assigned_at' => $delivery->assigned_at ?? now(), 'failed_at' => null]);
@@ -340,12 +263,130 @@ class DeliveryController extends Controller
 
     public function cancel(Delivery $delivery)
     {
+        $this->requirePermission('deliveries.edit');
         $delivery = $this->scopedDelivery($delivery);
         abort_unless($delivery->status !== 'Delivered', 403);
         $delivery->update(['status' => 'Cancelled', 'cancelled_at' => $delivery->cancelled_at ?? now()]);
         $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery cancelled', $delivery->id, null, ['invoice_id' => $delivery->invoice_id]);
 
         return back()->with('success', 'Delivery cancelled.');
+    }
+
+    public function recordCollection(Request $request, Delivery $delivery)
+    {
+        $this->requirePermission('deliveries.record_collection');
+        $delivery = $this->scopedDelivery($delivery);
+        $data = $request->validate([
+            'collected_amount' => ['required', 'integer', 'min:1'],
+            'payment_method' => ['required', 'in:Cash,Bank Transfer Manual,JazzCash Manual,Easypaisa Manual,Cheque'],
+            'payment_reference' => ['nullable', 'string', 'max:255'],
+            'payment_proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ]);
+
+        if (in_array($delivery->status, ['Cancelled', 'Failed', 'Returned'], true)) {
+            return back()->withErrors(['collection' => 'Collection cannot be recorded for this delivery status.']);
+        }
+
+        $paymentProofPath = $request->hasFile('payment_proof_image')
+            ? $request->file('payment_proof_image')->store('delivery_proofs', 'public')
+            : null;
+
+        try {
+            DB::transaction(function () use ($delivery, $data, $paymentProofPath) {
+                $locked = Delivery::query()
+                    ->where('business_id', $delivery->business_id)
+                    ->with(['invoice.order', 'order', 'customer'])
+                    ->lockForUpdate()
+                    ->findOrFail($delivery->id);
+
+                if (in_array($locked->status, ['Cancelled', 'Failed', 'Returned'], true)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['collection' => 'Collection cannot be recorded for this delivery status.']);
+                }
+
+                $sourceOrder = $locked->sourceOrder();
+                if ($sourceOrder) {
+                    $sourceOrder = $this->finance->syncOrderPaymentSummary($sourceOrder);
+                }
+                $remaining = $sourceOrder
+                    ? $this->finance->calculateBalance((float) ($sourceOrder->grand_total ?: $sourceOrder->total), $this->finance->calculatePaidAmount($sourceOrder))
+                    : max(0, (float) $locked->amount - (float) ($locked->received_amount ?? 0));
+                $collected = (int) $data['collected_amount'];
+
+                if ($remaining <= 0) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['collection' => 'This delivery is already paid.']);
+                }
+                if ($collected > $remaining) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collected_amount' => 'Collected amount cannot exceed remaining balance of Rs '.number_format($remaining).'.',
+                    ]);
+                }
+
+                $payment = Payment::create([
+                    'business_id' => $locked->business_id,
+                    'order_id' => $sourceOrder?->id,
+                    'customer_id' => $locked->customer_id,
+                    'method' => $data['payment_method'],
+                    'amount' => $collected,
+                    'payment_date' => now()->toDateString(),
+                    'reference_number' => $data['payment_reference'] ?? null,
+                    'transaction_reference' => $data['payment_reference'] ?? null,
+                    'proof_image' => $paymentProofPath,
+                    'status' => 'Paid',
+                ]);
+
+                if ($locked->customer) {
+                    $balance = max(0, (float) $locked->customer->current_balance - $collected);
+                    $locked->customer->update(['current_balance' => $balance]);
+                    KhataLedger::create([
+                        'business_id' => $locked->business_id,
+                        'customer_id' => $locked->customer_id,
+                        'order_id' => $sourceOrder?->id,
+                        'payment_id' => $payment->id,
+                        'entry_type' => 'payment',
+                        'type' => 'debit',
+                        'amount' => $collected,
+                        'customer_debit' => $collected,
+                        'customer_credit' => 0,
+                        'business_debit' => $collected,
+                        'business_credit' => 0,
+                        'payment_method' => $data['payment_method'],
+                        'description' => 'Payment received via '.$data['payment_method'].' on delivery',
+                        'balance' => $balance,
+                        'balance_after' => $balance,
+                        'entry_date' => now()->toDateString(),
+                    ]);
+                }
+
+                $paymentStatus = 'Partial';
+                if ($sourceOrder) {
+                    $synced = $this->finance->syncOrderPaymentSummary($sourceOrder);
+                    $paymentStatus = $synced->payment_status;
+                    $payment->update(['status' => $paymentStatus]);
+                    $this->postPaymentAccounting($payment, $locked);
+                }
+
+                $locked->update([
+                    'collected_amount' => (float) ($locked->collected_amount ?? 0) + $collected,
+                    'received_amount' => (float) ($locked->received_amount ?? 0) + $collected,
+                    'payment_method' => $data['payment_method'],
+                    'payment_reference' => $data['payment_reference'] ?? $locked->payment_reference,
+                    'payment_proof_image' => $paymentProofPath ?? $locked->payment_proof_image,
+                    'payment_proof' => $paymentProofPath ?? $locked->payment_proof,
+                    'payment_status' => $paymentStatus,
+                    'received_by' => auth()->id(),
+                    'received_at' => now(),
+                ]);
+            });
+        } catch (\Throwable $exception) {
+            if ($paymentProofPath) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($paymentProofPath);
+            }
+            throw $exception;
+        }
+
+        $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery collection recorded', $delivery->id, null, ['invoice_id' => $delivery->invoice_id, 'amount' => $data['collected_amount']]);
+
+        return back()->with('success', 'Collection recorded successfully.');
     }
 
     public function sheet(Delivery $delivery)
@@ -381,6 +422,12 @@ class DeliveryController extends Controller
     {
         return $this->permissions->allowsUser($user, 'deliveries.assign')
             || $this->permissions->allowsUser($user, 'deliveries.edit');
+    }
+
+    private function requirePermission(string $permission): void
+    {
+        abort_unless($this->permissions->allowsUser(auth()->user(), 'deliveries.view')
+            && $this->permissions->allowsUser(auth()->user(), $permission), 403);
     }
 
     private function canTransition(string $from, string $to): bool

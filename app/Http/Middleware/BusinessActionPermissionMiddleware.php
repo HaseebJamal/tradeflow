@@ -12,19 +12,22 @@ class BusinessActionPermissionMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $permission = $this->permissionFor($request->route()?->getName());
+        $route = $request->route()?->getName();
+        $permission = $this->permissionFor($route);
         if (!$permission) {
             return $next($request);
         }
 
         $user = $request->user();
         $companyPermissions = app(CompanyPermissionService::class);
-        if (!$user || !$companyPermissions->allows($user, $permission)) {
-            return $this->deny($request, 'This feature is not enabled for your company.');
-        }
+        foreach (array_unique([$permission, ...$this->requiredPermissionsFor($route)]) as $requiredPermission) {
+            if (!$user || !$companyPermissions->allows($user, $requiredPermission)) {
+                return $this->deny($request, 'This feature is not enabled for your company.');
+            }
 
-        if (!$companyPermissions->allowsUser($user, $permission)) {
-            return $this->deny($request, 'You do not have permission to access this module. Please contact your business owner.');
+            if (!$companyPermissions->allowsUser($user, $requiredPermission)) {
+                return $this->deny($request, 'You do not have permission to access this module. Please contact your business owner.');
+            }
         }
 
         return $next($request);
@@ -106,8 +109,12 @@ class BusinessActionPermissionMiddleware
             'business.pos.history' => 'pos.view_history', 'business.pos.receipt', 'business.pos.receipt.pdf' => 'pos.print_receipt',
             'business.sales.payments.index', 'business.payments' => 'sales.payments', 'business.sales.payments.store', 'business.payments.store' => 'sales.payments',
             'business.khata' => 'accounting.view', 'business.khata.journal.store' => 'accounting.create_journal',
+            'business.pos.delivery.assign' => 'deliveries.assign',
             'business.deliveries', 'business.deliveries.show', 'business.deliveries.sheet' => 'deliveries.view',
-            'business.deliveries.update', 'business.deliveries.start', 'business.deliveries.deliver', 'business.deliveries.fail', 'business.deliveries.reopen', 'business.deliveries.cancel' => 'deliveries.update_status',
+            'business.deliveries.update', 'business.deliveries.reopen', 'business.deliveries.cancel' => 'deliveries.edit',
+            'business.deliveries.start', 'business.deliveries.deliver', 'business.deliveries.fail' => 'deliveries.update_status',
+            'business.deliveries.proof' => 'deliveries.upload_proof',
+            'business.deliveries.collection' => 'deliveries.record_collection',
             'business.sales.invoices.index', 'business.sales.invoices.show', 'business.invoices.index', 'business.invoices.show' => 'sales.invoices',
             'business.sales.invoices.pdf', 'business.sales.invoices.pdf.download', 'business.invoices.pdf', 'business.invoices.pdf.download' => 'sales.invoice_export',
             'business.sales.invoices.update', 'business.sales.invoices.issue', 'business.sales.invoices.reissue', 'business.sales.invoices.credit-notes.store', 'business.invoices.update', 'business.invoices.issue', 'business.invoices.reissue', 'business.invoices.credit-notes.store' => 'sales.invoices',
@@ -123,5 +130,29 @@ class BusinessActionPermissionMiddleware
             'business.settings.logo' => 'settings.update',
             default => null,
         };
+    }
+
+    /** @return array<int, string> */
+    private function requiredPermissionsFor(?string $route): array
+    {
+        $deliveryActions = [
+            'business.pos.delivery.assign',
+            'business.deliveries.update',
+            'business.deliveries.start',
+            'business.deliveries.deliver',
+            'business.deliveries.fail',
+            'business.deliveries.reopen',
+            'business.deliveries.cancel',
+            'business.deliveries.proof',
+            'business.deliveries.collection',
+        ];
+
+        $required = in_array($route, $deliveryActions, true) ? ['deliveries.view'] : [];
+
+        if ($route === 'business.deliveries.deliver') {
+            $required[] = 'deliveries.upload_proof';
+        }
+
+        return $required;
     }
 }

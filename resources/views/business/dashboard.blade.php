@@ -29,7 +29,7 @@
     ];
 @endphp
 
-@if($subscription?->plan)
+@if(($canManageSubscription ?? false) && $subscription?->plan)
     @php($expiry = $subscription->status === 'Trial' ? $subscription->trial_end_at : $subscription->ends_at)
     <section class="tf-card p-3 mb-4" aria-label="Subscription summary">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">

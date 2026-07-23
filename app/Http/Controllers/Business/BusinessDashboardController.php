@@ -13,13 +13,19 @@ use App\Models\Purchase;
 use App\Models\Supplier;
 use App\Models\Subscription;
 use App\Services\CompanyPermissionService;
+use App\Services\SubscriptionManagementAccessService;
 use Illuminate\Support\Facades\DB;
 
 class BusinessDashboardController extends Controller
 {
-    public function __invoke(CompanyPermissionService $companyPermissions)
+    public function __invoke(
+        CompanyPermissionService $companyPermissions,
+        SubscriptionManagementAccessService $subscriptionAccess,
+    )
     {
-        $businessId = auth()->user()->business_id;
+        $user = auth()->user();
+        $businessId = $user->business_id;
+        $canManageSubscription = $subscriptionAccess->canManage($user);
         // Dashboard access is a core workspace capability. Operational cards
         // are shown only when at least one operational module is enabled.
         $hasOperationalAccess = collect([
@@ -31,7 +37,10 @@ class BusinessDashboardController extends Controller
         if (!$hasOperationalAccess) {
             return view('business.dashboard', [
                 'hasOperationalAccess' => false,
-                'subscription' => Subscription::with('plan')->where('business_id', $businessId)->first(),
+                'canManageSubscription' => $canManageSubscription,
+                'subscription' => $canManageSubscription
+                    ? Subscription::with('plan')->where('business_id', $businessId)->first()
+                    : null,
             ]);
         }
         $saleBase = Order::where('business_id', $businessId)->whereNotIn('status', ['Cancelled', 'Void', 'Returned']);
@@ -61,7 +70,10 @@ class BusinessDashboardController extends Controller
             'expenses' => $expenses,
             'profit' => $totalSales - $costOfSales - $totalExpenses,
             'monthlyProfit' => $monthlySalesTotal - $monthlyCostOfSales - $expenses,
-            'subscription' => Subscription::with('plan')->where('business_id', $businessId)->first(),
+            'canManageSubscription' => $canManageSubscription,
+            'subscription' => $canManageSubscription
+                ? Subscription::with('plan')->where('business_id', $businessId)->first()
+                : null,
             'recentOrders' => Order::with('customer')->where('business_id', $businessId)->latest()->take(5)->get(),
             'lowStockProducts' => Product::where('business_id', $businessId)->whereColumn('stock_quantity', '<=', 'low_stock_alert_qty')->take(5)->get(),
         ]);

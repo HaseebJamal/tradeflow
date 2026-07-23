@@ -1,5 +1,6 @@
 @props(['module', 'label', 'permissions', 'selectedPermissions' => []])
 @php($isRolesAndUsers = strtolower($module) === 'staff')
+@php($isDeliveries = strtolower($module) === 'deliveries')
 @php($label = $isRolesAndUsers ? 'Roles & Users' : $label)
 @php($groupId = 'permission-group-'.\Illuminate\Support\Str::slug($module))
 @php($selectedCount = collect($permissions)->whereIn('permission_key', $selectedPermissions)->count())
@@ -9,6 +10,9 @@
     </summary>
     <div class="d-grid gap-2 p-3 pt-0 border-top">
         <label class="form-check fw-semibold pt-3 mb-0" for="{{ $groupId }}-all"><input id="{{ $groupId }}-all" class="form-check-input me-2" type="checkbox" data-permission-module> Select all {{ $label }}</label>
+        @if($isDeliveries)
+            <p class="small text-muted mb-0 d-none" data-delivery-view-dependency>View Deliveries is required for delivery actions.</p>
+        @endif
         @foreach($permissions as $permission)
             <label class="form-check" for="{{ $groupId }}-{{ $permission->id }}">
                 <input id="{{ $groupId }}-{{ $permission->id }}" class="form-check-input" type="checkbox" name="permissions[]" value="{{ $permission->permission_key }}" data-permission-child @checked(in_array($permission->permission_key, $selectedPermissions, true))>
