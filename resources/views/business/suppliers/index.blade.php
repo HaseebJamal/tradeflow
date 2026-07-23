@@ -3,7 +3,9 @@
 @section('page-subtitle', 'Supplier records, filters, and payable tracking')
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-@if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
+@if($errors->any())
+    <div class="alert alert-danger" @if($errors->first('supplier_name') === 'A supplier with the same phone or complete identity already exists for this business.') data-tf-alert-title="Supplier already exists" @endif>{{ $errors->first() }}</div>
+@endif
 
 @companyCan('suppliers.create')<div class="tf-card p-4 mb-4">
     <h2 class="h5 mb-3">Add Supplier</h2>

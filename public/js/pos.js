@@ -21,6 +21,7 @@
     let searchVersion = 0;
     let submitting = false;
     let keyboardProductSelection = false;
+    let finishCompletedSale = () => {};
 
     const barcode = $('[data-pos-barcode]');
     const search = $('[data-pos-search]');
@@ -102,9 +103,8 @@
         })
         : window.alert(`${title}${text ? `\n${text}` : ''}`);
     const showReceiptActions = async (payload) => {
-        const historyUrl = payload.history_url || config.historyUrl;
         if (!window.Swal) {
-            window.location.assign(historyUrl);
+            finishCompletedSale();
             return;
         }
 
@@ -117,23 +117,23 @@
                 <button type="button" class="btn btn-outline-secondary" data-pos-receipt-print><i class="bi bi-printer"></i>Print Receipt</button>
                 <a class="btn btn-outline-success" href="${escapeHtml(payload.receipt_download_url || '#')}" data-pos-receipt-download><i class="bi bi-download"></i>Download PDF</a>
             </div>`,
-            showCancelButton: true,
-            showConfirmButton: false,
-            cancelButtonText: 'Sales History',
+            showCancelButton: false,
+            showConfirmButton: true,
+            confirmButtonText: 'Done',
             buttonsStyling: false,
             allowOutsideClick: false,
             allowEscapeKey: false,
             customClass: {
                 popup: 'tf-pos-receipt-modal',
                 actions: 'tf-pos-receipt-modal-actions',
-                cancelButton: 'btn btn-outline-secondary',
+                confirmButton: 'btn btn-tf-primary',
             },
             didOpen: (popup) => {
                 const viewButton = popup.querySelector('[data-pos-receipt-view]');
                 const printButton = popup.querySelector('[data-pos-receipt-print]');
                 const downloadButton = popup.querySelector('[data-pos-receipt-download]');
-                const historyButton = Swal.getCancelButton();
-                const actions = [viewButton, printButton, downloadButton, historyButton].filter(Boolean);
+                const doneButton = Swal.getConfirmButton();
+                const actions = [viewButton, printButton, downloadButton, doneButton].filter(Boolean);
 
                 viewButton?.addEventListener('click', () => {
                     window.open(payload.receipt_url, '_blank', 'noopener');
@@ -149,16 +149,14 @@
 
                     const currentIndex = Math.max(0, actions.indexOf(document.activeElement));
                     let nextIndex = currentIndex;
-                    if (event.key === 'ArrowRight') nextIndex = Math.min(actions.length - 1, currentIndex + 1);
-                    if (event.key === 'ArrowLeft') nextIndex = Math.max(0, currentIndex - 1);
-                    if (event.key === 'ArrowDown' && currentIndex < 3) nextIndex = Math.min(3, actions.length - 1);
-                    if (event.key === 'ArrowUp' && currentIndex === 3) nextIndex = 0;
+                    if (['ArrowRight', 'ArrowDown'].includes(event.key)) nextIndex = Math.min(actions.length - 1, currentIndex + 1);
+                    if (['ArrowLeft', 'ArrowUp'].includes(event.key)) nextIndex = Math.max(0, currentIndex - 1);
                     actions[nextIndex]?.focus({ preventScroll: true });
                 });
             },
         });
 
-        if (result.dismiss === Swal.DismissReason.cancel) window.location.assign(historyUrl);
+        if (result.isConfirmed) finishCompletedSale();
     };
     const request = async (url, method = 'GET', body = null) => {
         const response = await fetch(url, {
@@ -362,6 +360,24 @@
         renderCart();
         search.value = '';
         barcode.value = '';
+        focusElement(search);
+    };
+    finishCompletedSale = () => {
+        clearCart();
+        customer.value = '';
+        quickCustomerName && (quickCustomerName.value = '');
+        quickCustomerPhone && (quickCustomerPhone.value = '');
+        quickCustomerCity && (quickCustomerCity.value = '');
+        quickCustomerAddress && (quickCustomerAddress.value = '');
+        discount.value = 0;
+        tax.value = 0;
+        paymentType.value = 'Cash';
+        paymentMethod.value = 'Cash';
+        cash.value = '';
+        reference.value = '';
+        $('[data-pos-invoice]').textContent = 'New sale';
+        syncCustomerMode(false);
+        updateTotals();
         focusElement(search);
     };
     const checkoutPayload = () => ({
@@ -720,8 +736,8 @@
         .filter(Boolean)
         .forEach((input) => input.addEventListener('input', () => updateTotals()));
     quickCustomerPhone?.addEventListener('input', () => {
-        const valid = quickCustomerPhone.value === '' || /^\d{11}$/.test(quickCustomerPhone.value);
-        quickCustomerPhone.setCustomValidity(valid ? '' : 'Enter a valid 11-digit phone number.');
+        const valid = window.TradeFlowPhone?.isValid(quickCustomerPhone) ?? quickCustomerPhone.value === '';
+        quickCustomerPhone.setCustomValidity(valid ? '' : 'Enter a valid international phone number.');
     });
     paymentType.addEventListener('change', () => {
         paymentMethod.value = paymentType.value === 'Cash' ? 'Cash' : paymentType.value;

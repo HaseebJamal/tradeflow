@@ -2,7 +2,9 @@
 @section('page-title', 'Edit Supplier')
 @section('page-subtitle', $supplier->supplier_name)
 @section('content')
-@if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
+@if($errors->any())
+    <div class="alert alert-danger" @if($errors->first('supplier_name') === 'A supplier with the same phone or complete identity already exists for this business.') data-tf-alert-title="Supplier already exists" @endif>{{ $errors->first() }}</div>
+@endif
 <div class="tf-card p-4">
     <form method="POST" action="{{ route('business.suppliers.update', $supplier) }}" class="row g-3">
         @csrf @method('PUT')

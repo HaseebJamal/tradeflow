@@ -10,6 +10,7 @@ use App\Models\StockMovement;
 use App\Services\BusinessActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class InventoryController extends Controller
@@ -31,12 +32,12 @@ class InventoryController extends Controller
     public function adjust(Request $request)
     {
         $data = $request->validate([
-            'product_id' => ['required', 'exists:products,id'],
+            'product_id' => ['required', Rule::exists('products', 'id')->where(fn ($query) => $query->where('business_id', auth()->user()->business_id))],
             'type' => ['required', 'in:added,reduced,returned,damaged,adjustment'],
             'quantity' => ['required', 'integer', 'min:1'],
             'note' => ['nullable', 'string', 'max:255'],
             'reason' => ['nullable', 'string', 'max:255'],
-        ]);
+        ], ['product_id.required' => 'Please select a product.', 'product_id.exists' => 'Please select a valid product.']);
 
         $this->recordMovement($data, false);
 
@@ -46,10 +47,10 @@ class InventoryController extends Controller
     public function transfer(Request $request)
     {
         $data = $request->validate([
-            'product_id' => ['required', 'exists:products,id'],
+            'product_id' => ['required', Rule::exists('products', 'id')->where(fn ($query) => $query->where('business_id', auth()->user()->business_id))],
             'quantity' => ['required', 'integer', 'min:1'],
             'note' => ['required', 'string', 'max:255'],
-        ]);
+        ], ['product_id.required' => 'Please select a product.', 'product_id.exists' => 'Please select a valid product.']);
 
         $data['type'] = 'transfer';
         $this->recordMovement($data, true);

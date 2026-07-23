@@ -15,6 +15,9 @@
     const back = wizard.querySelector('[data-tf-step-back]');
     const next = wizard.querySelector('[data-tf-step-next]');
     const submit = wizard.querySelector('[data-tf-step-submit]');
+    const billingCycleInputs = [...wizard.querySelectorAll('[data-registration-billing-cycle]')];
+    const planInputs = [...wizard.querySelectorAll('[data-registration-plan-input]')];
+    const planOptions = [...wizard.querySelectorAll('[data-registration-plan-option]')];
     const restored = document.querySelector('[data-tf-register-restored]');
     const hasServerErrors = wizard.dataset.registrationHasErrors === '1';
     let currentStep = 0;
@@ -173,6 +176,7 @@
                     if (error) setInvalid(field, error);
                     return;
                 }
+                if (field.type === 'radio') return;
                 if (field.required && !field.value.trim()) {
                     setInvalid(field, 'This field is required.');
                 } else if (field.name === 'phone' && !phoneIsValid(field.value)) {
@@ -192,6 +196,17 @@
             if (password.value !== confirmation.value) {
                 setInvalid(confirmation, 'Password and confirm password do not match.');
             }
+        }
+
+        if (index === 3) {
+            const selectedPlan = wizard.querySelector('input[name="selected_plan_id"]:checked');
+            const selectedCycle = wizard.querySelector('input[name="billing_cycle"]:checked');
+            if (!selectedPlan) {
+                const target = wizard.querySelector('[data-register-error="selected_plan_id"]');
+                if (target) target.textContent = 'Please select a subscription plan before continuing.';
+                firstInvalid ??= planInputs[0] || null;
+            }
+            if (!selectedCycle) firstInvalid ??= billingCycleInputs[0] || null;
         }
 
         if (firstInvalid && focus) {
@@ -255,6 +270,28 @@
         });
     };
 
+    const refreshPlanPricing = () => {
+        const cycle = wizard.querySelector('input[name="billing_cycle"]:checked')?.value || 'Monthly';
+        const yearly = cycle === 'Yearly';
+
+        wizard.querySelectorAll('[data-registration-monthly-price]').forEach((price) => price.classList.toggle('d-none', yearly));
+        wizard.querySelectorAll('[data-registration-yearly-price]').forEach((price) => price.classList.toggle('d-none', !yearly));
+    };
+
+    const refreshPlanSelection = () => {
+        const selected = wizard.querySelector('input[name="selected_plan_id"]:checked');
+        planOptions.forEach((option) => {
+            const input = option.querySelector('[data-registration-plan-input]');
+            option.classList.toggle('is-selected', input === selected);
+            option.setAttribute('aria-checked', input === selected ? 'true' : 'false');
+        });
+
+        if (selected) {
+            const error = wizard.querySelector('[data-register-error="selected_plan_id"]');
+            if (error) error.textContent = '';
+        }
+    };
+
     const showStep = (step, persist = true) => {
         currentStep = Math.max(0, Math.min(step, panels.length - 1));
         tabs.forEach((tab, index) => tab.classList.toggle('active', index === currentStep));
@@ -296,6 +333,8 @@
     window.applyTradeFlowTabOrder?.(wizard, true);
     syncOwnerName();
     refreshBusinessTypes();
+    refreshPlanPricing();
+    refreshPlanSelection();
 
     tabs.forEach((tab) => tab.addEventListener('click', () => moveTo(Number(tab.dataset.tfStepTab))));
     back.addEventListener('click', () => showStep(currentStep - 1));
@@ -309,6 +348,8 @@
 
     wizard.addEventListener('change', (event) => {
         if (event.target.matches('input[name="business_type"]')) refreshBusinessTypes();
+        if (event.target.matches('[data-registration-billing-cycle]')) refreshPlanPricing();
+        if (event.target.matches('[data-registration-plan-input]')) refreshPlanSelection();
         if (event.target.matches('[data-register-file]')) {
             const file = event.target.files?.[0];
             const target = wizard.querySelector('[data-file-name="' + event.target.name + '"]');

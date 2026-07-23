@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Business;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\AuditLog;
+use App\Models\Business;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Supplier;
@@ -13,6 +14,7 @@ use App\Services\AccountingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class SupplierController extends Controller
 {
@@ -63,11 +65,15 @@ class SupplierController extends Controller
 
     public function store(Request $request)
     {
-        DB::transaction(function () use ($request) {
-            $validated = $this->validated($request);
+        $businessId = (int) auth()->user()->business_id;
+
+        DB::transaction(function () use ($request, $businessId) {
+            Business::query()->lockForUpdate()->findOrFail($businessId);
+            $validated = $this->normaliseSupplierFields($this->validated($request));
+            $this->ensureUniqueSupplier($businessId, $validated);
             $supplier = Supplier::create($validated + [
                 'opening_balance' => $validated['opening_balance'] ?? 0,
-                'business_id' => auth()->user()->business_id,
+                'business_id' => $businessId,
                 'created_by' => auth()->id(),
             ]);
 
@@ -114,9 +120,11 @@ class SupplierController extends Controller
     public function update(Request $request, Supplier $supplier)
     {
         $supplier = $this->scoped($supplier);
-        $validated = $this->validated($request);
+        $validated = $this->normaliseSupplierFields($this->validated($request));
 
         DB::transaction(function () use ($supplier, $validated) {
+            Business::query()->lockForUpdate()->findOrFail($supplier->business_id);
+            $this->ensureUniqueSupplier($supplier->business_id, $validated, $supplier->id);
             $supplier->update($validated + ['opening_balance' => $validated['opening_balance'] ?? 0]);
             $this->syncOpeningBalance($supplier->fresh());
         });
@@ -181,6 +189,94 @@ class SupplierController extends Controller
     {
         abort_unless($supplier->business_id === auth()->user()->business_id, 404);
         return $supplier;
+    }
+
+    /** Locking the parent business serializes concurrent creates in the same tenant. */
+    private function ensureUniqueSupplier(int $businessId, array $data, ?int $ignoreSupplierId = null): void
+    {
+        $identity = [
+            'supplier_name' => $this->normaliseForComparison($data['supplier_name'] ?? ''),
+            'company_name' => $this->normaliseForComparison($data['company_name'] ?? ''),
+            'city' => $this->normaliseForComparison($data['city'] ?? ''),
+            'phone' => $this->normalisePhoneForComparison($data['phone'] ?? ''),
+        ];
+        $email = $this->normaliseForComparison($data['email'] ?? '');
+        $hasCompleteIdentity = collect($identity)->every(fn ($value) => $value !== '');
+
+        $duplicate = Supplier::withTrashed()
+            ->where('business_id', $businessId)
+            ->when($ignoreSupplierId, fn ($query) => $query->whereKeyNot($ignoreSupplierId))
+            ->get(['id', 'supplier_name', 'company_name', 'city', 'phone', 'email'])
+            ->first(function (Supplier $candidate) use ($identity, $email, $hasCompleteIdentity) {
+                $candidatePhone = $this->normalisePhoneForComparison($candidate->phone ?? '');
+                $candidateEmail = $this->normaliseForComparison($candidate->email ?? '');
+
+                if ($identity['phone'] !== '' && $identity['phone'] === $candidatePhone) {
+                    return true;
+                }
+
+                if ($email !== '' && $email === $candidateEmail) {
+                    return true;
+                }
+
+                if (! $hasCompleteIdentity || $candidatePhone === '') {
+                    return false;
+                }
+
+                return $identity['supplier_name'] === $this->normaliseForComparison($candidate->supplier_name ?? '')
+                    && $identity['company_name'] === $this->normaliseForComparison($candidate->company_name ?? '')
+                    && $identity['city'] === $this->normaliseForComparison($candidate->city ?? '')
+                    && $identity['phone'] === $candidatePhone;
+            });
+
+        if ($duplicate) {
+            throw ValidationException::withMessages([
+                'supplier_name' => 'A supplier with the same phone or complete identity already exists for this business.',
+            ]);
+        }
+    }
+
+    private function normaliseSupplierFields(array $data): array
+    {
+        foreach (['supplier_name', 'company_name', 'city'] as $field) {
+            if (array_key_exists($field, $data) && $data[$field] !== null) {
+                $data[$field] = trim((string) preg_replace('/\s+/u', ' ', $data[$field]));
+            }
+        }
+
+        if (array_key_exists('email', $data) && $data['email'] !== null) {
+            $data['email'] = mb_strtolower(trim($data['email']));
+        }
+
+        if (array_key_exists('phone', $data) && $data['phone'] !== null) {
+            $data['phone'] = $this->normalisePhoneForComparison($data['phone']);
+        }
+
+        return $data;
+    }
+
+    private function normaliseForComparison(string $value): string
+    {
+        return mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $value)));
+    }
+
+    private function normalisePhoneForComparison(string $value): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        $digits = preg_replace('/\D+/', '', $value);
+
+        if (str_starts_with($digits, '00')) {
+            $digits = substr($digits, 2);
+        } elseif (preg_match('/^0?3\d{9}$/', $digits)) {
+            $digits = '92'.ltrim($digits, '0');
+        }
+
+        return '+'.$digits;
     }
 
     private function audit(string $action, Supplier $supplier): void

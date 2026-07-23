@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Business;
 use App\Models\SubscriptionChangeRequest;
+use App\Models\SubscriptionPlan;
 use Illuminate\Http\Request;
 
 class AdminNotificationController extends Controller
@@ -96,13 +97,20 @@ class AdminNotificationController extends Controller
 
         abort_unless($category === 'company_registration', 404);
 
-        $business = Business::with(['owner', 'documents', 'approvalLogs.changedBy'])
+        $business = Business::with(['owner', 'documents', 'approvalLogs.changedBy', 'selectedPlan', 'subscription.plan'])
             ->findOrFail(data_get($item->data, 'business_id'));
 
         if (!$item->read_at) {
             $item->markAsRead();
         }
 
-        return view('super-admin.notifications.review-registration', compact('item', 'business'));
+        $adminPlans = SubscriptionPlan::query()
+            ->where('status', 'Active')
+            ->whereNull('archived_at')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        return view('super-admin.notifications.review-registration', compact('item', 'business', 'adminPlans'));
     }
 }

@@ -1595,9 +1595,34 @@ function initCompanyCreateForm(form) {
     const submit = form.querySelector('[data-company-create-submit]');
     const validationStatus = form.querySelector('[data-company-create-status]');
     const permissionInputs = [...form.querySelectorAll('[data-permission-child]')];
+    const phoneInputs = [...form.querySelectorAll('[data-tf-phone-visible]')];
     const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 
+    // Only inspect controls the browser can actually validate. In particular,
+    // the phone component uses hidden transport inputs and permission inputs
+    // are optional; neither should determine the message shown to the user.
+    const validatableFields = () => [...form.elements].filter((field) => (
+        !permissionInputs.includes(field)
+        && field.willValidate
+        && !field.disabled
+        && field.type !== 'hidden'
+    ));
+
+    const fieldLabel = (field) => {
+        const label = field.labels?.[0]?.textContent
+            ?.replace(/\*/g, '')
+            .replace(/\bOptional\b/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        return label || 'This field';
+    };
+
     const validate = () => {
+        // The visible control is authoritative for the user, while its hidden
+        // sibling carries the normalized E.164 value to the server. Sync
+        // first so both Company Phone and Owner Phone report their own state.
+        phoneInputs.forEach((field) => window.TradeFlowPhone?.sync(field));
         const value = password?.value || '';
         const matches = value !== '' && value === (confirmation?.value || '');
         const strong = passwordRule.test(value);
@@ -1607,11 +1632,13 @@ function initCompanyCreateForm(form) {
         passwordError?.classList.toggle('d-block', showError);
         if (password) password.setCustomValidity(value && !strong ? 'Use a stronger password.' : '');
         if (confirmation) confirmation.setCustomValidity(showError ? 'Password and confirm password do not match.' : '');
-        const invalidField = [...form.elements].find((field) => !permissionInputs.includes(field) && typeof field.checkValidity === 'function' && !field.checkValidity());
+        const invalidField = validatableFields().find((field) => !field.checkValidity());
         let message = '';
         if (value && !strong) message = 'Temporary Password must include uppercase, lowercase, number, and special character.';
         else if (confirmation?.value && !matches) message = 'Password and confirm password do not match.';
-        else if (invalidField) message = `${invalidField.labels?.[0]?.textContent?.replace('*', '').trim() || 'A required field'} is required or invalid.`;
+        else if (invalidField) message = invalidField.validity.valueMissing
+            ? `${fieldLabel(invalidField)} is required.`
+            : `${fieldLabel(invalidField)} is invalid.`;
 
         validationStatus?.classList.toggle('d-none', !message);
         if (validationStatus) validationStatus.textContent = message;
@@ -1621,6 +1648,7 @@ function initCompanyCreateForm(form) {
     form.querySelectorAll('input, select, textarea').forEach((field) => {
         field.addEventListener('input', validate);
         field.addEventListener('change', validate);
+        field.addEventListener('blur', validate);
     });
     password?.addEventListener('input', validate);
     confirmation?.addEventListener('input', validate);
@@ -1639,6 +1667,10 @@ function initCompanyCreateForm(form) {
         }
     });
     validate();
+    // Browsers may restore or autofill fields after the initial synchronous
+    // validation pass without dispatching input/change events. Re-check on
+    // the next paint so a completed Company Name never leaves a stale error.
+    requestAnimationFrame(validate);
 }
 
 document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreateForm);

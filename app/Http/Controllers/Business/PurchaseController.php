@@ -21,6 +21,7 @@ use App\Services\DocumentNumberService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class PurchaseController extends Controller
@@ -57,11 +58,15 @@ class PurchaseController extends Controller
             ->where('purchase_date', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
             ->latest('purchase_date')->paginate(12)->withQueryString();
 
+        $suppliers = Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get();
+        $hasSuppliers = $suppliers->isNotEmpty();
+
         return view('business.purchases.index', [
             'purchases' => $purchases,
-            'suppliers' => Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get(),
-            'products' => $request->boolean('create') ? Product::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get() : collect(),
+            'suppliers' => $suppliers,
+            'products' => $request->boolean('create') && $hasSuppliers ? Product::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get() : collect(),
             'showPurchaseCreate' => $request->boolean('create'),
+            'hasSuppliers' => $hasSuppliers,
         ]);
     }
 
@@ -89,20 +94,26 @@ class PurchaseController extends Controller
 
     public function store(Request $request)
     {
+        $businessId = $this->businessId();
+        if (! Supplier::where('business_id', $businessId)->where('status', 'Active')->exists()) {
+            throw ValidationException::withMessages([
+                'supplier_id' => 'You must create at least one supplier before creating a purchase.',
+            ]);
+        }
+
         $data = $request->validate([
             'supplier_id' => ['required', 'integer'],
             'purchase_date' => ['required', 'date'], 'notes' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'], 'items.*.product_id' => ['required', 'integer'],
             'items.*.quantity' => ['required', 'integer', 'min:1'], 'items.*.unit_cost' => ['required', 'integer', 'min:0'],
             'items.*.selling_price' => ['required', 'integer', 'min:0'],
+            'items.*.discount_type' => ['nullable', Rule::in(['percentage', 'fixed'])],
+            'items.*.discount_value' => ['nullable', 'integer', 'min:0'],
+            'items.*.tax_type' => ['nullable', Rule::in(['percentage', 'fixed'])],
+            'items.*.tax_value' => ['nullable', 'integer', 'min:0'],
             'items.*.discount_amount' => ['nullable', 'integer', 'min:0'],
             'items.*.tax_amount' => ['nullable', 'integer', 'min:0'],
-            // Kept for compatibility with the purchase header. These values are
-            // recalculated from item rows below and never trusted from the form.
-            'discount_amount' => ['nullable', 'integer', 'min:0'], 'tax_amount' => ['nullable', 'integer', 'min:0'],
         ]);
-        $businessId = $this->businessId();
-
         foreach ($data['items'] as $index => $item) {
             if ((int) $item['selling_price'] <= (int) $item['unit_cost']) {
                 throw ValidationException::withMessages([
@@ -112,14 +123,24 @@ class PurchaseController extends Controller
         }
 
         $purchase = DB::transaction(function () use ($data, $businessId) {
-            $supplier = Supplier::where('business_id', $businessId)->where('status', 'Active')->findOrFail($data['supplier_id']);
+            $supplier = Supplier::where('business_id', $businessId)
+                ->where('status', 'Active')
+                ->lockForUpdate()
+                ->find($data['supplier_id']);
+            if (! $supplier) {
+                throw ValidationException::withMessages([
+                    'supplier_id' => 'Select an active supplier before creating a purchase.',
+                ]);
+            }
             $lines = collect($data['items'])->groupBy('product_id')->map(fn ($items, $productId) => [
                 'product_id' => (int) $productId,
                 'quantity' => (int) $items->sum('quantity'),
                 'unit_cost' => (float) $items->last()['unit_cost'],
                 'selling_price' => (float) $items->last()['selling_price'],
-                'discount_amount' => (int) ($items->last()['discount_amount'] ?? 0),
-                'tax_amount' => (int) ($items->last()['tax_amount'] ?? 0),
+                'discount_type' => $items->last()['discount_type'] ?? 'fixed',
+                'discount_value' => (int) ($items->last()['discount_value'] ?? $items->last()['discount_amount'] ?? 0),
+                'tax_type' => $items->last()['tax_type'] ?? 'fixed',
+                'tax_value' => (int) ($items->last()['tax_value'] ?? $items->last()['tax_amount'] ?? 0),
             ])->values();
             $subtotal = 0;
             $discount = 0;
@@ -127,10 +148,7 @@ class PurchaseController extends Controller
             $prepared = [];
             foreach ($lines as $line) {
                 $product = Product::where('business_id', $businessId)->findOrFail($line['product_id']);
-                $lineSubtotal = round($line['quantity'] * $line['unit_cost'], 2);
-                $lineDiscount = min($lineSubtotal, (float) $line['discount_amount']);
-                $lineTax = (float) $line['tax_amount'];
-                $lineTotal = round($lineSubtotal - $lineDiscount + $lineTax, 2);
+                ['subtotal' => $lineSubtotal, 'discount' => $lineDiscount, 'tax' => $lineTax, 'total' => $lineTotal] = $this->lineAmounts($line);
                 $subtotal += $lineSubtotal;
                 $discount += $lineDiscount;
                 $tax += $lineTax;
@@ -150,7 +168,11 @@ class PurchaseController extends Controller
                     'quantity' => $line['quantity'],
                     'unit_cost' => $line['unit_cost'],
                     'selling_price' => $line['selling_price'],
+                    'discount_type' => $line['discount_type'],
+                    'discount_value' => $line['discount_value'],
                     'discount_amount' => $line['lineDiscount'],
+                    'tax_type' => $line['tax_type'],
+                    'tax_value' => $line['tax_value'],
                     'tax_amount' => $line['lineTax'],
                     'line_total' => $line['lineTotal'],
                 ]);
@@ -170,6 +192,39 @@ class PurchaseController extends Controller
     public function show(Purchase $purchase)
     {
         return view('business.purchases.show', ['purchase' => $this->scoped($purchase)->load(['supplier', 'items.product', 'invoice', 'payments', 'returns.items'])]);
+    }
+
+    private function lineAmounts(array $line): array
+    {
+        $subtotal = round((int) $line['quantity'] * (float) $line['unit_cost'], 2);
+        $discountValue = (int) ($line['discount_value'] ?? 0);
+        $taxValue = (int) ($line['tax_value'] ?? 0);
+
+        if ($line['discount_type'] === 'percentage' && $discountValue > 100) {
+            throw ValidationException::withMessages(['items' => 'Discount percentage cannot exceed 100.']);
+        }
+        if ($line['tax_type'] === 'percentage' && $taxValue > 100) {
+            throw ValidationException::withMessages(['items' => 'Tax percentage cannot exceed 100.']);
+        }
+
+        $discount = $line['discount_type'] === 'percentage'
+            ? round($subtotal * $discountValue / 100, 2)
+            : (float) $discountValue;
+        if ($discount > $subtotal) {
+            throw ValidationException::withMessages(['items' => 'Discount cannot exceed the item base amount.']);
+        }
+
+        $taxable = $subtotal - $discount;
+        $tax = $line['tax_type'] === 'percentage'
+            ? round($taxable * $taxValue / 100, 2)
+            : (float) $taxValue;
+        $total = round($taxable + $tax, 2);
+
+        if ($total < 0) {
+            throw ValidationException::withMessages(['items' => 'Item total cannot be negative.']);
+        }
+
+        return compact('subtotal', 'discount', 'tax', 'total');
     }
 
     public function receive(Purchase $purchase)

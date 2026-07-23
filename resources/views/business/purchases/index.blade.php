@@ -7,7 +7,15 @@
 
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div><h2 class="h5 mb-1">All Purchases</h2><p class="tf-muted mb-0">Track supplier commitments through receiving, payment, and return.</p></div>
-    <div>@companyCan('purchases.create')<a href="{{ route('business.purchases.index', ['create' => 1]) }}#purchase-create" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>New Purchase</a>@endcompanyCan</div>
+    <div>
+        @companyCan('purchases.create')
+            @if($hasSuppliers)
+                <a href="{{ route('business.purchases.index', ['create' => 1]) }}#purchase-create" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>New Purchase</a>
+            @else
+                <button type="button" class="btn btn-tf-primary" data-purchase-no-supplier data-create-supplier-url="{{ route('business.suppliers.create') }}"><i class="bi bi-plus-lg me-1"></i>New Purchase</button>
+            @endif
+        @endcompanyCan
+    </div>
 </div>
 
 @if($showPurchaseCreate)
@@ -28,3 +36,36 @@
 
 <x-table><thead><tr><th>Purchase order</th><th>Supplier</th><th>Invoice</th><th>Ordered</th><th>Received</th><th>Total</th><th>Paid / Balance</th><th>Status</th><th></th></tr></thead><tbody>@forelse($purchases as $purchase)<tr><td><strong>{{ $purchase->purchase_number }}</strong><small class="d-block tf-muted"><x-date-time :value="$purchase->purchase_date" /></small></td><td>{{ $purchase->supplier?->supplier_name }}</td><td>{{ $purchase->invoice?->invoice_number ?: ($purchase->supplier_invoice_number ?: 'Pending receipt') }}</td><td>Rs {{ number_format($purchase->grand_total, 2) }}</td><td>Rs {{ number_format($purchase->invoice?->grand_total ?? 0, 2) }}</td><td>Rs {{ number_format($purchase->grand_total, 2) }}</td><td>Rs {{ number_format($purchase->paid_amount, 2) }}<small class="d-block tf-muted">Balance Rs {{ number_format($purchase->balance, 2) }}</small></td><td><span class="tf-badge {{ $purchase->status === 'Received' ? 'tf-badge-success' : ($purchase->status === 'Ordered' ? 'tf-badge-warning' : 'tf-badge-info') }}">{{ $purchase->status }}</span></td><td><a href="{{ route('business.purchases.show', $purchase) }}" class="btn btn-sm btn-outline-primary">Manage</a></td></tr>@empty<tr><td colspan="9" class="text-center tf-muted py-5">No purchase orders found.</td></tr>@endforelse</tbody></x-table><div class="mt-3">{{ $purchases->links() }}</div>
 @endsection
+
+@if(! $hasSuppliers)
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const showNoSupplier = function (url) {
+        if (!window.Swal) {
+            if (window.confirm('You must create at least one supplier before creating a purchase. Create supplier now?')) window.location.assign(url);
+            return;
+        }
+        window.Swal.fire({
+            icon: 'warning',
+            title: 'No Supplier Found',
+            text: 'You must create at least one supplier before creating a purchase.',
+            showCancelButton: true,
+            confirmButtonText: 'Create Supplier',
+            cancelButtonText: 'Cancel',
+        }).then(function (result) {
+            if (result.isConfirmed) window.location.assign(url);
+        });
+    };
+
+    document.querySelectorAll('[data-purchase-no-supplier]').forEach(function (button) {
+        button.addEventListener('click', function () { showNoSupplier(button.dataset.createSupplierUrl); });
+    });
+
+    @if($showPurchaseCreate)
+        showNoSupplier(@json(route('business.suppliers.create')));
+    @endif
+});
+</script>
+@endpush
+@endif

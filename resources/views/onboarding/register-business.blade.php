@@ -131,20 +131,27 @@
                                 <h2 class="h4 fw-bold">Choose Plan <span class="text-danger" aria-hidden="true">*</span></h2>
                                 <p class="tf-muted small">Start with a free trial. Your trial begins after Super Admin approves your business.</p>
                                 <div class="btn-group mb-3" role="group" aria-label="Billing cycle">
-                                    <input type="radio" class="btn-check" name="billing_cycle" id="registrationMonthly" value="Monthly" @checked(old('billing_cycle', $selectedBillingCycle ?? 'Monthly') === 'Monthly')>
+                                    <input type="radio" class="btn-check" name="billing_cycle" id="registrationMonthly" value="Monthly" data-registration-billing-cycle @checked(old('billing_cycle', $selectedBillingCycle ?? 'Monthly') === 'Monthly')>
                                     <label class="btn btn-outline-primary" for="registrationMonthly">Monthly</label>
-                                    <input type="radio" class="btn-check" name="billing_cycle" id="registrationYearly" value="Yearly" @checked(old('billing_cycle', $selectedBillingCycle ?? 'Monthly') === 'Yearly')>
-                                    <label class="btn btn-outline-primary" for="registrationYearly">Yearly <span class="small">Save 20%</span></label>
+                                    <input type="radio" class="btn-check" name="billing_cycle" id="registrationYearly" value="Yearly" data-registration-billing-cycle @checked(old('billing_cycle', $selectedBillingCycle ?? 'Monthly') === 'Yearly')>
+                                    <label class="btn btn-outline-primary" for="registrationYearly">Yearly</label>
                                 </div>
                                 <div class="row g-3">
                                     @forelse($plans as $plan)
-                                        @php($selectedPlan = (string) old('selected_plan_id', $selectedPlanId ?? null) === (string) $plan->id)
+                                        @php
+                                            $selectedPlan = (string) old('selected_plan_id', $selectedPlanId ?? null) === (string) $plan->id;
+                                            $monthlyPrice = $plan->priceFor('Monthly');
+                                            $yearlyPrice = $plan->priceFor('Yearly');
+                                            $yearlySaving = $monthlyPrice > 0 && $yearlyPrice > 0 && $yearlyPrice < ($monthlyPrice * 12)
+                                                ? (int) round((1 - ($yearlyPrice / ($monthlyPrice * 12))) * 100)
+                                                : 0;
+                                        @endphp
                                         <div class="col-md-6">
-                                            <label class="tf-plan-option">
-                                                <input type="radio" name="selected_plan_id" value="{{ $plan->id }}" required @checked($selectedPlan)>
-                                                <div class="d-flex justify-content-between gap-2"><strong>{{ $plan->name }}</strong>@if($plan->is_recommended)<span class="tf-badge tf-badge-info">Recommended</span>@endif</div>
-                                                <div class="h5 mt-2 mb-1" data-registration-monthly-price>Rs {{ number_format($plan->priceFor('Monthly')) }} <small class="tf-muted">/ month</small></div>
-                                                <div class="h5 mt-2 mb-1 d-none" data-registration-yearly-price>Rs {{ number_format($plan->priceFor('Yearly')) }} <small class="tf-muted">/ year</small></div>
+                                            <label class="tf-plan-option" data-registration-plan-option>
+                                                <input type="radio" name="selected_plan_id" value="{{ $plan->id }}" required data-registration-plan-input @checked($selectedPlan)>
+                                                <div class="d-flex justify-content-between gap-2"><strong>{{ $plan->name }}</strong><span>@if($yearlySaving > 0)<span class="tf-badge tf-badge-info">Save {{ $yearlySaving }}%</span>@elseif($plan->is_recommended)<span class="tf-badge tf-badge-info">Recommended</span>@endif</span></div>
+                                                <div class="h5 mt-2 mb-1" data-registration-monthly-price>Rs {{ number_format($monthlyPrice) }} <small class="tf-muted">/ month</small></div>
+                                                <div class="h5 mt-2 mb-1 d-none" data-registration-yearly-price>Rs {{ number_format($yearlyPrice) }} <small class="tf-muted">/ year</small></div>
                                                 <small class="tf-muted d-block">{{ $plan->trial_days }}-day trial · {{ number_format($plan->product_limit) }} products · {{ number_format($plan->staff_limit) }} staff</small>
                                             </label>
                                         </div>
