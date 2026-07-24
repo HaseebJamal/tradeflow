@@ -21,7 +21,7 @@
         <div class="container">
             <div class="row g-4 align-items-start">
                 <div class="col-lg-4">
-                    <div class="tf-brand d-flex align-items-center mb-3"><img src="{{ asset('images/tradeflow-logo.svg') }}" class="tf-brand-logo tf-brand-logo-on-dark" alt="TradeFlow"></div>
+                    <div class="tf-brand d-flex align-items-center mb-3"><span class="tf-brand-mark"><i class="bi bi-box-seam"></i></span><span>TradeFlow</span></div>
                     <p class="text-white-50 mb-0">Smart Wholesale Management Platform for manufacturers, distributors, wholesalers, retailers, accountants, and delivery teams.</p>
                 </div>
                 <div class="col-6 col-lg-2"><h3 class="h6">Platform</h3><a href="{{ route('public.home') }}#features" data-tf-smooth>Features</a><a href="{{ route('public.home') }}#pricing" data-tf-smooth>Pricing</a><a href="{{ route('public.home') }}#faq" data-tf-smooth>FAQ</a><a href="{{ route('public.home') }}#about" data-tf-smooth>About</a><a href="{{ route('public.home') }}#contact" data-tf-smooth>Contact</a></div>
@@ -70,4 +70,3 @@
     @stack('scripts')
 </body>
 </html>
-

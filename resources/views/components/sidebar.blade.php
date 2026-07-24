@@ -172,7 +172,7 @@
                 @if($hasSidebarBusinessLogo)
                     <img src="{{ asset('storage/'.$sidebarLogoPath) }}" alt="{{ $sidebarBusinessName }} logo">
                 @else
-                    <img src="{{ asset('images/tradeflow-mark.svg') }}" alt="TradeFlow">
+                    <i class="bi bi-box-seam"></i>
                 @endif
             </span>
             <span class="tf-sidebar-text tf-sidebar-company-name" title="{{ $sidebarBusinessName ?: 'TradeFlow' }}">{{ $sidebarBusinessName ?: 'TradeFlow' }}</span>
