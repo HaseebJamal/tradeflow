@@ -219,6 +219,11 @@ class CompanyPermissionService
             'deliveries.update' => 'deliveries.update_status',
             'expenses.add' => 'expenses.create',
             'settings.manage' => 'settings.update',
+            // These two dashboard cards were retired in favour of the
+            // canonical receivables and payables cards. Keep old grants
+            // effective while ensuring they can never reappear as choices.
+            'dashboard.card_pending_customer_payments' => 'dashboard.card_receivables',
+            'dashboard.card_pending_supplier_payments' => 'dashboard.card_payables',
             default => str_contains($permission, '.') ? $permission : $permission.'.view',
         };
     }

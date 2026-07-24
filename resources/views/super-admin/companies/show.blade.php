@@ -29,7 +29,6 @@
         'pending' => ['approved' => 'Approve', 'rejected' => 'Reject'],
         'approved' => ['suspended' => 'Suspend'],
         'suspended' => ['approved' => 'Activate'],
-        'rejected' => ['pending' => 'Move to Pending'],
     ][$currentStatus] ?? [];
     $registrationPlan = $company->selectedPlan;
     $registrationSnapshot = $company->selected_plan_snapshot ?? [];

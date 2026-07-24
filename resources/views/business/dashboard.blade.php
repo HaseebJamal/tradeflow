@@ -8,24 +8,18 @@
 @php
     $companyPermissions = app(\App\Services\CompanyPermissionService::class);
     $dashboardCards = [
-        ['sales.view', 'Total Sales', 'Rs '.number_format($totalSales ?? 0), 'bi-graph-up', 'bg-blue', 'All completed sales'],
-        ['sales.view', "Today's Sales", 'Rs '.number_format($todaySales ?? 0), 'bi-calendar-day', 'bg-green', 'Sales created today'],
-        ['inventory.view', 'Inventory Value', 'Rs '.number_format($inventoryValue ?? 0), 'bi-boxes', 'bg-navy', 'Current stock cost'],
-        ['sales.view', 'Receivables', 'Rs '.number_format($receivables ?? 0), 'bi-wallet2', 'bg-amber', 'Customer balances due'],
-        ['purchases.view', 'Payables', 'Rs '.number_format($payables ?? 0), 'bi-credit-card', 'bg-amber', 'Supplier balances due'],
-        ['accounting.view', 'Total Profit / Loss', 'Rs '.number_format($profit ?? 0), 'bi-graph-up-arrow', 'bg-green', 'All-time sales less cost and expenses'],
-        ['inventory.view', 'Low Stock', $lowStock ?? 0, 'bi-exclamation-triangle', 'bg-red', 'Restock required'],
-        ['customers.view', 'Total Customers', $customersCount ?? 0, 'bi-people', 'bg-navy', 'Customer master records'],
-        ['suppliers.view', 'Total Suppliers', $suppliersCount ?? 0, 'bi-building-add', 'bg-blue', 'Supplier master records'],
-        ['deliveries.view', 'Pending Deliveries', $pendingDeliveries ?? 0, 'bi-truck', 'bg-blue', 'Awaiting delivery completion'],
-        ['purchases.view', "Today's Purchases", 'Rs '.number_format($todayPurchases ?? 0), 'bi-cart-plus', 'bg-navy', 'Purchase orders created today'],
-        ['accounting.view', 'Monthly Profit / Loss', 'Rs '.number_format($monthlyProfit ?? 0), 'bi-calendar-month', 'bg-green', 'Current month sales less cost and expenses'],
-    ];
-    $dashboardCardPermissions = [
-        'dashboard.card_total_sales', 'dashboard.card_today_sales', 'dashboard.card_inventory_value',
-        'dashboard.card_receivables', 'dashboard.card_payables', 'dashboard.card_profit_loss',
-        'dashboard.card_low_stock', 'dashboard.card_total_customers', 'dashboard.card_total_suppliers',
-        'dashboard.card_pending_deliveries', 'dashboard.card_today_purchases', 'dashboard.card_monthly_profit',
+        ['dashboard.card_total_sales', 'sales.view', 'Total Sales', 'Rs '.number_format($totalSales ?? 0), 'bi-graph-up', 'bg-blue', 'All completed sales'],
+        ['dashboard.card_today_sales', 'sales.view', "Today's Sales", 'Rs '.number_format($todaySales ?? 0), 'bi-calendar-day', 'bg-green', 'Sales created today'],
+        ['dashboard.card_inventory_value', 'inventory.view', 'Inventory Value', 'Rs '.number_format($inventoryValue ?? 0), 'bi-boxes', 'bg-navy', 'Current stock cost'],
+        ['dashboard.card_receivables', 'sales.view', 'Receivables', 'Rs '.number_format($receivables ?? 0), 'bi-wallet2', 'bg-amber', 'Customer balances due'],
+        ['dashboard.card_payables', 'purchases.view', 'Payables', 'Rs '.number_format($payables ?? 0), 'bi-credit-card', 'bg-amber', 'Supplier balances due'],
+        ['dashboard.card_profit_loss', 'accounting.view', 'Total Profit / Loss', 'Rs '.number_format($profit ?? 0), 'bi-graph-up-arrow', 'bg-green', 'All-time sales less cost and expenses'],
+        ['dashboard.card_low_stock', 'inventory.view', 'Low Stock', $lowStock ?? 0, 'bi-exclamation-triangle', 'bg-red', 'Restock required'],
+        ['dashboard.card_total_customers', 'customers.view', 'Total Customers', $customersCount ?? 0, 'bi-people', 'bg-navy', 'Customer master records'],
+        ['dashboard.card_total_suppliers', 'suppliers.view', 'Total Suppliers', $suppliersCount ?? 0, 'bi-building-add', 'bg-blue', 'Supplier master records'],
+        ['dashboard.card_pending_deliveries', 'deliveries.view', 'Pending Deliveries', $pendingDeliveries ?? 0, 'bi-truck', 'bg-blue', 'Awaiting delivery completion'],
+        ['dashboard.card_today_purchases', 'purchases.view', "Today's Purchases", 'Rs '.number_format($todayPurchases ?? 0), 'bi-cart-plus', 'bg-navy', 'Purchase orders created today'],
+        ['dashboard.card_monthly_profit', 'accounting.view', 'Monthly Profit / Loss', 'Rs '.number_format($monthlyProfit ?? 0), 'bi-calendar-month', 'bg-green', 'Current month sales less cost and expenses'],
     ];
 @endphp
 
@@ -64,9 +58,8 @@
     </div>
 
     <div class="dashboard-cards">
-        @foreach($dashboardCards as $dashboardIndex => $dashboardCard)
-            @php([$permission, $label, $value, $icon, $color, $note] = $dashboardCard)
-            @php($dashboardPermission = $dashboardCardPermissions[$dashboardIndex])
+        @foreach($dashboardCards as $dashboardCard)
+            @php([$dashboardPermission, $permission, $label, $value, $icon, $color, $note] = $dashboardCard)
             @if($companyPermissions->allowsUser(auth()->user(), $dashboardPermission) && $companyPermissions->allowsUser(auth()->user(), $permission))
                 <div>@include('components.card', compact('label', 'value', 'icon', 'color', 'note'))</div>
             @endif

@@ -14,6 +14,7 @@
     $planModules = collect($registrationSnapshot['included_modules'] ?? $registrationPlan?->included_modules ?? [])->filter();
     $planSelectionSource = $business->plan_selection_source === 'pricing' ? 'Landing Pricing' : 'Registration Form';
     $reviewPlanId = old('selected_plan_id', $business->selected_plan_id ?? $business->subscription?->subscription_plan_id);
+    $reviewStatus = strtolower((string) $business->status);
 @endphp
 
 <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-4">
@@ -67,7 +68,33 @@
     </div>
 
     <div class="col-lg-4">
-        <div class="tf-card p-4 mb-4"><h2 class="h5 mb-1">Decision control</h2><p class="tf-muted small">Your decision is recorded in the approval history and audit log.</p><form method="POST" action="{{ route('admin.companies.status', $business) }}" class="row g-3">@csrf @method('PATCH')<div class="col-12"><label for="review-status" class="form-label">Registration status</label><select id="review-status" name="status" class="form-select"><option value="pending" @selected(strtolower($business->status) === 'pending')>Keep pending</option><option value="approved" @selected(strtolower($business->status) === 'approved')>Approve and activate</option><option value="rejected" @selected(strtolower($business->status) === 'rejected')>Reject registration</option><option value="suspended" @selected(strtolower($business->status) === 'suspended')>Suspend account</option></select></div><div class="col-12"><label for="review-note" class="form-label">Decision note</label><textarea id="review-note" name="admin_note" class="form-control" rows="5" placeholder="Add the reason, requested changes, or approval note"></textarea></div><div class="col-12"><button class="btn btn-tf-primary w-100"><i class="bi bi-check2-circle me-1"></i>Save decision</button></div></form></div>
+        <div class="tf-card p-4 mb-4">
+            <h2 class="h5 mb-1">Decision control</h2>
+            <p class="tf-muted small">Your decision is recorded in the approval history and audit log.</p>
+            @if($reviewStatus === 'pending')
+                <form method="POST" action="{{ route('admin.companies.status', $business) }}" class="row g-3">
+                    @csrf @method('PATCH')
+                    <div class="col-12"><label for="review-status" class="form-label">Registration status</label><select id="review-status" name="status" class="form-select"><option value="pending">Keep pending</option><option value="approved">Approve and activate</option><option value="rejected">Reject registration</option></select></div>
+                    <div class="col-12"><label for="review-note" class="form-label">Decision note</label><textarea id="review-note" name="admin_note" class="form-control" rows="5" placeholder="Add the reason when rejecting this registration"></textarea></div>
+                    <div class="col-12"><button class="btn btn-tf-primary w-100"><i class="bi bi-check2-circle me-1"></i>Save decision</button></div>
+                </form>
+            @elseif($reviewStatus === 'approved')
+                <p class="mb-3">This registration has already been approved.</p>
+                <form method="POST" action="{{ route('admin.companies.status', $business) }}" class="row g-3">
+                    @csrf @method('PATCH')
+                    <input type="hidden" name="status" value="suspended">
+                    <div class="col-12"><label for="review-note" class="form-label">Suspension note</label><textarea id="review-note" name="admin_note" class="form-control" rows="4" placeholder="Optional suspension reason"></textarea></div>
+                    <div class="col-12"><button class="btn btn-outline-warning w-100">Suspend account</button></div>
+                </form>
+            @elseif($reviewStatus === 'suspended')
+                <p class="tf-muted">This company is suspended.</p>
+                <form method="POST" action="{{ route('admin.companies.status', $business) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="approved"><button class="btn btn-outline-success w-100">Reactivate account</button></form>
+            @elseif($reviewStatus === 'rejected')
+                <p class="tf-muted mb-0">This registration was rejected. Reopen it through the explicit registration-reopen workflow before making another decision.</p>
+            @else
+                <p class="tf-muted mb-0">No registration-review decision is available for this company.</p>
+            @endif
+        </div>
         @if(strtolower((string) $business->status) === 'pending')
             <div class="tf-card p-4 mb-4" data-registration-review-plan>
                 <h2 class="h5 mb-1">Plan Review</h2><p class="tf-muted small">Confirm the registration plan before approving this business.</p>

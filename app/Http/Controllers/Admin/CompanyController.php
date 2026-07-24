@@ -456,7 +456,13 @@ class CompanyController extends Controller
             'admin_note' => ['nullable', 'string', 'max:3000'],
         ]);
 
+        $oldStatus = strtolower((string) $company->status);
+
         if (($data['decision'] ?? 'status') === 'request_changes') {
+            if ($oldStatus !== 'pending') {
+                return back()->withErrors(['status' => 'Registration changes can only be requested while a registration is pending.']);
+            }
+
             if (blank($data['admin_note'] ?? null)) {
                 throw ValidationException::withMessages(['admin_note' => 'Provide a note when requesting registration changes.']);
             }
@@ -468,7 +474,6 @@ class CompanyController extends Controller
             return back()->with('success', 'Registration changes requested. The business owner has been notified.');
         }
 
-        $oldStatus = strtolower((string) $company->status);
         $newStatus = strtolower($data['status']);
         if ($oldStatus === $newStatus) {
             return back()->with('success', 'Company status is already '.ucfirst($newStatus).'.');
@@ -478,13 +483,17 @@ class CompanyController extends Controller
             'pending' => ['approved', 'rejected'],
             'approved' => ['suspended'],
             'suspended' => ['approved'],
-            'rejected' => ['pending'],
+            'rejected' => [],
         ];
 
         if (!in_array($newStatus, $allowedTransitions[$oldStatus] ?? [], true)) {
             $message = $oldStatus === 'approved' && $newStatus === 'rejected'
-                ? 'Approved companies cannot be rejected.'
-                : 'This company status transition is not allowed.';
+                ? 'An approved company cannot be rejected through the registration review workflow.'
+                : ($oldStatus === 'approved' && $newStatus === 'pending'
+                    ? 'An approved company cannot be moved back to pending through the registration review workflow.'
+                : ($oldStatus === 'rejected'
+                    ? 'Rejected registrations must be reopened through the dedicated reopen workflow before they can be changed.'
+                    : 'This company status transition is not allowed.'));
 
             return back()->withErrors(['status' => $message]);
         }
@@ -510,7 +519,13 @@ class CompanyController extends Controller
             $this->recordApprovalLog($company, $oldStatus, $newStatus, $data['admin_note'] ?? null);
         });
 
-        $this->audit($request, 'company status changed', $company, ['status' => $oldStatus], ['status' => $newStatus, 'note' => $data['admin_note'] ?? null]);
+        $auditAction = match ([$oldStatus, $newStatus]) {
+            ['pending', 'approved'] => 'registration approved',
+            ['approved', 'suspended'] => 'company suspended',
+            ['suspended', 'approved'] => 'company reactivated',
+            default => 'company status changed',
+        };
+        $this->audit($request, $auditAction, $company, ['status' => $oldStatus], ['status' => $newStatus, 'note' => $data['admin_note'] ?? null]);
 
         return back()->with('success', 'Company status updated.');
     }
