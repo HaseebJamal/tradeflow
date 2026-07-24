@@ -12,6 +12,7 @@
     $planPrice = $registrationSnapshot['selected_price'] ?? $business->selected_plan_price ?? $business->subscription?->amount;
     $planStatus = $registrationSnapshot['plan_status'] ?? $registrationPlan?->status;
     $planModules = collect($registrationSnapshot['included_modules'] ?? $registrationPlan?->included_modules ?? [])->filter();
+    $planSelectionSource = $business->plan_selection_source === 'pricing' ? 'Landing Pricing' : 'Registration Form';
     $reviewPlanId = old('selected_plan_id', $business->selected_plan_id ?? $business->subscription?->subscription_plan_id);
 @endphp
 
@@ -36,7 +37,7 @@
             </div>
         </div>
 
-        <div class="tf-card p-4 mb-4"><h2 class="h5 mb-3">Owner account</h2><div class="row g-3"><div class="col-md-6"><small class="tf-muted d-block">Name</small><strong>{{ $business->owner?->name ?? 'Not available' }}</strong></div><div class="col-md-6"><small class="tf-muted d-block">Private owner phone</small><strong>{{ $business->owner?->phone ?? 'Not available' }}</strong></div></div></div>
+        <div class="tf-card p-4 mb-4"><h2 class="h5 mb-3">Owner account</h2><div class="row g-3"><div class="col-md-4"><small class="tf-muted d-block">Name</small><strong>{{ $business->owner?->name ?? 'Not provided' }}</strong></div><div class="col-md-4"><small class="tf-muted d-block">Owner Login Email</small><strong class="text-break">{{ $business->owner?->email ?? 'Not provided' }}</strong></div><div class="col-md-4"><small class="tf-muted d-block">Private owner phone</small><strong>{{ $business->owner?->phone ?? 'Not provided' }}</strong></div></div></div>
 
         <div class="tf-card p-4 mb-4">
             <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
@@ -48,6 +49,7 @@
                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Plan Name</small><strong>{{ $planName }}</strong></div></div>
                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Billing Cycle</small><strong>{{ $planCycle ?: 'Not recorded' }}</strong></div></div>
                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Selected Price</small><strong>Rs {{ number_format((int) $planPrice) }}</strong></div></div>
+                    <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Selection Source</small><strong>{{ $planSelectionSource }}</strong></div></div>
                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Trial Days</small><strong>{{ $business->trial_eligible ? (int) ($business->requested_trial_days ?? $registrationSnapshot['trial_days'] ?? 0).' days' : 'No trial' }}</strong></div></div>
                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Product Limit</small><strong>{{ number_format((int) ($registrationSnapshot['product_limit'] ?? $registrationPlan?->product_limit ?? 0)) }}</strong></div></div>
                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Staff Limit</small><strong>{{ number_format((int) ($registrationSnapshot['staff_limit'] ?? $registrationPlan?->staff_limit ?? 0)) }}</strong></div></div>

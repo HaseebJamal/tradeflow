@@ -92,7 +92,7 @@
             <div class="mt-auto">{{ $actions ?? '' }}</div>
         @elseif($context === 'landing')
             @if(! auth()->check())
-                <a href="{{ route('register.business', ['plan' => $plan->id, 'billing_cycle' => $cycle]) }}" class="btn {{ $plan->is_recommended ? 'btn-tf-primary' : 'btn-outline-primary' }} w-100 mt-auto" data-plan-cta>
+                <a href="{{ route('register.business', ['plan' => $plan->id, 'billing_cycle' => $cycle, 'source' => 'pricing']) }}" class="btn {{ $plan->is_recommended ? 'btn-tf-primary' : 'btn-outline-primary' }} w-100 mt-auto" data-plan-cta>
                     {{ $plan->trial_days > 0 ? 'Start Free Trial' : 'Choose Plan' }}
                 </a>
             @elseif(! $isBusinessOwner)

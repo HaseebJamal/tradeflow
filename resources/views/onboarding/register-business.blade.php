@@ -130,6 +130,31 @@
 
                             <div class="tf-step-panel" data-tf-step-panel="3">
                                 <h2 class="h4 fw-bold">Choose Plan <span class="text-danger" aria-hidden="true">*</span></h2>
+                                @php
+                                    $pricingLocked = is_array($pricingSelection ?? null);
+                                @endphp
+                                @if($pricingLocked)
+                                    @php
+                                        $lockedPlan = $plans->firstWhere('id', $pricingSelection['plan_id']);
+                                        $lockedCycle = $pricingSelection['billing_cycle'];
+                                        $lockedPrice = $lockedPlan?->priceFor($lockedCycle) ?? 0;
+                                    @endphp
+                                    <input type="hidden" name="selected_plan_id" value="{{ $pricingSelection['plan_id'] }}" required>
+                                    <input type="hidden" name="billing_cycle" value="{{ $lockedCycle }}" required>
+                                    <input type="hidden" name="plan_selection_source" value="pricing">
+                                    <p class="tf-muted small">You selected this plan from the pricing page.</p>
+                                    <div class="border rounded p-4 bg-light">
+                                        <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
+                                            <div><h3 class="h5 mb-1">{{ $lockedPlan?->name }}</h3><div class="tf-muted">{{ $lockedCycle }} - Rs {{ number_format($lockedPrice) }}</div></div>
+                                            @if($lockedPlan && $lockedPlan->is_recommended)
+                                                <span class="tf-badge tf-badge-info">Recommended</span>
+                                            @endif
+                                        </div>
+                                        <div class="mt-3 small"><strong>{{ $lockedPlan?->trial_days }}-day free trial</strong><span class="tf-muted"> · {{ number_format((int) $lockedPlan?->product_limit) }} products · {{ number_format((int) $lockedPlan?->staff_limit) }} staff · {{ number_format((int) $lockedPlan?->order_limit) }} orders</span></div>
+                                        <a href="{{ route('public.pricing') }}" class="btn btn-outline-primary btn-sm mt-3">Back to Pricing</a>
+                                    </div>
+                                @else
+                                <input type="hidden" name="plan_selection_source" value="direct">
                                 <p class="tf-muted small">Start with a free trial. Your trial begins after Super Admin approves your business.</p>
                                 <div class="btn-group mb-3" role="group" aria-label="Billing cycle">
                                     <input type="radio" class="btn-check" name="billing_cycle" id="registrationMonthly" value="Monthly" data-registration-billing-cycle @checked(old('billing_cycle', $selectedBillingCycle ?? 'Monthly') === 'Monthly')>
@@ -160,6 +185,7 @@
                                         <div class="col-12"><div class="alert alert-warning mb-0">No public plan is available right now. Please contact TradeFlow support.</div></div>
                                     @endforelse
                                 </div>
+                                @endif
                                 <div class="invalid-feedback d-block" data-register-error="selected_plan_id">@error('selected_plan_id'){{ $message }}@enderror</div>
                             </div>
 

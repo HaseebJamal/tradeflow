@@ -41,6 +41,7 @@ class RegisterBusinessRequest extends FormRequest
             'tax_number' => ['nullable', 'string', 'max:100'],
             'selected_plan_id' => ['required', 'integer', Rule::exists('subscription_plans', 'id')->where(fn ($query) => $query->where('status', 'Active')->where('is_public', true)->whereNull('archived_at'))],
             'billing_cycle' => ['required', Rule::in(['Monthly', 'Yearly'])],
+            'plan_selection_source' => ['nullable', Rule::in(['pricing', 'direct'])],
             'cnic_image' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png', 'max:5120'],
             'business_document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png', 'max:5120'],
             'shop_image' => ['required', 'file', 'mimes:jpg,jpeg,png', 'mimetypes:image/jpeg,image/png', 'max:5120'],
@@ -78,6 +79,15 @@ class RegisterBusinessRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
+            $lockedSelection = $this->session()->get('registration_pricing_selection');
+            if (is_array($lockedSelection) && (
+                (int) $this->input('selected_plan_id') !== (int) ($lockedSelection['plan_id'] ?? 0)
+                || $this->input('billing_cycle') !== ($lockedSelection['billing_cycle'] ?? null)
+            )) {
+                $validator->errors()->add('selected_plan_id', 'The selected subscription plan cannot be changed during this registration.');
+                return;
+            }
+
             $verifier = app(BusinessDocumentVerifier::class);
             $hashes = [];
 

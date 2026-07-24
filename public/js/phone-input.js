@@ -1,8 +1,10 @@
 (() => {
-    const message = 'Enter a valid international phone number.';
+    const invalidMessage = 'Please enter a valid phone number for the selected country.';
+    const incompleteMessage = 'Please complete the phone number for the selected country.';
     const e164Pattern = /^\+[1-9]\d{7,14}$/;
     const initialisers = new WeakMap();
     const synchronisers = new WeakMap();
+    const normalizedNumbers = new WeakMap();
 
     const initialise = (field, visible, hidden = null) => {
         if (initialisers.has(field) || !window.intlTelInput || !visible) return;
@@ -25,12 +27,13 @@
             const dialCodeLength = String(instance.getSelectedCountryData()?.dialCode || '').replace(/\D/g, '').length;
             return Math.max(1, 15 - dialCodeLength);
         };
-        const normaliseVisibleValue = () => {
+        const normaliseVisibleValue = ({ truncate = false } = {}) => {
             const limit = nationalDigitLimit();
-            const digits = visible.value.replace(/\D/g, '').slice(0, limit);
+            const digits = visible.value.replace(/\D/g, '');
+            const normalized = truncate ? digits.slice(0, limit) : digits;
             visible.maxLength = limit;
             visible.dataset.phoneDigitLimit = String(limit);
-            if (visible.value !== digits) visible.value = digits;
+            if (visible.value !== normalized) visible.value = normalized;
         };
 
         const fallbackE164Number = () => {
@@ -49,28 +52,76 @@
             return e164Pattern.test(number) ? number : '';
         };
 
-        const e164Number = () => {
+        const normalisedNumber = () => {
             const number = String(instance.getNumber() || '');
             const normalised = number.startsWith('+')
                 ? `+${number.slice(1).replace(/\D/g, '')}`
                 : '';
 
-            if (!e164Pattern.test(normalised)) return fallbackE164Number();
-            if (utilitiesReady && typeof instance.isValidNumber === 'function' && !instance.isValidNumber()) return '';
-
-            return normalised;
+            return e164Pattern.test(normalised) ? normalised : fallbackE164Number();
         };
-        const sync = () => {
-            normaliseVisibleValue();
-            if (!visible.value.trim()) { if (hidden) hidden.value = ''; visible.setCustomValidity(''); return true; }
-            // The backend accepts normalized E.164 values. Use getNumber()
-            // directly so a correctly-entered number is not lost while the
-            // optional intl-tel-input utility bundle is still loading.
-            const number = e164Number();
-            const valid = number !== '';
-            if (hidden) hidden.value = number;
-            visible.setCustomValidity(valid ? '' : message);
-            visible.classList.toggle('is-invalid', Boolean(visible.value.trim()) && !valid);
+        const isIncomplete = () => {
+            const validationError = instance.getValidationError?.();
+            const tooShort = window.intlTelInputUtils?.validationError?.TOO_SHORT;
+            if (typeof tooShort === 'number' && validationError === tooShort) return true;
+
+            return visible.value.replace(/\D/g, '').length < nationalDigitLimit();
+        };
+        const hasSelectedCountryMismatch = () => {
+            const nationalDigits = visible.value.replace(/\D/g, '');
+            const selectedCountry = instance.getSelectedCountryData?.()?.iso2;
+
+            // A Pakistani mobile number is commonly entered as 03XXXXXXXXX.
+            // Do not let another country's metadata reinterpret that local
+            // format as a different valid-looking number after a flag change.
+            return selectedCountry !== 'pk' && /^03\d{9}$/.test(nationalDigits);
+        };
+        const feedbackFor = (create = false) => {
+            const wrapper = field.closest('[data-tf-phone-field]');
+            const existing = wrapper?.querySelector('[data-tf-phone-feedback]');
+            if (existing) return existing;
+            if (!create) return null;
+
+            const feedback = document.createElement('div');
+            feedback.className = 'invalid-feedback d-none';
+            feedback.dataset.tfPhoneFeedback = '';
+            (visible.closest('.iti') || visible).insertAdjacentElement('afterend', feedback);
+            return feedback;
+        };
+        const setFeedback = (message = '') => {
+            const feedback = feedbackFor(Boolean(message));
+            if (!feedback) return;
+
+            feedback.textContent = message;
+            feedback.classList.toggle('d-block', Boolean(message));
+            feedback.classList.toggle('d-none', !message);
+        };
+        const sync = ({ truncate = false } = {}) => {
+            normaliseVisibleValue({ truncate });
+            if (!visible.value.trim()) {
+                if (hidden) hidden.value = '';
+                normalizedNumbers.set(field, '');
+                visible.setCustomValidity('');
+                visible.classList.remove('is-invalid');
+                setFeedback();
+                return true;
+            }
+
+            const number = normalisedNumber();
+            const validByCountry = typeof instance.isValidNumber === 'function' && instance.isValidNumber();
+            const validByPreciseMetadata = typeof instance.isValidNumberPrecise === 'function'
+                ? instance.isValidNumberPrecise()
+                : true;
+            const valid = !hasSelectedCountryMismatch() && utilitiesReady
+                ? Boolean(number) && validByCountry && validByPreciseMetadata
+                : false;
+            const validationMessage = valid ? '' : (isIncomplete() ? incompleteMessage : invalidMessage);
+
+            if (hidden) hidden.value = valid ? number : '';
+            normalizedNumbers.set(field, valid ? number : '');
+            visible.setCustomValidity(validationMessage);
+            visible.classList.toggle('is-invalid', !valid);
+            setFeedback(validationMessage);
             return valid;
         };
         initialisers.set(field, instance);
@@ -110,15 +161,16 @@
             visible.value = next;
             visible.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        visible.addEventListener('input', sync);
-        visible.addEventListener('countrychange', sync);
+        visible.addEventListener('input', () => sync({ truncate: true }));
+        visible.addEventListener('blur', () => sync());
+        visible.addEventListener('countrychange', () => sync());
         visible.closest('form')?.addEventListener('submit', (event) => {
             if (visible.required && !visible.value.trim()) return;
             if (!sync()) { event.preventDefault(); visible.reportValidity(); return; }
-            if (!hidden && visible.value.trim()) visible.value = e164Number();
+            if (!hidden && visible.value.trim()) visible.value = normalizedNumbers.get(field) || '';
         }, true);
         visible.closest('form')?.addEventListener('formdata', (event) => {
-            if (hidden?.name) event.formData.set(hidden.name, e164Number());
+            if (hidden?.name) event.formData.set(hidden.name, hidden.value || '');
         });
     };
     const init = (root = document) => {
@@ -135,14 +187,23 @@
     window.TradeFlowPhone = {
         init,
         sync: (field) => synchronisers.get(field)?.() ?? true,
-        e164: (field) => {
+        setNumber: (field, value = '') => {
             const instance = initialisers.get(field);
-            if (!instance) return field?.value || '';
-            const number = String(instance.getNumber() || '');
-            const normalised = number.startsWith('+') ? `+${number.slice(1).replace(/\D/g, '')}` : '';
-            return e164Pattern.test(normalised) ? normalised : '';
+            if (!instance) {
+                if (field) field.value = value;
+                return synchronisers.get(field)?.() ?? true;
+            }
+
+            instance.setNumber(value);
+            return synchronisers.get(field)?.() ?? true;
+        },
+        e164: (field) => {
+            synchronisers.get(field)?.();
+            return normalizedNumbers.get(field) ?? (e164Pattern.test(field?.value || '') ? field.value : '');
         },
         isValid: (field) => !field?.value.trim() || Boolean(window.TradeFlowPhone?.e164(field)),
     };
+    window.initializePhoneInputs = init;
     document.addEventListener('DOMContentLoaded', () => init());
+    document.addEventListener('shown.bs.modal', (event) => init(event.target));
 })();

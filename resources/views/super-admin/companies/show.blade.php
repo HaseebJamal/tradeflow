@@ -38,6 +38,7 @@
     $planPrice = $registrationSnapshot['selected_price'] ?? $company->selected_plan_price;
     $planStatus = $registrationSnapshot['plan_status'] ?? $registrationPlan?->status;
     $planModules = $registrationSnapshot['included_modules'] ?? $registrationPlan?->included_modules ?? [];
+    $planSelectionSource = $company->plan_selection_source === 'pricing' ? 'Landing Pricing' : 'Registration Form';
 @endphp
 
 <div class="row g-4">
@@ -45,7 +46,7 @@
         <div class="tf-card p-4">
             <h2 class="h5 mb-3">Company Overview</h2>
             <div class="row g-3">
-                @foreach(['Company Name' => $company->business_name, 'Owner' => $company->owner?->name, 'Phone' => $company->phone, 'Business Type' => $company->display_business_type, 'Category' => $company->category, 'City' => $company->city] as $label => $value)
+                @foreach(['Company Name' => $company->business_name, 'Owner' => $company->owner?->name, 'Owner Login Email' => $company->owner?->email ?: 'Not provided', 'Phone' => $company->phone, 'Business Type' => $company->display_business_type, 'Category' => $company->category, 'City' => $company->city] as $label => $value)
                     <div class="col-md-6"><div class="border rounded p-3"><small class="tf-muted">{{ $label }}</small><strong class="d-block">{{ $value ?: '—' }}</strong></div></div>
                 @endforeach
                 <div class="col-md-6"><div class="border rounded p-3"><small class="tf-muted">Created At</small><strong class="d-block"><x-date-time :value="$company->created_at" /></strong></div></div>
@@ -67,6 +68,7 @@
                     <div class="col-md-2"><div class="border rounded p-3 h-100"><small class="tf-muted">Billing Cycle</small><strong class="d-block">{{ $planCycle ?: 'Not recorded' }}</strong></div></div>
                     <div class="col-md-3"><div class="border rounded p-3 h-100"><small class="tf-muted">Selected Price</small><strong class="d-block">Rs {{ number_format((int) $planPrice) }}</strong></div></div>
                     <div class="col-md-3"><div class="border rounded p-3 h-100"><small class="tf-muted">Plan Status</small><strong class="d-block">{{ $planStatus ?: 'Not recorded' }}</strong></div></div>
+                    <div class="col-md-3"><div class="border rounded p-3 h-100"><small class="tf-muted">Selection Source</small><strong class="d-block">{{ $planSelectionSource }}</strong></div></div>
                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted">Trial</small><strong class="d-block">{{ $company->trial_eligible ? ((int) ($company->requested_trial_days ?? $registrationSnapshot['trial_days'] ?? 0)).'-day trial' : 'Payment required' }}</strong></div></div>
                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted">Limits</small><strong class="d-block">{{ number_format((int) ($registrationSnapshot['product_limit'] ?? $registrationPlan?->product_limit ?? 0)) }} products, {{ number_format((int) ($registrationSnapshot['staff_limit'] ?? $registrationPlan?->staff_limit ?? 0)) }} staff</strong><small class="tf-muted">{{ number_format((int) ($registrationSnapshot['order_limit'] ?? $registrationPlan?->order_limit ?? 0)) }} orders</small></div></div>
                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted">Selected At</small><strong class="d-block"><x-date-time :value="$company->plan_selected_at" /></strong></div></div>

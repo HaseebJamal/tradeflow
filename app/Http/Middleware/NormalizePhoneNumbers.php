@@ -3,12 +3,17 @@
 namespace App\Http\Middleware;
 
 use Closure;
+use App\Services\PhoneNumberService;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 class NormalizePhoneNumbers
 {
     private const FIELDS = ['phone', 'company_phone', 'owner_phone', 'receiver_phone', 'new_customer_phone', 'support_phone', 'contact_number', 'mobile', 'whatsapp'];
+
+    public function __construct(private readonly PhoneNumberService $phones)
+    {
+    }
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -27,25 +32,21 @@ class NormalizePhoneNumbers
                 continue;
             }
 
-            if (in_array(strtolower((string) $key), self::FIELDS, true) && is_string($value)) {
-                $values[$key] = $this->toE164($value);
+            if ($this->isPhoneField((string) $key) && is_string($value)) {
+                $values[$key] = $this->phones->normalize($value);
             }
         }
 
         return $values;
     }
 
-    private function toE164(string $value): string
+    private function isPhoneField(string $key): bool
     {
-        $value = trim($value);
-        if ($value === '') return '';
+        $key = strtolower($key);
 
-        $digits = preg_replace('/\D+/', '', $value);
-        if (str_starts_with($value, '+')) return '+'.$digits;
-        if (str_starts_with($digits, '00')) return '+'.substr($digits, 2);
-        // Preserve compatibility for existing Pakistani local-format entries.
-        if (preg_match('/^0?3\d{9}$/', $digits)) return '+92'.ltrim($digits, '0');
-
-        return '+'.$digits;
+        return in_array($key, self::FIELDS, true)
+            || str_ends_with($key, '_phone')
+            || str_ends_with($key, '_mobile')
+            || str_ends_with($key, '_whatsapp');
     }
 }

@@ -366,7 +366,10 @@
         clearCart();
         customer.value = '';
         quickCustomerName && (quickCustomerName.value = '');
-        quickCustomerPhone && (quickCustomerPhone.value = '');
+        if (quickCustomerPhone) {
+            if (window.TradeFlowPhone?.setNumber) window.TradeFlowPhone.setNumber(quickCustomerPhone, '');
+            else quickCustomerPhone.value = '';
+        }
         quickCustomerCity && (quickCustomerCity.value = '');
         quickCustomerAddress && (quickCustomerAddress.value = '');
         discount.value = 0;
@@ -384,7 +387,7 @@
         customer_id: isQuickCustomer() ? null : customer.value || null,
         quick_customer: isQuickCustomer() ? {
             name: quickCustomerName?.value.trim() || '',
-            phone: window.TradeFlowPhone?.e164(quickCustomerPhone) || quickCustomerPhone?.value.trim() || '',
+            phone: window.TradeFlowPhone?.e164(quickCustomerPhone) || '',
             city: quickCustomerCity?.value.trim() || '',
             address: quickCustomerAddress?.value.trim() || '',
         } : null,
@@ -472,7 +475,10 @@
             reference.value = checkout.reference || '';
             if (checkout.quick_customer) {
                 quickCustomerName && (quickCustomerName.value = checkout.quick_customer.name || '');
-                quickCustomerPhone && (quickCustomerPhone.value = checkout.quick_customer.phone || '');
+                if (quickCustomerPhone) {
+                    if (window.TradeFlowPhone?.setNumber) window.TradeFlowPhone.setNumber(quickCustomerPhone, checkout.quick_customer.phone || '');
+                    else quickCustomerPhone.value = checkout.quick_customer.phone || '';
+                }
                 quickCustomerCity && (quickCustomerCity.value = checkout.quick_customer.city || '');
                 quickCustomerAddress && (quickCustomerAddress.value = checkout.quick_customer.address || '');
             }
@@ -735,10 +741,6 @@
     [quickCustomerName, quickCustomerPhone, quickCustomerCity, quickCustomerAddress]
         .filter(Boolean)
         .forEach((input) => input.addEventListener('input', () => updateTotals()));
-    quickCustomerPhone?.addEventListener('input', () => {
-        const valid = window.TradeFlowPhone?.isValid(quickCustomerPhone) ?? quickCustomerPhone.value === '';
-        quickCustomerPhone.setCustomValidity(valid ? '' : 'Enter a valid international phone number.');
-    });
     paymentType.addEventListener('change', () => {
         paymentMethod.value = paymentType.value === 'Cash' ? 'Cash' : paymentType.value;
         updateTotals();

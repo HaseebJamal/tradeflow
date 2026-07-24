@@ -20,19 +20,25 @@ class BusinessOnboardingController extends Controller
 {
     public function create(Request $request)
     {
-        $billingCycle = $request->query('billing_cycle', 'Monthly');
-        abort_unless(in_array($billingCycle, ['Monthly', 'Yearly'], true), 404);
-
         $plans = SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get();
-        $selectedPlanId = $request->integer('plan');
-        if ($selectedPlanId) {
-            abort_unless($plans->contains('id', $selectedPlanId), 404);
+        $pricingSelection = null;
+
+        if ($request->query('source') === 'pricing') {
+            $billingCycle = $request->query('billing_cycle', 'Monthly');
+            $selectedPlanId = $request->integer('plan');
+            abort_unless(in_array($billingCycle, ['Monthly', 'Yearly'], true) && $selectedPlanId > 0 && $plans->contains('id', $selectedPlanId), 404);
+
+            $pricingSelection = ['plan_id' => $selectedPlanId, 'billing_cycle' => $billingCycle];
+            $request->session()->put('registration_pricing_selection', $pricingSelection);
+        } else {
+            $request->session()->forget('registration_pricing_selection');
         }
 
         return view('onboarding.register-business', [
             'plans' => $plans,
-            'selectedPlanId' => $selectedPlanId,
-            'selectedBillingCycle' => $billingCycle,
+            'selectedPlanId' => $pricingSelection['plan_id'] ?? null,
+            'selectedBillingCycle' => $pricingSelection['billing_cycle'] ?? 'Monthly',
+            'pricingSelection' => $pricingSelection,
         ]);
     }
 
@@ -40,8 +46,10 @@ class BusinessOnboardingController extends Controller
     {
         $data = $request->validated();
         $billingCycle = $data['billing_cycle'];
+        $pricingSelection = $request->session()->get('registration_pricing_selection');
+        $planSelectionSource = is_array($pricingSelection) ? 'pricing' : 'direct';
 
-        DB::transaction(function () use ($request, $data, $billingCycle, &$user, &$business, &$plan) {
+        DB::transaction(function () use ($request, $data, $billingCycle, $planSelectionSource, &$user, &$business, &$plan) {
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -55,6 +63,7 @@ class BusinessOnboardingController extends Controller
                 'owner_id' => $user->id,
                 'selected_plan_id' => $data['selected_plan_id'],
                 'selected_billing_cycle' => $data['billing_cycle'],
+                'plan_selection_source' => $planSelectionSource,
                 'selected_plan_price' => 0,
                 'trial_eligible' => true,
                 'requested_trial_days' => 0,
@@ -128,7 +137,7 @@ class BusinessOnboardingController extends Controller
         ]);
         $business->owner?->notify(new \App\Notifications\SubscriptionStatusNotification('Plan Selection Received', 'Your '.$plan->name.' '.$billingCycle.' plan selection was received and is pending review.', $business->id));
 
-        $request->session()->forget(['registration_step', 'registration_draft']);
+        $request->session()->forget(['registration_step', 'registration_draft', 'registration_pricing_selection']);
 
         return redirect()->route('public.home')->with('registration_completed', true);
     }

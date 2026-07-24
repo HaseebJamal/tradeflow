@@ -77,7 +77,8 @@
         }
     };
 
-    const phoneIsValid = (value) => /^(?:\+92|92|0)3\d{9}$/.test(value.replace(/[\s-]/g, ''));
+    const phoneIsValid = (field) => window.TradeFlowPhone?.isValid(field)
+        ?? /^\+[1-9]\d{7,14}$/.test(field.value.replace(/[\s-]/g, ''));
     const passwordIsStrong = (value) => /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(value);
     const documentMessage = (field) => ({
         cnic_image: 'Please upload a valid CNIC document.',
@@ -179,8 +180,8 @@
                 if (field.type === 'radio') return;
                 if (field.required && !field.value.trim()) {
                     setInvalid(field, 'This field is required.');
-                } else if (field.name === 'phone' && !phoneIsValid(field.value)) {
-                    setInvalid(field, 'Enter a valid Pakistani phone number, for example 03001234567.');
+                } else if (field.name === 'phone' && !phoneIsValid(field)) {
+                    setInvalid(field, field.validationMessage || 'Please enter a valid phone number for the selected country.');
                 } else if (field.name === 'email' && !field.validity.valid) {
                     setInvalid(field, 'Please enter a valid email address.');
                 }
@@ -190,17 +191,21 @@
         if (index === 0) {
             const password = wizard.querySelector('[name="password"]');
             const confirmation = wizard.querySelector('[name="password_confirmation"]');
-            if (!passwordIsStrong(password.value)) {
+            const passwordIsValid = passwordIsStrong(password.value);
+            if (!passwordIsValid) {
                 setInvalid(password, 'Use at least 8 characters with uppercase, lowercase, number, and special character.');
             }
-            if (password.value !== confirmation.value) {
-                setInvalid(confirmation, 'Password and confirm password do not match.');
+            if (password.value && (!confirmation.value || password.value !== confirmation.value)) {
+                if (passwordIsValid) {
+                    setInvalid(password, 'Password and confirm password do not match.');
+                }
+                firstInvalid ??= confirmation;
             }
         }
 
         if (index === 3) {
-            const selectedPlan = wizard.querySelector('input[name="selected_plan_id"]:checked');
-            const selectedCycle = wizard.querySelector('input[name="billing_cycle"]:checked');
+            const selectedPlan = wizard.querySelector('input[name="selected_plan_id"]:checked, input[type="hidden"][name="selected_plan_id"]');
+            const selectedCycle = wizard.querySelector('input[name="billing_cycle"]:checked, input[type="hidden"][name="billing_cycle"]');
             if (!selectedPlan) {
                 const target = wizard.querySelector('[data-register-error="selected_plan_id"]');
                 if (target) target.textContent = 'Please select a subscription plan before continuing.';
@@ -295,7 +300,7 @@
     };
 
     const refreshPlanSelection = () => {
-        const selected = wizard.querySelector('input[name="selected_plan_id"]:checked');
+        const selected = wizard.querySelector('input[name="selected_plan_id"]:checked, input[type="hidden"][name="selected_plan_id"]');
         planOptions.forEach((option) => {
             const input = option.querySelector('[data-registration-plan-input]');
             option.classList.toggle('is-selected', input === selected);
@@ -343,7 +348,9 @@
         moving = false;
     };
 
-    const draft = restoreDraft();
+    // Laravel's old input is authoritative after a server-side validation error.
+    // Restoring the browser draft here would hide those errors and reset the flow.
+    const draft = hasServerErrors ? { restored: false, step: 0 } : restoreDraft();
     const serverStep = Math.max(1, Math.min(panels.length, Number(wizard.dataset.registrationStep || 1))) - 1;
     showStep(hasServerErrors ? serverStep : draft.step, false);
     window.applyTradeFlowTabOrder?.(wizard, true);

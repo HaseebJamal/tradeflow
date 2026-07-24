@@ -130,7 +130,7 @@
                         <section class="mb-4">
                             <h3 class="h6 mb-3">Owner Information</h3>
                             <div class="row g-3">
-                                @foreach(['Owner Name' => $company->owner?->name, 'Phone' => $company->owner?->phone] as $label => $value)
+                                @foreach(['Owner Name' => $company->owner?->name ?: 'Not provided', 'Owner Login Email' => $company->owner?->email ?: 'Not provided', 'Owner Phone' => $company->owner?->phone ?: 'Not provided'] as $label => $value)
                                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">{{ $label }}</small><strong class="text-break">{{ $value ?: '—' }}</strong></div></div>
                                 @endforeach
                             </div>

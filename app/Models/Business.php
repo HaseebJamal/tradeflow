@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Business extends Model
 {
-    protected $fillable = ['owner_id', 'created_by', 'selected_plan_id', 'selected_billing_cycle', 'selected_plan_price', 'selected_plan_snapshot', 'trial_eligible', 'requested_trial_days', 'subscription_request_status', 'plan_selected_at', 'subscription_admin_note', 'business_name', 'business_type', 'business_description', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo', 'status', 'archived_at', 'archived_by', 'archived_status'];
+    protected $fillable = ['owner_id', 'created_by', 'selected_plan_id', 'selected_billing_cycle', 'plan_selection_source', 'selected_plan_price', 'selected_plan_snapshot', 'trial_eligible', 'requested_trial_days', 'subscription_request_status', 'plan_selected_at', 'subscription_admin_note', 'business_name', 'business_type', 'business_description', 'category', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo', 'status', 'archived_at', 'archived_by', 'archived_status'];
 
     protected $casts = ['archived_at' => 'datetime', 'selected_plan_snapshot' => 'array', 'trial_eligible' => 'boolean', 'plan_selected_at' => 'datetime'];
 
