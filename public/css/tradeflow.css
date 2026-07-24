@@ -120,6 +120,42 @@ a:hover {
     width: 34px;
 }
 
+.tf-brand-logo {
+    display: block;
+    height: 40px;
+    object-fit: contain;
+    width: 170px;
+}
+
+.tf-brand-logo-on-dark {
+    background: #fff;
+    border-radius: 6px;
+    padding: 5px 8px;
+}
+
+.tf-platform-brand-mark {
+    background: #fff;
+    overflow: hidden;
+}
+
+.tf-platform-brand-mark img,
+.tf-sidebar-company-mark img {
+    display: block;
+    height: 100%;
+    object-fit: contain;
+    width: 100%;
+}
+
+.tf-sidebar-brand-logo {
+    background: #fff;
+    border-radius: 5px;
+    display: block;
+    height: 32px;
+    object-fit: contain;
+    padding: 4px 6px;
+    width: 136px;
+}
+
 .tf-sidebar-company-mark {
     overflow: hidden;
 }
@@ -919,6 +955,10 @@ body.sidebar-collapsed .tf-sidebar a.active {
 
 body.sidebar-collapsed .tf-brand-mark {
     margin-right: 0;
+}
+
+body.sidebar-collapsed .tf-sidebar-brand-logo {
+    display: none;
 }
 
 body.sidebar-collapsed .tf-sidebar .tf-brand {

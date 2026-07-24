@@ -1,8 +1,8 @@
 <div class="tf-sidebar-inner p-3" data-super-admin-sidebar>
     <div class="d-flex align-items-center justify-content-between mb-4">
-        <a class="tf-brand text-white d-flex align-items-center mb-0" href="{{ route('public.home') }}">
-            <span class="tf-brand-mark bg-blue"><i class="bi bi-box-seam"></i></span>
-            <span class="tf-sidebar-text">TradeFlow</span>
+        <a class="tf-brand text-white d-flex align-items-center mb-0" href="{{ route('public.home') }}" aria-label="TradeFlow home">
+            <span class="tf-brand-mark tf-platform-brand-mark"><img src="{{ asset('images/tradeflow-mark.svg') }}" alt=""></span>
+            <img src="{{ asset('images/tradeflow-logo.svg') }}" class="tf-sidebar-brand-logo tf-sidebar-text" alt="TradeFlow">
         </a>
         <button type="button" class="btn btn-sm btn-outline-light tf-sidebar-toggle tf-sidebar-toggle-inside d-none d-lg-inline-flex" data-tf-sidebar-toggle aria-label="Toggle sidebar" title="Toggle sidebar"><i class="bi bi-list"></i></button>
         <button type="button" class="btn btn-sm btn-outline-light tf-sidebar-close d-lg-none" data-tf-sidebar-close aria-label="Close sidebar"><i class="bi bi-x-lg"></i></button>

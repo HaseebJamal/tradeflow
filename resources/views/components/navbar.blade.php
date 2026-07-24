@@ -1,7 +1,7 @@
 <nav class="navbar navbar-expand-lg fixed-top tf-public-nav">
     <div class="container">
-        <a class="navbar-brand tf-brand d-flex align-items-center" href="{{ route('public.home') }}">
-            <span class="tf-brand-mark"><i class="bi bi-box-seam"></i></span>TradeFlow
+        <a class="navbar-brand tf-brand d-flex align-items-center" href="{{ route('public.home') }}" aria-label="TradeFlow home">
+            <img src="{{ asset('images/tradeflow-logo.svg') }}" class="tf-brand-logo" alt="TradeFlow">
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#publicNav"><span class="navbar-toggler-icon"></span></button>
         <div class="collapse navbar-collapse" id="publicNav">
