@@ -27,4 +27,13 @@ class Business extends Model
     public function approvalLogs() { return $this->hasMany(CompanyApprovalLog::class, 'company_id')->latest('changed_at'); }
     public function approvalHistory() { return $this->approvalLogs(); }
     public function archivedBy() { return $this->belongsTo(User::class, 'archived_by'); }
+
+    public function getDisplayBusinessTypeAttribute(): ?string
+    {
+        if ($this->business_type === 'Other' && filled($this->business_description)) {
+            return $this->business_description;
+        }
+
+        return $this->business_type;
+    }
 }

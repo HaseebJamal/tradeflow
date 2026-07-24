@@ -45,7 +45,7 @@
         <div class="tf-card p-4">
             <h2 class="h5 mb-3">Company Overview</h2>
             <div class="row g-3">
-                @foreach(['Company Name' => $company->business_name, 'Owner' => $company->owner?->name, 'Phone' => $company->phone, 'Business Type' => $company->business_type, 'Category' => $company->category, 'City' => $company->city] as $label => $value)
+                @foreach(['Company Name' => $company->business_name, 'Owner' => $company->owner?->name, 'Phone' => $company->phone, 'Business Type' => $company->display_business_type, 'Category' => $company->category, 'City' => $company->city] as $label => $value)
                     <div class="col-md-6"><div class="border rounded p-3"><small class="tf-muted">{{ $label }}</small><strong class="d-block">{{ $value ?: '—' }}</strong></div></div>
                 @endforeach
                 <div class="col-md-6"><div class="border rounded p-3"><small class="tf-muted">Created At</small><strong class="d-block"><x-date-time :value="$company->created_at" /></strong></div></div>

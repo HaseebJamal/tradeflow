@@ -270,6 +270,22 @@
         });
     };
 
+    const syncOtherBusinessType = () => {
+        const selectedType = wizard.querySelector('input[name="business_type"]:checked')?.value;
+        const wrapper = wizard.querySelector('[data-tf-other-business-type]');
+        const field = wizard.querySelector('[name="other_business_type"]');
+        if (!wrapper || !field) return;
+
+        const isOther = selectedType === 'Other';
+        wrapper.classList.toggle('d-none', !isOther);
+        field.required = isOther;
+
+        if (!isOther) {
+            field.value = '';
+            setError(field);
+        }
+    };
+
     const refreshPlanPricing = () => {
         const cycle = wizard.querySelector('input[name="billing_cycle"]:checked')?.value || 'Monthly';
         const yearly = cycle === 'Yearly';
@@ -333,6 +349,7 @@
     window.applyTradeFlowTabOrder?.(wizard, true);
     syncOwnerName();
     refreshBusinessTypes();
+    syncOtherBusinessType();
     refreshPlanPricing();
     refreshPlanSelection();
 
@@ -347,7 +364,10 @@
     });
 
     wizard.addEventListener('change', (event) => {
-        if (event.target.matches('input[name="business_type"]')) refreshBusinessTypes();
+        if (event.target.matches('input[name="business_type"]')) {
+            refreshBusinessTypes();
+            syncOtherBusinessType();
+        }
         if (event.target.matches('[data-registration-billing-cycle]')) refreshPlanPricing();
         if (event.target.matches('[data-registration-plan-input]')) refreshPlanSelection();
         if (event.target.matches('[data-register-file]')) {

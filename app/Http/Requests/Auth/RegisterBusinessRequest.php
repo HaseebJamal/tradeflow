@@ -17,7 +17,12 @@ class RegisterBusinessRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->merge(['phone' => trim((string) $this->input('phone'))]);
+        $this->merge([
+            'phone' => trim((string) $this->input('phone')),
+            'other_business_type' => $this->input('business_type') === 'Other'
+                ? trim((string) $this->input('other_business_type'))
+                : null,
+        ]);
     }
 
     public function rules(): array
@@ -28,7 +33,7 @@ class RegisterBusinessRequest extends FormRequest
             'email' => ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
             'business_type' => ['required', Rule::in(['Manufacturer', 'Distributor', 'Wholesaler', 'Retail Shop', 'Other'])],
-            'business_description' => ['nullable', 'string', 'max:1000', 'required_if:business_type,Other'],
+            'other_business_type' => ['nullable', 'string', 'max:255', 'required_if:business_type,Other'],
             'business_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'address' => ['required', 'string', 'max:1000'],
             'city' => ['required', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
@@ -49,7 +54,7 @@ class RegisterBusinessRequest extends FormRequest
             'name.regex' => 'Name may contain letters and spaces only.',
             'business_name.regex' => 'Business name may contain letters and spaces only.',
             'city.regex' => 'City may contain letters and spaces only.',
-            'business_description.required_if' => 'Please briefly describe the business when selecting Other.',
+            'other_business_type.required_if' => 'Please specify your business type.',
             'email.unique' => 'This email address is already registered.',
             'password.confirmed' => 'Password and confirm password do not match.',
             'cnic_image.required' => 'CNIC upload is required.',
@@ -106,7 +111,7 @@ class RegisterBusinessRequest extends FormRequest
         $step = 1;
         $errors = array_keys($validator->errors()->toArray());
 
-        if (collect($errors)->contains(fn (string $field) => $field === 'business_type')) {
+        if (collect($errors)->contains(fn (string $field) => in_array($field, ['business_type', 'other_business_type'], true))) {
             $step = 2;
         } elseif (collect($errors)->contains(fn (string $field) => in_array($field, ['business_name', 'address', 'city', 'registration_number', 'tax_number'], true))) {
             $step = 3;

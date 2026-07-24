@@ -86,6 +86,13 @@
                                     @endforeach
                                 </div>
                                 <div class="invalid-feedback d-block" data-register-error="business_type">@error('business_type'){{ $message }}@enderror</div>
+                                <div class="row g-3 mt-3 d-none" data-tf-other-business-type>
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="other_business_type">Specify your business type <span class="text-danger" aria-hidden="true">*</span></label>
+                                        <input id="other_business_type" name="other_business_type" maxlength="255" class="form-control @error('other_business_type') is-invalid @enderror" value="{{ old('other_business_type') }}" placeholder="For example, Pharmacy">
+                                        <div class="invalid-feedback d-block" data-register-error="other_business_type">@error('other_business_type'){{ $message }}@enderror</div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="tf-step-panel" data-tf-step-panel="2">
@@ -109,12 +116,6 @@
                                         <label class="form-label" for="business_city">City <span class="text-danger" aria-hidden="true">*</span></label>
                                         <input id="business_city" name="city" maxlength="100" class="form-control @error('city') is-invalid @enderror" value="{{ old('city') }}" required data-tf-name-only>
                                         <div class="invalid-feedback" data-register-error="city">@error('city'){{ $message }}@enderror</div>
-                                    </div>
-                                    <div class="col-12 d-none" data-tf-other-business-description>
-                                        <label class="form-label" for="business_description">Describe Your Business <span class="text-danger" aria-hidden="true">*</span></label>
-                                        <textarea id="business_description" name="business_description" maxlength="1000" rows="2" class="form-control @error('business_description') is-invalid @enderror" placeholder="Briefly describe the type of business you operate.">{{ old('business_description') }}</textarea>
-                                        <small class="tf-muted">Required only if you selected Other as the business type.</small>
-                                        <div class="invalid-feedback d-block" data-register-error="business_description">@error('business_description'){{ $message }}@enderror</div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label" for="registration_number">Registration Number <span class="tf-muted">Optional</span></label>

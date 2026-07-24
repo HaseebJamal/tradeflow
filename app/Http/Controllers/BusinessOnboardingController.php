@@ -62,7 +62,7 @@ class BusinessOnboardingController extends Controller
                 'plan_selected_at' => now(),
                 'business_name' => $data['business_name'],
                 'business_type' => $data['business_type'],
-                'business_description' => $data['business_description'] ?? null,
+                'business_description' => $data['other_business_type'] ?? null,
                 'category' => $data['category'] ?? null,
                 'phone' => $data['phone'],
                 'address' => $data['address'] ?? null,
