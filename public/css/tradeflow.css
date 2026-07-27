@@ -2204,7 +2204,7 @@ body.tf-company-delete-modal-open {
     color: #172033;
 }
 .tf-pos-product-card:hover,
-.tf-pos-product-card.is-keyboard-active {
+.tf-pos-product-card.is-keyboard-selected {
     border-color: #2563eb;
     box-shadow: 0 0 0 2px #bfdbfe;
 }

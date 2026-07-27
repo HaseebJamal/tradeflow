@@ -216,11 +216,57 @@
         return values;
     };
 
-    const setActiveProduct = (index) => {
-        const cards = $$('[data-product]');
+    const visibleProductCards = () => [...grid.querySelectorAll('[data-product]')].filter((card) => (
+        card.offsetParent !== null && !card.hidden && window.getComputedStyle(card).visibility !== 'hidden'
+    ));
+    const setActiveProduct = (index, { focus = false } = {}) => {
+        const cards = visibleProductCards();
         activeProduct = cards.length ? Math.max(0, Math.min(cards.length - 1, index)) : -1;
-        cards.forEach((card, cardIndex) => card.classList.toggle('is-keyboard-active', cardIndex === activeProduct));
-        cards[activeProduct]?.scrollIntoView({ block: 'nearest' });
+        cards.forEach((card, cardIndex) => {
+            const selected = cardIndex === activeProduct;
+            card.classList.toggle('is-keyboard-selected', selected);
+            card.setAttribute('aria-selected', String(selected));
+        });
+        const selectedCard = cards[activeProduct];
+        selectedCard?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        if (focus) selectedCard?.focus({ preventScroll: true });
+        return selectedCard;
+    };
+    const visualProductRows = (cards) => cards.reduce((rows, card) => {
+        const bounds = card.getBoundingClientRect();
+        const row = rows.find((candidate) => Math.abs(candidate.top - bounds.top) < 8);
+        const entry = { card, center: bounds.left + (bounds.width / 2) };
+        if (row) row.cards.push(entry);
+        else rows.push({ top: bounds.top, cards: [entry] });
+        return rows;
+    }, []).sort((left, right) => left.top - right.top).map((row) => ({
+        ...row,
+        cards: row.cards.sort((left, right) => left.center - right.center),
+    }));
+    const moveActiveProduct = (direction, focus = false) => {
+        const cards = visibleProductCards();
+        if (!cards.length) return;
+
+        const currentIndex = activeProduct < 0 ? 0 : Math.min(activeProduct, cards.length - 1);
+        let targetIndex = currentIndex;
+        if (direction === 'left') targetIndex = Math.max(0, currentIndex - 1);
+        if (direction === 'right') targetIndex = Math.min(cards.length - 1, currentIndex + 1);
+
+        if (direction === 'up' || direction === 'down') {
+            const rows = visualProductRows(cards);
+            const currentRowIndex = rows.findIndex((row) => row.cards.some((entry) => entry.card === cards[currentIndex]));
+            const targetRow = rows[currentRowIndex + (direction === 'up' ? -1 : 1)];
+            if (targetRow) {
+                const currentBounds = cards[currentIndex].getBoundingClientRect();
+                const currentCenter = currentBounds.left + (currentBounds.width / 2);
+                const target = targetRow.cards.reduce((closest, entry) => (
+                    Math.abs(entry.center - currentCenter) < Math.abs(closest.center - currentCenter) ? entry : closest
+                ));
+                targetIndex = cards.indexOf(target.card);
+            }
+        }
+
+        setActiveProduct(targetIndex, { focus });
     };
     const productCard = (product) => {
         const payload = JSON.stringify({
@@ -232,7 +278,7 @@
             stock: product.stock_quantity ?? product.stock ?? 0,
             image: product.image,
         }).replace(/'/g, '&#039;');
-        return `<button type="button" class="tf-pos-product-card" data-product='${payload}'>
+        return `<button type="button" class="tf-pos-product-card" data-product='${payload}' tabindex="-1" role="option" aria-selected="false">
             <div class="tf-pos-product-image">${product.image ? `<img src="${escapeHtml(`/storage/${product.image}`)}" alt="">` : '<i class="bi bi-box-seam"></i>'}</div>
             <strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.barcode || '')}</small>
             <span>${currency(product.retail_price ?? product.price ?? product.wholesale_price ?? 0)}</span><em>${product.stock_quantity ?? product.stock ?? 0} ${escapeHtml(product.unit || '')}</em>
@@ -678,6 +724,27 @@
         const product = card ? parseProduct(card) : null;
         if (product) addProduct(product);
     });
+    grid.addEventListener('keydown', (event) => {
+        const card = event.target.closest('[data-product]');
+        if (!card) return;
+
+        const directions = {
+            ArrowLeft: 'left',
+            ArrowRight: 'right',
+            ArrowUp: 'up',
+            ArrowDown: 'down',
+        };
+        if (directions[event.key]) {
+            event.preventDefault();
+            moveActiveProduct(directions[event.key], true);
+            return;
+        }
+        if (event.key !== 'Enter') return;
+
+        event.preventDefault();
+        const product = parseProduct(card);
+        if (product) addProduct(product);
+    });
     cartBody.addEventListener('click', (event) => {
         const row = event.target.closest('[data-cart-id]');
         if (!row) return;
@@ -751,16 +818,28 @@
         searchTimer = setTimeout(searchProducts, 250);
     });
     search.addEventListener('keydown', (event) => {
-        if (['ArrowRight', 'ArrowDown'].includes(event.key)) {
+        if (event.key === 'ArrowRight') {
             event.preventDefault();
             keyboardProductSelection = true;
-            setActiveProduct(activeProduct + 1);
+            moveActiveProduct('right');
             return;
         }
-        if (['ArrowLeft', 'ArrowUp'].includes(event.key)) {
+        if (event.key === 'ArrowLeft') {
             event.preventDefault();
             keyboardProductSelection = true;
-            setActiveProduct(activeProduct - 1);
+            moveActiveProduct('left');
+            return;
+        }
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            keyboardProductSelection = true;
+            moveActiveProduct('down');
+            return;
+        }
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            keyboardProductSelection = true;
+            moveActiveProduct('up');
             return;
         }
         if (event.key !== 'Enter') return;
@@ -828,7 +907,7 @@
         }));
     root.addEventListener('wheel', (event) => { if (event.target === cash) event.preventDefault(); }, { passive: false });
 
-    setActiveProduct($$('[data-product]').length ? 0 : -1);
+    setActiveProduct(visibleProductCards().length ? 0 : -1);
     syncCustomerMode(false);
     search.value = '';
     barcode.value = '';

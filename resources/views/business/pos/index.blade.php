@@ -45,7 +45,7 @@
                 <div class="input-group"><span class="input-group-text"><i class="bi bi-search"></i></span><input type="search" class="form-control" data-pos-search placeholder="Search product" autocomplete="off"></div>
             </div>
             <div class="tf-pos-categories" data-pos-categories><button type="button" class="active" data-category="">All</button>@foreach($categories as $category)<button type="button" data-category="{{ $category->id }}">{{ $category->name }}</button>@endforeach</div>
-            <div class="tf-pos-product-grid" data-pos-product-grid>
+            <div class="tf-pos-product-grid" data-pos-product-grid role="listbox" aria-label="Products">
                 @foreach($products as $product)
                     @php
                         $productConfig = json_encode([
@@ -58,7 +58,7 @@
                             'image' => $product->image,
                         ]);
                     @endphp
-                    <button type="button" class="tf-pos-product-card" data-product="{{ $productConfig }}">
+                    <button type="button" class="tf-pos-product-card" data-product="{{ $productConfig }}" tabindex="-1" role="option" aria-selected="false">
                         <div class="tf-pos-product-image">@if($product->image)<img src="{{ asset('storage/'.$product->image) }}" alt="">@else<i class="bi bi-box-seam"></i>@endif</div>
                         <strong>{{ $product->name }}</strong><small>{{ $product->barcode }}</small><span>Rs {{ number_format($product->retail_price ?: $product->wholesale_price ?: 0) }}</span><em><x-quantity :value="$product->stock_quantity" /> {{ $product->unit }}</em>
                     </button>
