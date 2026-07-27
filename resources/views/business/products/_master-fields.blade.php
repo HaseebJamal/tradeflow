@@ -15,13 +15,18 @@
     $purchasePrice = data_get($values, 'latest_purchase_price')
         ?? data_get($values, 'average_purchase_price')
         ?? data_get($values, 'purchase_cost', 0);
+    $productNameField = $nested ? 'product_name' : 'name';
+    $productNameError = $nested ? $errorKey('product_name') : 'name';
+    $productName = $nested
+        ? old($productNameError, data_get($values, 'product_name', ''))
+        : old('name', data_get($values, 'name', ''));
 @endphp
 
 <div class="row g-3" data-product-master-fields>
     <div class="col-md-6">
         <label class="form-label" for="{{ $fieldId('product_name') }}">Product Name <span class="text-danger">*</span></label>
-        <input id="{{ $fieldId('product_name') }}" name="{{ $fieldName('product_name') }}" data-product-field="product_name" class="form-control @error($errorKey('product_name')) is-invalid @enderror" value="{{ $fieldValue('product_name') }}" required>
-        @error($errorKey('product_name'))<div class="invalid-feedback">{{ $message }}</div>@enderror
+        <input id="{{ $fieldId('product_name') }}" name="{{ $nested ? $fieldName('product_name') : $productNameField }}" data-product-field="product_name" class="form-control @error($productNameError) is-invalid @enderror" value="{{ $productName }}" required>
+        @error($productNameError)<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
     <div class="col-md-3">
         <label class="form-label" for="{{ $fieldId('category_id') }}">Category <span class="text-danger">*</span></label>

@@ -11,15 +11,15 @@
     --tf-danger: #ef4444;
 }
 
-/* Transactional quantities, prices, discounts, taxes, and amounts use manual
-   entry or existing +/- controls; browser number steppers are not useful. */
-input.js-no-number-spinner::-webkit-outer-spin-button,
-input.js-no-number-spinner::-webkit-inner-spin-button {
+/* Numeric values are typed directly throughout TradeFlow. Keep number semantics
+   and validation, but remove browser spinner controls that cause accidental edits. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
 
-input.js-no-number-spinner {
+input[type="number"] {
     -moz-appearance: textfield;
     appearance: textfield;
 }

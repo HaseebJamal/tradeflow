@@ -40,6 +40,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'business.action' => \App\Http\Middleware\BusinessActionPermissionMiddleware::class,
             'business.approved' => \App\Http\Middleware\ApprovedBusinessMiddleware::class,
             'super_admin.context' => \App\Http\Middleware\SuperAdminBusinessContextMiddleware::class,
+            'record.context' => \App\Http\Middleware\EnsureRouteRecordContext::class,
             'track.activity' => \App\Http\Middleware\TrackActivity::class,
         ]);
     })

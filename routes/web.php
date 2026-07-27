@@ -107,7 +107,7 @@ Route::middleware('auth')->group(function () {
     });
 });
 
-Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 'track.activity'])->group(function () {
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'role:super_admin', 'track.activity'])->group(function () {
     Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
     Route::get('/companies', [CompanyController::class, 'index'])->name('companies.index');
     Route::get('/companies/create', [CompanyController::class, 'create'])->name('companies.create');
@@ -209,7 +209,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:super_admin', 
     Route::get('/business-reports/{report}/pdf', [AdminController::class, 'reportPdf'])->name('business-reports.pdf');
 });
 
-Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'business.action', 'track.activity'])->group(function () {
+Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.context', 'record.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'business.action', 'track.activity'])->group(function () {
     Route::get('/access-denied', function (\App\Services\BusinessWorkspaceAccessService $workspaceAccess) {
         // Re-check current permissions so a stale denial page does not survive
         // a Super Admin permission update in the same authenticated session.
