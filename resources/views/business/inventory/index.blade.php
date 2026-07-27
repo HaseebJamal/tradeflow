@@ -12,7 +12,7 @@
 </div>
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div><h2 class="h5 mb-1">Inventory Control</h2><p class="tf-muted mb-0">Manage available stock and stock movement history.</p></div>
-    @companyCan('products.create')<a href="{{ route('business.products.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>Add Product</a>@endcompanyCan
+    @companyCan('products.create')<button type="button" class="btn btn-sm btn-tf-primary" data-bs-toggle="modal" data-bs-target="#inventoryProductCreateModal"><i class="bi bi-plus-lg me-1"></i>Add Product</button>@endcompanyCan
 </div>
 @companyCan('inventory.adjust_stock')<div class="tf-card p-4 mb-4">
     <h2 class="h5">Stock Adjustment</h2>
@@ -62,6 +62,22 @@
     </tbody>
 </x-table>
 <div class="tf-card p-4 mt-4"><h2 class="h5">Stock History</h2><x-table><thead><tr><th>Date &amp; Time</th><th>Product</th><th>Movement Type</th><th>Stock Before</th><th>Quantity</th><th>Operation</th><th>Stock After</th><th>Reference</th><th>User</th></tr></thead><tbody>@forelse($movements ?? [] as $move)@php($isReturn = in_array($move->type, ['PURCHASE_RETURN', 'SALES_RETURN'], true))@php($operation = $move->type === 'PURCHASE_RETURN' ? '-' : ($move->type === 'SALES_RETURN' ? '+' : '—'))<tr><td><x-date-time :value="$move->movement_date ?? $move->created_at" /></td><td>{{ $move->product?->name ?? 'Deleted Product' }}</td><td>{{ $move->type === 'PURCHASE_RETURN' ? 'Purchase Return' : ($move->type === 'SALES_RETURN' ? 'Sales Return' : str_replace('_', ' ', $move->type)) }}</td><td><x-quantity :value="$move->previous_stock" /></td><td><x-quantity :value="abs((float) $move->quantity)" /></td><td>{{ $operation }}</td><td><x-quantity :value="$move->new_stock" /></td><td>{{ $isReturn ? $move->note : '—' }}</td><td>{{ $move->creator?->name ?? 'System' }}</td></tr>@empty<tr><td colspan="9" class="text-center tf-muted py-4">No stock history.</td></tr>@endforelse</tbody></x-table></div>
+@companyCan('products.create')
+<div class="modal fade" id="inventoryProductCreateModal" tabindex="-1" aria-hidden="true" aria-labelledby="inventoryProductCreateModalTitle">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered"><div class="modal-content">
+        <form method="POST" action="{{ route('business.products.store') }}" enctype="multipart/form-data" class="tf-inventory-product-create-form" data-inline-products-form data-product-create-async="true" data-inline-category-url="{{ route('business.categories.store') }}" data-inline-unit-url="{{ route('business.units.store') }}">
+            @csrf
+            <div class="modal-header"><h2 class="modal-title h5" id="inventoryProductCreateModalTitle">Add Products</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body"><div class="alert alert-danger d-none" data-product-create-errors role="alert"></div>
+                @php($draftProducts = [[]])
+                @include('business.products._multi-create-fields', ['hideProductFormActions' => true])
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Another Product</button><button class="btn btn-tf-primary" data-save-products @disabled(($categories ?? collect())->isEmpty() || ($units ?? collect())->isEmpty())>Save Products</button></div></div>
+        </form>
+    </div></div>
+</div>
+@include('business.products._inline-catalog-modals')
+@endcompanyCan
 @endsection
 
 @push('scripts')
@@ -86,4 +102,30 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
+@companyCan('products.create')
+<script src="{{ asset('js/product-create-form.js') }}?v={{ filemtime(public_path('js/product-create-form.js')) }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('inventoryProductCreateModal');
+    if (!modal) return;
+    window.initTradeFlowProductCreateForm?.(modal);
+    modal.addEventListener('shown.bs.modal', function () {
+        modal.querySelector('[data-product-field="product_name"]')?.focus();
+    });
+    window.addEventListener('tradeflow:products-created', function (event) {
+        (event.detail || []).forEach(function (product) {
+            document.querySelectorAll('[data-inventory-product-form] [name="product_id"]').forEach(function (select) {
+                if ([...select.options].some((option) => String(option.value) === String(product.id))) return;
+                const control = window.getTradeFlowTomSelect?.(select);
+                if (control) {
+                    control.addOption({ value: String(product.id), text: product.name });
+                    control.refreshOptions(false);
+                }
+                else select.add(new Option(product.name, product.id));
+            });
+        });
+    });
+});
+</script>
+@endcompanyCan
 @endpush

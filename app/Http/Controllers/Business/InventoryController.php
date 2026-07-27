@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Business;
 use App\Http\Controllers\Controller;
 use App\Models\Inventory;
 use App\Models\InventoryMovement;
+use App\Models\Category;
 use App\Models\Product;
 use App\Models\StockMovement;
+use App\Models\Unit;
 use App\Services\BusinessActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +28,8 @@ class InventoryController extends Controller
                 ->whereColumn('stock_quantity', '<=', 'low_stock_alert_qty')
                 ->get(),
             'movements' => InventoryMovement::with('product', 'creator')->where('business_id', $businessId)->latest('movement_date')->take(30)->get(),
+            'categories' => Category::where('business_id', $businessId)->where('type', 'Product')->where('status', 'Active')->orderBy('name')->get(),
+            'units' => Unit::where('business_id', $businessId)->where('status', 'Active')->orderBy('unit_name')->get(),
         ]);
     }
 

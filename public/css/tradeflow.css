@@ -1170,6 +1170,74 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     z-index: 1080;
 }
 
+/* Inventory's inline product creator keeps its action footer in view while
+   the potentially long multi-product form scrolls inside the dialog. */
+#inventoryProductCreateModal .modal-dialog {
+    height: calc(100vh - 2rem);
+    margin: 1rem auto;
+    max-height: calc(100vh - 2rem);
+    max-width: min(1140px, calc(100vw - 2rem));
+}
+
+#inventoryProductCreateModal .modal-content {
+    height: 100%;
+    max-height: calc(100vh - 2rem);
+    overflow: hidden;
+}
+
+#inventoryProductCreateModal .tf-inventory-product-create-form {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#inventoryProductCreateModal .modal-header,
+#inventoryProductCreateModal .modal-footer {
+    background: var(--tf-card);
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 1;
+}
+
+#inventoryProductCreateModal .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+#inventoryProductCreateModal .modal-footer {
+    border-top: 1px solid var(--tf-border);
+}
+
+#inventoryProductCreateModal .ts-dropdown {
+    z-index: 1080;
+}
+
+@media (max-width: 575.98px) {
+    #inventoryProductCreateModal .modal-dialog {
+        height: calc(100vh - 1rem);
+        margin: 0.5rem;
+        max-height: calc(100vh - 1rem);
+        max-width: calc(100vw - 1rem);
+    }
+
+    #inventoryProductCreateModal .modal-content {
+        max-height: calc(100vh - 1rem);
+    }
+
+    #inventoryProductCreateModal .modal-footer {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    #inventoryProductCreateModal .modal-footer > .d-flex {
+        display: grid !important;
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Public plan selection stays deliberately scoped to pricing surfaces. */
 .tf-pricing-cycle {
     background: #eef4ff;

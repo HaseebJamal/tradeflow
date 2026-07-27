@@ -77,14 +77,19 @@
             return selectedCountry !== 'pk' && /^03\d{9}$/.test(nationalDigits);
         };
         const feedbackFor = (create = false) => {
+            if (!visible.id) visible.id = `tf-phone-${Math.random().toString(36).slice(2)}`;
+
             const wrapper = field.closest('[data-tf-phone-field]');
-            const existing = wrapper?.querySelector('[data-tf-phone-feedback]');
+            const scope = wrapper || visible.closest('.iti')?.parentElement || visible.parentElement;
+            const existing = wrapper?.querySelector('[data-tf-phone-feedback]')
+                || scope?.querySelector(`[data-tf-phone-feedback-for="${visible.id}"]`);
             if (existing) return existing;
             if (!create) return null;
 
             const feedback = document.createElement('div');
             feedback.className = 'invalid-feedback d-none';
             feedback.dataset.tfPhoneFeedback = '';
+            feedback.dataset.tfPhoneFeedbackFor = visible.id;
             (visible.closest('.iti') || visible).insertAdjacentElement('afterend', feedback);
             return feedback;
         };
@@ -112,9 +117,9 @@
             const validByPreciseMetadata = typeof instance.isValidNumberPrecise === 'function'
                 ? instance.isValidNumberPrecise()
                 : true;
-            const valid = !hasSelectedCountryMismatch() && utilitiesReady
-                ? Boolean(number) && validByCountry && validByPreciseMetadata
-                : false;
+            const valid = !hasSelectedCountryMismatch()
+                && Boolean(number)
+                && (utilitiesReady ? validByCountry && validByPreciseMetadata : !isIncomplete());
             const validationMessage = valid ? '' : (isIncomplete() ? incompleteMessage : invalidMessage);
 
             if (hidden) hidden.value = valid ? number : '';

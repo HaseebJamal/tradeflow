@@ -160,6 +160,15 @@ class ProductController extends Controller
             throw $exception;
         }
 
+        $message = 'Product(s) created successfully.';
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'products' => $products->map(fn (Product $product) => ['id' => $product->id, 'name' => $product->name])->values(),
+            ], 201);
+        }
+
         return redirect()->route('business.products.index')
             ->with('success', $products->count() === 1 ? 'Product created.' : $products->count().' products created.');
     }
