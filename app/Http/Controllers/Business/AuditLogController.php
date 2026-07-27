@@ -85,7 +85,9 @@ class AuditLogController extends Controller
         [, $query] = $this->filteredQuery($request);
         $logs = $query->orderByDesc('created_at')->limit(250)->get();
 
-        return Pdf::loadView('business.audit-logs.pdf', compact('logs'))->setPaper('a4', 'landscape')
+        $business = $request->user()->business?->load(['documentFooter', 'owner:id,email']);
+
+        return Pdf::loadView('business.audit-logs.pdf', compact('logs', 'business'))->setPaper('a4', 'landscape')
             ->stream('tradeflow-audit-logs-'.now()->format('Ymd-His').'.pdf');
     }
 

@@ -7,7 +7,7 @@
 </head>
 <body class="p-4">
     <div class="d-flex justify-content-between border-bottom pb-3 mb-4">
-        <div><h1 class="h3">TradeFlow Delivery Sheet</h1><div>#DEL-{{ $delivery->id }}</div></div>
+        <div><h1 class="h3">{{ $delivery->business?->business_name ?? 'TradeFlow' }} Delivery Sheet</h1><div>#DEL-{{ $delivery->id }}</div></div>
         <button class="btn btn-primary d-print-none" onclick="window.print()">Print</button>
     </div>
     <div class="row mb-4">
@@ -16,5 +16,6 @@
     </div>
     <table class="table table-bordered"><thead><tr><th>Product</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>@foreach($delivery->sourceOrder()?->items ?? [] as $item)<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td><x-quantity :value="$item->quantity" /> {{ $item->unit }}</td><td>Rs {{ number_format($item->unit_price ?: $item->price) }}</td><td>Rs {{ number_format($item->line_total ?: $item->total) }}</td></tr>@endforeach</tbody></table>
     <div class="text-end h4">Amount: Rs {{ number_format($delivery->sourceOrder()?->grand_total ?: $delivery->amount) }}</div>
+    <x-document-footer :business="$delivery->business" :footer="$delivery->business?->documentFooter" />
 </body>
 </html>

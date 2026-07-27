@@ -1,0 +1,30 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class BusinessDocumentFooter extends Model
+{
+    protected $fillable = [
+        'business_id', 'footer_title', 'footer_message', 'show_company_name',
+        'show_address', 'show_phone', 'show_email', 'show_website',
+        'show_tax_number', 'show_powered_by',
+    ];
+
+    protected $casts = [
+        'show_company_name' => 'boolean',
+        'show_address' => 'boolean',
+        'show_phone' => 'boolean',
+        'show_email' => 'boolean',
+        'show_website' => 'boolean',
+        'show_tax_number' => 'boolean',
+        'show_powered_by' => 'boolean',
+    ];
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
+    }
+}

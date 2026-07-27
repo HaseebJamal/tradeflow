@@ -82,7 +82,6 @@ class BusinessOnboardingController extends Controller
             ]);
 
             $user->update(['business_id' => $business->id]);
-
             $plan = SubscriptionPlan::publicActive()->findOrFail($data['selected_plan_id']);
             $amount = $plan->priceFor($billingCycle);
             $business->update([
@@ -134,6 +133,18 @@ class BusinessOnboardingController extends Controller
             'record_type' => 'Subscription',
             'record_id' => $business->subscription?->id,
             'new_values' => ['plan_id' => $plan->id, 'billing_cycle' => $billingCycle, 'amount' => $business->selected_plan_price],
+        ]);
+        AuditLog::create([
+            'user_id' => $user->id,
+            'actor_id' => $user->id,
+            'actor_role' => 'business_owner',
+            'business_id' => $business->id,
+            'module' => 'Settings',
+            'action' => 'footer settings created',
+            'description' => 'Footer Settings Created',
+            'record_type' => 'BusinessDocumentFooter',
+            'record_id' => $business->documentFooter?->id,
+            'new_values' => ['changed_fields' => ['default_footer']],
         ]);
         $business->owner?->notify(new \App\Notifications\SubscriptionStatusNotification('Plan Selection Received', 'Your '.$plan->name.' '.$billingCycle.' plan selection was received and is pending review.', $business->id));
 

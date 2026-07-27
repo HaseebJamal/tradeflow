@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Business extends Model
 {
@@ -10,9 +11,17 @@ class Business extends Model
 
     protected $casts = ['archived_at' => 'datetime', 'selected_plan_snapshot' => 'array', 'trial_eligible' => 'boolean', 'plan_selected_at' => 'datetime'];
 
+    protected static function booted(): void
+    {
+        static::created(function (self $business): void {
+            app(\App\Services\BusinessDocumentFooterService::class)->for($business);
+        });
+    }
+
     public function owner() { return $this->belongsTo(User::class, 'owner_id'); }
     public function users() { return $this->hasMany(User::class); }
     public function documents() { return $this->hasMany(BusinessDocument::class); }
+    public function documentFooter(): HasOne { return $this->hasOne(BusinessDocumentFooter::class); }
     public function products() { return $this->hasMany(Product::class); }
     public function customers() { return $this->hasMany(Customer::class); }
     public function orders() { return $this->hasMany(Order::class); }

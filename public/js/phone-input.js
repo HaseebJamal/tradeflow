@@ -183,7 +183,8 @@
         root.querySelectorAll?.('[data-tf-phone-standalone]')?.forEach((visible) => initialise(visible, visible));
         root.querySelectorAll?.('form:not([method="GET"]):not([method="get"]) input[name]')?.forEach((visible) => {
             const name = visible.name.toLowerCase();
-            if (initialisers.has(visible) || visible.type === 'hidden' || !(name.includes('phone') || name.includes('mobile') || name.includes('contact') || name.includes('whatsapp'))) return;
+            const textLikePhoneControl = ['text', 'tel'].includes(visible.type);
+            if (initialisers.has(visible) || !textLikePhoneControl || !(name.includes('phone') || name.includes('mobile') || name.includes('contact') || name.includes('whatsapp'))) return;
             visible.dataset.tfPhoneStandalone = '1';
             initialise(visible, visible);
         });

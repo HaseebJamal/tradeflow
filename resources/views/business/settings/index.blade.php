@@ -28,6 +28,15 @@
 </div>
 @endif
 
+@if($canManageDocumentFooter)
+<div class="tf-card p-4 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div><h2 class="h5 mb-1">Branding &amp; Documents</h2><p class="tf-muted mb-0">Manage the receipt footer used on future invoices and printable documents.</p></div>
+        <a class="btn btn-outline-primary" href="{{ route('business.settings.document-footer.edit') }}"><i class="bi bi-receipt me-1"></i>Receipt Footer</a>
+    </div>
+</div>
+@endif
+
 <div class="tf-card p-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div><h2 class="h5 mb-1">Request Business Details Change</h2><p class="tf-muted mb-0">Your request is sent to Super Admin and is applied only after approval.</p></div>

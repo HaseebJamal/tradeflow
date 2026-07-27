@@ -12,13 +12,13 @@ use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
 use App\Services\DocumentNumberService;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\ThermalDocumentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private DocumentNumberService $numbers) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private DocumentNumberService $numbers, private ThermalDocumentService $thermal) {}
 
     public function index()
     {
@@ -32,7 +32,7 @@ class InvoiceController extends Controller
         abort_unless($order->business_id === auth()->user()->business_id || auth()->user()->role === 'retailer', 403);
         $order = $this->finance->syncOrderTotals($order);
         $invoice = $this->syncInvoice($order);
-        return view('business.invoices.show', ['invoice' => $invoice->load('order.customer', 'order.business', 'order.items.product', 'items', 'creditNotes'), 'order' => $order->load(['customer', 'business', 'items.product'])]);
+        return view('business.invoices.show', ['invoice' => $invoice->load('order.customer', 'order.business.documentFooter', 'order.business.owner:id,email', 'order.items.product', 'items', 'creditNotes'), 'order' => $order->load(['customer', 'business.documentFooter', 'business.owner:id,email', 'items.product'])]);
     }
 
     public function pdf(Order $order)
@@ -40,7 +40,8 @@ class InvoiceController extends Controller
         abort_unless($order->business_id === auth()->user()->business_id || auth()->user()->role === 'retailer', 403);
         $order = $this->finance->syncOrderTotals($order);
         $invoice = $this->syncInvoice($order);
-        $pdf = Pdf::loadView('business.invoices.pdf', ['invoice' => $invoice->load('items'), 'order' => $order->load(['customer', 'business', 'items.product'])]);
+        $paper = $this->thermal->width(request());
+        $pdf = $this->thermal->loadPdf('business.invoices.pdf', ['invoice' => $invoice->load('items'), 'order' => $order->load(['customer', 'business.documentFooter', 'business.owner:id,email', 'items.product']), 'paper' => $paper], $paper);
 
         return $pdf->stream($invoice->invoice_number.'.pdf');
     }
@@ -51,10 +52,13 @@ class InvoiceController extends Controller
         $order = $this->finance->syncOrderTotals($order);
         $invoice = $this->syncInvoice($order);
 
-        return Pdf::loadView('business.invoices.pdf', [
+        $paper = $this->thermal->width(request());
+
+        return $this->thermal->loadPdf('business.invoices.pdf', [
             'invoice' => $invoice->load('items'),
-            'order' => $order->load(['customer', 'business', 'items.product']),
-        ])->download($invoice->invoice_number.'.pdf');
+            'order' => $order->load(['customer', 'business.documentFooter', 'business.owner:id,email', 'items.product']),
+            'paper' => $paper,
+        ], $paper)->download($invoice->invoice_number.'.pdf');
     }
 
     public function update(Request $request, Invoice $invoice)

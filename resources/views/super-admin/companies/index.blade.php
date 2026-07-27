@@ -57,6 +57,7 @@
                             <div class="dropdown-menu dropdown-menu-end shadow">
                                 <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#company-details-{{ $company->id }}"><i class="bi bi-eye me-2"></i>View</button>
                                 <a class="dropdown-item" href="{{ route('admin.companies.show', $company) }}"><i class="bi bi-box-arrow-up-right me-2"></i>Open Full Company Page</a>
+                                <a class="dropdown-item" href="{{ route('admin.companies.document-footer.edit', $company) }}"><i class="bi bi-receipt me-2"></i>Receipt Footer</a>
 
                                 @if($companyStatus === 'pending')
                                     <a class="dropdown-item" href="{{ route('admin.companies.edit', $company) }}"><i class="bi bi-pencil me-2"></i>Edit Company</a>

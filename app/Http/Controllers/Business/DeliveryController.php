@@ -391,7 +391,7 @@ class DeliveryController extends Controller
 
     public function sheet(Delivery $delivery)
     {
-        $delivery = $this->scopedDelivery($delivery)->load(['invoice.order.items.product', 'order.items.product', 'customer', 'staff']);
+        $delivery = $this->scopedDelivery($delivery)->load(['business.documentFooter', 'business.owner:id,email', 'invoice.order.items.product', 'order.items.product', 'customer', 'staff']);
         return view('business.deliveries.sheet', compact('delivery'));
     }
 

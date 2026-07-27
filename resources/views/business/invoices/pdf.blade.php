@@ -1,41 +1,10 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8">
-    <style>
-        body{font-family:DejaVu Sans,sans-serif;color:#111827}
-        .invoice{padding:24px}
-        .header{display:flex;justify-content:space-between;border-bottom:1px solid #ddd;margin-bottom:20px}
-        table{width:100%;border-collapse:collapse}
-        th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left}
-        .total{text-align:right;margin-top:20px}
-    </style>
+    <title>Invoice {{ $invoice->invoice_number }}</title>
 </head>
 <body>
-<div class="invoice">
-    <div class="header">
-        <div><h1>TradeFlow Invoice</h1><p>{{ $order->business?->business_name }}@if($order->business?->phone)<br>{{ $order->business->phone }}@endif</p></div>
-        <div><h3>{{ $invoice->invoice_number }}</h3><p>{{ $invoice->created_at->format('M d, Y') }}</p></div>
-    </div>
-    <p><strong>Customer:</strong> {{ $order->customer?->business_name ?? $order->customer?->name }}</p>
-    <table>
-        <thead><tr><th>Product</th><th>Quantity</th><th>Price</th><th>Total</th></tr></thead>
-        <tbody>
-        @foreach($invoice->items->isNotEmpty() ? $invoice->items : $order->items as $item)
-            <tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td><x-quantity :value="$item->quantity" /> {{ $item->unit ?? '' }}</td><td>Rs {{ number_format($item->unit_price ?? $item->price) }}</td><td>Rs {{ number_format($item->line_total ?? $item->total) }}</td></tr>
-        @endforeach
-        </tbody>
-    </table>
-    <div class="total">
-        <p>Subtotal: Rs {{ number_format($order->subtotal) }}</p>
-        <p>Discount: {{ number_format($order->discount_percentage ?? $order->discount ?? 0, 2) }}%</p>
-        <p>Discount Amount: Rs {{ number_format($order->discount_amount ?? 0) }}</p>
-        <p>Tax: {{ number_format($order->tax_rate ?? 0, 2) }}%</p>
-        <p>Tax Amount: Rs {{ number_format($order->tax_amount ?? 0) }}</p>
-        <p>Paid: Rs {{ number_format($invoice->paid_amount) }}</p>
-        <p>Balance: Rs {{ number_format($invoice->balance) }}</p>
-        <h2>Grand Total: Rs {{ number_format($order->grand_total ?: $order->total) }}</h2>
-    </div>
-</div>
+    @include('business.invoices._thermal-invoice', ['invoice' => $invoice, 'order' => $order, 'paper' => $paper ?? 80, 'pdf' => true])
 </body>
 </html>

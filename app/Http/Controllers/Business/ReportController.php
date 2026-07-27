@@ -132,7 +132,7 @@ class ReportController extends Controller
 
         $data = [
             'type' => $type,
-            'business' => auth()->user()->business,
+            'business' => auth()->user()->business?->load(['documentFooter', 'owner:id,email']),
             'orders' => (clone $orders)->latest()->get(),
             'summary' => [
                 'subtotal' => (clone $validOrders)->sum('subtotal'),

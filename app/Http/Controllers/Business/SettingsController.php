@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\BusinessDetailChangeRequest;
 use App\Models\User;
+use App\Services\BusinessDocumentFooterService;
+use App\Services\CompanyPermissionService;
 use App\Notifications\BusinessDetailsChangeRequestedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -16,13 +18,86 @@ class SettingsController extends Controller
     public function index()
     {
         $business = auth()->user()->business;
+        $canManageDocumentFooter = app(CompanyPermissionService::class)
+            ->allowsUser(auth()->user(), 'settings.update', $business);
 
         return view('business.settings.index', [
             'business' => $business,
+            'canManageDocumentFooter' => $canManageDocumentFooter,
             'pendingRequest' => $business
                 ? BusinessDetailChangeRequest::where('business_id', $business->id)->where('status', 'Pending')->latest()->first()
                 : null,
         ]);
+    }
+
+    public function editDocumentFooter()
+    {
+        $business = auth()->user()->business;
+        abort_unless($business, 404);
+
+        $footer = app(BusinessDocumentFooterService::class)->for($business);
+        if ($footer->wasRecentlyCreated) {
+            app(\App\Services\BusinessActivityService::class)->record(
+                $business->id, 'Settings', 'Footer Settings Created', $footer->id, null, ['changed_fields' => ['default_footer']]
+            );
+        }
+
+        return view('business.settings.document-footer', [
+            'business' => $business,
+            'footer' => $footer,
+        ]);
+    }
+
+    public function updateDocumentFooter(Request $request)
+    {
+        $business = auth()->user()->business;
+        abort_unless($business, 404);
+
+        $data = $request->validate([
+            'footer_title' => ['nullable', 'string', 'max:255'],
+            'footer_message' => ['nullable', 'string', 'max:500'],
+            'show_company_name' => ['nullable', 'boolean'],
+            'show_address' => ['nullable', 'boolean'],
+            'show_phone' => ['nullable', 'boolean'],
+            'show_email' => ['nullable', 'boolean'],
+            'show_website' => ['nullable', 'boolean'],
+            'show_tax_number' => ['nullable', 'boolean'],
+            'show_powered_by' => ['nullable', 'boolean'],
+        ]);
+
+        $service = app(BusinessDocumentFooterService::class);
+        $footer = $service->for($business);
+        $old = $footer->only(array_keys($data));
+        $footer->fill([
+            'footer_title' => $data['footer_title'] ?: $business->business_name,
+            'footer_message' => $data['footer_message'] ?: null,
+            'show_company_name' => $request->boolean('show_company_name'),
+            'show_address' => $request->boolean('show_address'),
+            'show_phone' => $request->boolean('show_phone'),
+            'show_email' => $request->boolean('show_email'),
+            'show_website' => $request->boolean('show_website'),
+            'show_tax_number' => $request->boolean('show_tax_number'),
+            'show_powered_by' => $request->boolean('show_powered_by'),
+        ])->save();
+
+        $changed = array_keys(array_filter(
+            $footer->only(array_keys($old)),
+            fn ($value, string $field) => (string) $value !== (string) ($old[$field] ?? ''),
+            ARRAY_FILTER_USE_BOTH
+        ));
+
+        if ($changed !== []) {
+            app(\App\Services\BusinessActivityService::class)->record(
+                $business->id,
+                'Settings',
+                'Footer Settings Updated',
+                $footer->id,
+                null,
+                ['changed_fields' => $changed]
+            );
+        }
+
+        return redirect()->route('business.settings.document-footer.edit')->with('success', 'Receipt footer settings updated.');
     }
 
     public function updateBusiness(Request $request)

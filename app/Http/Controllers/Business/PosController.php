@@ -12,12 +12,12 @@ use App\Models\PosRegister;
 use App\Models\Product;
 use App\Services\PosSaleService;
 use App\Services\PosDeliveryAssignmentService;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\ThermalDocumentService;
 use Illuminate\Http\Request;
 
 class PosController extends Controller
 {
-    public function __construct(private PosSaleService $pos, private PosDeliveryAssignmentService $deliveryAssignments) {}
+    public function __construct(private PosSaleService $pos, private PosDeliveryAssignmentService $deliveryAssignments, private ThermalDocumentService $thermal) {}
 
     public function index(Request $request)
     {
@@ -140,29 +140,27 @@ class PosController extends Controller
     public function receiptView(Request $request, string $invoice)
     {
         $order = $this->posReceiptOrderByInvoice($request, $invoice);
-        $receiptNumber = $this->receiptReference($order);
-        $filename = 'Receipt-'.preg_replace('/[^A-Za-z0-9_-]+/', '-', $receiptNumber).'.pdf';
+        $paper = $this->thermal->width($request);
 
-        return Pdf::loadView('business.pos.receipt-pdf', compact('order'))
-            ->setPaper('a4')
-            ->stream($filename, ['Attachment' => false]);
+        return view('business.pos.receipt', compact('order', 'paper'));
     }
 
     public function receiptPrint(Request $request, string $invoice)
     {
         $order = $this->posReceiptOrderByInvoice($request, $invoice);
+        $paper = $this->thermal->width($request);
 
-        return view('business.pos.receipt-print', compact('order'));
+        return view('business.pos.receipt-print', compact('order', 'paper'));
     }
 
     public function receiptDownload(Request $request, string $invoice)
     {
         $order = $this->posReceiptOrderByInvoice($request, $invoice);
+        $paper = $this->thermal->width($request);
         $receiptNumber = $this->receiptReference($order);
         $filename = 'Receipt-'.preg_replace('/[^A-Za-z0-9_-]+/', '-', $receiptNumber).'.pdf';
 
-        return Pdf::loadView('business.pos.receipt-pdf', compact('order'))
-            ->setPaper('a4')
+        return $this->thermal->loadPdf('business.pos.receipt-pdf', compact('order', 'paper'), $paper)
             ->download($filename);
     }
 
@@ -182,13 +180,13 @@ class PosController extends Controller
             403
         );
 
-        return $order->load(['business', 'customer', 'creator', 'items.product', 'payments', 'invoice']);
+        return $order->load(['business.documentFooter', 'business.owner:id,email', 'customer', 'creator', 'items.product', 'payments', 'invoice']);
     }
 
     private function posReceiptOrderByInvoice(Request $request, string $invoice): Order
     {
         $order = Order::query()
-            ->with(['business', 'customer', 'creator', 'items.product', 'payments', 'invoice'])
+            ->with(['business.documentFooter', 'business.owner:id,email', 'customer', 'creator', 'items.product', 'payments', 'invoice'])
             ->where('sale_channel', 'pos')
             ->where(function ($query) use ($invoice) {
                 $query->where('order_number', $invoice)

@@ -990,6 +990,27 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     min-width: 0;
 }
 
+/* Application chrome only. Printable documents retain their dedicated footer. */
+.tf-business-application-footer {
+    border-top: 1px solid var(--tf-border);
+    color: var(--tf-muted);
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    padding: 0.65rem 1rem;
+    text-align: center;
+}
+
+.tf-business-application-footer__separator {
+    margin: 0 0.4rem;
+}
+
+@media print {
+    .tf-business-application-footer {
+        display: none !important;
+    }
+}
+
 .dashboard-cards {
     display: grid;
     gap: 1rem;

@@ -30,6 +30,7 @@ use App\Notifications\BusinessDetailsChangeDecisionNotification;
 use App\Notifications\BusinessDetailsUpdatedNotification;
 use App\Services\AccountingService;
 use App\Services\BusinessWorkspaceAccessService;
+use App\Services\BusinessDocumentFooterService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -189,7 +190,6 @@ class CompanyController extends Controller
                 ]);
 
                 $owner->update(['business_id' => $company->id]);
-
                 if ($request->hasFile('company_logo')) {
                     $company->update(['logo' => $request->file('company_logo')->store('business-logos', 'public')]);
                 }
@@ -228,6 +228,7 @@ class CompanyController extends Controller
         }
 
         $this->audit($request, 'company created', $company, null, $company->only(['business_name', 'status']));
+        $this->audit($request, 'footer settings created', $company, null, ['changed_fields' => ['default_footer']]);
         $this->audit($request, 'company permissions assigned', $company, null, ['permissions' => $data['permissions'] ?? []]);
 
         return redirect()->route('admin.companies.show', $company)
@@ -239,11 +240,72 @@ class CompanyController extends Controller
         $this->audit($request, 'company viewed', $company, null, null);
 
         return view('super-admin.companies.show', [
-            'company' => $company->load(['owner', 'users.staffProfile', 'documents', 'selectedPlan', 'subscription.plan', 'approvalLogs.changedBy', 'companyPermissions']),
+            'company' => $company->load(['owner', 'users.staffProfile', 'documents', 'documentFooter', 'selectedPlan', 'subscription.plan', 'approvalLogs.changedBy', 'companyPermissions']),
             'adminPlans' => SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->orderBy('sort_order')->orderBy('name')->get(),
             'activity' => ActivityLog::with('actor')->where('business_id', $company->id)->latest('occurred_at')->take(20)->get(),
             'loginHistory' => ActivityLog::with('actor')->where('business_id', $company->id)->latest('occurred_at')->take(10)->get(),
         ]);
+    }
+
+    public function editDocumentFooter(Request $request, Business $company)
+    {
+        $footer = app(BusinessDocumentFooterService::class)->for($company);
+
+        if ($footer->wasRecentlyCreated) {
+            $this->audit($request, 'footer settings created', $company, null, ['changed_fields' => ['default_footer']]);
+        }
+
+        $this->audit($request, 'footer settings viewed', $company, null, null);
+
+        return view('super-admin.companies.document-footer', compact('company', 'footer'));
+    }
+
+    public function updateDocumentFooter(Request $request, Business $company)
+    {
+        $data = $request->validate([
+            'footer_title' => ['nullable', 'string', 'max:255'],
+            'footer_message' => ['nullable', 'string', 'max:500'],
+            'show_company_name' => ['nullable', 'boolean'],
+            'show_address' => ['nullable', 'boolean'],
+            'show_phone' => ['nullable', 'boolean'],
+            'show_email' => ['nullable', 'boolean'],
+            'show_website' => ['nullable', 'boolean'],
+            'show_tax_number' => ['nullable', 'boolean'],
+            'show_powered_by' => ['nullable', 'boolean'],
+        ]);
+
+        $footer = app(BusinessDocumentFooterService::class)->for($company);
+        $old = $footer->only(array_keys($data));
+        $footer->fill([
+            'footer_title' => $data['footer_title'] ?: $company->business_name,
+            'footer_message' => $data['footer_message'] ?: null,
+            'show_company_name' => $request->boolean('show_company_name'),
+            'show_address' => $request->boolean('show_address'),
+            'show_phone' => $request->boolean('show_phone'),
+            'show_email' => $request->boolean('show_email'),
+            'show_website' => $request->boolean('show_website'),
+            'show_tax_number' => $request->boolean('show_tax_number'),
+            'show_powered_by' => $request->boolean('show_powered_by'),
+        ])->save();
+
+        $changed = array_keys(array_filter(
+            $footer->only(array_keys($old)),
+            fn ($value, string $field) => (string) $value !== (string) ($old[$field] ?? ''),
+            ARRAY_FILTER_USE_BOTH
+        ));
+        if ($changed !== []) {
+            $this->audit($request, 'footer settings updated', $company, null, ['changed_fields' => $changed]);
+        }
+
+        return redirect()->route('admin.companies.document-footer.edit', $company)->with('success', 'Receipt footer settings updated.');
+    }
+
+    public function resetDocumentFooter(Request $request, Business $company)
+    {
+        $footer = app(BusinessDocumentFooterService::class)->reset($company);
+        $this->audit($request, 'footer settings reset', $company, null, ['footer_id' => $footer->id]);
+
+        return redirect()->route('admin.companies.document-footer.edit', $company)->with('success', 'Receipt footer reset to company defaults.');
     }
 
     public function openDashboard(Request $request, Business $company)

@@ -31,5 +31,6 @@
         @endforeach
         </tbody>
     </table>
+    @if($business)<x-document-footer :business="$business" :footer="$business->documentFooter" />@endif
 </body>
 </html>

@@ -1,1 +1,42 @@
-<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:DejaVu Sans,sans-serif;color:#111827}h1{color:#0B1F3A}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left}.summary td{font-weight:bold}</style></head><body><h1>TradeFlow {{ ucwords(str_replace('-', ' ', $type)) }} Report</h1><p>{{ $business?->business_name }}@if($business?->phone) · {{ $business->phone }}@endif - {{ now()->format('M d, Y') }}</p><table class="summary"><tr><td>Subtotal</td><td>Rs {{ number_format($summary['subtotal'] ?? 0) }}</td></tr><tr><td>Discount Amount</td><td>Rs {{ number_format($summary['discount_amount'] ?? 0) }}</td></tr><tr><td>Grand Total</td><td>Rs {{ number_format($summary['grand_total'] ?? 0) }}</td></tr><tr><td>Paid Amount</td><td>Rs {{ number_format($summary['paid_amount'] ?? 0) }}</td></tr><tr><td>Balance</td><td>Rs {{ number_format($summary['balance'] ?? 0) }}</td></tr></table><table><thead><tr><th>Section</th><th>Record</th><th>Amount/Qty</th></tr></thead><tbody>@foreach($orders as $order)<tr><td>Order</td><td>{{ $order->order_number }}</td><td>Subtotal Rs {{ number_format($order->subtotal) }} / Discount Rs {{ number_format($order->discount_amount ?? 0) }} / Total Rs {{ number_format($order->grand_total ?: $order->total) }} / Paid Rs {{ number_format($order->paid_amount ?? 0) }} / Balance Rs {{ number_format($order->balance ?? 0) }}</td></tr>@endforeach @foreach($products as $product)<tr><td>Product</td><td>{{ $product->name }}</td><td>{{ $product->stock_quantity }}</td></tr>@endforeach @foreach($customers as $customer)<tr><td>Customer Credit</td><td>{{ $customer->business_name ?: $customer->name }}</td><td>Rs {{ number_format($customer->current_balance) }}</td></tr>@endforeach @foreach($expenses as $expense)<tr><td>Expense</td><td>{{ $expense->title }}</td><td>Rs {{ number_format($expense->amount) }}</td></tr>@endforeach</tbody></table></body></html>
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: DejaVu Sans, sans-serif; color: #111827; }
+        h1 { color: #0B1F3A; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+        .summary td { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>TradeFlow {{ ucwords(str_replace('-', ' ', $type)) }} Report</h1>
+    <p>{{ $business?->business_name }}@if($business?->phone) &middot; {{ $business->phone }}@endif - {{ now()->format('M d, Y') }}</p>
+    <table class="summary">
+        <tr><td>Subtotal</td><td>Rs {{ number_format($summary['subtotal'] ?? 0) }}</td></tr>
+        <tr><td>Discount Amount</td><td>Rs {{ number_format($summary['discount_amount'] ?? 0) }}</td></tr>
+        <tr><td>Grand Total</td><td>Rs {{ number_format($summary['grand_total'] ?? 0) }}</td></tr>
+        <tr><td>Paid Amount</td><td>Rs {{ number_format($summary['paid_amount'] ?? 0) }}</td></tr>
+        <tr><td>Balance</td><td>Rs {{ number_format($summary['balance'] ?? 0) }}</td></tr>
+    </table>
+    <table>
+        <thead><tr><th>Section</th><th>Record</th><th>Amount/Qty</th></tr></thead>
+        <tbody>
+            @foreach($orders as $order)
+                <tr><td>Order</td><td>{{ $order->order_number }}</td><td>Subtotal Rs {{ number_format($order->subtotal) }} / Discount Rs {{ number_format($order->discount_amount ?? 0) }} / Total Rs {{ number_format($order->grand_total ?: $order->total) }} / Paid Rs {{ number_format($order->paid_amount ?? 0) }} / Balance Rs {{ number_format($order->balance ?? 0) }}</td></tr>
+            @endforeach
+            @foreach($products as $product)
+                <tr><td>Product</td><td>{{ $product->name }}</td><td>{{ $product->stock_quantity }}</td></tr>
+            @endforeach
+            @foreach($customers as $customer)
+                <tr><td>Customer Credit</td><td>{{ $customer->business_name ?: $customer->name }}</td><td>Rs {{ number_format($customer->current_balance) }}</td></tr>
+            @endforeach
+            @foreach($expenses as $expense)
+                <tr><td>Expense</td><td>{{ $expense->title }}</td><td>Rs {{ number_format($expense->amount) }}</td></tr>
+            @endforeach
+        </tbody>
+    </table>
+    @if($business)<x-document-footer :business="$business" :footer="$business->documentFooter" />@endif
+</body>
+</html>

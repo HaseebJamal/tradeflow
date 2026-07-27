@@ -118,6 +118,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::get('/companies/suspended', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'suspended'))->name('companies.suspended');
     Route::get('/companies/archived', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'archived'))->name('companies.archived');
     Route::get('/companies/{company}', [CompanyController::class, 'show'])->name('companies.show');
+    Route::get('/companies/{company}/document-footer', [CompanyController::class, 'editDocumentFooter'])->name('companies.document-footer.edit');
+    Route::put('/companies/{company}/document-footer', [CompanyController::class, 'updateDocumentFooter'])->name('companies.document-footer.update');
+    Route::patch('/companies/{company}/document-footer/reset', [CompanyController::class, 'resetDocumentFooter'])->name('companies.document-footer.reset');
     Route::get('/companies/{company}/edit', [CompanyController::class, 'edit'])->name('companies.edit');
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->name('companies.update');
     Route::patch('/companies/{company}/status', [CompanyController::class, 'updateStatus'])->name('companies.status');
@@ -386,6 +389,8 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::put('/settings/business', [SettingsController::class, 'updateBusiness'])->name('settings.business');
     Route::patch('/settings/logo', [SettingsController::class, 'updateLogo'])->name('settings.logo');
+    Route::get('/settings/receipt-footer', [SettingsController::class, 'editDocumentFooter'])->name('settings.document-footer.edit');
+    Route::put('/settings/receipt-footer', [SettingsController::class, 'updateDocumentFooter'])->name('settings.document-footer.update');
 });
 
 Route::prefix('staff')->name('staff.')->middleware(['auth', 'role:custom_staff', 'business.approved', 'track.activity'])->group(function () {

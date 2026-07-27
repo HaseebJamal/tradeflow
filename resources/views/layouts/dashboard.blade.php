@@ -17,7 +17,7 @@
         @include('components.sidebar')
     </aside>
     <div class="sidebar-overlay" data-tf-sidebar-overlay></div>
-    <div class="tf-dashboard-main main-content">
+    <div class="tf-dashboard-main main-content d-flex flex-column">
         <div class="tf-dashboard-topbar dashboard-header px-3 px-lg-4 py-3 sticky-top">
             <div class="d-flex align-items-center gap-3 min-w-0">
                 <button class="btn btn-outline-secondary tf-sidebar-toggle d-lg-none" data-tf-sidebar-toggle aria-label="Open sidebar" title="Open sidebar"><i class="bi bi-list"></i></button>
@@ -41,7 +41,7 @@
                 <form method="POST" action="{{ route('admin.company-context.return') }}">@csrf<button class="btn btn-sm btn-dark text-nowrap"><i class="bi bi-arrow-return-left me-1"></i>Return to Super Admin Dashboard</button></form>
             </div>
         @endif
-        <main class="dashboard-page">
+        <main class="dashboard-page flex-grow-1">
             @if($returnAlert = session('tradeflow_return_alert'))
                 <div class="alert alert-success visually-hidden" data-tf-alert-title="{{ data_get($returnAlert, 'title', 'Completed') }}">
                     {{ data_get($returnAlert, 'message') }}
@@ -49,6 +49,12 @@
             @endif
             @yield('content')
         </main>
+        @php
+            $applicationFooterBusiness = request()->attributes->get('super_admin_business_context') ?? auth()->user()?->business;
+        @endphp
+        @if(request()->is('business/*') && ! request()->routeIs('business.pos.index') && $applicationFooterBusiness)
+            <x-business-application-footer :business="$applicationFooterBusiness" />
+        @endif
     </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

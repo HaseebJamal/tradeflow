@@ -128,6 +128,7 @@ class BusinessActionPermissionMiddleware
             'business.settings' => 'settings.view',
             'business.settings.business' => 'settings.update',
             'business.settings.logo' => 'settings.update',
+            'business.settings.document-footer.edit', 'business.settings.document-footer.update' => 'settings.update',
             default => null,
         };
     }
