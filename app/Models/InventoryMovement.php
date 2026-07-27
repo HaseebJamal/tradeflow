@@ -16,6 +16,7 @@ class InventoryMovement extends Model
         'note',
         'created_by',
         'movement_date',
+        'goods_receipt_id',
     ];
 
     protected $casts = [

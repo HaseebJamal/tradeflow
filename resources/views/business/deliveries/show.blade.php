@@ -24,7 +24,7 @@
 
 <div class="tf-card p-4 mb-4">
     <h2 class="h5">Products</h2>
-    <x-table><thead><tr><th>Product Name</th><th>Quantity</th><th>Price</th><th>Total</th></tr></thead><tbody>@forelse($order?->items ?? [] as $item)<tr><td>{{ $item->product?->name }}</td><td>{{ $item->quantity }}</td><td>Rs {{ number_format($item->price) }}</td><td>Rs {{ number_format($item->total) }}</td></tr>@empty<tr><td colspan="4" class="text-center tf-muted py-4">No products.</td></tr>@endforelse</tbody></x-table>
+    <x-table><thead><tr><th>Product Name</th><th>Quantity</th><th>Price</th><th>Total</th></tr></thead><tbody>@forelse($order?->items ?? [] as $item)<tr><td>{{ $item->product?->name }}</td><td><x-quantity :value="$item->quantity" /></td><td>Rs {{ number_format($item->price) }}</td><td>Rs {{ number_format($item->total) }}</td></tr>@empty<tr><td colspan="4" class="text-center tf-muted py-4">No products.</td></tr>@endforelse</tbody></x-table>
 </div>
 
 <div class="row g-4 mb-4">

@@ -34,6 +34,13 @@ class CategoryController extends Controller
         $category = Category::create([...$request->validated(), 'business_id' => $request->user()->business_id, 'type' => 'Product', 'created_by' => $request->user()->id]);
         $this->audit('Category Created', $category);
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Category created successfully.',
+                'category' => $category->only(['id', 'name', 'status']),
+            ], 201);
+        }
+
         return redirect()->route('business.categories.index')->with('success', 'Category created successfully.');
     }
 

@@ -8,6 +8,8 @@ use App\Models\Expense;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\Purchase;
+use App\Models\Supplier;
 use App\Services\FinanceCalculator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -57,6 +59,8 @@ class ReportController extends Controller
         $customerQuery = Customer::where('business_id', $businessId)
             ->when($customerId, fn ($q) => $q->where('id', $customerId));
         $validOrdersQuery = (clone $ordersQuery)->whereNotIn('status', ['Cancelled']);
+        $payables = Purchase::where('business_id', $businessId)->where('balance', '>', 0)->whereNotIn('status', ['Draft', 'Cancelled']);
+        $today = now(config('app.timezone'))->toDateString();
         $sales = (clone $validOrdersQuery)->sum('grand_total');
         $subtotal = (clone $validOrdersQuery)->sum('subtotal');
         $discountAmount = (clone $validOrdersQuery)->sum('discount_amount');
@@ -89,6 +93,12 @@ class ReportController extends Controller
             'lowStockProducts' => (clone $productQuery)->whereColumn('stock_quantity', '<=', 'low_stock_alert_qty')->get(),
             'credit' => $balance,
             'pendingPayments' => $balance,
+            'totalPayables' => (clone $payables)->sum('balance'),
+            'dueTodayPayables' => (clone $payables)->whereDate('due_date', $today)->sum('balance'),
+            'dueSoonPayables' => (clone $payables)->whereBetween('due_date', [$today, now(config('app.timezone'))->addDays(7)->toDateString()])->sum('balance'),
+            'overduePayables' => (clone $payables)->whereNotNull('due_date')->whereDate('due_date', '<', $today)->sum('balance'),
+            'highestSupplierBalances' => Supplier::where('business_id', $businessId)->withSum(['purchases as open_payable' => fn ($query) => $query->where('balance', '>', 0)->whereNotIn('status', ['Draft', 'Cancelled'])], 'balance')->orderByDesc('open_payable')->take(5)->get(),
+            'oldestOutstandingPurchases' => (clone $payables)->with('supplier')->orderBy('due_date')->orderBy('purchase_date')->take(5)->get(),
             'topCustomers' => (clone $customerQuery)->orderByDesc('current_balance')->take(5)->get(),
             'blockedCustomers' => (clone $customerQuery)->where('status', 'Blocked')->count(),
             'expenses' => $expenses, 'profit' => $this->finance->calculateProfit($revenue, $expenses),

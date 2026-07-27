@@ -3,9 +3,10 @@
 @section('page-subtitle', $supplier->supplier_name)
 @section('content')
 <div class="row g-4 mb-4">
-    <div class="col-md-4"><x-card label="Total Purchases" :value="'Rs '.number_format($totalPurchases)" icon="bi-box-seam" color="bg-blue" /></div>
-    <div class="col-md-4"><x-card label="Total Payments" :value="'Rs '.number_format($totalPayments)" icon="bi-cash-stack" color="bg-green" /></div>
-    <div class="col-md-4"><x-card label="Remaining Payable" :value="'Rs '.number_format($remainingPayable)" icon="bi-wallet2" color="bg-amber" /></div>
+    <div class="col-md-3"><x-card label="Current Payable" :value="'Rs '.number_format($remainingPayable, 2)" icon="bi-wallet2" color="bg-amber" /></div>
+    <div class="col-md-3"><x-card label="Received Value" :value="'Rs '.number_format($receivedValue, 2)" icon="bi-box-seam" color="bg-blue" /></div>
+    <div class="col-md-3"><x-card label="Overdue Payable" :value="'Rs '.number_format($overduePayable, 2)" icon="bi-exclamation-circle" color="bg-red" /></div>
+    <div class="col-md-3"><x-card label="Available Advances" :value="'Rs '.number_format($availableAdvances, 2)" icon="bi-cash-stack" color="bg-green" /></div>
 </div>
 
 <div class="tf-card p-4 mb-4">
@@ -26,7 +27,8 @@
 </div>
 
 <div class="tf-card p-4">
-    <h2 class="h5">Supplier Ledger</h2>
+    <div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><h2 class="h5 mb-0">Supplier Statement</h2><form class="d-flex flex-wrap gap-2"><input type="date" name="date_from" value="{{ request('date_from') }}" class="form-control form-control-sm"><input type="date" name="date_to" value="{{ request('date_to') }}" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form></div>
+    <div class="row small mb-3"><div class="col-md-3"><strong>Opening payable</strong><div>Rs {{ number_format($supplier->opening_balance, 2) }}</div></div><div class="col-md-3"><strong>Payments</strong><div>Rs {{ number_format($totalPayments, 2) }}</div></div><div class="col-md-3"><strong>Returns / credits</strong><div>Rs {{ number_format($returnsValue, 2) }}</div></div><div class="col-md-3"><strong>Current payable</strong><div>Rs {{ number_format($remainingPayable, 2) }}</div></div></div>
     <x-table>
         <thead><tr><th>Date</th><th>Voucher</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
         <tbody>

@@ -21,10 +21,10 @@
                             <input type="hidden" name="items[{{ $index }}][order_item_id]" value="{{ $item->id }}" disabled data-sales-return-field>
                         </td>
                         <td>{{ $item->product_name_snapshot ?: $item->product?->name ?: 'Deleted Product' }}</td>
-                        <td>{{ $item->quantity }}</td>
-                        <td>{{ $returned }}</td>
-                        <td>{{ $returnable }}</td>
-                        <td><input type="number" min="1" max="{{ $returnable }}" step="1" inputmode="numeric" name="items[{{ $index }}][quantity]" value="1" class="form-control js-whole-number" disabled data-sales-return-field></td>
+                        <td><x-quantity :value="$item->quantity" /></td>
+                        <td><x-quantity :value="$returned" /></td>
+                        <td><x-quantity :value="$returnable" /></td>
+                        <td><input type="number" min="1" max="{{ $returnable }}" step="1" inputmode="numeric" name="items[{{ $index }}][quantity]" value="0" class="form-control js-whole-number" disabled data-sales-return-field></td>
                     </tr>
                 @endforeach
                 @if($returnableItems === 0)<tr><td colspan="6" class="text-center tf-muted py-4">No items are available for return.</td></tr>@endif
@@ -50,6 +50,17 @@ document.addEventListener('DOMContentLoaded', () => {
         toggle.closest('tr').querySelectorAll('[data-sales-return-field]').forEach((field) => {
             field.disabled = !toggle.checked;
         });
+    });
+    form.addEventListener('submit', (event) => {
+        const invalidQuantity = [...form.querySelectorAll('[data-sales-return-toggle]:checked')]
+            .map((toggle) => toggle.closest('tr').querySelector('[name$="[quantity]"]'))
+            .find((field) => Number(field?.value || 0) < 1);
+
+        if (!invalidQuantity) return;
+
+        event.preventDefault();
+        invalidQuantity.focus();
+        invalidQuantity.reportValidity();
     });
 });
 </script>

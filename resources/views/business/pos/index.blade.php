@@ -60,7 +60,7 @@
                     @endphp
                     <button type="button" class="tf-pos-product-card" data-product="{{ $productConfig }}">
                         <div class="tf-pos-product-image">@if($product->image)<img src="{{ asset('storage/'.$product->image) }}" alt="">@else<i class="bi bi-box-seam"></i>@endif</div>
-                        <strong>{{ $product->name }}</strong><small>{{ $product->barcode }}</small><span>Rs {{ number_format($product->retail_price ?: $product->wholesale_price ?: 0) }}</span><em>{{ $product->stock_quantity }} {{ $product->unit }}</em>
+                        <strong>{{ $product->name }}</strong><small>{{ $product->barcode }}</small><span>Rs {{ number_format($product->retail_price ?: $product->wholesale_price ?: 0) }}</span><em><x-quantity :value="$product->stock_quantity" /> {{ $product->unit }}</em>
                     </button>
                 @endforeach
             </div>

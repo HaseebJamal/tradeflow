@@ -12,6 +12,9 @@
         return $value instanceof \DateTimeInterface ? $value->format('Y-m-d') : (string) ($value ?? '');
     };
     $tracksBatches = (bool) $fieldValue('has_batch_tracking', false);
+    $purchasePrice = data_get($values, 'latest_purchase_price')
+        ?? data_get($values, 'average_purchase_price')
+        ?? data_get($values, 'purchase_cost', 0);
 @endphp
 
 <div class="row g-3" data-product-master-fields>
@@ -22,25 +25,31 @@
     </div>
     <div class="col-md-3">
         <label class="form-label" for="{{ $fieldId('category_id') }}">Category <span class="text-danger">*</span></label>
-        <select id="{{ $fieldId('category_id') }}" name="{{ $fieldName('category_id') }}" data-product-field="category_id" class="form-select @error($errorKey('category_id')) is-invalid @enderror" required @disabled(($categories ?? collect())->isEmpty())>
-            <option value="">Select category</option>
-            @foreach(($categories ?? collect()) as $category)
-                <option value="{{ $category->id }}" @selected((string) $fieldValue('category_id') === (string) $category->id)>{{ $category->name }}</option>
-            @endforeach
-        </select>
+        <div class="d-flex gap-2" data-product-select-control>
+            <select id="{{ $fieldId('category_id') }}" name="{{ $fieldName('category_id') }}" data-product-field="category_id" class="form-select @error($errorKey('category_id')) is-invalid @enderror" required @disabled(($categories ?? collect())->isEmpty())>
+                <option value="">Select category</option>
+                @foreach(($categories ?? collect()) as $category)
+                    <option value="{{ $category->id }}" @selected((string) $fieldValue('category_id') === (string) $category->id)>{{ $category->name }}</option>
+                @endforeach
+            </select>
+            @companyCan('categories.create')<button type="button" class="btn btn-sm btn-outline-primary px-2 py-1 lh-sm text-nowrap" data-inline-catalog-open="category" aria-label="Create new category">+ New</button>@endcompanyCan
+        </div>
         @error($errorKey('category_id'))<div class="invalid-feedback">{{ $message }}</div>@enderror
-        @if(($categories ?? collect())->isEmpty())<div class="form-text text-danger">Please create a category first.</div>@endif
+        @if(($categories ?? collect())->isEmpty())<div class="form-text text-danger" data-product-catalog-empty="category">Please create a category first.</div>@endif
     </div>
     <div class="col-md-3">
         <label class="form-label" for="{{ $fieldId('unit_id') }}">Unit <span class="text-danger">*</span></label>
-        <select id="{{ $fieldId('unit_id') }}" name="{{ $fieldName('unit_id') }}" data-product-field="unit_id" class="form-select @error($errorKey('unit_id')) is-invalid @enderror" required @disabled(($units ?? collect())->isEmpty())>
-            <option value="">Select unit</option>
-            @foreach(($units ?? collect()) as $unit)
-                <option value="{{ $unit->id }}" @selected((string) $fieldValue('unit_id') === (string) $unit->id)>{{ $unit->unit_name }}</option>
-            @endforeach
-        </select>
+        <div class="d-flex gap-2" data-product-select-control>
+            <select id="{{ $fieldId('unit_id') }}" name="{{ $fieldName('unit_id') }}" data-product-field="unit_id" class="form-select @error($errorKey('unit_id')) is-invalid @enderror" required @disabled(($units ?? collect())->isEmpty())>
+                <option value="">Select unit</option>
+                @foreach(($units ?? collect()) as $unit)
+                    <option value="{{ $unit->id }}" @selected((string) $fieldValue('unit_id') === (string) $unit->id)>{{ $unit->unit_name }}</option>
+                @endforeach
+            </select>
+            @companyCan('units.create')<button type="button" class="btn btn-sm btn-outline-primary px-2 py-1 lh-sm text-nowrap" data-inline-catalog-open="unit" aria-label="Create new unit">+ New</button>@endcompanyCan
+        </div>
         @error($errorKey('unit_id'))<div class="invalid-feedback">{{ $message }}</div>@enderror
-        @if(($units ?? collect())->isEmpty())<div class="form-text text-danger">Please create a unit first.</div>@endif
+        @if(($units ?? collect())->isEmpty())<div class="form-text text-danger" data-product-catalog-empty="unit">Please create a unit first.</div>@endif
     </div>
 
     <div class="col-md-4">
@@ -75,6 +84,22 @@
         </div>
     </div>
 
+    <div class="col-md-4">
+        <label class="form-label" for="{{ $fieldId('retail_price') }}">Retail Selling Price</label>
+        <input id="{{ $fieldId('retail_price') }}" name="{{ $fieldName('retail_price') }}" data-product-field="retail_price" type="number" min="0" step="any" data-allow-decimal class="form-control @error($errorKey('retail_price')) is-invalid @enderror" value="{{ $fieldValue('retail_price', 0) }}">
+        @error($errorKey('retail_price'))<div class="invalid-feedback">{{ $message }}</div>@enderror
+    </div>
+    <div class="col-md-4">
+        <label class="form-label" for="{{ $fieldId('wholesale_price') }}">Wholesale Selling Price</label>
+        <input id="{{ $fieldId('wholesale_price') }}" name="{{ $fieldName('wholesale_price') }}" data-product-field="wholesale_price" type="number" min="0" step="any" data-allow-decimal class="form-control @error($errorKey('wholesale_price')) is-invalid @enderror" value="{{ $fieldValue('wholesale_price', 0) }}">
+        @error($errorKey('wholesale_price'))<div class="invalid-feedback">{{ $message }}</div>@enderror
+    </div>
+    <div class="col-md-4">
+        <label class="form-label" for="{{ $fieldId('purchase_price') }}">Purchase Price</label>
+        <input id="{{ $fieldId('purchase_price') }}" data-product-display-field="purchase_price" type="text" class="form-control" value="Rs {{ number_format((float) $purchasePrice, 2) }}" readonly aria-describedby="{{ $fieldId('purchase_price') }}-help">
+        <div id="{{ $fieldId('purchase_price') }}-help" class="form-text">Updated from accepted goods receipts only.</div>
+    </div>
+
     <div class="row g-3 mx-0 {{ $tracksBatches ? '' : 'd-none' }}" data-product-batch-fields>
         <div class="col-md-3">
             <label class="form-label" for="{{ $fieldId('batch_number') }}">Batch Number</label>
@@ -94,8 +119,4 @@
         </div>
     </div>
 
-    <div class="col-12">
-        <label class="form-label" for="{{ $fieldId('description') }}">Description</label>
-        <textarea id="{{ $fieldId('description') }}" name="{{ $fieldName('description') }}" data-product-field="description" class="form-control" rows="3">{{ $fieldValue('description') }}</textarea>
-    </div>
 </div>

@@ -48,7 +48,7 @@
             <td>{{ $order->order_number }}</td>
             <td>Sale</td>
             <td>{{ $order->customer?->display_name ?? 'Walk-in' }}</td>
-            <td>{{ $order->items->map(fn($item) => ($item->product_name_snapshot ?: $item->product?->name ?: 'Deleted Product').' x '.$item->quantity)->implode(', ') }}</td>
+            <td>{{ $order->items->map(fn($item) => ($item->product_name_snapshot ?: $item->product?->name ?: 'Deleted Product').' x '.(rtrim(rtrim(number_format((float) $item->quantity, 3, '.', ''), '0'), '.') ?: '0'))->implode(', ') }}</td>
             <td>{{ $order->status }}</td>
             <td>{{ $order->payment_status }}</td>
             <td>{{ $order->payment_type }}</td>

@@ -15,8 +15,8 @@
     <section class="border rounded p-3 mb-3 bg-light" aria-label="Add quotation item">
         <div class="d-flex justify-content-between align-items-center mb-2"><h2 class="h6 mb-0">Add quotation item</h2><small class="tf-muted">Choose whether each discount and tax value is a percentage or a fixed amount.</small></div>
         <div class="row g-2 align-items-end">
-            <div class="col-xl-3"><label class="form-label">Product</label><select class="form-select js-select2" data-quotation-entry-product><option value="">Select product</option>@foreach($products as $product)<option value="{{ $product->id }}" data-price="{{ $product->wholesale_price }}">{{ $product->name }} ({{ $product->stock_quantity }} {{ $product->unit }})</option>@endforeach</select></div>
-            <div class="col-xl-1"><label class="form-label">Qty</label><input type="number" min="1" step="1" value="1" class="form-control js-no-number-spinner js-no-wheel-change" data-quotation-entry-qty></div>
+            <div class="col-xl-3"><label class="form-label">Product</label><select class="form-select js-select2" data-quotation-entry-product><option value="">Select product</option>@foreach($products as $product)<option value="{{ $product->id }}" data-price="{{ $product->wholesale_price }}">{{ $product->name }} (<x-quantity :value="$product->stock_quantity" /> {{ $product->unit }})</option>@endforeach</select></div>
+            <div class="col-xl-1"><label class="form-label">Qty</label><input type="number" min="1" step="1" value="0" class="form-control js-no-number-spinner js-no-wheel-change" data-quotation-entry-qty></div>
             <div class="col-xl-1"><label class="form-label">Unit Price</label><input type="number" min="0" step="1" class="form-control js-no-number-spinner js-no-wheel-change" data-quotation-entry-price data-whole-number></div>
             <div class="col-xl-2"><label class="form-label">Discount</label><div class="input-group tf-adjustment-group"><select class="form-select tf-adjustment-type" data-quotation-entry-discount-type aria-label="Discount type"><option value="percentage">%</option><option value="fixed">Rs</option></select><input type="number" min="0" step="1" value="0" class="form-control js-no-number-spinner js-no-wheel-change" data-quotation-entry-discount-value data-whole-number aria-label="Discount value"></div></div>
             <div class="col-xl-2"><label class="form-label">Tax</label><div class="input-group tf-adjustment-group"><select class="form-select tf-adjustment-type" data-quotation-entry-tax-type aria-label="Tax type"><option value="percentage">%</option><option value="fixed">Rs</option></select><input type="number" min="0" step="1" value="0" class="form-control js-no-number-spinner js-no-wheel-change" data-quotation-entry-tax-value data-whole-number aria-label="Tax value"></div></div>
@@ -27,7 +27,7 @@
     </section>
 
     <div class="table-responsive border rounded"><table class="table align-middle mb-0"><thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Tax</th><th>Line Total</th><th>Edit</th><th>Delete</th></tr></thead><tbody data-quotation-items><tr data-quotation-empty><td colspan="9" class="text-center tf-muted py-4">No quotation items added yet.</td></tr></tbody></table></div>
-    <div class="tf-quotation-footer mt-3"><div class="tf-quotation-notes"><label class="form-label">Notes</label><input name="notes" value="{{ old('notes') }}" class="form-control"></div><div class="tf-quotation-total"><small class="d-block tf-muted">Total</small><strong data-quotation-grand-total>Rs 0.00</strong></div><div class="tf-quotation-actions"><a href="{{ route('business.sales.quotations.index') }}" class="btn btn-outline-secondary">Cancel</a><button class="btn btn-tf-primary" data-save-quotation>Save quotation</button></div></div>
+    <div class="tf-quotation-footer mt-3"><div class="tf-quotation-total"><small class="d-block tf-muted">Total</small><strong data-quotation-grand-total>Rs 0.00</strong></div><div class="tf-quotation-actions"><a href="{{ route('business.sales.quotations.index') }}" class="btn btn-outline-secondary">Cancel</a><button class="btn btn-tf-primary" data-save-quotation>Save quotation</button></div></div>
 </form>
 
 @push('scripts')
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshProductOptions();
     };
     const reset = () => {
-        editing = null; product.value = ''; qty.value = 1; price.value = ''; discountType.value = 'percentage'; discountValue.value = 0; taxType.value = 'percentage'; taxValue.value = 0; total.value = 'Rs 0.00'; clearError(); refreshProductOptions(); window.syncTradeFlowTomSelect?.(product); setTimeout(() => window.getTradeFlowTomSelect?.(product)?.focus(), 0);
+        editing = null; product.value = ''; qty.value = 0; price.value = ''; discountType.value = 'percentage'; discountValue.value = 0; taxType.value = 'percentage'; taxValue.value = 0; total.value = 'Rs 0.00'; clearError(); refreshProductOptions(); window.syncTradeFlowTomSelect?.(product); setTimeout(() => window.getTradeFlowTomSelect?.(product)?.focus(), 0);
     };
     const add = () => {
         const option = product.selectedOptions[0];

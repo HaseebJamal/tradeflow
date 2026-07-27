@@ -257,6 +257,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::resource('suppliers', SupplierController::class)->middleware('business.permission:Suppliers');
     Route::get('/purchases', [\App\Http\Controllers\Business\PurchaseController::class, 'index'])->name('purchases.index')->middleware('business.permission:Purchases');
     Route::get('/purchases/create', [\App\Http\Controllers\Business\PurchaseController::class, 'create'])->name('purchases.create')->middleware('business.permission:Purchases');
+    Route::post('/purchases/suppliers', [SupplierController::class, 'store'])->name('purchases.suppliers.store')->middleware(['business.permission:Suppliers', 'company.permission:suppliers.create']);
     Route::post('/purchases', [\App\Http\Controllers\Business\PurchaseController::class, 'store'])->name('purchases.store')->middleware('business.permission:Purchases');
     Route::get('/purchases/lookup', [\App\Http\Controllers\Business\PurchaseController::class, 'lookup'])->name('purchases.lookup')->middleware('business.permission:Purchases');
     Route::get('/purchase-returns', [\App\Http\Controllers\Business\PurchaseReturnController::class, 'index'])->name('purchase-returns.index')->middleware(['business.permission:Purchase Returns', 'business.permission:Purchases']);
@@ -264,7 +265,13 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::post('/purchase-returns/start', [\App\Http\Controllers\Business\PurchaseReturnController::class, 'start'])->name('purchase-returns.start')->middleware(['business.permission:Purchase Returns', 'business.permission:Purchases']);
     Route::get('/purchase-returns/{purchaseReturn}', [\App\Http\Controllers\Business\PurchaseReturnController::class, 'show'])->name('purchase-returns.show')->middleware(['business.permission:Purchase Returns', 'business.permission:Purchases']);
     Route::get('/purchase-returns/{purchaseReturn}/edit', [\App\Http\Controllers\Business\PurchaseReturnController::class, 'edit'])->name('purchase-returns.edit')->middleware(['business.permission:Purchase Returns', 'business.permission:Purchases']);
+    Route::get('/purchases/{purchase}/edit', [\App\Http\Controllers\Business\PurchaseController::class, 'edit'])->name('purchases.edit')->middleware('business.permission:Purchases');
+    Route::put('/purchases/{purchase}', [\App\Http\Controllers\Business\PurchaseController::class, 'update'])->name('purchases.update')->middleware('business.permission:Purchases');
+    Route::post('/purchases/{purchase}/cancel', [\App\Http\Controllers\Business\PurchaseController::class, 'cancel'])->name('purchases.cancel')->middleware('business.permission:Purchases');
     Route::get('/purchases/{purchase}', [\App\Http\Controllers\Business\PurchaseController::class, 'show'])->name('purchases.show')->middleware('business.permission:Purchases');
+    Route::get('/purchases/{purchase}/receiving', [\App\Http\Controllers\Business\GoodsReceiptController::class, 'create'])->name('purchases.receiving.create')->middleware('business.permission:Purchases');
+    Route::post('/purchases/{purchase}/receipts', [\App\Http\Controllers\Business\GoodsReceiptController::class, 'store'])->name('purchases.receipts.store')->middleware('business.permission:Purchases');
+    Route::get('/goods-receipts/{goodsReceipt}', [\App\Http\Controllers\Business\GoodsReceiptController::class, 'show'])->name('goods-receipts.show')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/receive', [\App\Http\Controllers\Business\PurchaseController::class, 'receive'])->name('purchases.receive')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/payments', [\App\Http\Controllers\Business\PurchaseController::class, 'pay'])->name('purchases.pay')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/returns', [\App\Http\Controllers\Business\PurchaseController::class, 'processReturn'])->name('purchases.return')->middleware('business.permission:Purchases');

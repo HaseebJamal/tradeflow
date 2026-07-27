@@ -49,7 +49,7 @@ class InventoryController extends Controller
         $data = $request->validate([
             'product_id' => ['required', Rule::exists('products', 'id')->where(fn ($query) => $query->where('business_id', auth()->user()->business_id))],
             'quantity' => ['required', 'integer', 'min:1'],
-            'note' => ['required', 'string', 'max:255'],
+            'note' => ['nullable', 'string', 'max:255'],
         ], ['product_id.required' => 'Please select a product.', 'product_id.exists' => 'Please select a valid product.']);
 
         $data['type'] = 'transfer';

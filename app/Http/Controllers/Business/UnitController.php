@@ -52,6 +52,13 @@ class UnitController extends Controller
 
         $this->audit($request, 'Unit Created', $unit);
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Unit created successfully.',
+                'unit' => $unit->only(['id', 'unit_name', 'short_code', 'status']),
+            ], 201);
+        }
+
         return redirect()->route('business.units.index')->with('success', 'Unit created successfully.');
     }
 

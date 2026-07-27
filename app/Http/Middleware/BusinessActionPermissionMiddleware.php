@@ -89,7 +89,7 @@ class BusinessActionPermissionMiddleware
             'business.suppliers.index', 'business.suppliers.show' => 'suppliers.view',
             'business.suppliers.create', 'business.suppliers.store' => 'suppliers.create', 'business.suppliers.edit', 'business.suppliers.update' => 'suppliers.edit', 'business.suppliers.archive', 'business.suppliers.restore', 'business.suppliers.destroy' => 'suppliers.archive',
             'business.purchases.index', 'business.purchases.show' => 'purchases.view', 'business.purchases.create', 'business.purchases.store' => 'purchases.create',
-            'business.purchases.receive' => 'purchases.receive', 'business.purchases.pay' => 'purchases.pay', 'business.purchases.return' => 'purchase_returns.process',
+            'business.purchases.receive', 'business.purchases.receiving.create', 'business.purchases.receipts.store', 'business.goods-receipts.show' => 'purchases.receive', 'business.purchases.pay' => 'purchases.pay', 'business.purchases.return' => 'purchase_returns.process',
             'business.purchase-returns.index', 'business.purchase-returns.create', 'business.purchase-returns.show', 'business.purchase-returns.edit' => 'purchase_returns.view',
             'business.purchase-returns.start' => 'purchase_returns.process',
             'business.sales.quotations.index', 'business.sales.quotations.create', 'business.sales.quotations.store' => 'sales.quotations',

@@ -40,7 +40,7 @@ class StoreOrUpdateUnitRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'unit_type.unique' => 'A unit for this type already exists for your business.',
+            'unit_type.unique' => 'This unit already exists for this business.',
         ];
     }
 }

@@ -22,7 +22,7 @@
         <thead><tr><th>Product</th><th>Quantity</th><th>Price</th><th>Total</th></tr></thead>
         <tbody>
         @foreach($invoice->items->isNotEmpty() ? $invoice->items : $order->items as $item)
-            <tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td>{{ $item->quantity }} {{ $item->unit ?? '' }}</td><td>Rs {{ number_format($item->unit_price ?? $item->price) }}</td><td>Rs {{ number_format($item->line_total ?? $item->total) }}</td></tr>
+            <tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td><x-quantity :value="$item->quantity" /> {{ $item->unit ?? '' }}</td><td>Rs {{ number_format($item->unit_price ?? $item->price) }}</td><td>Rs {{ number_format($item->line_total ?? $item->total) }}</td></tr>
         @endforeach
         </tbody>
     </table>

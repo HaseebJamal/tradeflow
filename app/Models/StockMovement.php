@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class StockMovement extends Model
 {
-    protected $fillable = ['business_id', 'product_id', 'type', 'quantity', 'reason', 'note', 'user_id', 'created_by'];
+    protected $fillable = ['business_id', 'product_id', 'goods_receipt_id', 'type', 'quantity', 'reason', 'note', 'user_id', 'created_by'];
 
     public function product() { return $this->belongsTo(Product::class); }
     public function user() { return $this->belongsTo(User::class); }

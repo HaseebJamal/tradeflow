@@ -30,7 +30,7 @@
 
     <x-table><thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Tax</th><th>Total</th></tr></thead><tbody>
         @foreach($order->items as $item)
-            <tr><td>{{ $item->product_name_snapshot }}</td><td>{{ $item->quantity }}</td><td>Rs {{ number_format($item->unit_price ?: $item->price) }}</td><td>{{ $item->discount_rate ?? 0 }}%</td><td>{{ $item->tax_rate ?? 0 }}%</td><td>Rs {{ number_format($item->line_total ?: $item->total) }}</td></tr>
+            <tr><td>{{ $item->product_name_snapshot }}</td><td><x-quantity :value="$item->quantity" /></td><td>Rs {{ number_format($item->unit_price ?: $item->price) }}</td><td>{{ $item->discount_rate ?? 0 }}%</td><td>{{ $item->tax_rate ?? 0 }}%</td><td>Rs {{ number_format($item->line_total ?: $item->total) }}</td></tr>
         @endforeach
     </tbody></x-table>
 

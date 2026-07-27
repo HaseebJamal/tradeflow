@@ -6,11 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\AuditLog;
 use App\Models\Business;
+use App\Models\GoodsReceiptItem;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Purchase;
+use App\Models\PurchaseReturn;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\CompanyPermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -66,8 +70,9 @@ class SupplierController extends Controller
     public function store(Request $request)
     {
         $businessId = (int) auth()->user()->business_id;
+        abort_unless(app(CompanyPermissionService::class)->allowsUser($request->user(), 'suppliers.create'), 403);
 
-        DB::transaction(function () use ($request, $businessId) {
+        $supplier = DB::transaction(function () use ($request, $businessId) {
             Business::query()->lockForUpdate()->findOrFail($businessId);
             $validated = $this->normaliseSupplierFields($this->validated($request));
             $this->ensureUniqueSupplier($businessId, $validated);
@@ -78,7 +83,16 @@ class SupplierController extends Controller
             ]));
 
             $this->postOpeningBalance($supplier);
+
+            return $supplier;
         });
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Supplier saved.',
+                'supplier' => $supplier->only(['id', 'supplier_name', 'company_name', 'phone', 'email', 'address', 'city', 'opening_balance', 'status']),
+            ], 201);
+        }
 
         return back()->with('success', 'Supplier saved.');
     }
@@ -94,21 +108,34 @@ class SupplierController extends Controller
             ->where('business_id', $request->user()->business_id)
             ->findOrFail($supplier);
         $supplier = $this->scoped($supplier);
+        $filters = $request->validate(['date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from']]);
         $lines = JournalEntryLine::with(['journalEntry', 'account'])
             ->where('supplier_id', $supplier->id)
             ->whereHas('journalEntry', fn ($q) => $q->where('business_id', $supplier->business_id)->where('status', 'posted'))
+            ->when($filters['date_from'] ?? null, fn ($query, $date) => $query->whereHas('journalEntry', fn ($journal) => $journal->whereDate('entry_date', '>=', $date)))
+            ->when($filters['date_to'] ?? null, fn ($query, $date) => $query->whereHas('journalEntry', fn ($journal) => $journal->whereDate('entry_date', '<=', $date)))
             ->oldest('id')
             ->get();
 
-        $totalPurchases = (float) $supplier->opening_balance + $lines->sum('credit');
-        $totalPayments = $lines->sum('debit');
+        $payableLines = $lines->filter(fn (JournalEntryLine $line) => $line->account?->name === 'Accounts Payable');
+        $totalPurchases = (float) $payableLines->sum('credit');
+        $totalPayments = (float) $payableLines->sum('debit');
+        $receivedValue = (float) GoodsReceiptItem::whereHas('goodsReceipt', fn ($receipt) => $receipt->where('business_id', $supplier->business_id)->where('supplier_id', $supplier->id))->sum('line_total');
+        $returns = (float) PurchaseReturn::where('business_id', $supplier->business_id)->where('supplier_id', $supplier->id)->sum('total_amount');
+        $availableAdvances = (float) $supplier->payments()->where('is_advance', true)->sum('remaining_amount');
+        $openPurchases = Purchase::where('business_id', $supplier->business_id)->where('supplier_id', $supplier->id)->where('balance', '>', 0);
+        $overduePayable = (float) (clone $openPurchases)->whereNotNull('due_date')->whereDate('due_date', '<', now(config('app.timezone'))->toDateString())->sum('balance');
 
         return view('business.suppliers.show', [
             'supplier' => $supplier,
             'lines' => $lines,
             'totalPurchases' => $totalPurchases,
             'totalPayments' => $totalPayments,
-            'remainingPayable' => $totalPurchases - $totalPayments,
+            'remainingPayable' => (float) $lines->sum('credit') - (float) $lines->sum('debit'),
+            'receivedValue' => $receivedValue,
+            'returnsValue' => $returns,
+            'availableAdvances' => $availableAdvances,
+            'overduePayable' => $overduePayable,
         ]);
     }
 

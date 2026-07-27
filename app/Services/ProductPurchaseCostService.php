@@ -21,10 +21,10 @@ class ProductPurchaseCostService
             ->where('product_id', $product->id)
             ->whereHas('purchase', fn ($query) => $query
                 ->where('business_id', $product->business_id)
-                ->whereIn('status', ['Received', 'Partially Returned', 'Completed']))
+                ->whereHas('goodsReceipts'))
             ->get()
             ->map(function (PurchaseItem $item) {
-                $item->net_received_quantity = max(0, (int) $item->received_quantity - (int) $item->returnItems->sum('quantity'));
+                $item->net_received_quantity = max(0, (float) $item->received_quantity - (float) $item->returnItems->sum('quantity'));
 
                 return $item;
             })
@@ -40,10 +40,10 @@ class ProductPurchaseCostService
             return;
         }
 
-        $totalQuantity = (int) $items->sum('net_received_quantity');
+        $totalQuantity = (float) $items->sum('net_received_quantity');
         $totalCost = $items->sum(fn (PurchaseItem $item) => $item->net_received_quantity * (float) $item->unit_cost);
         $latestItem = $items->sortByDesc(fn (PurchaseItem $item) => $item->purchase->received_at ?? $item->purchase->purchase_date ?? $item->purchase->created_at)->first();
-        $average = round($totalCost / max(1, $totalQuantity), 2);
+        $average = round($totalCost / max(0.001, $totalQuantity), 2);
 
         $product->update([
             'latest_purchase_price' => round((float) $latestItem->unit_cost, 2),

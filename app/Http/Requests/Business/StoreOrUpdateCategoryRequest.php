@@ -27,4 +27,11 @@ class StoreOrUpdateCategoryRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:1000'],
         ];
     }
+
+    public function messages(): array
+    {
+        return [
+            'name.unique' => 'This category already exists for this business.',
+        ];
+    }
 }

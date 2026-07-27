@@ -46,7 +46,6 @@
                         <div class="alert alert-light border py-2"><strong>{{ $order->invoice->invoice_number }}</strong><br><small>{{ $order->customer?->name ?? 'Walk-in Customer' }}</small></div>
                         <div class="mb-3"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select" data-native-select required><option value="">Select delivery staff</option>@foreach($deliveryStaff as $staff)<option value="{{ $staff->id }}">{{ $staff->name }}</option>@endforeach</select></div>
                         <div class="mb-3"><label class="form-label">Delivery Address</label><textarea name="address" class="form-control" rows="3" required>{{ $order->customer?->address }}</textarea></div>
-                        <div><label class="form-label">Delivery Notes <span class="text-muted">Optional</span></label><textarea name="note" class="form-control" rows="2"></textarea></div>
                         @if($deliveryStaff->isEmpty())<div class="alert alert-warning mt-3 mb-0">No active delivery staff are available for this business.</div>@endif
                     </div>
                     <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-tf-primary" @disabled($deliveryStaff->isEmpty())>Assign Delivery</button></div>

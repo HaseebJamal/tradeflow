@@ -454,9 +454,17 @@ initTradeFlowCodeLookups();
 
 function initNonNegativeNumberGuards(root = document) {
     const selector = 'input[type="number"]:not([data-allow-negative]):not([data-allow-decimal]), [data-non-negative]';
-    const fields = root.matches?.(selector)
+    const candidates = root.matches?.(selector)
         ? [root]
         : [...(root.querySelectorAll?.(selector) || [])];
+    // A number field that explicitly declares a decimal step is intentional.
+    // Do not let the project-wide whole-number guard replace it with step=1.
+    const fields = candidates.filter((field) => {
+        if (field.hasAttribute('data-allow-decimal') || field.type !== 'number') return !field.hasAttribute('data-allow-decimal');
+
+        const configuredStep = field.getAttribute('step');
+        return configuredStep !== 'any' && !/^\d*\.\d+$/.test(configuredStep || '');
+    });
     fields.forEach((field) => {
         if (field.dataset.nonNegativeReady === '1') return;
         field.dataset.nonNegativeReady = '1';

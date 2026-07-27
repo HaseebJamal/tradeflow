@@ -119,11 +119,11 @@ class ProductController extends Controller
                         'warehouse_location' => $data['warehouse_location'] ?? null,
                         'description' => $data['description'] ?? null,
                         'status' => $data['status'],
-                        // Commercial values are managed by purchase, inventory,
-                        // and pricing workflows after master-data creation.
+                        // Purchase cost is calculated only from accepted goods
+                        // receipts. Product setup controls selling prices only.
                         'purchase_cost' => 0,
-                        'wholesale_price' => 0,
-                        'retail_price' => 0,
+                        'wholesale_price' => round((float) ($data['wholesale_price'] ?? 0), 2),
+                        'retail_price' => round((float) ($data['retail_price'] ?? 0), 2),
                         'opening_stock' => 0,
                         'current_stock' => 0,
                         'stock_quantity' => 0,

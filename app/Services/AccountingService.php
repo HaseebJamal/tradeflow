@@ -14,6 +14,7 @@ class AccountingService
         ['1010', 'Bank', 'Asset', 'Debit'],
         ['1100', 'Accounts Receivable', 'Asset', 'Debit'],
         ['1200', 'Inventory', 'Asset', 'Debit'],
+        ['1210', 'Supplier Advances', 'Asset', 'Debit'],
         ['2000', 'Accounts Payable', 'Liability', 'Credit'],
         ['4000', 'Sales Revenue', 'Income', 'Credit'],
         ['4010', 'Delivery Income', 'Income', 'Credit'],
@@ -59,6 +60,9 @@ class AccountingService
 
             $journal = JournalEntry::create([
                 'business_id' => $businessId,
+                'purchase_id' => $entry['purchase_id'] ?? null,
+                'goods_receipt_id' => $entry['goods_receipt_id'] ?? null,
+                'purchase_return_id' => $entry['purchase_return_id'] ?? null,
                 'voucher_number' => $entry['voucher_number'] ?? $this->voucherNumber($businessId),
                 'entry_date' => $entry['entry_date'] ?? now()->toDateString(),
                 'reference_type' => $entry['reference_type'] ?? null,
