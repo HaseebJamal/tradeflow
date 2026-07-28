@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Business;
 use App\Models\SubscriptionChangeRequest;
 use App\Models\SubscriptionPlan;
+use App\Models\BusinessFooterChangeRequest;
 use Illuminate\Http\Request;
 
 class AdminNotificationController extends Controller
@@ -80,6 +81,20 @@ class AdminNotificationController extends Controller
 
             return redirect()->route('admin.business-detail-change-requests.index', [
                 'business_id' => data_get($item->data, 'business_id'),
+            ]);
+        }
+
+        if ($category === 'footer_change_request') {
+            $changeRequest = BusinessFooterChangeRequest::whereKey(data_get($item->data, 'footer_change_request_id'))
+                ->where('business_id', data_get($item->data, 'business_id'))
+                ->firstOrFail();
+            if (! $item->read_at) {
+                $item->markAsRead();
+            }
+
+            return redirect()->route('admin.footer-change-requests.index', [
+                'business_id' => $changeRequest->business_id,
+                'request_id' => $changeRequest->id,
             ]);
         }
 

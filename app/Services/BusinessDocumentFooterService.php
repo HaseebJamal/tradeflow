@@ -37,6 +37,7 @@ class BusinessDocumentFooterService
             'show_website' => true,
             'show_tax_number' => true,
             'show_powered_by' => true,
+            'powered_by_text' => 'Powered by TradeFlow',
         ];
     }
 

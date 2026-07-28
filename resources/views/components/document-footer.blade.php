@@ -39,5 +39,5 @@
         @if(filled($line))<div>{{ $line }}</div>@endif
     @endforeach
     @if($showCompanyName)<div>&copy; {{ now()->year }} {{ $businessName }}</div>@endif
-    @if($footer->show_powered_by)<div>Powered by TradeFlow</div>@endif
+    @if($footer->show_powered_by)<div>{{ $footer->powered_by_text ?: 'Powered by TradeFlow' }}</div>@endif
 </footer>

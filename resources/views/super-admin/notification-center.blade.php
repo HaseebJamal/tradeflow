@@ -41,6 +41,7 @@
             @forelse($notifications as $notification)
                 @php($isRegistration = data_get($notification->data, 'category') === 'company_registration')
                 @php($isDetailChangeRequest = data_get($notification->data, 'category') === 'business_detail_change_request')
+                @php($isFooterChangeRequest = data_get($notification->data, 'category') === 'footer_change_request')
                 @php($isSubscriptionRequest = data_get($notification->data, 'category') === 'subscription' && data_get($notification->data, 'subscription_request_id'))
                 <div class="list-group-item p-3 p-lg-4 {{ $notification->read_at ? '' : 'bg-light' }}">
                     <div class="d-flex gap-3 justify-content-between align-items-start">
@@ -56,6 +57,9 @@
                             @endif
                             @if($isDetailChangeRequest)
                                 <a class="btn btn-sm btn-tf-primary" href="{{ route('admin.notifications.review', $notification->id) }}"><i class="bi bi-clipboard-check me-1"></i>Review request</a>
+                            @endif
+                            @if($isFooterChangeRequest)
+                                <a class="btn btn-sm btn-tf-primary" href="{{ route('admin.notifications.review', $notification->id) }}"><i class="bi bi-receipt me-1"></i>Review footer change</a>
                             @endif
                             @if($isSubscriptionRequest)
                                 <a class="btn btn-sm btn-tf-primary" href="{{ route('admin.notifications.review', $notification->id) }}"><i class="bi bi-credit-card me-1"></i>Review Subscription</a>

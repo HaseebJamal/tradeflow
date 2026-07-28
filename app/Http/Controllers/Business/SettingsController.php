@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Business;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\BusinessDetailChangeRequest;
+use App\Models\BusinessFooterChangeRequest;
 use App\Models\User;
 use App\Services\BusinessDocumentFooterService;
 use App\Services\CompanyPermissionService;
@@ -18,8 +19,8 @@ class SettingsController extends Controller
     public function index()
     {
         $business = auth()->user()->business;
-        $canManageDocumentFooter = app(CompanyPermissionService::class)
-            ->allowsUser(auth()->user(), 'settings.update', $business);
+        $canManageDocumentFooter = auth()->user()?->role === 'business_owner'
+            && app(CompanyPermissionService::class)->allowsUser(auth()->user(), 'footer_settings.view', $business);
 
         return view('business.settings.index', [
             'business' => $business,
@@ -32,6 +33,7 @@ class SettingsController extends Controller
 
     public function editDocumentFooter()
     {
+        $this->ensureFooterOwner();
         $business = auth()->user()->business;
         abort_unless($business, 404);
 
@@ -45,24 +47,21 @@ class SettingsController extends Controller
         return view('business.settings.document-footer', [
             'business' => $business,
             'footer' => $footer,
+            'pendingFooterRequests' => BusinessFooterChangeRequest::where('business_id', $business->id)
+                ->where('requester_id', auth()->id())->where('status', 'Pending')->latest()->get(),
+            'footerChangeFields' => app(\App\Services\BusinessFooterChangeService::class)->fields(),
         ]);
     }
 
     public function updateDocumentFooter(Request $request)
     {
+        $this->ensureFooterOwner();
         $business = auth()->user()->business;
         abort_unless($business, 404);
 
         $data = $request->validate([
             'footer_title' => ['nullable', 'string', 'max:255'],
             'footer_message' => ['nullable', 'string', 'max:500'],
-            'show_company_name' => ['nullable', 'boolean'],
-            'show_address' => ['nullable', 'boolean'],
-            'show_phone' => ['nullable', 'boolean'],
-            'show_email' => ['nullable', 'boolean'],
-            'show_website' => ['nullable', 'boolean'],
-            'show_tax_number' => ['nullable', 'boolean'],
-            'show_powered_by' => ['nullable', 'boolean'],
         ]);
 
         $service = app(BusinessDocumentFooterService::class);
@@ -71,13 +70,6 @@ class SettingsController extends Controller
         $footer->fill([
             'footer_title' => $data['footer_title'] ?: $business->business_name,
             'footer_message' => $data['footer_message'] ?: null,
-            'show_company_name' => $request->boolean('show_company_name'),
-            'show_address' => $request->boolean('show_address'),
-            'show_phone' => $request->boolean('show_phone'),
-            'show_email' => $request->boolean('show_email'),
-            'show_website' => $request->boolean('show_website'),
-            'show_tax_number' => $request->boolean('show_tax_number'),
-            'show_powered_by' => $request->boolean('show_powered_by'),
         ])->save();
 
         $changed = array_keys(array_filter(
@@ -98,6 +90,11 @@ class SettingsController extends Controller
         }
 
         return redirect()->route('business.settings.document-footer.edit')->with('success', 'Receipt footer settings updated.');
+    }
+
+    private function ensureFooterOwner(): void
+    {
+        abort_unless(auth()->user()?->role === 'business_owner', 403, 'Only the Business Owner can manage footer settings.');
     }
 
     public function updateBusiness(Request $request)

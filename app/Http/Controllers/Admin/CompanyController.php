@@ -262,9 +262,17 @@ class CompanyController extends Controller
 
     public function updateDocumentFooter(Request $request, Business $company)
     {
+        $company->loadMissing('owner');
         $data = $request->validate([
+            'business_name' => ['required', 'string', 'max:255'],
+            'address' => ['nullable', 'string', 'max:1000'],
+            'phone' => ['nullable', 'regex:/^\+[1-9]\d{7,14}$/'],
+            'business_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($company->owner_id)],
+            'website' => ['nullable', 'url', 'max:255'],
+            'tax_number' => ['nullable', 'string', 'max:100'],
             'footer_title' => ['nullable', 'string', 'max:255'],
             'footer_message' => ['nullable', 'string', 'max:500'],
+            'powered_by_text' => ['nullable', 'string', 'max:100'],
             'show_company_name' => ['nullable', 'boolean'],
             'show_address' => ['nullable', 'boolean'],
             'show_phone' => ['nullable', 'boolean'],
@@ -274,27 +282,44 @@ class CompanyController extends Controller
             'show_powered_by' => ['nullable', 'boolean'],
         ]);
 
-        $footer = app(BusinessDocumentFooterService::class)->for($company);
-        $old = $footer->only(array_keys($data));
-        $footer->fill([
-            'footer_title' => $data['footer_title'] ?: $company->business_name,
-            'footer_message' => $data['footer_message'] ?: null,
-            'show_company_name' => $request->boolean('show_company_name'),
-            'show_address' => $request->boolean('show_address'),
-            'show_phone' => $request->boolean('show_phone'),
-            'show_email' => $request->boolean('show_email'),
-            'show_website' => $request->boolean('show_website'),
-            'show_tax_number' => $request->boolean('show_tax_number'),
-            'show_powered_by' => $request->boolean('show_powered_by'),
-        ])->save();
+        [$old, $new, $changed] = DB::transaction(function () use ($company, $data, $request): array {
+            $lockedCompany = Business::with('owner')->lockForUpdate()->findOrFail($company->id);
+            $footer = app(BusinessDocumentFooterService::class)->for($lockedCompany);
+            $businessFields = ['business_name', 'address', 'phone', 'website', 'tax_number'];
+            $footerFields = ['footer_title', 'footer_message', 'powered_by_text', 'show_company_name', 'show_address', 'show_phone', 'show_email', 'show_website', 'show_tax_number', 'show_powered_by'];
+            $old = [
+                ...$lockedCompany->only($businessFields),
+                'business_email' => $lockedCompany->owner?->email,
+                ...$footer->only($footerFields),
+            ];
 
-        $changed = array_keys(array_filter(
-            $footer->only(array_keys($old)),
-            fn ($value, string $field) => (string) $value !== (string) ($old[$field] ?? ''),
-            ARRAY_FILTER_USE_BOTH
-        ));
+            $lockedCompany->fill(collect($data)->only($businessFields)->all())->save();
+            if ($lockedCompany->owner && array_key_exists('business_email', $data)) {
+                $lockedCompany->owner->update(['email' => $data['business_email']]);
+            }
+            $footer->fill([
+                'footer_title' => $data['footer_title'] ?: $lockedCompany->business_name,
+                'footer_message' => $data['footer_message'] ?: null,
+                'powered_by_text' => $data['powered_by_text'] ?: 'Powered by TradeFlow',
+                'show_company_name' => $request->boolean('show_company_name'),
+                'show_address' => $request->boolean('show_address'),
+                'show_phone' => $request->boolean('show_phone'),
+                'show_email' => $request->boolean('show_email'),
+                'show_website' => $request->boolean('show_website'),
+                'show_tax_number' => $request->boolean('show_tax_number'),
+                'show_powered_by' => $request->boolean('show_powered_by'),
+            ])->save();
+            $new = [
+                ...$lockedCompany->fresh()->only($businessFields),
+                'business_email' => $lockedCompany->owner?->fresh()?->email,
+                ...$footer->fresh()->only($footerFields),
+            ];
+            $changed = array_keys(array_filter($new, fn ($value, string $field) => (string) $value !== (string) ($old[$field] ?? ''), ARRAY_FILTER_USE_BOTH));
+
+            return [$old, $new, $changed];
+        });
         if ($changed !== []) {
-            $this->audit($request, 'footer settings updated', $company, null, ['changed_fields' => $changed]);
+            $this->audit($request, 'footer settings updated', $company->fresh(), $old, $new);
         }
 
         return redirect()->route('admin.companies.document-footer.edit', $company)->with('success', 'Receipt footer settings updated.');

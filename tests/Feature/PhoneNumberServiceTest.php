@@ -12,6 +12,9 @@ class PhoneNumberServiceTest extends TestCase
         $phones = app(PhoneNumberService::class);
 
         $this->assertSame('+923001234567', $phones->normalize('+92 300-1234567'));
+        $this->assertSame('+12025550123', $phones->normalize('+1 (202) 555-0123'));
+        $this->assertSame('+919876543210', $phones->normalize('+91 98765 43210'));
+        $this->assertSame('+971501234567', $phones->normalize('+971 50 123 4567'));
         $this->assertSame('+447700900123', $phones->normalize('0044 7700 900123'));
         $this->assertSame('447700900123', $phones->whatsappDigits('+44 7700 900123'));
     }

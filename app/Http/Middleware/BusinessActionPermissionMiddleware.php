@@ -128,7 +128,9 @@ class BusinessActionPermissionMiddleware
             'business.settings' => 'settings.view',
             'business.settings.business' => 'settings.update',
             'business.settings.logo' => 'settings.update',
-            'business.settings.document-footer.edit', 'business.settings.document-footer.update' => 'settings.update',
+            'business.settings.document-footer.edit' => 'footer_settings.view',
+            'business.settings.document-footer.update' => 'footer_settings.update',
+            'business.settings.document-footer.requests.store', 'business.settings.document-footer.requests.cancel' => 'footer_change_requests.create',
             default => null,
         };
     }

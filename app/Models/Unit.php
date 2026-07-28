@@ -12,6 +12,7 @@ class Unit extends Model
     protected $fillable = [
         'business_id',
         'unit_name',
+        'unit_name_normalized',
         'short_code',
         'unit_type',
         'status',
@@ -27,5 +28,18 @@ class Unit extends Model
     public function products()
     {
         return $this->hasMany(Product::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $unit): void {
+            $unit->unit_name = self::normalizeName((string) $unit->unit_name);
+            $unit->unit_name_normalized = strtolower($unit->unit_name);
+        });
+    }
+
+    public static function normalizeName(string $name): string
+    {
+        return trim((string) preg_replace('/\s+/', ' ', $name));
     }
 }

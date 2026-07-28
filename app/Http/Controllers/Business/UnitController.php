@@ -35,9 +35,7 @@ class UnitController extends Controller
 
     public function create()
     {
-        return view('business.units.form', [
-            'usedUnitTypes' => $this->usedUnitTypes(),
-        ]);
+        return view('business.units.form');
     }
 
     public function store(StoreOrUpdateUnitRequest $request)
@@ -76,10 +74,7 @@ class UnitController extends Controller
     {
         $this->ensureBusiness($unit);
 
-        return view('business.units.form', [
-            'unit' => $unit,
-            'usedUnitTypes' => $this->usedUnitTypes($unit),
-        ]);
+        return view('business.units.form', compact('unit'));
     }
 
     public function update(StoreOrUpdateUnitRequest $request, Unit $unit)
@@ -172,15 +167,6 @@ class UnitController extends Controller
     private function ensureBusiness(Unit $unit): void
     {
         abort_unless($unit->business_id === auth()->user()->business_id || auth()->user()->role === 'super_admin', 404);
-    }
-
-    private function usedUnitTypes(?Unit $except = null): array
-    {
-        return Unit::withTrashed()
-            ->where('business_id', auth()->user()->business_id)
-            ->when($except, fn ($query) => $query->where('unit_type', '!=', $except->unit_type))
-            ->pluck('unit_type')
-            ->all();
     }
 
     private function audit(Request $request, string $action, Unit $unit): void

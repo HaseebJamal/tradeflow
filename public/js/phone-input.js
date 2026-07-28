@@ -5,6 +5,13 @@
     const initialisers = new WeakMap();
     const synchronisers = new WeakMap();
     const normalizedNumbers = new WeakMap();
+    // Keep country metadata local to the application. A failed cross-origin
+    // dynamic import leaves intl-tel-input unable to validate non-default
+    // countries correctly.
+    const utilitiesUrl = new URL(
+        'intl-tel-input-utils.js',
+        document.currentScript?.src || window.location.href,
+    ).href;
 
     const initialise = (field, visible, hidden = null) => {
         if (initialisers.has(field) || !window.intlTelInput || !visible) return;
@@ -16,7 +23,7 @@
             nationalMode: true,
             formatOnDisplay: true,
             autoPlaceholder: 'polite',
-            loadUtils: () => import('https://cdn.jsdelivr.net/npm/intl-tel-input@25.3.1/build/js/utils.js'),
+            loadUtils: () => import(utilitiesUrl),
         });
         if (hidden?.value || visible.value) instance.setNumber(hidden?.value || visible.value);
 
@@ -24,12 +31,29 @@
             const placeholderDigits = String(instance.getPlaceholder?.() || '').replace(/\D/g, '').length;
             if (placeholderDigits) return placeholderDigits;
 
+            return null;
+        };
+        const inputDigitLimit = () => {
+            const exactLimit = nationalDigitLimit();
+            if (exactLimit) return exactLimit;
+
             const dialCodeLength = String(instance.getSelectedCountryData()?.dialCode || '').replace(/\D/g, '').length;
             return Math.max(1, 15 - dialCodeLength);
         };
         const normaliseVisibleValue = ({ truncate = false } = {}) => {
-            const limit = nationalDigitLimit();
-            const digits = visible.value.replace(/\D/g, '');
+            const exactLimit = nationalDigitLimit();
+            const limit = inputDigitLimit();
+            const dialCode = String(instance.getSelectedCountryData?.()?.dialCode || '').replace(/\D/g, '');
+            let digits = visible.value.replace(/\D/g, '');
+
+            // The control already renders the selected dial code separately.
+            // If a cashier/pasted value includes it again (for example, `1`
+            // before a US national number), remove that duplicate instead of
+            // treating the dial code as an extra national digit.
+            if (dialCode && exactLimit && digits.startsWith(dialCode) && digits.length > exactLimit) {
+                digits = digits.slice(dialCode.length);
+            }
+
             const normalized = truncate ? digits.slice(0, limit) : digits;
             visible.maxLength = limit;
             visible.dataset.phoneDigitLimit = String(limit);
@@ -65,7 +89,8 @@
             const tooShort = window.intlTelInputUtils?.validationError?.TOO_SHORT;
             if (typeof tooShort === 'number' && validationError === tooShort) return true;
 
-            return visible.value.replace(/\D/g, '').length < nationalDigitLimit();
+            const exactLimit = nationalDigitLimit();
+            return exactLimit ? visible.value.replace(/\D/g, '').length < exactLimit : false;
         };
         const hasSelectedCountryMismatch = () => {
             const nationalDigits = visible.value.replace(/\D/g, '');
@@ -101,25 +126,29 @@
             feedback.classList.toggle('d-block', Boolean(message));
             feedback.classList.toggle('d-none', !message);
         };
-        const sync = ({ truncate = false } = {}) => {
+        const sync = ({ truncate = false, showRequired = false } = {}) => {
             normaliseVisibleValue({ truncate });
             if (!visible.value.trim()) {
                 if (hidden) hidden.value = '';
                 normalizedNumbers.set(field, '');
-                visible.setCustomValidity('');
-                visible.classList.remove('is-invalid');
-                setFeedback();
-                return true;
+                const requiredMessage = visible.required && showRequired ? 'Phone number is required.' : '';
+                visible.setCustomValidity(requiredMessage);
+                visible.classList.toggle('is-invalid', Boolean(requiredMessage));
+                setFeedback(requiredMessage);
+                return !requiredMessage;
             }
 
             const number = normalisedNumber();
+            // isValidNumber is intentionally invoked for the plugin's normal
+            // country-aware validation. Numbering-plan metadata can reject a
+            // correctly sized test/new range before it is assigned, so accept
+            // a possible number with the exact selected-country length too.
             const validByCountry = typeof instance.isValidNumber === 'function' && instance.isValidNumber();
-            const validByPreciseMetadata = typeof instance.isValidNumberPrecise === 'function'
-                ? instance.isValidNumberPrecise()
-                : true;
+            const validBySelectedCountryLength = !isIncomplete()
+                && instance.getValidationError?.() !== window.intlTelInputUtils?.validationError?.TOO_LONG;
             const valid = !hasSelectedCountryMismatch()
                 && Boolean(number)
-                && (utilitiesReady ? validByCountry && validByPreciseMetadata : !isIncomplete());
+                && (utilitiesReady ? (validByCountry || validBySelectedCountryLength) : !isIncomplete());
             const validationMessage = valid ? '' : (isIncomplete() ? incompleteMessage : invalidMessage);
 
             if (hidden) hidden.value = valid ? number : '';
@@ -138,7 +167,9 @@
             instance.promise
                 .then(() => {
                     utilitiesReady = true;
-                    normaliseVisibleValue();
+                    // A value may have been entered before country metadata
+                    // was ready. Apply the actual national limit once it is.
+                    normaliseVisibleValue({ truncate: true });
                     sync();
                 })
                 .catch(() => {
@@ -159,19 +190,18 @@
                 return;
             }
             const pastedDigits = pastedValue.replace(/\D/g, '');
-            const limit = nationalDigitLimit();
+            const limit = inputDigitLimit();
             const next = (visible.value.slice(0, visible.selectionStart || 0) + pastedDigits + visible.value.slice(visible.selectionEnd || 0))
                 .replace(/\D/g, '')
                 .slice(0, limit);
             visible.value = next;
             visible.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        visible.addEventListener('input', () => sync({ truncate: true }));
-        visible.addEventListener('blur', () => sync());
-        visible.addEventListener('countrychange', () => sync());
+        visible.addEventListener('input', () => sync({ truncate: true, showRequired: visible.required && !visible.value.trim() }));
+        visible.addEventListener('blur', () => sync({ showRequired: true }));
+        visible.addEventListener('countrychange', () => sync({ truncate: true, showRequired: true }));
         visible.closest('form')?.addEventListener('submit', (event) => {
-            if (visible.required && !visible.value.trim()) return;
-            if (!sync()) { event.preventDefault(); visible.reportValidity(); return; }
+            if (!sync({ showRequired: true })) { event.preventDefault(); visible.reportValidity(); return; }
             if (!hidden && visible.value.trim()) visible.value = normalizedNumbers.get(field) || '';
         }, true);
         visible.closest('form')?.addEventListener('formdata', (event) => {
@@ -193,6 +223,8 @@
     window.TradeFlowPhone = {
         init,
         sync: (field) => synchronisers.get(field)?.() ?? true,
+        validate: (field) => synchronisers.get(field)?.({ showRequired: true })
+            ?? (!field?.required || Boolean(field?.value.trim())),
         setNumber: (field, value = '') => {
             const instance = initialisers.get(field);
             if (!instance) {
@@ -207,7 +239,7 @@
             synchronisers.get(field)?.();
             return normalizedNumbers.get(field) ?? (e164Pattern.test(field?.value || '') ? field.value : '');
         },
-        isValid: (field) => !field?.value.trim() || Boolean(window.TradeFlowPhone?.e164(field)),
+        isValid: (field) => window.TradeFlowPhone?.validate(field) ?? (!field?.required || Boolean(field?.value.trim())),
     };
     window.initializePhoneInputs = init;
     document.addEventListener('DOMContentLoaded', () => init());

@@ -132,6 +132,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::patch('/business-detail-change-requests/{changeRequest}/approve', [CompanyController::class, 'approveDetailChangeRequest'])->name('business-detail-change-requests.approve');
     Route::patch('/business-detail-change-requests/{changeRequest}/apply', [CompanyController::class, 'applyDetailChangeRequest'])->name('business-detail-change-requests.apply');
     Route::patch('/business-detail-change-requests/{changeRequest}/reject', [CompanyController::class, 'rejectDetailChangeRequest'])->name('business-detail-change-requests.reject');
+    Route::get('/footer-change-requests', [\App\Http\Controllers\Admin\FooterChangeRequestController::class, 'index'])->name('footer-change-requests.index');
+    Route::patch('/footer-change-requests/{footerChangeRequest}/review', [\App\Http\Controllers\Admin\FooterChangeRequestController::class, 'review'])->name('footer-change-requests.review');
     Route::post('/companies/{company}/open-dashboard', [CompanyController::class, 'openDashboard'])->name('companies.open-dashboard');
     Route::post('/company-context/return', [CompanyController::class, 'returnToDashboard'])->name('company-context.return');
     Route::post('/companies/{company}/owner/reset-password', [CompanyController::class, 'resetOwnerPassword'])->name('companies.owner.reset-password');
@@ -391,6 +393,8 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::patch('/settings/logo', [SettingsController::class, 'updateLogo'])->name('settings.logo');
     Route::get('/settings/receipt-footer', [SettingsController::class, 'editDocumentFooter'])->name('settings.document-footer.edit');
     Route::put('/settings/receipt-footer', [SettingsController::class, 'updateDocumentFooter'])->name('settings.document-footer.update');
+    Route::post('/settings/receipt-footer/requests', [\App\Http\Controllers\Business\FooterChangeRequestController::class, 'store'])->name('settings.document-footer.requests.store');
+    Route::patch('/settings/receipt-footer/requests/{footerChangeRequest}/cancel', [\App\Http\Controllers\Business\FooterChangeRequestController::class, 'cancel'])->name('settings.document-footer.requests.cancel');
 });
 
 Route::prefix('staff')->name('staff.')->middleware(['auth', 'role:custom_staff', 'business.approved', 'track.activity'])->group(function () {

@@ -19,6 +19,10 @@
     const planInputs = [...wizard.querySelectorAll('[data-registration-plan-input]')];
     const planOptions = [...wizard.querySelectorAll('[data-registration-plan-option]')];
     const restored = document.querySelector('[data-tf-register-restored]');
+    const ownerPhone = wizard.querySelector('[data-tf-phone-visible]');
+    const ownerPhoneValue = wizard.querySelector('[data-tf-phone-value]');
+    const passwordField = wizard.querySelector('[name="password"]');
+    const confirmationField = wizard.querySelector('[name="password_confirmation"]');
     const hasServerErrors = wizard.dataset.registrationHasErrors === '1';
     let currentStep = 0;
     let moving = false;
@@ -80,6 +84,26 @@
     const phoneIsValid = (field) => window.TradeFlowPhone?.isValid(field)
         ?? /^\+[1-9]\d{7,14}$/.test(field.value.replace(/[\s-]/g, ''));
     const passwordIsStrong = (value) => /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(value);
+    const validatePasswordFields = () => {
+        if (!passwordField || !confirmationField) return null;
+
+        let firstInvalid = null;
+        const passwordMessage = !passwordField.value
+            ? 'This field is required.'
+            : (!passwordIsStrong(passwordField.value)
+                ? 'Use at least 8 characters with uppercase, lowercase, number, and special character.'
+                : '');
+        setError(passwordField, passwordMessage);
+        if (passwordMessage) firstInvalid = passwordField;
+
+        const confirmationMessage = !confirmationField.value
+            ? 'Please confirm your password.'
+            : (confirmationField.value !== passwordField.value
+                ? 'Password and confirm password do not match.'
+                : '');
+        setError(confirmationField, confirmationMessage);
+        return firstInvalid || (confirmationMessage ? confirmationField : null);
+    };
     const documentMessage = (field) => ({
         cnic_image: 'Please upload a valid CNIC document.',
         business_document: 'Please upload a valid business document.',
@@ -189,18 +213,13 @@
         }
 
         if (index === 0) {
-            const password = wizard.querySelector('[name="password"]');
-            const confirmation = wizard.querySelector('[name="password_confirmation"]');
-            const passwordIsValid = passwordIsStrong(password.value);
-            if (!passwordIsValid) {
-                setInvalid(password, 'Use at least 8 characters with uppercase, lowercase, number, and special character.');
-            }
-            if (password.value && (!confirmation.value || password.value !== confirmation.value)) {
-                if (passwordIsValid) {
-                    setInvalid(password, 'Password and confirm password do not match.');
+            if (ownerPhone) {
+                const phoneValid = phoneIsValid(ownerPhone);
+                if (!phoneValid || !ownerPhoneValue?.value) {
+                    firstInvalid ??= ownerPhone;
                 }
-                firstInvalid ??= confirmation;
             }
+            firstInvalid ??= validatePasswordFields();
         }
 
         if (index === 3) {
@@ -367,8 +386,10 @@
     wizard.addEventListener('input', (event) => {
         if (event.target.name === 'name') syncOwnerName();
         if (event.target.type !== 'password') saveDraft();
-        if (event.target.name === 'password' || event.target.name === 'password_confirmation') validateStep(0, false);
+        if (event.target === passwordField || event.target === confirmationField) validatePasswordFields();
     });
+
+    [passwordField, confirmationField].filter(Boolean).forEach((field) => field.addEventListener('blur', validatePasswordFields));
 
     wizard.addEventListener('change', (event) => {
         if (event.target.matches('input[name="business_type"]')) {
