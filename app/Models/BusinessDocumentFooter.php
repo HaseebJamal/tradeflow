@@ -8,13 +8,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class BusinessDocumentFooter extends Model
 {
     protected $fillable = [
-        'business_id', 'footer_title', 'footer_message', 'show_company_name',
+        'business_id', 'footer_title', 'footer_message', 'show_company_name', 'show_footer_title', 'show_footer_message',
         'show_address', 'show_phone', 'show_email', 'show_website',
         'show_tax_number', 'show_powered_by', 'powered_by_text',
     ];
 
     protected $casts = [
         'show_company_name' => 'boolean',
+        'show_footer_title' => 'boolean',
+        'show_footer_message' => 'boolean',
         'show_address' => 'boolean',
         'show_phone' => 'boolean',
         'show_email' => 'boolean',

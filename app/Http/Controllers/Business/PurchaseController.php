@@ -22,6 +22,7 @@ use App\Services\ProductPurchaseCostService;
 use App\Services\DocumentNumberService;
 use App\Services\CompanyPermissionService;
 use App\Services\PurchaseReceivingService;
+use App\Services\ThermalDocumentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -51,7 +52,13 @@ class PurchaseController extends Controller
         ]);
         $filters['date_from'] ??= now(config('app.timezone'))->toDateString();
         $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
-        $purchases = Purchase::with(['supplier', 'invoice', 'creator'])->withSum('items', 'quantity')->where('business_id', $businessId)
+        $purchases = Purchase::with([
+            'supplier',
+            'invoice',
+            'creator',
+            'items:id,purchase_id,received_quantity',
+            'returns.items:id,purchase_return_id,quantity',
+        ])->withCount('payments')->withSum('items', 'quantity')->where('business_id', $businessId)
             ->when($request->filled('supplier_id'), fn ($query) => $query->where('supplier_id', $request->integer('supplier_id')))
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->value()))
             ->when($request->filled('search'), fn ($query) => $query->where(fn ($inner) => $inner
@@ -122,8 +129,9 @@ class PurchaseController extends Controller
     public function edit(Purchase $purchase)
     {
         $purchase = $this->scoped($purchase);
-        abort_unless($purchase->status === 'Draft', 403, 'Only draft purchases can be edited.');
         $this->ensureActionPermission('purchases.edit');
+        $purchase->loadCount('payments');
+        $this->assertPurchaseIsEditable($purchase);
 
         return view('business.purchases.edit', [
             'purchase' => $purchase->load('items'),
@@ -136,19 +144,82 @@ class PurchaseController extends Controller
     public function update(Request $request, Purchase $purchase)
     {
         $purchase = $this->scoped($purchase);
-        abort_unless($purchase->status === 'Draft', 403, 'Only draft purchases can be edited.');
         $data = $this->validatedPurchase($request);
         $this->ensureActionPermission($data['intent'] === 'confirm' ? 'purchases.confirm' : 'purchases.edit');
 
-        $purchase = DB::transaction(fn () => $this->persistPurchase($data, $purchase->business_id, $purchase));
+        $purchase = DB::transaction(function () use ($purchase, $data): Purchase {
+            $locked = Purchase::where('business_id', $purchase->business_id)->lockForUpdate()->findOrFail($purchase->id);
+            $locked->loadCount('payments');
+            $this->assertPurchaseIsEditable($locked);
+
+            return $this->persistPurchase($data, $locked->business_id, $locked);
+        });
         $this->activity->record($purchase->business_id, 'Purchases', 'Purchase '.$purchase->status.' after edit: '.$purchase->purchase_number, $purchase->id);
 
         return redirect()->route('business.purchases.show', $purchase)->with('success', $purchase->status === 'Draft' ? 'Purchase draft updated.' : 'Purchase confirmed and supplier payable recorded.');
     }
 
-    public function show(Purchase $purchase)
+    public function show(Request $request, Purchase $purchase)
     {
-        return view('business.purchases.show', ['purchase' => $this->scoped($purchase)->load(['supplier', 'items.product', 'invoice', 'payments.creator', 'payments.account', 'returns.items', 'goodsReceipts.items.product', 'goodsReceipts.creator', 'creator', 'updater', 'confirmer'])]);
+        $purchase = $this->scoped($purchase)->load(['supplier', 'items.product', 'invoice', 'payments.creator', 'payments.account', 'returns.items', 'goodsReceipts.items.product', 'goodsReceipts.creator', 'creator', 'updater', 'confirmer']);
+        $document = $request->validate(['document' => ['nullable', Rule::in(['print', 'pdf'])]])['document'] ?? null;
+
+        if (! $document) {
+            return view('business.purchases.show', compact('purchase'));
+        }
+
+        $payload = $this->purchaseDocumentPayload($purchase);
+        if ($document === 'pdf') {
+            return app(ThermalDocumentService::class)
+                ->loadPdf('business.purchases.document-pdf', $payload, 80)
+                ->stream($purchase->purchase_number.'-purchase.pdf');
+        }
+
+        return view('business.purchases.document-print', $payload);
+    }
+
+    private function purchaseDocumentPayload(Purchase $purchase): array
+    {
+        $quantity = static fn (float|int|string|null $value): string => rtrim(rtrim(number_format((float) $value, 3, '.', ''), '0'), '.') ?: '0';
+        $amount = static fn (float|int|string|null $value): string => 'Rs '.number_format((float) $value, 2);
+        $business = Business::with('documentFooter')->findOrFail($purchase->business_id);
+
+        return [
+            'purchase' => $purchase,
+            'business' => $business,
+            'items' => $purchase->items->map(fn ($item) => [
+                'name' => $item->product_name_snapshot ?: $item->product?->name,
+                'quantity' => $quantity($item->quantity).($item->unit_snapshot ? ' '.$item->unit_snapshot : ''),
+                'rate' => $amount($item->unit_cost),
+                'amount' => $amount($item->line_total),
+            ])->all(),
+            'metadata' => [
+                'Invoice' => $purchase->supplier_invoice_number,
+                'Payment' => $purchase->payment_method,
+                'Due date' => $purchase->due_date?->format('d M Y'),
+            ],
+            'totals' => [
+                ['label' => 'Subtotal', 'amount' => $amount($purchase->subtotal)],
+                ['label' => 'Discount', 'amount' => $amount($purchase->discount_amount), 'show' => (float) $purchase->discount_amount !== 0.0],
+                ['label' => 'Tax', 'amount' => $amount($purchase->tax_amount), 'show' => (float) $purchase->tax_amount !== 0.0],
+                ['label' => 'Other charges', 'amount' => $amount($purchase->other_charges), 'show' => (float) $purchase->other_charges !== 0.0],
+                ['label' => 'Paid', 'amount' => $amount($purchase->paid_amount), 'show' => (float) $purchase->paid_amount > 0],
+                ['label' => 'Payable', 'amount' => $amount($purchase->balance), 'show' => (float) $purchase->balance > 0],
+                ['label' => 'Grand total', 'amount' => $amount($purchase->grand_total), 'emphasis' => true],
+            ],
+        ];
+    }
+
+    private function assertPurchaseIsEditable(Purchase $purchase): void
+    {
+        $paymentCount = $purchase->payments_count ?? $purchase->payments()->count();
+        abort_unless(
+            in_array($purchase->status, ['Draft', 'Confirmed'], true)
+                && ! $purchase->received_at
+                && (int) $paymentCount === 0,
+            403,
+            'Only an unreceived purchase without supplier payments can be edited.'
+        );
     }
 
     public function cancel(Purchase $purchase)
@@ -309,7 +380,7 @@ class PurchaseController extends Controller
         }
 
         if ($confirmed) {
-            $this->postConfirmedPurchase($purchase);
+            $this->syncConfirmedPurchasePosting($purchase);
             if ($payment['paid_amount'] > 0) {
                 $supplierPayment = SupplierPayment::create([
                     'business_id' => $businessId,
@@ -561,6 +632,40 @@ class PurchaseController extends Controller
     }
 
     private function postConfirmedPurchase(Purchase $purchase): void { $this->post($purchase, (float) $purchase->grand_total, 'purchase_confirmation', $purchase->id, [['Purchases', (float) $purchase->grand_total, 0], ['Accounts Payable', 0, (float) $purchase->grand_total]]); }
+    private function syncConfirmedPurchasePosting(Purchase $purchase): void
+    {
+        $entry = JournalEntry::where('business_id', $purchase->business_id)
+            ->where('reference_type', 'purchase_confirmation')
+            ->where('reference_id', $purchase->id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $entry) {
+            $this->postConfirmedPurchase($purchase);
+            return;
+        }
+
+        $this->accounting->ensureDefaultAccounts($purchase->business_id);
+        $accounts = Account::where('business_id', $purchase->business_id)
+            ->whereIn('name', ['Purchases', 'Accounts Payable'])
+            ->pluck('id', 'name');
+        if (! isset($accounts['Purchases'], $accounts['Accounts Payable'])) {
+            throw ValidationException::withMessages(['payment_account_id' => 'A required accounting account is not configured for this business.']);
+        }
+
+        $amount = (float) $purchase->grand_total;
+        $entry->lines()->delete();
+        $entry->lines()->createMany([
+            ['account_id' => $accounts['Purchases'], 'debit' => $amount, 'credit' => 0, 'description' => 'Purchase commitment '.$purchase->purchase_number],
+            ['account_id' => $accounts['Accounts Payable'], 'supplier_id' => $purchase->supplier_id, 'debit' => 0, 'credit' => $amount, 'description' => 'Purchase commitment '.$purchase->purchase_number],
+        ]);
+        $entry->update([
+            'description' => 'Purchase confirmation '.$purchase->purchase_number,
+            'entry_date' => now()->toDateString(),
+            'posted_by' => auth()->id(),
+            'posted_at' => now(),
+        ]);
+    }
     private function postAccountsPayable(Purchase $purchase, float $amount): void { $this->post($purchase, $amount, 'purchase_receipt', $purchase->id, [['Inventory', $amount, 0], ['Accounts Payable', 0, $amount]]); }
     private function postReceiptClearing(Purchase $purchase, float $amount): void { $this->post($purchase, $amount, 'purchase_receipt_clearing', $purchase->id, [['Inventory', $amount, 0], ['Purchases', 0, $amount]]); }
     private function postPayment(Purchase $purchase, SupplierPayment $payment): void

@@ -274,6 +274,8 @@ class CompanyController extends Controller
             'footer_message' => ['nullable', 'string', 'max:500'],
             'powered_by_text' => ['nullable', 'string', 'max:100'],
             'show_company_name' => ['nullable', 'boolean'],
+            'show_footer_title' => ['nullable', 'boolean'],
+            'show_footer_message' => ['nullable', 'boolean'],
             'show_address' => ['nullable', 'boolean'],
             'show_phone' => ['nullable', 'boolean'],
             'show_email' => ['nullable', 'boolean'],
@@ -286,7 +288,7 @@ class CompanyController extends Controller
             $lockedCompany = Business::with('owner')->lockForUpdate()->findOrFail($company->id);
             $footer = app(BusinessDocumentFooterService::class)->for($lockedCompany);
             $businessFields = ['business_name', 'address', 'phone', 'website', 'tax_number'];
-            $footerFields = ['footer_title', 'footer_message', 'powered_by_text', 'show_company_name', 'show_address', 'show_phone', 'show_email', 'show_website', 'show_tax_number', 'show_powered_by'];
+            $footerFields = ['footer_title', 'footer_message', 'powered_by_text', 'show_company_name', 'show_footer_title', 'show_footer_message', 'show_address', 'show_phone', 'show_email', 'show_website', 'show_tax_number', 'show_powered_by'];
             $old = [
                 ...$lockedCompany->only($businessFields),
                 'business_email' => $lockedCompany->owner?->email,
@@ -302,6 +304,8 @@ class CompanyController extends Controller
                 'footer_message' => $data['footer_message'] ?: null,
                 'powered_by_text' => $data['powered_by_text'] ?: 'Powered by TradeFlow',
                 'show_company_name' => $request->boolean('show_company_name'),
+                'show_footer_title' => $request->boolean('show_footer_title'),
+                'show_footer_message' => $request->boolean('show_footer_message'),
                 'show_address' => $request->boolean('show_address'),
                 'show_phone' => $request->boolean('show_phone'),
                 'show_email' => $request->boolean('show_email'),

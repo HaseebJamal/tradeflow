@@ -16,12 +16,38 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         unit: [...form.querySelectorAll('[data-product-field="unit_id"] option')].filter((option) => option.value).map((option) => ({ value: option.value, text: option.text })),
     };
     let originSelect = null;
+    let originTrigger = null;
 
     const hasOption = (select, value) => [...select.options].some((option) => String(option.value) === String(value));
+    const catalogModalIsValid = (modalForm) => {
+        const kind = modalForm.dataset.inlineCatalogForm;
+        const nameField = modalForm.querySelector(kind === 'category' ? '[name="name"]' : '[name="unit_name"]');
+        const statusField = modalForm.querySelector('[name="status"]');
+        const typeField = modalForm.querySelector('[name="unit_type"]');
+
+        return Boolean(nameField?.value.trim())
+            && Boolean(statusField?.value)
+            && (kind !== 'unit' || Boolean(typeField?.value));
+    };
+    const updateCatalogSubmitState = (modalForm) => {
+        const submit = modalForm.querySelector('[data-inline-catalog-submit]');
+        if (!submit) return;
+
+        submit.disabled = submit.dataset.submitting === 'true' || !catalogModalIsValid(modalForm);
+    };
     const resetCatalogModal = (modalForm) => {
         modalForm.reset();
         const status = modalForm.querySelector('[name="status"]');
         if (status) status.value = 'Active';
+        modalForm.querySelectorAll('.is-invalid').forEach((field) => field.classList.remove('is-invalid'));
+        const errorBox = modalForm.querySelector('[data-inline-catalog-errors]');
+        if (errorBox) {
+            errorBox.classList.add('d-none');
+            errorBox.textContent = '';
+        }
+        const submit = modalForm.querySelector('[data-inline-catalog-submit]');
+        if (submit) delete submit.dataset.submitting;
+        updateCatalogSubmitState(modalForm);
     };
     const clearErrors = () => {
         errors?.classList.add('d-none');
@@ -122,13 +148,16 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         if (catalogButton) {
             const kind = catalogButton.dataset.inlineCatalogOpen;
             originSelect = catalogButton.closest('[data-product-master-fields]')?.querySelector(`[data-product-field="${fieldFor(kind)}"]`) || null;
+            originTrigger = catalogButton;
             const modal = document.getElementById(kind === 'category' ? 'inlineProductCategoryModal' : 'inlineProductUnitModal');
             const modalForm = modal?.querySelector('[data-inline-catalog-form]');
             if (!modal || !modalForm || !window.bootstrap) return;
             resetCatalogModal(modalForm);
-            modalForm.querySelector('[data-inline-catalog-errors]')?.classList.add('d-none');
             window.bootstrap.Modal.getOrCreateInstance(modal).show();
-            setTimeout(() => modalForm.querySelector('input, select, textarea')?.focus(), 150);
+            setTimeout(() => {
+                updateCatalogSubmitState(modalForm);
+                modalForm.querySelector('input, select, textarea')?.focus();
+            }, 150);
             return;
         }
 
@@ -158,13 +187,31 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
     document.querySelectorAll('[data-inline-catalog-form]').forEach((modalForm) => {
         if (modalForm.dataset.catalogReady === '1') return;
         modalForm.dataset.catalogReady = '1';
-        modalForm.addEventListener('input', () => modalForm.querySelector('[data-inline-catalog-errors]')?.classList.add('d-none'));
-        modalForm.addEventListener('change', () => modalForm.querySelector('[data-inline-catalog-errors]')?.classList.add('d-none'));
+        modalForm.addEventListener('input', () => {
+            modalForm.querySelector('[data-inline-catalog-errors]')?.classList.add('d-none');
+            updateCatalogSubmitState(modalForm);
+        });
+        modalForm.addEventListener('change', () => {
+            modalForm.querySelector('[data-inline-catalog-errors]')?.classList.add('d-none');
+            updateCatalogSubmitState(modalForm);
+        });
+        modalForm.closest('.modal')?.addEventListener('shown.bs.modal', () => updateCatalogSubmitState(modalForm));
+        modalForm.closest('.modal')?.addEventListener('hidden.bs.modal', () => {
+            resetCatalogModal(modalForm);
+            originSelect = null;
+            originTrigger?.focus();
+            originTrigger = null;
+        });
         modalForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             const kind = modalForm.dataset.inlineCatalogForm;
             const submit = modalForm.querySelector('[data-inline-catalog-submit]');
             const modalErrors = modalForm.querySelector('[data-inline-catalog-errors]');
+            if (!catalogModalIsValid(modalForm) || submit.dataset.submitting === 'true') {
+                updateCatalogSubmitState(modalForm);
+                return;
+            }
+            submit.dataset.submitting = 'true';
             submit.disabled = true;
             modalErrors.classList.add('d-none');
             try {
@@ -184,11 +231,15 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
                 window.Swal?.fire({ icon: 'success', title: payload.message || `${kind === 'category' ? 'Category' : 'Unit'} created`, timer: 1400, showConfirmButton: false });
             } catch (payload) {
                 const messages = Object.values(payload.errors || { form: [payload.message || 'Unable to save this record.'] }).flat();
-                const duplicate = messages.some((message) => /already exists|already been taken/i.test(String(message)));
-                modalErrors.textContent = duplicate ? `This ${kind} already exists for this business.` : messages.join(' ');
+                modalErrors.textContent = messages.join(' ');
                 modalErrors.classList.remove('d-none');
-            } finally { submit.disabled = false; }
+            } finally {
+                delete submit.dataset.submitting;
+                updateCatalogSubmitState(modalForm);
+            }
         });
+
+        updateCatalogSubmitState(modalForm);
     });
 
     form.addEventListener('submit', async (event) => {

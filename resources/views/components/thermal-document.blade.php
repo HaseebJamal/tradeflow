@@ -26,7 +26,7 @@
 <style>
     @page { margin: 3mm; }
     html, body { margin: 0; padding: 0; }
-    .tf-thermal-document { box-sizing: border-box; width: 100%; max-width: {{ $contentWidth }}mm; margin: 1rem auto; padding: 0; background: #fff; color: #111; font-family: DejaVu Sans, Arial, Helvetica, sans-serif; font-size: {{ $fontSize }}; line-height: 1.35; }
+    .tf-thermal-document { box-sizing: border-box; width: 100%; max-width: {{ $contentWidth }}mm; margin: {{ $pdf ? '0' : '1rem auto' }}; padding: 0; background: #fff; color: #111; font-family: DejaVu Sans, Arial, Helvetica, sans-serif; font-size: {{ $fontSize }}; line-height: 1.35; }
     .tf-thermal-document *, .tf-thermal-document *::before, .tf-thermal-document *::after { box-sizing: border-box; }
     .tf-thermal-document__header { text-align: center; }
     .tf-thermal-document__name { margin: 0; font-size: {{ $headerNameSize }}; font-weight: 700; overflow-wrap: anywhere; }
@@ -47,6 +47,35 @@
     .tf-thermal-document__total { font-size: {{ $paper === 58 ? '10px' : '12px' }}; font-weight: 700; border-top: 1px solid #111; margin-top: 2mm; padding-top: 2mm; }
 </style>
 @if(! $pdf)
+<style media="screen">
+    /* Desktop preview only: keep printed and PDF thermal dimensions untouched. */
+    .tf-thermal-document {
+        width: min(calc(100vw - 3rem), 25rem);
+        max-width: 25rem;
+        margin: 0;
+        padding: 1.5rem 1.35rem;
+        border: 1px solid #dbe3ef;
+        border-radius: .2rem;
+        box-shadow: 0 .75rem 1.75rem rgba(15, 23, 42, .12);
+        font-size: .875rem;
+        line-height: 1.5;
+    }
+    .tf-thermal-document__name { font-size: 1.15rem; }
+    .tf-thermal-document__title { font-size: .8rem; }
+    .tf-thermal-document__muted { font-size: .78rem; }
+    .tf-thermal-document__rule { margin: .9rem 0; }
+    .tf-thermal-document__row { margin: .4rem 0; }
+    .tf-thermal-document__label { width: 42%; padding-right: .75rem; }
+    .tf-thermal-document__value { width: 58%; }
+    .tf-thermal-document__item { padding: .7rem 0; }
+    .tf-thermal-document__item-details { font-size: .78rem; }
+    .tf-thermal-document__item-calculation { width: 64%; padding-right: .5rem; }
+    .tf-thermal-document__item-amount { width: 36%; }
+    .tf-thermal-document__total { font-size: 1rem; margin-top: .75rem; padding-top: .75rem; }
+    @media (max-width: 420px) {
+        .tf-thermal-document { width: calc(100vw - 2rem); padding: 1.15rem 1rem; }
+    }
+</style>
 <style media="print">
     @page { margin: 3mm; }
     body * { visibility: hidden; }
@@ -88,5 +117,7 @@
     @foreach($totals as $total)
         @if($total['show'] ?? true)<div class="tf-thermal-document__row {{ ($total['emphasis'] ?? false) ? 'tf-thermal-document__total' : '' }}"><span class="tf-thermal-document__label">{{ $total['label'] }}</span><strong class="tf-thermal-document__value">{{ $total['amount'] }}</strong></div>@endif
     @endforeach
+
+    <x-document-footer :business="$business" :footer="$footer" thermal />
 
 </section>

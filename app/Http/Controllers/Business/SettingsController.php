@@ -5,12 +5,12 @@ namespace App\Http\Controllers\Business;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\BusinessDetailChangeRequest;
-use App\Models\BusinessFooterChangeRequest;
 use App\Models\User;
 use App\Services\BusinessDocumentFooterService;
 use App\Services\CompanyPermissionService;
 use App\Notifications\BusinessDetailsChangeRequestedNotification;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -47,9 +47,6 @@ class SettingsController extends Controller
         return view('business.settings.document-footer', [
             'business' => $business,
             'footer' => $footer,
-            'pendingFooterRequests' => BusinessFooterChangeRequest::where('business_id', $business->id)
-                ->where('requester_id', auth()->id())->where('status', 'Pending')->latest()->get(),
-            'footerChangeFields' => app(\App\Services\BusinessFooterChangeService::class)->fields(),
         ]);
     }
 
@@ -62,21 +59,54 @@ class SettingsController extends Controller
         $data = $request->validate([
             'footer_title' => ['nullable', 'string', 'max:255'],
             'footer_message' => ['nullable', 'string', 'max:500'],
+            'phone' => ['nullable', 'regex:/^\+[1-9]\d{7,14}$/'],
+            'address' => ['nullable', 'string', 'max:1000'],
+            'website' => ['nullable', 'url', 'max:255'],
+            'tax_number' => ['nullable', 'string', 'max:100'],
+            'show_company_name' => ['nullable', 'boolean'],
+            'show_footer_title' => ['nullable', 'boolean'],
+            'show_footer_message' => ['nullable', 'boolean'],
+            'show_phone' => ['nullable', 'boolean'],
+            'show_address' => ['nullable', 'boolean'],
+            'show_email' => ['nullable', 'boolean'],
+            'show_website' => ['nullable', 'boolean'],
+            'show_tax_number' => ['nullable', 'boolean'],
+            'show_powered_by' => ['nullable', 'boolean'],
         ]);
 
-        $service = app(BusinessDocumentFooterService::class);
-        $footer = $service->for($business);
-        $old = $footer->only(array_keys($data));
-        $footer->fill([
-            'footer_title' => $data['footer_title'] ?: $business->business_name,
-            'footer_message' => $data['footer_message'] ?: null,
-        ])->save();
+        [$footer, $changed] = DB::transaction(function () use ($business, $data, $request): array {
+            $lockedBusiness = \App\Models\Business::lockForUpdate()->findOrFail($business->id);
+            $footer = app(BusinessDocumentFooterService::class)->for($lockedBusiness);
+            $businessFields = ['phone', 'address', 'website', 'tax_number'];
+            $footerFields = ['footer_title', 'footer_message', 'show_company_name', 'show_footer_title', 'show_footer_message', 'show_phone', 'show_address', 'show_email', 'show_website', 'show_tax_number', 'show_powered_by'];
+            $old = [
+                ...$lockedBusiness->only($businessFields),
+                ...$footer->only($footerFields),
+            ];
 
-        $changed = array_keys(array_filter(
-            $footer->only(array_keys($old)),
-            fn ($value, string $field) => (string) $value !== (string) ($old[$field] ?? ''),
-            ARRAY_FILTER_USE_BOTH
-        ));
+            $lockedBusiness->fill(collect($data)->only($businessFields)->map(fn ($value) => $value === '' ? null : $value)->all())->save();
+            $footer->fill([
+                'footer_title' => filled($data['footer_title'] ?? null) ? trim($data['footer_title']) : null,
+                'footer_message' => filled($data['footer_message'] ?? null) ? trim($data['footer_message']) : null,
+                'show_company_name' => $request->boolean('show_company_name'),
+                'show_footer_title' => $request->boolean('show_footer_title'),
+                'show_footer_message' => $request->boolean('show_footer_message'),
+                'show_phone' => $request->boolean('show_phone'),
+                'show_address' => $request->boolean('show_address'),
+                'show_email' => $request->boolean('show_email'),
+                'show_website' => $request->boolean('show_website'),
+                'show_tax_number' => $request->boolean('show_tax_number'),
+                'show_powered_by' => $request->boolean('show_powered_by'),
+            ])->save();
+
+            $new = [
+                ...$lockedBusiness->fresh()->only($businessFields),
+                ...$footer->fresh()->only($footerFields),
+            ];
+            $changed = array_keys(array_filter($new, fn ($value, string $field) => (string) $value !== (string) ($old[$field] ?? ''), ARRAY_FILTER_USE_BOTH));
+
+            return [$footer, $changed];
+        });
 
         if ($changed !== []) {
             app(\App\Services\BusinessActivityService::class)->record(

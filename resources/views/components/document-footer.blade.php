@@ -12,6 +12,8 @@
                 'footer_title' => data_get($business, 'business_name') ?: data_get($business, 'name'),
                 'footer_message' => 'Thank you for your business!',
                 'show_company_name' => true,
+                'show_footer_title' => true,
+                'show_footer_message' => true,
                 'show_address' => true,
                 'show_phone' => true,
                 'show_email' => true,
@@ -25,11 +27,16 @@
     $email = data_get($business, 'email') ?: data_get($business, 'owner.email');
     $website = data_get($business, 'website');
     $taxNumber = data_get($business, 'tax_number') ?: data_get($business, 'ntn_number');
-    $showCompanyName = $footer->show_company_name && filled($footer->footer_title ?: $businessName);
+    $footerTitle = trim((string) $footer->footer_title);
+    $showCompanyName = $footer->show_company_name && filled($businessName);
+    $showFooterTitle = ($footer->show_footer_title ?? true) && filled($footerTitle)
+        && (! $showCompanyName || strcasecmp($footerTitle, (string) $businessName) !== 0);
+    $showFooterMessage = ($footer->show_footer_message ?? true) && filled($footer->footer_message);
 @endphp
 <footer class="tf-document-footer {{ $thermal ? 'tf-document-footer--thermal' : '' }}" style="margin-top: 1rem; text-align: center; color: #4b5563; font-size: {{ $thermal ? '9px' : '.875rem' }}; line-height: 1.45;">
-    @if($showCompanyName)<div class="tf-document-footer__title" style="font-weight: 700; color: #111827;">{{ $footer->footer_title ?: $businessName }}</div>@endif
-    @if(filled($footer->footer_message))<div>{{ $footer->footer_message }}</div>@endif
+    @if($showCompanyName)<div class="tf-document-footer__title" style="font-weight: 700; color: #111827;">{{ $businessName }}</div>@endif
+    @if($showFooterTitle)<div class="tf-document-footer__title" style="font-weight: 700; color: #111827;">{{ $footerTitle }}</div>@endif
+    @if($showFooterMessage)<div>{{ $footer->footer_message }}</div>@endif
     @if($footer->show_address && filled($address))<div>{{ $address }}</div>@endif
     @if($footer->show_phone && filled(data_get($business, 'phone')))<div>{{ data_get($business, 'phone') }}</div>@endif
     @if($footer->show_email && filled($email))<div>{{ $email }}</div>@endif

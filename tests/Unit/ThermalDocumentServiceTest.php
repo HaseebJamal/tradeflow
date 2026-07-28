@@ -21,6 +21,34 @@ class ThermalDocumentServiceTest extends TestCase
         $this->assertEqualsWithDelta(58 * (72 / 25.4), $service->dompdfPaper(58)[2], 0.001);
     }
 
+    public function test_it_sizes_thermal_pdf_paper_from_rendered_content(): void
+    {
+        $service = new ThermalDocumentService;
+        $estimate = new \ReflectionMethod($service, 'estimatePaperHeight');
+
+        $shortReceipt = <<<'HTML'
+            <section class="tf-thermal-document">
+                <div class="tf-thermal-document__row"></div>
+                <div class="tf-thermal-document__item"><div class="tf-thermal-document__item-name"></div><span class="tf-thermal-document__item-calculation"></span></div>
+                <div class="tf-thermal-document__row tf-thermal-document__total"></div>
+                <footer class="tf-document-footer"><div>Thank you</div></footer>
+            </section>
+            HTML;
+
+        $longReceipt = str_replace(
+            '<footer',
+            str_repeat('<div class="tf-thermal-document__item"><div class="tf-thermal-document__item-name"></div></div>', 15).'<footer',
+            $shortReceipt
+        );
+
+        $shortHeight = $estimate->invoke($service, $shortReceipt, 80);
+        $longHeight = $estimate->invoke($service, $longReceipt, 80);
+
+        $this->assertLessThan(297, $shortHeight);
+        $this->assertGreaterThanOrEqual(75, $shortHeight);
+        $this->assertGreaterThan($shortHeight, $longHeight);
+    }
+
     public function test_the_shared_thermal_document_produces_visible_pdf_content(): void
     {
         $html = Blade::render(<<<'BLADE'
@@ -49,9 +77,9 @@ class ThermalDocumentServiceTest extends TestCase
         $this->assertStringNotContainsString('<table class="tf-thermal-document__items">', $html);
         $this->assertStringContainsString('@page { margin: 3mm; }', $html);
         $this->assertStringContainsString('max-width: 74mm', $html);
-        $this->assertStringNotContainsString('Lahore', $html);
-        $this->assertStringNotContainsString('+923001234567', $html);
-        $this->assertStringNotContainsString('NTN-123', $html);
+        $this->assertStringContainsString('Lahore', $html);
+        $this->assertStringContainsString('+923001234567', $html);
+        $this->assertStringContainsString('Tax / NTN: NTN-123', $html);
         $this->assertStringNotContainsString('Cashier: Cashier', $html);
 
         $pdf = Pdf::loadHtml('<!doctype html><html><head><meta charset="utf-8"></head><body>'.$html.'</body></html>')
@@ -77,6 +105,8 @@ class ThermalDocumentServiceTest extends TestCase
             'footer_title' => 'Apex Foods',
             'footer_message' => 'Thank you, Lahore!',
             'show_company_name' => true,
+            'show_footer_title' => true,
+            'show_footer_message' => true,
             'show_address' => true,
             'show_phone' => false,
             'show_email' => true,
