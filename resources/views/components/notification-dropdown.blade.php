@@ -38,7 +38,6 @@
                         ?? 'Notification';
                 @endphp
                 <a class="dropdown-item tf-notification-item tf-notification-item--compact {{ is_null($notification->read_at) ? 'tf-notification-unread' : '' }}" href="{{ $notificationIndexRoute }}" title="{{ $notificationTitle }}">
-                    <i class="bi {{ is_null($notification->read_at) ? 'bi-bell-fill text-primary' : 'bi-bell text-muted' }}"></i>
                     <span class="tf-notification-title text-truncate">{{ $notificationTitle }}</span>
                     <small class="tf-muted text-nowrap">{{ $notification->created_at?->diffForHumans() }}</small>
                 </a>

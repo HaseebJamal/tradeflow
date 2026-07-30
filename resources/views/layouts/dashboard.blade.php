@@ -3,7 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@yield('title', 'TradeFlow Dashboard')</title>
+    @php($dashboardTitle = str(trim($__env->yieldContent('title', $platformSettings->company_name.' Dashboard')))->replace('TradeFlow', $platformSettings->company_name))
+    <title>{{ $dashboardTitle }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
@@ -23,10 +24,10 @@
                 <button class="btn btn-outline-secondary tf-sidebar-toggle d-lg-none" data-tf-sidebar-toggle aria-label="Open sidebar" title="Open sidebar"><i class="bi bi-list"></i></button>
                 <div class="min-w-0">
                     <h1 class="h4 mb-0">@yield('page-title', 'Dashboard')</h1>
-                    <small class="tf-muted">@yield('page-subtitle', 'TradeFlow workspace')</small>
+                    <small class="tf-muted">{{ str(trim($__env->yieldContent('page-subtitle', $platformSettings->company_name.' workspace')))->replace('TradeFlow', $platformSettings->company_name) }}</small>
                 </div>
             </div>
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2 tf-topbar-actions">
                 @auth
                     @if(request()->is('business/*') || request()->is('staff/*') || request()->is('admin/*'))
                         @include('components.notification-dropdown')
@@ -49,11 +50,12 @@
             @endif
             @yield('content')
         </main>
-        @php
-            $applicationFooterBusiness = request()->attributes->get('super_admin_business_context') ?? auth()->user()?->business;
-        @endphp
-        @if(request()->is('business/*') && ! request()->routeIs('business.pos.index') && $applicationFooterBusiness)
-            <x-business-application-footer :business="$applicationFooterBusiness" />
+        @if(
+            request()->is('business/*')
+            && ! request()->routeIs('business.pos.index')
+            && (request()->attributes->get('super_admin_business_context') ?? auth()->user()?->business)
+        )
+            <x-business-application-footer :business="(request()->attributes->get('super_admin_business_context') ?? auth()->user()?->business)" />
         @endif
     </div>
 </div>
@@ -80,7 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const fields = [...document.querySelectorAll('.dashboard-page form input:not([type="hidden"]):not([disabled]), .dashboard-page form select:not([disabled]), .dashboard-page form textarea:not([disabled])')]
         .filter((field) => field.offsetParent !== null);
     fields.forEach((field, index) => field.tabIndex = index + 1);
-    if (!document.activeElement || document.activeElement === document.body) fields[0]?.focus();
+    const skipInitialFormFocus = @json(trim($__env->yieldContent('disable-dashboard-autofocus')) === 'true');
+    if (!skipInitialFormFocus && (!document.activeElement || document.activeElement === document.body)) fields[0]?.focus();
 });
 </script>
 @endif

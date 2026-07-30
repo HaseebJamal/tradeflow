@@ -71,6 +71,12 @@ function togglePassword(inputId, iconId) {
 
 window.togglePassword = togglePassword;
 
+// Verification controls can appear in the Company Details modal. Moving their
+// child modals to the document body avoids nested-modal clipping and stale state.
+document.querySelectorAll('[data-tf-document-modal]').forEach((modal) => {
+    document.body.append(modal);
+});
+
 // Every standard select keeps its original element, name, value, and native
 // form submission while Tom Select adds search, keyboard navigation, and a
 // Bootstrap 5 control. Mark a specialised select with data-native-select to
@@ -86,15 +92,37 @@ window.syncTradeFlowTomSelect = (element) => {
 };
 
 function positionTradeFlowTomSelectDropdown(control) {
-    if (!control?.isOpen || control.settings.dropdownParent !== 'body') return;
+    if (!control?.isOpen) return;
 
     const rect = control.control.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const width = Math.min(rect.width, Math.max(0, viewportWidth - 24));
     const menuHeight = Math.min(control.dropdown.offsetHeight || 280, Math.max(0, window.innerHeight - 24));
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const opensUp = spaceBelow < Math.min(menuHeight, 260) && spaceAbove > spaceBelow;
+    const modalParent = control.input?.closest('#manageSubscriptionModal .modal-content, #planChangeRequestModal .modal-content');
+
+    if (modalParent && control.settings.dropdownParent === modalParent) {
+        // Tom Select only positions body-portaled menus itself. This menu is
+        // deliberately mounted in the modal to stay above its backdrop, so
+        // translate viewport coordinates into the positioned modal content.
+        const parentRect = modalParent.getBoundingClientRect();
+        const top = opensUp
+            ? Math.max(8, rect.top - parentRect.top - menuHeight)
+            : rect.bottom - parentRect.top;
+
+        control.wrapper.classList.toggle('tf-tom-select-up', opensUp);
+        Object.assign(control.dropdown.style, {
+            left: `${Math.max(0, rect.left - parentRect.left)}px`,
+            top: `${top}px`,
+            width: `${rect.width}px`,
+        });
+        return;
+    }
+
+    if (control.settings.dropdownParent !== 'body') return;
+
+    const viewportWidth = window.innerWidth;
+    const width = Math.min(rect.width, Math.max(0, viewportWidth - 24));
     const left = Math.max(12, Math.min(rect.left + window.scrollX, window.scrollX + viewportWidth - width - 12));
     const top = opensUp
         ? window.scrollY + Math.max(12, rect.top - menuHeight)
@@ -173,6 +201,14 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         // dropdowns inside their own Tom Select wrapper instead.  This is
         // intentionally route-scoped; other selects retain body portal logic.
         const useInlineOrderDropdown = Boolean(element.closest('[data-order-form]'));
+        // Subscription management is the only modal whose selects must keep
+        // their menu inside the Bootstrap focus trap. Portaling those menus to
+        // body can place them underneath the dialog on some browsers.
+        const useModalDropdownParent = ['manageSubscriptionModal', 'planChangeRequestModal'].includes(containingModal?.id);
+        const modalDropdownParent = useModalDropdownParent
+            ? containingModal.querySelector('.modal-content')
+            : null;
+        const dropdownParent = modalDropdownParent || (useInlineOrderDropdown ? null : 'body');
 
         const control = new window.TomSelect(element, {
             create: false,
@@ -193,7 +229,7 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
                 ...(!useInlineOrderDropdown ? { dropdown_input: {} } : {}),
                 ...(canClear ? { clear_button: { title: 'Clear selection' } } : {}),
             },
-            dropdownParent: useInlineOrderDropdown ? null : 'body',
+            dropdownParent,
             position: 'auto',
             render: {
                 no_results: () => '<div class="no-results">No matching records found</div>',
@@ -224,7 +260,18 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
 window.reinitializeTradeFlowTomSelect = (root = document) => window.initTradeFlowTomSelect(root, { force: true });
 
 window.initTradeFlowTomSelect();
-document.addEventListener('shown.bs.modal', (event) => window.initTradeFlowTomSelect(event.target));
+document.addEventListener('shown.bs.modal', (event) => {
+    const modal = event.target;
+    const modalContent = ['manageSubscriptionModal', 'planChangeRequestModal'].includes(modal?.id)
+        ? modal.querySelector('.modal-content')
+        : null;
+    // Rebuild only a stale, body-portaled instance. This retains each native
+    // select value while ensuring menus always belong to this modal's stack.
+    const hasStaleSubscriptionSelect = modalContent && [...modal.querySelectorAll('select')]
+        .some((element) => element.tomselect && element.tomselect.dropdown.parentElement !== modalContent);
+
+    window.initTradeFlowTomSelect(modal, { force: Boolean(hasStaleSubscriptionSelect) });
+});
 document.addEventListener('tradeflow:content-loaded', (event) => window.initTradeFlowTomSelect(event.target || document));
 
 function initTradeFlowBootstrapDropdowns(root = document) {

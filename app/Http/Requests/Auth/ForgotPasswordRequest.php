@@ -21,7 +21,7 @@ class ForgotPasswordRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'email.exists' => 'No TradeFlow account is registered with this email address.',
+            'email.exists' => 'No '.app(\App\Services\PlatformSettingsService::class)->name().' account is registered with this email address.',
         ];
     }
 }

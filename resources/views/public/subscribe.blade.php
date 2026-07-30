@@ -40,7 +40,7 @@
         <div class="row align-items-end g-4">
             <div class="col-lg-8">
                 <span class="tf-pill"><i class="bi bi-shield-check me-1"></i>Manual verification checkout</span>
-                <h1 class="display-5 fw-bold mt-3 mb-3">Start Your TradeFlow Subscription</h1>
+                <h1 class="display-5 fw-bold mt-3 mb-3">Start Your {{ $platformSettings->company_name }} Subscription</h1>
                 <p class="lead text-white-50 mb-0">Choose your billing cycle, submit business details, and our team will manually verify and activate your SaaS workspace.</p>
             </div>
             <div class="col-lg-4">
@@ -67,7 +67,7 @@
                 <div class="tf-icon-tile bg-green text-white"><i class="bi bi-check2-circle"></i></div>
                 <div>
                     <h2 class="h4 mb-2">Subscription Request Received</h2>
-                    <p class="mb-3">Your TradeFlow subscription request has been received. Our team will contact you for verification and manual activation.</p>
+                    <p class="mb-3">Your {{ $platformSettings->company_name }} subscription request has been received. Our team will contact you for verification and manual activation.</p>
                     <div class="row g-2 small">
                         <div class="col-md-3"><strong>Selected Plan</strong><div data-success-plan>{{ $selected['name'] }}</div></div>
                         <div class="col-md-3"><strong>Billing Cycle</strong><div data-success-cycle>Monthly</div></div>
@@ -127,7 +127,7 @@
                     <div class="mb-4">
                         <div class="tf-step-eyebrow">Step 2</div>
                         <h2 class="h4 mb-1">Business Details</h2>
-                        <p class="tf-muted mb-0">These details help the TradeFlow team verify your business before manual activation.</p>
+                        <p class="tf-muted mb-0">These details help the {{ $platformSettings->company_name }} team verify your business before manual activation.</p>
                     </div>
 
                     <div class="row g-3">
@@ -140,7 +140,7 @@
                         <div class="col-md-6"><label class="form-label">Selected Plan</label><input class="form-control form-control-lg" value="{{ $selected['name'] }}" readonly></div>
                         <div class="col-md-6"><label class="form-label">Preferred Payment Method</label><select name="payment_method" class="form-select form-select-lg" data-subscribe-payment><option>Cash</option><option>Bank Transfer</option><option>JazzCash Manual</option><option>Easypaisa Manual</option></select></div>
                         <div class="col-12">
-                            <div class="tf-manual-note"><i class="bi bi-info-circle me-2"></i>No online payment is charged now. TradeFlow team will verify your business and manually activate your subscription.</div>
+                            <div class="tf-manual-note"><i class="bi bi-info-circle me-2"></i>No online payment is charged now. {{ $platformSettings->company_name }} will verify your business and manually activate your subscription.</div>
                         </div>
                         <div class="col-12">
                             <button class="btn btn-tf-primary btn-lg px-4">Submit Subscription Request</button>

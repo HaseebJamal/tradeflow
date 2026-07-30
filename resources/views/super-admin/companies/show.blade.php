@@ -2,6 +2,7 @@
 
 @section('page-title', 'Company Details')
 @section('page-subtitle', $company->business_name)
+@section('disable-dashboard-autofocus', 'true')
 
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
@@ -41,9 +42,9 @@
     $planSelectionSource = $company->plan_selection_source === 'pricing' ? 'Landing Pricing' : 'Registration Form';
 @endphp
 
-<div class="row g-4">
+<div class="row g-4 tf-company-details-page">
     <div class="col-lg-8">
-        <div class="tf-card p-4">
+        <div class="tf-card p-4 tf-company-overview">
             <h2 class="h5 mb-3">Company Overview</h2>
             <div class="row g-3">
                 @foreach(['Company Name' => $company->business_name, 'Owner' => $company->owner?->name, 'Owner Login Email' => $company->owner?->email ?: 'Not provided', 'Phone' => $company->phone, 'Business Type' => $company->display_business_type, 'Category' => $company->category, 'City' => $company->city] as $label => $value)
@@ -151,7 +152,7 @@
             @endif
         </div>
         <div class="tf-card p-4 mt-4"><h2 class="h5">Business Owner</h2><p class="mb-1"><strong>{{ $company->owner?->name ?? '—' }}</strong></p><p class="tf-muted small mb-0">Owner login credentials are private and managed only by the owner.</p></div>
-        <div class="tf-card p-4 mt-4"><h2 class="h5">Verification Documents</h2>@forelse($company->documents as $document)<a class="d-block border rounded p-2 mb-2" href="{{ asset('storage/'.$document->file_path) }}" target="_blank" rel="noopener">{{ str_replace('_', ' ', ucfirst($document->document_type)) }}</a>@empty<p class="tf-muted mb-0">No documents uploaded.</p>@endforelse</div>
+        <div class="tf-card p-4 mt-4"><h2 class="h5">Verification Documents</h2>@forelse($company->documents as $document)<div class="border rounded p-2 mb-2"><div class="small tf-muted mb-2">{{ str_replace('_', ' ', ucfirst($document->document_type)) }}</div><x-admin-document-verification :company="$company" :document="$document" :label="str_replace('_', ' ', ucfirst($document->document_type))" /></div>@empty<p class="tf-muted mb-0">No documents uploaded.</p>@endforelse</div>
     </div>
 </div>
 @endsection

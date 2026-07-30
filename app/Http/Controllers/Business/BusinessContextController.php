@@ -22,8 +22,8 @@ class BusinessContextController extends Controller
         $business = $this->business($request)->loadMissing('owner');
         abort_unless(app(CompanyPermissionService::class)->allowsUser($request->user(), 'notifications.view', $business), 403);
         $notifications = $business->owner
-            ? $business->owner->notifications()->latest()->paginate(12)->withQueryString()
-            : new LengthAwarePaginator([], 0, 12);
+            ? $business->owner->notifications()->latest()->paginate(10)->withQueryString()
+            : new LengthAwarePaginator([], 0, 10);
 
         return view('auth.notifications', [
             'notifications' => $notifications,

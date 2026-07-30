@@ -8,9 +8,11 @@
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div><h2 class="h5 mb-1">All Purchases</h2><p class="tf-muted mb-0">Track supplier commitments through receiving, payment, and return.</p></div>
     <div>
+        @if(! $showPurchaseCreate)
         @companyCan('purchases.create')
             <a href="{{ route('business.purchases.index', ['create' => 1]) }}#purchase-create" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>New Purchase</a>
         @endcompanyCan
+        @endif
     </div>
 </div>
 

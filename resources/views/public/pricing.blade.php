@@ -22,7 +22,7 @@
                     <x-subscription-plan-card :plan="$plan" context="landing" :current-subscription="$currentSubscription" />
                 </div>
             @empty
-                <div class="col-lg-7"><div class="tf-card p-5 text-center"><i class="bi bi-box-seam fs-2 text-muted"></i><h2 class="h5 mt-3">Plans are being prepared</h2><p class="tf-muted mb-0">Please check back shortly for available TradeFlow plans.</p></div></div>
+                <div class="col-lg-7"><div class="tf-card p-5 text-center"><i class="bi bi-box-seam fs-2 text-muted"></i><h2 class="h5 mt-3">Plans are being prepared</h2><p class="tf-muted mb-0">Please check back shortly for available {{ $platformSettings->company_name }} plans.</p></div></div>
             @endforelse
         </div>
 

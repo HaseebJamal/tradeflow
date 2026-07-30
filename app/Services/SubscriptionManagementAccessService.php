@@ -12,10 +12,14 @@ class SubscriptionManagementAccessService
 {
     private const MANAGEMENT_PERMISSIONS = [
         'subscriptions.request',
+        'subscriptions.manage',
         'subscriptions.upgrade',
         'subscriptions.downgrade',
         'subscriptions.renew',
         'subscriptions.cancel',
+        'subscriptions.change_billing_cycle',
+        'subscriptions.change_payment_method',
+        'subscriptions.resume_cancellation',
     ];
 
     public function __construct(private readonly CompanyPermissionService $permissions)

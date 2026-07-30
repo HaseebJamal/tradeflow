@@ -1,7 +1,7 @@
 <nav class="navbar navbar-expand-lg fixed-top tf-public-nav">
     <div class="container">
-        <a class="navbar-brand tf-brand d-flex align-items-center" href="{{ route('public.home') }}" aria-label="TradeFlow home">
-            <span class="tf-brand-mark"><i class="bi bi-box-seam"></i></span><span>TradeFlow</span>
+        <a class="navbar-brand tf-brand d-flex align-items-center" href="{{ route('public.home') }}" aria-label="{{ $platformSettings->company_name }} home">
+            @if($platformSettings->logo)<img src="{{ asset('storage/'.$platformSettings->logo) }}" alt="" class="tf-brand-logo">@else<span class="tf-brand-mark"><i class="bi bi-box-seam"></i></span>@endif<span>{{ $platformSettings->company_name }}</span>
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#publicNav"><span class="navbar-toggler-icon"></span></button>
         <div class="collapse navbar-collapse" id="publicNav">

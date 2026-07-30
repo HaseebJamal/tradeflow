@@ -4,8 +4,11 @@
 @section('page-subtitle', 'Platform registrations, alerts, and Super Admin updates')
 
 @section('content')
-    @if(session('success'))
+@if(session('success'))
         <div class="alert alert-success">{{ session('success') }}</div>
+    @endif
+    @if(session('warning'))
+        <div class="alert alert-warning">{{ session('warning') }}</div>
     @endif
 
     <div class="row g-3 mb-4">
@@ -19,65 +22,34 @@
         @endforeach
     </div>
 
-    <div class="tf-card p-3 p-lg-4 mb-3">
+    <div class="tf-card p-3 mb-3">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
             <div><h2 class="h5 mb-1">Notification queue</h2><p class="tf-muted small mb-0">Review registrations, acknowledge alerts, and keep the platform queue clean.</p></div>
             @if($counts['unread'])<form method="POST" action="{{ route('admin.notifications.read-all') }}">@csrf @method('PATCH')<button class="btn btn-outline-primary"><i class="bi bi-check2-all me-1"></i>Mark all read</button></form>@endif
         </div>
-        <div class="d-flex flex-wrap gap-2 mt-3" role="tablist" aria-label="Notification filters">
-            @foreach([
-                [null, 'All', $counts['all'], 'admin.notifications.index'],
-                ['unread', 'Unread', $counts['unread'], 'admin.notifications.unread'],
-                ['registrations', 'Company registrations', $counts['registrations'], 'admin.notifications.registrations'],
-                ['alerts', 'System alerts', $counts['alerts'], 'admin.notifications.alerts'],
-            ] as [$filter, $label, $count, $route])
-                <a class="btn btn-sm {{ $category === $filter ? 'btn-tf-primary' : 'btn-outline-secondary' }}" href="{{ route($route) }}">{{ $label }} <span class="badge {{ $category === $filter ? 'text-bg-light text-primary' : 'text-bg-secondary' }} ms-1">{{ $count }}</span></a>
-            @endforeach
-        </div>
     </div>
 
-    <div class="tf-card p-0 overflow-hidden">
-        <div class="list-group list-group-flush">
-            @forelse($notifications as $notification)
-                @php($isRegistration = data_get($notification->data, 'category') === 'company_registration')
-                @php($isDetailChangeRequest = data_get($notification->data, 'category') === 'business_detail_change_request')
-                @php($isFooterChangeRequest = data_get($notification->data, 'category') === 'footer_change_request')
-                @php($isSubscriptionRequest = data_get($notification->data, 'category') === 'subscription' && data_get($notification->data, 'subscription_request_id'))
-                <div class="list-group-item p-3 p-lg-4 {{ $notification->read_at ? '' : 'bg-light' }}">
-                    <div class="d-flex gap-3 justify-content-between align-items-start">
-                        <span class="tf-icon-tile {{ $isRegistration ? 'bg-blue' : 'bg-amber' }} text-white flex-shrink-0"><i class="bi {{ $isRegistration ? 'bi-buildings' : 'bi-bell' }}"></i></span>
-                        <div class="flex-grow-1">
-                            <div class="d-flex flex-wrap align-items-center gap-2 mb-1"><strong>{{ data_get($notification->data, 'title', 'TradeFlow Notification') }}</strong>@if(!$notification->read_at)<span class="tf-badge tf-badge-info">Unread</span>@endif</div>
-                            <p class="mb-2">{{ data_get($notification->data, 'message') }}</p>
-                            <small class="tf-muted"><i class="bi bi-clock me-1"></i><x-date-time :value="$notification->created_at" /></small>
-                        </div>
-                        <div class="d-flex flex-wrap justify-content-end gap-2 flex-shrink-0">
-                            @if($isRegistration)
-                                <a class="btn btn-sm btn-tf-primary" href="{{ route('admin.notifications.review', $notification->id) }}"><i class="bi bi-clipboard-check me-1"></i>Review registration</a>
-                            @endif
-                            @if($isDetailChangeRequest)
-                                <a class="btn btn-sm btn-tf-primary" href="{{ route('admin.notifications.review', $notification->id) }}"><i class="bi bi-clipboard-check me-1"></i>Review request</a>
-                            @endif
-                            @if($isFooterChangeRequest)
-                                <a class="btn btn-sm btn-tf-primary" href="{{ route('admin.notifications.review', $notification->id) }}"><i class="bi bi-receipt me-1"></i>Review footer change</a>
-                            @endif
-                            @if($isSubscriptionRequest)
-                                <a class="btn btn-sm btn-tf-primary" href="{{ route('admin.notifications.review', $notification->id) }}"><i class="bi bi-credit-card me-1"></i>Review Subscription</a>
-                            @endif
-                            @if(!$notification->read_at)
-                                <form method="POST" action="{{ route('admin.notifications.read', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Mark read</button></form>
-                            @else
-                                <form method="POST" action="{{ route('admin.notifications.unread-item', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Mark unread</button></form>
-                            @endif
-                            <form method="POST" action="{{ route('admin.notifications.destroy', $notification->id) }}" onsubmit="return confirm('Dismiss this notification?')">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" title="Dismiss notification" aria-label="Dismiss notification"><i class="bi bi-x-lg"></i></button></form>
-                        </div>
-                    </div>
-                </div>
-            @empty
-                <div class="p-5 text-center tf-muted">No notifications in this category.</div>
-            @endforelse
-        </div>
+    <div class="tf-card p-3 mb-3">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-lg-4 col-md-6"><label class="form-label">Search</label><input name="search" value="{{ $filters['search'] ?? request('search') }}" class="form-control" placeholder="Title, message, or category"></div>
+            <div class="col-lg-2 col-md-6"><label class="form-label">Category</label><input name="category" value="{{ $filters['category'] ?? request('category') }}" class="form-control" placeholder="Category"></div>
+            <div class="col-lg-2 col-md-4"><label class="form-label">Status</label><select name="status" class="form-select"><option value="all">All</option><option value="unread" @selected(($filters['status'] ?? request('status')) === 'unread')>Unread</option><option value="read" @selected(($filters['status'] ?? request('status')) === 'read')>Read</option></select></div>
+            <div class="col-lg-2 col-md-4"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ $filters['date_from'] ?? request('date_from', now()->toDateString()) }}" class="form-control"></div>
+            <div class="col-lg-2 col-md-4"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ $filters['date_to'] ?? request('date_to', now()->toDateString()) }}" class="form-control"></div>
+            <div class="col-12 d-flex gap-2"><button class="btn btn-tf-primary">Filter</button><a class="btn btn-outline-secondary" href="{{ route('admin.notifications.index') }}">Clear Filters</a></div>
+        </form>
     </div>
 
-    <div class="mt-3">{{ $notifications->links() }}</div>
+    <div class="tf-card p-0 overflow-hidden"><x-table><thead><tr><th>#</th><th>Category</th><th>Title</th><th>Message</th><th>Status</th><th>Date</th><th>Time</th><th>Actions</th></tr></thead><tbody>
+        @forelse($notifications as $notification)
+            @php($notificationCategory = data_get($notification->data, 'category', 'general'))
+            @php($isReviewable = in_array($notificationCategory, ['company_registration', 'business_detail_change_request', 'footer_change_request'], true) || ($notificationCategory === 'subscription' && data_get($notification->data, 'subscription_request_id')))
+            <tr class="{{ $notification->read_at ? '' : 'table-light' }}" data-notification-row="{{ $notification->id }}"><td>{{ $notifications->firstItem() + $loop->index }}</td><td>{{ str($notificationCategory)->headline() }}</td><td class="fw-semibold">{{ data_get($notification->data, 'title', $platformSettings->company_name.' Notification') }}</td><td title="{{ data_get($notification->data, 'message') }}">{{ str(data_get($notification->data, 'message'))->limit(90) }}</td><td data-notification-status>@if(!$notification->read_at)<span class="tf-badge tf-badge-info">Unread</span>@else<span class="tf-badge">Read</span>@endif</td><td>{{ $notification->created_at?->format('d M, Y') }}</td><td>{{ $notification->created_at?->format('h:i A') }}</td><td class="text-nowrap"><button class="btn btn-sm btn-tf-primary" type="button" data-notification-view="{{ route('admin.notifications.show', $notification->id) }}">View</button> @if(!$notification->read_at)<form class="d-inline" method="POST" action="{{ route('admin.notifications.read', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Read</button></form>@else<form class="d-inline" method="POST" action="{{ route('admin.notifications.unread-item', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Unread</button></form>@endif <form class="d-inline" method="POST" action="{{ route('admin.notifications.destroy', $notification->id) }}" data-tf-confirm-message="Dismiss this notification?">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" title="Dismiss notification" aria-label="Dismiss notification"><i class="bi bi-trash"></i></button></form></td></tr>
+        @empty
+            <tr><td colspan="8" class="text-center tf-muted py-4">No notifications found.</td></tr>
+        @endforelse
+    </tbody></x-table></div>
+    @if($notifications->total())<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3"><small class="tf-muted">Showing {{ $notifications->firstItem() }} to {{ $notifications->lastItem() }} of {{ $notifications->total() }} results</small>{{ $notifications->links('pagination::bootstrap-5') }}</div>@endif
+    <div class="modal fade" id="notificationViewModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-md modal-dialog-scrollable"><div class="modal-content"><div class="modal-header py-2"><h2 class="modal-title h6" data-notification-modal-title>Notification</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body py-3"><dl class="row mb-0 small"><dt class="col-4">Category</dt><dd class="col-8" data-notification-category></dd><dt class="col-4">Message</dt><dd class="col-8 text-wrap" data-notification-message></dd><dt class="col-4">Status</dt><dd class="col-8" data-notification-modal-status></dd><dt class="col-4">Date</dt><dd class="col-8" data-notification-date></dd><dt class="col-4">Time</dt><dd class="col-8" data-notification-time></dd><dt class="col-4 d-none" data-notification-business-label>Company</dt><dd class="col-8 d-none fw-semibold" data-notification-business></dd></dl></div><div class="modal-footer py-2"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button><a class="btn btn-tf-primary d-none" data-notification-action></a></div></div></div></div>
+@push('scripts')<script>document.querySelectorAll('[data-notification-view]').forEach((button) => button.addEventListener('click', async () => { const response = await fetch(button.dataset.notificationView, {headers:{Accept:'application/json'}}); if (!response.ok) return; const item = await response.json(); const modal = document.querySelector('#notificationViewModal'); modal.querySelector('[data-notification-modal-title]').textContent = item.title; modal.querySelector('[data-notification-category]').textContent = item.category; modal.querySelector('[data-notification-message]').textContent = item.message || ''; modal.querySelector('[data-notification-modal-status]').textContent = item.status; modal.querySelector('[data-notification-date]').textContent = item.date || ''; modal.querySelector('[data-notification-time]').textContent = item.time || ''; const company = modal.querySelector('[data-notification-business]'); const companyLabel = modal.querySelector('[data-notification-business-label]'); company.textContent = item.business || ''; company.classList.toggle('d-none', !item.business); companyLabel.classList.toggle('d-none', !item.business); const action = modal.querySelector('[data-notification-action]'); action.classList.toggle('d-none', !item.action); if (item.action) { action.href = item.action.url; action.textContent = item.action.label; } document.querySelector(`[data-notification-row="${item.id}"] [data-notification-status]`)?.replaceChildren(Object.assign(document.createElement('span'), {className:'tf-badge', textContent:'Read'})); bootstrap.Modal.getOrCreateInstance(modal).show(); }));</script>@endpush
 @endsection

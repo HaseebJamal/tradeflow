@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Models\SubscriptionChangeRequest;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
@@ -20,6 +21,16 @@ class SubscriptionStatusNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
-        return ['category' => 'subscription', 'title' => $this->title, 'message' => $this->message, 'business_id' => $this->businessId, 'subscription_request_id' => $this->subscriptionRequestId];
+        return [
+            'category' => 'subscription',
+            'title' => $this->title,
+            'message' => $this->message,
+            'business_id' => $this->businessId,
+            // Keep the legacy key for existing consumers while recording an
+            // authoritative polymorphic reference for every new request.
+            'subscription_request_id' => $this->subscriptionRequestId,
+            'related_type' => $this->subscriptionRequestId ? SubscriptionChangeRequest::class : null,
+            'related_id' => $this->subscriptionRequestId,
+        ];
     }
 }

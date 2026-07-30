@@ -110,6 +110,11 @@ Route::middleware('auth')->group(function () {
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'role:super_admin', 'track.activity'])->group(function () {
     Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
     Route::get('/companies', [CompanyController::class, 'index'])->name('companies.index');
+    Route::get('/business-requests', [\App\Http\Controllers\Admin\BusinessRequestController::class, 'index'])->name('business-requests.index');
+    Route::get('/business-requests/{source}/{requestId}', [\App\Http\Controllers\Admin\BusinessRequestController::class, 'show'])
+        ->whereIn('source', \App\Services\BusinessRequestIndexService::SOURCES)
+        ->whereNumber('requestId')
+        ->name('business-requests.show');
     Route::get('/companies/create', [CompanyController::class, 'create'])->name('companies.create');
     Route::post('/companies', [CompanyController::class, 'store'])->name('companies.store');
     Route::get('/companies/pending', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'pending'))->name('companies.pending');
@@ -124,6 +129,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::get('/companies/{company}/edit', [CompanyController::class, 'edit'])->name('companies.edit');
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->name('companies.update');
     Route::patch('/companies/{company}/status', [CompanyController::class, 'updateStatus'])->name('companies.status');
+    Route::patch('/companies/{company}/documents/{document}/verification', [CompanyController::class, 'verifyDocument'])->name('companies.documents.verify');
     Route::patch('/companies/{company}/registration-plan', [CompanyController::class, 'updateRegistrationPlan'])->name('companies.registration-plan.update');
     Route::patch('/companies/{company}/archive', [CompanyController::class, 'archive'])->name('companies.archive');
     Route::patch('/companies/{company}/restore', [CompanyController::class, 'restore'])->name('companies.restore');
@@ -153,6 +159,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::patch('/notifications-center/{notification}/read', [AdminNotificationController::class, 'markRead'])->name('notifications.read');
     Route::patch('/notifications-center/{notification}/unread', [AdminNotificationController::class, 'markUnread'])->name('notifications.unread-item');
     Route::delete('/notifications-center/{notification}', [AdminNotificationController::class, 'destroy'])->name('notifications.destroy');
+    Route::get('/notifications-center/{notification}', [AdminNotificationController::class, 'show'])->name('notifications.show');
     Route::get('/notifications-center/{notification}/review', [AdminNotificationController::class, 'review'])->name('notifications.review');
     Route::patch('/notifications-center/read-all', [AdminNotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::get('/approvals/pending', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'pending'))->name('approvals.pending');

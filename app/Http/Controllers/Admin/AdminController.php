@@ -18,7 +18,7 @@ use App\Models\OrderItem;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PlatformPayment;
-use App\Models\PlatformSetting;
+use App\Services\PlatformSettingsService;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Subscription;
@@ -38,6 +38,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -558,6 +559,7 @@ class AdminController extends Controller
             'note' => ['nullable', 'string', 'max:2000'],
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
+            'effective_at' => ['nullable', 'date'],
             'status' => ['required', 'in:Pending,Trial,Active,Expiring,Expired,Suspended,Cancelled'],
         ]);
 
@@ -575,7 +577,10 @@ class AdminController extends Controller
         $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
         $data['amount'] = $plan->priceFor($data['billing_cycle']);
         $data['starts_at'] = $data['starts_at'] ?? now()->toDateString();
-        $data['ends_at'] = $data['ends_at'] ?? now()->addMonth()->toDateString();
+        $startDate = Carbon::parse($data['starts_at']);
+        $data['ends_at'] = $data['ends_at'] ?? ($data['billing_cycle'] === 'Yearly'
+            ? $startDate->copy()->addYear()->toDateString()
+            : $startDate->copy()->addMonth()->toDateString());
         $data['payment_status'] = $data['payment_status'] ?? ($data['status'] === 'Active' ? 'Received' : 'Pending');
         $data['status'] = $this->resolvedSubscriptionStatus($data['status'], $data['ends_at']);
 
@@ -612,7 +617,10 @@ class AdminController extends Controller
         $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
         $data['amount'] = $plan->priceFor($data['billing_cycle']);
         $data['starts_at'] = $data['starts_at'] ?? $subscription->starts_at?->toDateString() ?? now()->toDateString();
-        $data['ends_at'] = $data['ends_at'] ?? $subscription->ends_at?->toDateString() ?? now()->addMonth()->toDateString();
+        $startDate = Carbon::parse($data['starts_at']);
+        $data['ends_at'] = $data['ends_at'] ?? ($subscription->ends_at?->toDateString() ?? ($data['billing_cycle'] === 'Yearly'
+            ? $startDate->copy()->addYear()->toDateString()
+            : $startDate->copy()->addMonth()->toDateString()));
         $data['status'] = $this->resolvedSubscriptionStatus($data['status'], $data['ends_at']);
         $this->assertSubscriptionTransition($subscription->status, $data['status']);
         $old = $subscription->only(['subscription_plan_id', 'amount', 'payment_method', 'starts_at', 'ends_at', 'status']);
@@ -669,7 +677,7 @@ class AdminController extends Controller
         $end = ($subscription->trial_end_at ?? now())->addDays($data['days']);
         $subscription->update(['status' => 'Trial', 'trial_start_at' => $subscription->trial_start_at ?? now(), 'trial_end_at' => $end, 'ends_at' => $end]);
         $this->audit('Trial extended', $request, 'Subscriptions', $subscription->id, null, ['trial_end_at' => $end->toDateString()]);
-        $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Trial Extended', 'Your TradeFlow trial was extended until '.$end->format('d M, Y').'.', $subscription->business_id));
+        $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Trial Extended', 'Your '.app(PlatformSettingsService::class)->name().' trial was extended until '.$end->format('d M, Y').'.', $subscription->business_id));
         return back()->with('success', 'Trial extended successfully.');
     }
 
@@ -701,7 +709,7 @@ class AdminController extends Controller
         $startsAt = $data['starts_at'] ?? now()->toDateString();
         $endsAt = $data['ends_at'] ?? ($data['billing_cycle'] === 'Yearly' ? Carbon::parse($startsAt)->addYear()->toDateString() : Carbon::parse($startsAt)->addMonth()->toDateString());
 
-        $old = $changeRequest->only(['requested_plan_id', 'billing_cycle', 'expected_amount', 'trial_eligible', 'trial_days', 'starts_at', 'ends_at']);
+        $old = $changeRequest->only(['requested_plan_id', 'billing_cycle', 'expected_amount', 'trial_eligible', 'trial_days', 'starts_at', 'ends_at', 'effective_at']);
         $changeRequest->update([
             'requested_plan_id' => $plan->id,
             'billing_cycle' => $data['billing_cycle'],
@@ -710,11 +718,12 @@ class AdminController extends Controller
             'trial_days' => $trialDays,
             'starts_at' => $startsAt,
             'ends_at' => $endsAt,
+            'effective_at' => $data['effective_at'] ?? $changeRequest->effective_at,
             'admin_note' => $data['admin_note'] ?? null,
         ]);
 
         $this->audit('Subscription request review updated', $request, 'Subscriptions', $changeRequest->id, $old, $changeRequest->fresh()->only(array_keys($old)));
-        $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Request Updated', 'TradeFlow updated the review details for your subscription request.', $changeRequest->business_id));
+        $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Request Updated', app(PlatformSettingsService::class)->name().' updated the review details for your subscription request.', $changeRequest->business_id));
 
         return back()->with('success', 'Subscription request review details updated.');
     }
@@ -728,6 +737,8 @@ class AdminController extends Controller
         abort_unless(in_array($changeRequest->status, ['Pending', 'Changes Requested'], true), 422, 'This subscription request has already been reviewed.');
 
         DB::transaction(function () use ($request, $changeRequest, $data) {
+            $changeRequest = SubscriptionChangeRequest::whereKey($changeRequest->id)->lockForUpdate()->firstOrFail();
+            abort_unless(in_array($changeRequest->status, ['Pending', 'Changes Requested'], true), 422, 'This subscription request has already been reviewed.');
             $requestStatus = $data['decision'] === 'Activate' ? 'Active' : $data['decision'];
             $changeRequest->update([
                 'status' => $requestStatus,
@@ -738,9 +749,25 @@ class AdminController extends Controller
             if (in_array($data['decision'], ['Approved', 'Activate'], true)) {
                 $plan = SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->findOrFail($changeRequest->requested_plan_id);
                 $subscription = Subscription::where('business_id', $changeRequest->business_id)->lockForUpdate()->first() ?: new Subscription(['business_id' => $changeRequest->business_id]);
-                $start = $changeRequest->starts_at ?? now();
+                $type = $changeRequest->type === 'Subscription' ? 'New Subscription' : $changeRequest->type;
+
+                if ($type === 'Cancellation') {
+                    abort_unless($subscription->exists && in_array($subscription->status, ['Trial', 'Active', 'Expiring'], true), 422, 'This subscription can no longer be scheduled for cancellation.');
+                    $subscription->update([
+                        'cancellation_scheduled_at' => $changeRequest->effective_at ?? $subscription->ends_at,
+                        'cancellation_reason' => $changeRequest->note,
+                    ]);
+                    $title = 'Subscription Cancellation Scheduled';
+                    $message = 'Your subscription will remain active until '.($subscription->cancellation_scheduled_at?->format('d M, Y') ?? 'its expiry date').'.';
+                } elseif ($type === 'Resume Cancellation') {
+                    abort_unless($subscription->exists && $subscription->cancellation_scheduled_at, 422, 'There is no scheduled cancellation to resume.');
+                    $subscription->update(['cancellation_scheduled_at' => null, 'cancellation_reason' => null]);
+                    $title = 'Subscription Cancellation Resumed';
+                    $message = 'Your scheduled subscription cancellation has been removed.';
+                } else {
+                $start = $changeRequest->effective_at ?? $changeRequest->starts_at ?? now();
                 $end = $changeRequest->ends_at ?? ($changeRequest->billing_cycle === 'Yearly' ? Carbon::parse($start)->addYear() : Carbon::parse($start)->addMonth());
-                $trial = $data['decision'] === 'Approved' && $changeRequest->trial_eligible && (int) $changeRequest->trial_days > 0;
+                $trial = $type === 'New Subscription' && $data['decision'] === 'Approved' && $changeRequest->trial_eligible && (int) $changeRequest->trial_days > 0;
                 $subscription->fill([
                     'subscription_plan_id' => $plan->id,
                     'billing_cycle' => $changeRequest->billing_cycle,
@@ -755,10 +782,11 @@ class AdminController extends Controller
                     'renewed_at' => $data['decision'] === 'Activate' ? now() : $subscription->renewed_at,
                 ])->save();
                 $title = $trial ? 'Trial Activated' : ($data['decision'] === 'Activate' ? 'Subscription Activated' : 'Subscription Approved');
-                $message = $trial ? 'Your '.$plan->name.' trial is now active.' : ($data['decision'] === 'Activate' ? 'Your '.$plan->name.' subscription is now active.' : 'Your '.$plan->name.' request was approved and is awaiting payment confirmation.');
+                $message = $trial ? 'Your '.$plan->name.' trial is now active.' : ($data['decision'] === 'Activate' ? 'Your '.$plan->name.' subscription is now active.' : 'Your '.$type.' request was approved and is awaiting payment confirmation.');
+                }
                 $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification($title, $message, $changeRequest->business_id));
             } elseif ($data['decision'] === 'Changes Requested') {
-                $message = 'TradeFlow requested changes to your '.$changeRequest->type.' request.';
+                $message = app(PlatformSettingsService::class)->name().' requested changes to your '.$changeRequest->type.' request.';
                 if (filled($data['admin_note'] ?? null)) {
                     $message .= ' Note: '.$data['admin_note'];
                 }
@@ -768,7 +796,7 @@ class AdminController extends Controller
             }
         });
 
-        $this->audit('Subscription change request '.strtolower($data['decision']), $request, 'Subscriptions', $changeRequest->id, null, ['decision' => $data['decision']]);
+        $this->audit('Subscription '.$changeRequest->type.' '.strtolower($data['decision']), $request, 'Subscriptions', $changeRequest->id, null, ['decision' => $data['decision'], 'effective_at' => $changeRequest->effective_at?->toDateString()]);
         return back()->with('success', in_array($data['decision'], ['Approved', 'Activate'], true) ? 'Subscription request processed successfully.' : ($data['decision'] === 'Changes Requested' ? 'Changes requested from the business owner.' : 'Subscription request rejected.'));
     }
 
@@ -784,9 +812,12 @@ class AdminController extends Controller
             })
             ->each(function (Subscription $subscription) use ($request): void {
                 $old = ['status' => $subscription->status, 'ends_at' => $subscription->ends_at?->toDateString()];
-                $subscription->update(['status' => 'Expired']);
-                $this->audit('Subscription expired for business #'.$subscription->business_id, $request, 'Subscriptions', $subscription->id, $old, ['status' => 'Expired', 'ends_at' => $old['ends_at']]);
-                $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Expired', 'Your TradeFlow subscription has expired. Renew a plan to restore full access.', $subscription->business_id));
+                $scheduledCancellation = $subscription->cancellation_scheduled_at
+                    && $subscription->cancellation_scheduled_at->lte(now()->endOfDay());
+                $status = $scheduledCancellation ? 'Cancelled' : 'Expired';
+                $subscription->update(['status' => $status, 'cancelled_at' => $scheduledCancellation ? now() : $subscription->cancelled_at]);
+                $this->audit('Subscription '.strtolower($status).' for business #'.$subscription->business_id, $request, 'Subscriptions', $subscription->id, $old, ['status' => $status, 'ends_at' => $old['ends_at']]);
+                $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Subscription '.ucfirst($status), $scheduledCancellation ? 'Your scheduled subscription cancellation is now complete.' : 'Your '.app(PlatformSettingsService::class)->name().' subscription has expired. Renew a plan to restore full access.', $subscription->business_id));
             });
 
         Subscription::where('status', 'Active')
@@ -827,7 +858,6 @@ class AdminController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100', Rule::unique('subscription_plans', 'name')->ignore($plan?->id)],
-            'short_description' => ['nullable', 'string', 'max:255'],
             'price' => ['nullable', 'integer', 'min:0'],
             'monthly_price' => ['nullable', 'integer', 'min:0'],
             'yearly_price' => ['nullable', 'integer', 'min:0'],
@@ -835,8 +865,6 @@ class AdminController extends Controller
             'product_limit' => ['required', 'integer', 'min:0'],
             'staff_limit' => ['required', 'integer', 'min:0'],
             'order_limit' => ['required', 'integer', 'min:0'],
-            'included_modules' => ['nullable', 'string', 'max:5000'],
-            'features' => ['nullable', 'string', 'max:5000'],
             'is_public' => ['nullable', 'boolean'],
             'is_recommended' => ['nullable', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
@@ -850,12 +878,6 @@ class AdminController extends Controller
         }
         $data['trial_days'] = $data['trial_days'] ?? $plan?->trial_days ?? 14;
         unset($data['price']);
-        $data['included_modules'] = $request->has('included_modules')
-            ? $this->lineList($data['included_modules'] ?? null)
-            : ($plan?->included_modules ?? []);
-        $data['features'] = $request->has('features')
-            ? $this->lineList($data['features'] ?? null)
-            : ($plan?->features ?? []);
         $data['is_public'] = $request->has('is_public') ? $request->boolean('is_public') : ($plan?->is_public ?? true);
         $data['is_recommended'] = $request->has('is_recommended') ? $request->boolean('is_recommended') : ($plan?->is_recommended ?? false);
         $data['sort_order'] = $data['sort_order'] ?? 0;
@@ -1088,14 +1110,49 @@ class AdminController extends Controller
 
     public function settings()
     {
-        return view('super-admin.settings', ['settings' => PlatformSetting::firstOrCreate([]), 'plans' => SubscriptionPlan::all()]);
+        return view('super-admin.settings', ['settings' => app(PlatformSettingsService::class)->current()]);
     }
 
     public function updateSettings(Request $request)
     {
-        $data = $request->validate(['company_name' => ['required'], 'support_email' => ['nullable','email'], 'support_phone' => ['nullable','regex:/^\\+[1-9]\\d{7,14}$/'], 'trial_days' => ['required','integer','min:0'], 'default_plan_id' => ['nullable','exists:subscription_plans,id'], 'max_upload_size' => ['required','integer','min:1'], 'logo' => ['nullable','image','mimes:jpg,jpeg,png,webp','max:2048']]);
-        if ($request->hasFile('logo')) $data['logo'] = $request->file('logo')->store('platform', 'public');
-        PlatformSetting::firstOrCreate([])->update($data);
+        $data = $request->validate([
+            'company_name' => ['required', 'string', 'max:255'],
+            'support_email' => ['nullable', 'email'],
+            'support_phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
+            'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ], [
+            'logo.mimes' => 'Please upload a JPG, JPEG, PNG, or WebP image.',
+            'logo.max' => 'Platform logo must not exceed 2MB.',
+        ]);
+
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $oldLogo = $settings->logo;
+        $newLogo = null;
+
+        try {
+            if ($request->hasFile('logo')) {
+                $newLogo = $request->file('logo')->store('platform', 'public');
+                $data['logo'] = $newLogo;
+            }
+
+            DB::transaction(function () use ($settings, $data): void {
+                $settings->update($data);
+            });
+        } catch (\Throwable $exception) {
+            if ($newLogo) {
+                Storage::disk('public')->delete($newLogo);
+            }
+
+            throw $exception;
+        }
+
+        if ($newLogo && $oldLogo && $oldLogo !== $newLogo) {
+            $oldLogoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim($oldLogo, '/'));
+            Storage::disk('public')->delete($oldLogoPath);
+        }
+
+        $settingsService->forget();
         $this->audit('Settings updated', $request);
         return back()->with('success', 'Settings updated.');
     }

@@ -17,12 +17,26 @@ class BusinessNotificationController extends Controller
         $user = $request->user();
         $this->ensureAccess($request);
 
-        $query = $user->notifications();
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', 'in:all,read,unread'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+        ]);
+
+        $query = $user->notifications()
+            ->when($filters['search'] ?? null, fn ($query, $search) => $query->where('data', 'like', '%'.$search.'%'))
+            ->when($filters['category'] ?? null, fn ($query, $category) => $query->whereJsonContains('data->category', $category))
+            ->when(($filters['status'] ?? null) === 'read', fn ($query) => $query->whereNotNull('read_at'))
+            ->when(($filters['status'] ?? null) === 'unread', fn ($query) => $query->whereNull('read_at'))
+            ->when($filters['date_from'] ?? null, fn ($query, $date) => $query->whereDate('created_at', '>=', $date))
+            ->when($filters['date_to'] ?? null, fn ($query, $date) => $query->whereDate('created_at', '<=', $date));
         if ($user->role === 'super_admin') {
             $query->where('data', 'not like', '%business_activity%');
         }
 
-        $notifications = $query->latest()->paginate(12)->withQueryString();
+        $notifications = $query->latest()->paginate(10)->withQueryString();
         $profileRequests = collect();
         $emailChangeRequests = collect();
         $canApproveEmailChanges = $user->business_id
@@ -53,7 +67,7 @@ class BusinessNotificationController extends Controller
                 ->keyBy('id');
         }
 
-        return view('auth.notifications', compact('notifications', 'profileRequests', 'emailChangeRequests', 'canApproveEmailChanges'));
+        return view('auth.notifications', compact('notifications', 'profileRequests', 'emailChangeRequests', 'canApproveEmailChanges', 'filters'));
     }
 
     public function markRead(Request $request, string $notification)

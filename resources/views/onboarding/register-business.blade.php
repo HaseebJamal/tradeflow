@@ -182,7 +182,7 @@
                                             </label>
                                         </div>
                                     @empty
-                                        <div class="col-12"><div class="alert alert-warning mb-0">No public plan is available right now. Please contact TradeFlow support.</div></div>
+                                        <div class="col-12"><div class="alert alert-warning mb-0">No public plan is available right now. Please contact {{ $platformSettings->company_name }} support.</div></div>
                                     @endforelse
                                 </div>
                                 @endif

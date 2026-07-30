@@ -27,7 +27,7 @@
         <div class="d-flex justify-content-between align-items-center mb-2"><strong>Filter Companies</strong><small class="tf-muted">Current time: <time data-current-time></time></small></div>
         <form method="GET" action="{{ route('admin.companies.index') }}" class="row g-2 align-items-end">
             <input type="hidden" name="filters_applied" value="1">
-            <div class="col-md-3"><label class="form-label">Search</label><input name="search" class="form-control" value="{{ $filters['search'] ?? '' }}" placeholder="Company, owner, or phone"></div>
+            <div class="col-md-3"><label class="form-label">Search</label><input name="search" class="form-control" value="{{ $filters['search'] ?? '' }}" placeholder="Company, owner, email, phone, or registration no."></div>
             <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All statuses</option>@foreach(['pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected', 'suspended' => 'Suspended', 'archived' => 'Archived'] as $value => $label)<option value="{{ $value }}" @selected(($statusFilter ?? '') === $value)>{{ $label }}</option>@endforeach</select></div>
             <div class="col-md-2"><label class="form-label">Business Type</label><select name="business_type" class="form-select"><option value="">All types</option>@foreach($businessTypes as $type)<option value="{{ $type }}" @selected(($filters['business_type'] ?? '') === $type)>{{ $type }}</option>@endforeach</select></div>
             <div class="col-md-2"><label class="form-label">City</label><input name="city" class="form-control" value="{{ $filters['city'] ?? '' }}" placeholder="Any city"></div>
@@ -41,7 +41,7 @@
     </div>
 
     <x-table class="admin-company-table">
-        <thead><tr><th>Company</th><th>Plan</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+        <thead><tr><th>Company</th><th>Owner Name</th><th>Plan</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
         <tbody>
             @forelse($companies as $company)
                 @php
@@ -49,6 +49,7 @@
                 @endphp
                 <tr>
                     <td><strong>{{ $company->business_name }}</strong></td>
+                    <td>{{ $company->owner?->name ?: 'Owner not assigned' }}</td>
                     <td>{{ $company->subscription?->plan?->name ?? 'No plan' }}</td>
                     <td><span class="tf-badge {{ $companyStatus === 'approved' ? 'tf-badge-success' : ($companyStatus === 'pending' ? 'tf-badge-warning' : 'tf-badge-danger') }}">{{ $company->status }}</span></td>
                     <td class="text-end">
@@ -98,11 +99,14 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="4" class="text-center tf-muted py-4">No companies found.</td></tr>
+                <tr><td colspan="5" class="text-center tf-muted py-4">No companies found.</td></tr>
             @endforelse
         </tbody>
     </x-table>
-    <div class="mt-3">{{ $companies->links() }}</div>
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+        <small class="tf-muted">Showing {{ $companies->firstItem() ?? 0 }} to {{ $companies->lastItem() ?? 0 }} of {{ $companies->total() }} results</small>
+        {{ $companies->links() }}
+    </div>
 
     @foreach($companies as $company)
         @php
@@ -111,8 +115,8 @@
             $verificationDocuments = $company->documents->keyBy('document_type');
             $documentLabels = ['cnic_image' => 'CNIC', 'business_document' => 'Business Document', 'shop_image' => 'Shop Image'];
         @endphp
-        <div class="modal fade" id="company-details-{{ $company->id }}" tabindex="-1" aria-labelledby="company-details-title-{{ $company->id }}" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal fade tf-company-details-modal" id="company-details-{{ $company->id }}" tabindex="-1" aria-labelledby="company-details-title-{{ $company->id }}" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-scrollable">
                 <div class="modal-content">
                     <div class="modal-header">
                         <div><h2 class="modal-title fs-5" id="company-details-title-{{ $company->id }}">{{ $company->business_name }}</h2><p class="tf-muted small mb-0">Company details</p></div>
@@ -157,14 +161,7 @@
                             <div class="row g-3">
                                 @foreach($documentLabels as $documentType => $label)
                                     @php($document = $verificationDocuments->get($documentType))
-                                    <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block mb-1">{{ $label }}</small>
-                                        @if($document?->file_path)
-                                            <span class="tf-badge {{ strtolower((string) $document->status) === 'approved' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ ucfirst($document->status ?: 'Pending') }}</span>
-                                            <a href="{{ asset('storage/'.$document->file_path) }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary d-block mt-2">Preview</a>
-                                        @else
-                                            <span class="tf-muted">Not uploaded</span>
-                                        @endif
-                                    </div></div>
+                                    <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block mb-2">{{ $label }}</small><x-admin-document-verification :company="$company" :document="$document" :label="$label" /></div></div>
                                 @endforeach
                             </div>
                         </section>

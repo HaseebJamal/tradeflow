@@ -15,6 +15,10 @@
     $sidebarLogoPath = preg_replace('#^(?:public/|storage/)#', '', $sidebarLogoPath);
     $hasSidebarBusinessLogo = filled($sidebarLogoPath)
         && \Illuminate\Support\Facades\Storage::disk('public')->exists($sidebarLogoPath);
+    $sidebarPlatformLogoPath = ltrim((string) ($platformSettings?->logo ?? ''), '/');
+    $sidebarPlatformLogoPath = preg_replace('#^(?:public/|storage/)#', '', $sidebarPlatformLogoPath);
+    $hasSidebarPlatformLogo = filled($sidebarPlatformLogoPath)
+        && \Illuminate\Support\Facades\Storage::disk('public')->exists($sidebarPlatformLogoPath);
 
     $items = $area === 'admin'
         ? []
@@ -171,6 +175,8 @@
             <span class="tf-brand-mark bg-blue tf-sidebar-company-mark">
                 @if($hasSidebarBusinessLogo)
                     <img src="{{ asset('storage/'.$sidebarLogoPath) }}" alt="{{ $sidebarBusinessName }} logo">
+                @elseif($hasSidebarPlatformLogo)
+                    <img src="{{ asset('storage/'.$sidebarPlatformLogoPath) }}" alt="{{ $platformSettings->company_name }} logo" class="tf-brand-logo">
                 @else
                     <i class="bi bi-box-seam"></i>
                 @endif

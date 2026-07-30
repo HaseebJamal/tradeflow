@@ -27,7 +27,13 @@ class EnsureRouteRecordContext
                 continue;
             }
 
-            $this->ensureBusinessOwnership($record, $user->business_id);
+            // Admin routes are already restricted to Super Admin users. They
+            // deliberately operate across businesses, so applying the signed
+            // in user's business_id here makes valid review actions look like
+            // tampered row actions. Submitted route identifiers remain strict.
+            if ($user->role !== 'super_admin') {
+                $this->ensureBusinessOwnership($record, $user->business_id);
+            }
             $this->ensureSubmittedIdentifierMatches($request, (string) $name, $record);
         }
 

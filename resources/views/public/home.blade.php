@@ -64,7 +64,7 @@
 
 <section class="tf-section bg-white">
     <div class="container">
-        <div class="text-center mb-5"><h2 class="fw-bold">How TradeFlow Works</h2><p class="tf-muted">A practical path from registration to daily operations.</p></div>
+        <div class="text-center mb-5"><h2 class="fw-bold">How {{ $platformSettings->company_name }} Works</h2><p class="tf-muted">A practical path from registration to daily operations.</p></div>
         <div class="row g-4">
             @foreach(['Register and verify your business', 'Add products, prices, and stock', 'Receive and manage retailer orders', 'Record payments, khata, and delivery'] as $index => $step)
             <div class="col-md-3"><div class="tf-card p-4 h-100"><div class="h2 text-blue fw-bold">0{{ $index + 1 }}</div><h3 class="h6 mb-0">{{ $step }}</h3></div></div>
@@ -121,13 +121,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="col-lg-7">
                 <div class="accordion tf-faq" id="faqAccordion">
                     @foreach([
-                        'Does TradeFlow connect directly with JazzCash or Easypaisa?' => 'No. In this MVP, JazzCash and Easypaisa are recorded manually. Businesses can save payment method, amount, date, reference number, and proof image without using paid APIs.',
-                        'Can multiple businesses use the same TradeFlow platform?' => 'Yes. TradeFlow is designed as a multi-business SaaS platform where each approved business can manage its own products, orders, customers, payments, and reports separately.',
+                        'Does '.$platformSettings->company_name.' connect directly with JazzCash or Easypaisa?' => 'No. In this MVP, JazzCash and Easypaisa are recorded manually. Businesses can save payment method, amount, date, reference number, and proof image without using paid APIs.',
+                        'Can multiple businesses use the same '.$platformSettings->company_name.' platform?' => 'Yes. '.$platformSettings->company_name.' is designed as a multi-business SaaS platform where each approved business can manage its own products, orders, customers, payments, and reports separately.',
                         'Can Super Admin see business reports?' => 'Yes. Super Admin can review business-level reports for monitoring, verification, and support, but cannot directly change business products, orders, inventory, or khata records.',
                         'Can staff have limited access?' => 'Yes. Business owners can create custom roles and choose the exact business permissions each staff member receives.',
                         'Is business approval manual?' => 'Yes. New businesses submit their details and documents. Super Admin reviews them and approves, rejects, or suspends access.',
-                        'Can invoices and reports be exported?' => 'Yes. TradeFlow can generate printable invoices and PDF reports using DomPDF without using any paid PDF service.',
-                        'Does TradeFlow require external paid APIs?' => 'No. The MVP works with Laravel, MySQL, Blade, Bootstrap, and local/manual records only.',
+                        'Can invoices and reports be exported?' => 'Yes. '.$platformSettings->company_name.' can generate printable invoices and PDF reports using DomPDF without using any paid PDF service.',
+                        'Does '.$platformSettings->company_name.' require external paid APIs?' => 'No. The MVP works with Laravel, MySQL, Blade, Bootstrap, and local/manual records only.',
                     ] as $q => $a)
                     <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#faq{{ $loop->index }}">{{ $q }}</button></h3><div id="faq{{ $loop->index }}" class="accordion-collapse collapse" data-bs-parent="#faqAccordion"><div class="accordion-body tf-muted">{{ $a }}</div></div></div>
                     @endforeach
@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <section id="about" class="tf-section">
     <div class="container">
         <div class="row align-items-center g-5">
-            <div class="col-lg-5"><h2 class="fw-bold">Built for Wholesale Businesses That Run on Trust</h2><p class="tf-muted">TradeFlow helps manufacturers, distributors, wholesalers, retailers, accountants, and delivery teams manage daily operations from one secure Laravel-based platform. It is designed for local Pakistani businesses and can also support international wholesale workflows.</p></div>
+            <div class="col-lg-5"><h2 class="fw-bold">Built for Wholesale Businesses That Run on Trust</h2><p class="tf-muted">{{ $platformSettings->company_name }} helps manufacturers, distributors, wholesalers, retailers, accountants, and delivery teams manage daily operations from one secure Laravel-based platform. It is designed for local Pakistani businesses and can also support international wholesale workflows.</p></div>
             <div class="col-lg-7"><div class="row g-4">@foreach([['Business Verification','bi-shield-check'],['Manual Payment Tracking','bi-cash-stack'],['Role-Based Dashboards','bi-people']] as [$title,$icon])<div class="col-md-4"><div class="tf-card tf-feature-card p-4 h-100"><div class="tf-icon-tile bg-blue text-white mb-3"><i class="bi {{ $icon }}"></i></div><h3 class="h6">{{ $title }}</h3><p class="tf-muted mb-0">Simple, secure workflows for real wholesale teams.</p></div></div>@endforeach</div></div>
         </div>
     </div>

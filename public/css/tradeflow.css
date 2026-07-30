@@ -338,8 +338,71 @@ a:hover {
     min-width: 260px;
 }
 
+.tf-topbar-actions {
+    flex: 0 0 auto;
+}
+
+.tf-topbar-actions > .dropdown,
+.tf-topbar-actions .tf-user-dropdown-toggle,
+.tf-topbar-actions .tf-notification-dropdown > .btn {
+    flex: 0 0 auto;
+}
+
+.tf-notification-dropdown > .btn {
+    min-height: 40px;
+    min-width: 42px;
+}
+
+/* Keep the unread count within the bell so it never overlaps the user menu. */
+.tf-notification-dropdown > .btn > .badge {
+    left: auto !important;
+    right: 0.15rem;
+    top: 0.15rem;
+    transform: none !important;
+    z-index: 1;
+}
+
 .tf-notification-dropdown {
     position: relative;
+}
+
+.tf-brand-logo {
+    height: 32px;
+    max-width: 44px;
+    object-fit: contain;
+    width: auto;
+}
+
+.tf-brand-mark .tf-brand-logo {
+    height: 100%;
+    max-width: 100%;
+    width: 100%;
+}
+
+/* Expanded request details stay attached to their compact notification row. */
+.tf-notification-table-detail {
+    background: var(--tf-card);
+    border: 1px solid var(--tf-border);
+    border-radius: 6px;
+    box-shadow: 0 0.5rem 1rem rgb(15 23 42 / 12%);
+    margin-top: 0.35rem;
+    min-width: min(520px, calc(100vw - 3rem));
+    padding: 0.75rem;
+    position: absolute;
+    right: 0;
+    z-index: 5;
+}
+
+.tf-card details {
+    position: relative;
+}
+
+@media (max-width: 575.98px) {
+    .tf-notification-table-detail {
+        left: 0;
+        min-width: min(320px, calc(100vw - 2rem));
+        right: auto;
+    }
 }
 .tf-notification-menu {
     left: auto;
@@ -417,6 +480,51 @@ a:hover {
     padding: 0.5rem 0.75rem;
     white-space: nowrap;
 }
+
+/* Company details are read-only reference data, not dashboard metrics. */
+.tf-company-details-modal .modal-body .border.rounded {
+    padding: 0.5rem !important;
+}
+
+.tf-company-details-modal .modal-body section .border > strong {
+    font-weight: 400;
+}
+
+.tf-company-details-modal .modal-body section:first-child .row > :first-child .border > strong,
+.tf-company-details-modal .modal-body section:nth-child(2) .row > :first-child .border > strong {
+    font-weight: 600;
+}
+
+.detail-value {
+    font-weight: 400;
+    overflow-wrap: anywhere;
+}
+
+.detail-value.is-primary {
+    font-weight: 700;
+}
+
+.tf-company-details-page .border > strong {
+    display: block;
+    font-weight: 400;
+    overflow-wrap: anywhere;
+}
+
+.tf-company-details-page .tf-company-overview .row > :nth-child(1) .border > strong,
+.tf-company-details-page .tf-company-overview .row > :nth-child(2) .border > strong {
+    font-weight: 700;
+}
+
+.tf-company-details-page .tf-table td {
+    font-size: 0.9rem;
+    font-weight: 400;
+    vertical-align: middle;
+}
+
+.tf-document-preview {
+    height: min(65vh, 720px);
+}
+
 .tf-notification-item--compact .bi {
     flex: 0 0 auto;
     font-size: 0.9rem;
@@ -1136,10 +1244,10 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
 /* Keep the subscription plan forms inside the viewport without affecting other modals. */
 #createSubscriptionPlanModal .modal-dialog,
 [id^="editPlanModal-"] .modal-dialog {
-    height: calc(100vh - 40px);
-    margin: 20px auto;
-    max-height: calc(100vh - 40px);
-    max-width: min(1140px, calc(100vw - 2rem));
+    height: min(760px, calc(100vh - 2rem));
+    margin: 1rem auto;
+    max-height: calc(100vh - 2rem);
+    max-width: min(820px, calc(100vw - 2rem));
 }
 
 #createSubscriptionPlanModal .modal-content,
@@ -1171,8 +1279,93 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
 [id^="editPlanModal-"] .modal-body {
     flex: 1 1 auto;
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
+    padding: 1.25rem;
     overscroll-behavior: contain;
+}
+
+/* The plan forms use Bootstrap's row directly on the modal body. Keep its
+   gutters inside the scroll area so controls never extend beyond the dialog. */
+#createSubscriptionPlanModal .modal-body.row,
+[id^="editPlanModal-"] .modal-body.row {
+    margin-left: 0;
+    margin-right: 0;
+    width: 100%;
+}
+
+/* Keep the existing edit-plan field order compact. */
+@media (min-width: 768px) {
+    [id^="editPlanModal-"] .modal-body > :nth-child(1) {
+        flex: 0 0 auto;
+        width: 33.333333%;
+    }
+
+    [id^="editPlanModal-"] .modal-body > :nth-child(2) {
+        flex: 0 0 auto;
+        width: 16.666667%;
+    }
+
+    [id^="editPlanModal-"] .modal-body > :nth-child(3),
+    [id^="editPlanModal-"] .modal-body > :nth-child(11),
+    [id^="editPlanModal-"] .modal-body > :nth-child(12) {
+        flex: 0 0 auto;
+        width: 50%;
+    }
+}
+
+/* The create form is intentionally concise: four controls per desktop row,
+   two per tablet row, and a single column on narrow screens. */
+#createSubscriptionPlanModal .modal-dialog {
+    height: auto;
+    margin: 1rem auto;
+    max-height: calc(100vh - 2rem);
+    max-width: min(740px, calc(100vw - 2rem));
+}
+
+#createSubscriptionPlanModal .modal-content,
+#createSubscriptionPlanModal form {
+    height: auto;
+    max-height: calc(100vh - 2rem);
+}
+
+#createSubscriptionPlanModal form {
+    flex: 0 1 auto;
+}
+
+#createSubscriptionPlanModal .tf-create-plan-form {
+    align-content: start;
+    --bs-gutter-x: 0.75rem;
+    --bs-gutter-y: 0.75rem;
+    max-height: calc(100vh - 150px);
+    padding: 0.75rem 1rem;
+}
+
+#createSubscriptionPlanModal .tf-create-plan-form .form-label {
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+}
+
+#createSubscriptionPlanModal .tf-create-plan-form .form-control,
+#createSubscriptionPlanModal .tf-create-plan-form .form-select {
+    min-height: 36px;
+    padding-bottom: 0.35rem;
+    padding-top: 0.35rem;
+}
+
+#createSubscriptionPlanModal .tf-create-plan-form .ts-control {
+    min-height: 36px;
+    padding-bottom: 0.35rem;
+    padding-top: 0.35rem;
+}
+
+#createSubscriptionPlanModal .tf-create-plan-options {
+    gap: 1.25rem;
+}
+
+#createSubscriptionPlanModal .modal-header,
+#createSubscriptionPlanModal .modal-footer {
+    padding: 0.75rem 1rem;
 }
 
 #createSubscriptionPlanModal .modal-footer,
@@ -1529,6 +1722,26 @@ body.tf-company-delete-modal-open {
     padding: 0.65rem 0.8rem;
 }
 
+/* Keep the subscription-management Tom Select menus inside the Bootstrap
+   modal focus stack instead of letting a body-level portal sit behind it. */
+#manageSubscriptionModal .modal-content,
+#planChangeRequestModal .modal-content {
+    overflow: visible;
+}
+
+#manageSubscriptionModal .ts-dropdown,
+#planChangeRequestModal .ts-dropdown {
+    max-height: min(260px, calc(100vh - 9rem));
+    overflow: hidden;
+    z-index: 1065 !important;
+}
+
+#manageSubscriptionModal .ts-dropdown-content,
+#planChangeRequestModal .ts-dropdown-content {
+    max-height: min(212px, calc(100vh - 12rem));
+    overflow-y: auto;
+}
+
 /* Compact order header fields stay aligned when Tom Select wraps the customer control. */
 .order-details-panel {
     background: #f8fafc;
@@ -1632,6 +1845,80 @@ body.tf-company-delete-modal-open {
     font-size: 0.78rem;
     letter-spacing: 0.02em;
     text-transform: uppercase;
+}
+
+/* Keep the cross-module Super Admin request queue compact and readable. */
+.tf-business-request-table .tf-table {
+    min-width: 1080px;
+    font-size: 0.9rem;
+}
+
+.tf-business-request-table .tf-table th {
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.tf-business-request-table .tf-table td {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    vertical-align: middle;
+}
+
+.tf-business-request-table .tf-request-summary {
+    min-width: 210px;
+    max-width: 260px;
+    white-space: normal;
+}
+
+#businessRequestDetailsModal .table td,
+#businessRequestDetailsModal .table th {
+    font-size: 0.9rem;
+    vertical-align: top;
+}
+
+#businessRequestDetailsModal .tf-request-meta dt {
+    color: var(--tf-muted);
+    font-weight: 500;
+}
+
+/* Subscription plan forms share a compact modal treatment for create and edit. */
+.tf-plan-modal-dialog,
+.modal[id^="editPlanModal-"] .modal-dialog {
+    max-width: 750px;
+}
+
+.tf-plan-modal-body,
+.modal[id^="editPlanModal-"] .modal-body {
+    padding: 0.85rem 1rem;
+}
+
+.modal[id^="editPlanModal-"] .modal-body.row {
+    margin: 0;
+}
+
+.tf-plan-modal-body .form-label,
+.modal[id^="editPlanModal-"] .form-label {
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.tf-plan-modal-body .form-control,
+.tf-plan-modal-body .form-select,
+.modal[id^="editPlanModal-"] .form-control,
+.modal[id^="editPlanModal-"] .form-select {
+    min-height: 38px;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+}
+
+.tf-plan-modal-dialog .modal-header,
+.tf-plan-modal-dialog .modal-footer,
+.modal[id^="editPlanModal-"] .modal-header,
+.modal[id^="editPlanModal-"] .modal-footer {
+    padding: 0.75rem 1rem;
 }
 
 .tf-upload {

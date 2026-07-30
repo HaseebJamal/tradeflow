@@ -28,6 +28,7 @@ use App\Models\PermissionDefinition;
 use App\Notifications\CompanyRegistrationNotification;
 use App\Notifications\BusinessDetailsChangeDecisionNotification;
 use App\Notifications\BusinessDetailsUpdatedNotification;
+use App\Notifications\BusinessDocumentVerificationNotification;
 use App\Services\AccountingService;
 use App\Services\BusinessWorkspaceAccessService;
 use App\Services\BusinessDocumentFooterService;
@@ -76,8 +77,10 @@ class CompanyController extends Controller
             $search = $filters['search'];
             $query->where(fn ($q) => $q->where('business_name', 'like', "%{$search}%")
                 ->orWhere('phone', 'like', "%{$search}%")
-                ->orWhere('city', 'like', "%{$search}%")
-                ->orWhereHas('owner', fn ($owner) => $owner->where('name', 'like', "%{$search}%")->orWhere('phone', 'like', "%{$search}%")));
+                ->orWhere('registration_number', 'like', "%{$search}%")
+                ->orWhereHas('owner', fn ($owner) => $owner
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")));
         }
         $query
             ->when($filters['business_type'] ?? null, fn ($q, $value) => $q->where('business_type', $value))
@@ -94,7 +97,7 @@ class CompanyController extends Controller
         };
 
         return view('super-admin.companies.index', [
-            'companies' => $query->paginate(12)->withQueryString(),
+            'companies' => $query->paginate(10)->withQueryString(),
             'statusFilter' => $status,
             'businessTypes' => collect(['Manufacturer', 'Distributor', 'Wholesaler', 'Retail Shop', 'Other'])
                 ->merge(Business::query()->whereNotNull('business_type')->distinct()->pluck('business_type'))
@@ -194,7 +197,7 @@ class CompanyController extends Controller
                     $company->update(['logo' => $request->file('company_logo')->store('business-logos', 'public')]);
                 }
                 if ($request->hasFile('business_document')) {
-                    BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public')]);
+                    BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public'), 'status' => 'Pending Verification']);
                 }
 
                 app(AccountingService::class)->ensureDefaultAccounts($company->id);
@@ -433,7 +436,7 @@ class CompanyController extends Controller
                 $company->update(['logo' => $request->file('company_logo')->store('business-logos', 'public')]);
             }
             if ($request->hasFile('business_document')) {
-                BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public')]);
+                BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public'), 'status' => 'Pending Verification']);
             }
         });
         } catch (Throwable $exception) {
@@ -524,12 +527,12 @@ class CompanyController extends Controller
     public function rejectDetailChangeRequest(Request $request, BusinessDetailChangeRequest $changeRequest)
     {
         abort_unless($changeRequest->status === 'Pending', 404);
-        $data = $request->validate(['review_note' => ['required', 'string', 'max:2000']]);
+        $data = $request->validate(['review_note' => ['nullable', 'string', 'max:2000']]);
         $changeRequest->update([
             'status' => 'Rejected',
             'reviewed_by' => auth()->id(),
             'reviewed_at' => now(),
-            'review_note' => $data['review_note'],
+            'review_note' => $data['review_note'] ?? null,
         ]);
 
         $changeRequest->load('business');
@@ -537,6 +540,89 @@ class CompanyController extends Controller
         $changeRequest->business->owner?->notify(new BusinessDetailsChangeDecisionNotification($changeRequest));
 
         return back()->with('success', 'Business-detail change request rejected. The business owner has been notified.');
+    }
+
+    public function verifyDocument(Request $request, Business $company, BusinessDocument $document)
+    {
+        abort_unless($document->business_id === $company->id, 404);
+
+        $data = $request->validate([
+            'decision' => ['required', Rule::in(['approve', 'reject', 'request_reupload'])],
+            'reason' => ['nullable', 'string', 'max:2000', 'required_unless:decision,approve'],
+        ], [
+            'reason.required_unless' => 'Provide a reason before rejecting a document or requesting a re-upload.',
+        ]);
+
+        $document = DB::transaction(function () use ($document, $data): BusinessDocument {
+            $lockedDocument = BusinessDocument::whereKey($document->id)
+                ->where('business_id', $document->business_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $currentStatus = match (strtolower(trim((string) $lockedDocument->status))) {
+                'pending', 'pending verification' => 'Pending Verification',
+                'verified' => 'Verified',
+                'rejected' => 'Rejected',
+                're-upload requested' => 'Re-upload Requested',
+                default => $lockedDocument->status ?: 'Pending Verification',
+            };
+            $allowedDecisions = match ($currentStatus) {
+                'Pending Verification' => ['approve', 'reject', 'request_reupload'],
+                'Rejected' => ['request_reupload'],
+                default => [],
+            };
+
+            if (!in_array($data['decision'], $allowedDecisions, true)) {
+                throw ValidationException::withMessages([
+                    'decision' => 'This verification action is not available for the document’s current status.',
+                ]);
+            }
+
+            $updates = match ($data['decision']) {
+                'approve' => [
+                    'status' => 'Verified',
+                    'verified_by' => auth()->id(),
+                    'verified_at' => now(),
+                    'rejected_by' => null,
+                    'rejected_at' => null,
+                    'rejection_reason' => null,
+                    'reupload_requested_by' => null,
+                    'reupload_requested_at' => null,
+                    'reupload_reason' => null,
+                ],
+                'reject' => [
+                    'status' => 'Rejected',
+                    'rejected_by' => auth()->id(),
+                    'rejected_at' => now(),
+                    'rejection_reason' => $data['reason'],
+                ],
+                default => [
+                    'status' => 'Re-upload Requested',
+                    'reupload_requested_by' => auth()->id(),
+                    'reupload_requested_at' => now(),
+                    'reupload_reason' => $data['reason'],
+                ],
+            };
+
+            $lockedDocument->update($updates);
+
+            return $lockedDocument->fresh();
+        });
+
+        $action = match ($data['decision']) {
+            'approve' => 'document verified',
+            'reject' => 'document rejected',
+            default => 'document re-upload requested',
+        };
+        $this->audit($request, $action, $company, null, [
+            'document_type' => $document->document_type,
+            'document_status' => $document->status,
+            'reason_provided' => filled($data['reason'] ?? null),
+        ]);
+        $company->loadMissing('owner');
+        $company->owner?->notify(new BusinessDocumentVerificationNotification($document));
+
+        return back()->with('success', 'Document verification status updated.');
     }
 
     public function updateStatus(Request $request, Business $company)
@@ -593,6 +679,10 @@ class CompanyController extends Controller
             throw ValidationException::withMessages(['status' => 'Select or confirm a subscription plan before approving this business.']);
         }
 
+        if ($oldStatus === 'pending' && $newStatus === 'approved' && ! $this->hasVerifiedRegistrationDocuments($company)) {
+            throw ValidationException::withMessages(['status' => 'Verify all required registration documents before approving this business.']);
+        }
+
         if ($newStatus === 'rejected' && blank($data['admin_note'] ?? null)) {
             throw ValidationException::withMessages(['admin_note' => 'Provide a reason when rejecting a registration.']);
         }
@@ -619,6 +709,23 @@ class CompanyController extends Controller
         $this->audit($request, $auditAction, $company, ['status' => $oldStatus], ['status' => $newStatus, 'note' => $data['admin_note'] ?? null]);
 
         return back()->with('success', 'Company status updated.');
+    }
+
+    private function hasVerifiedRegistrationDocuments(Business $company): bool
+    {
+        $documents = $company->documents()
+            ->whereIn('document_type', ['cnic_image', 'business_document', 'shop_image'])
+            ->get()
+            ->keyBy('document_type');
+
+        // Super Admin-created companies can legitimately have no registration
+        // uploads. Public registrations always have all three documents.
+        if ($documents->isEmpty()) {
+            return true;
+        }
+
+        return collect(['cnic_image', 'business_document', 'shop_image'])
+            ->every(fn (string $type) => $documents->get($type)?->status === 'Verified');
     }
 
     private function startPendingSubscriptionTrial(Business $company): void

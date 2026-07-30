@@ -24,7 +24,7 @@ class CompanyPermissionsUpdatedNotification extends Notification
         return [
             'category' => 'company_permission',
             'title' => 'Company Permissions Updated',
-            'message' => 'TradeFlow access permissions were updated for '.$this->company->business_name.'.',
+            'message' => app(\App\Services\PlatformSettingsService::class)->name().' access permissions were updated for '.$this->company->business_name.'.',
             'business_id' => $this->company->id,
         ];
     }

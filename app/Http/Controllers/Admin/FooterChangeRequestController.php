@@ -42,10 +42,6 @@ class FooterChangeRequestController extends Controller
             'decision' => ['required', Rule::in(['Approved', 'Rejected', 'Changes Requested'])],
             'review_note' => ['nullable', 'string', 'max:2000'],
         ]);
-        if (in_array($data['decision'], ['Rejected', 'Changes Requested'], true) && blank($data['review_note'] ?? null)) {
-            throw ValidationException::withMessages(['review_note' => 'Provide a reason for this decision.']);
-        }
-
         $updated = DB::transaction(function () use ($footerChangeRequest, $data, $request) {
             $record = BusinessFooterChangeRequest::lockForUpdate()->findOrFail($footerChangeRequest->id);
             if ($record->status !== 'Pending') {

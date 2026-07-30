@@ -102,8 +102,8 @@
                 <div class="col-md-2"><label class="form-label">Billing Cycle</label><select name="billing_cycle" class="form-select" data-subscription-cycle><option value="Monthly">Monthly</option><option value="Yearly">Yearly</option></select></div>
                 <div class="col-md-2"><label class="form-label">Amount</label><input name="amount" type="number" min="0" step="1" class="form-control" value="{{ old('amount') }}" placeholder="Plan price" data-subscription-amount></div>
                 <div class="col-md-3"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select">@foreach(['Cash','Bank Transfer','JazzCash Manual','Easypaisa Manual'] as $method)<option value="{{ $method }}" @selected(old('payment_method', 'Cash') === $method)>{{ $method }}</option>@endforeach</select></div>
-                <div class="col-md-3"><label class="form-label">Start Date</label><input name="starts_at" type="date" class="form-control" value="{{ old('starts_at', now()->toDateString()) }}" required></div>
-                <div class="col-md-3"><label class="form-label">End Date</label><input name="ends_at" type="date" class="form-control" value="{{ old('ends_at', now()->addMonth()->toDateString()) }}" required></div>
+                <div class="col-md-3"><label class="form-label">Start Date</label><input name="starts_at" type="date" class="form-control" value="{{ old('starts_at', now()->toDateString()) }}" data-subscription-start required></div>
+                <div class="col-md-3"><label class="form-label">End Date</label><input name="ends_at" type="date" class="form-control" value="{{ old('ends_at', now()->addMonth()->toDateString()) }}" data-subscription-end required></div>
                 <div class="col-md-3"><label class="form-label">Status</label><select name="status" class="form-select"><option value="Pending">Pending</option><option value="Trial">Trial</option><option value="Active">Active</option><option value="Suspended">Suspended</option></select></div>
                 <div class="col-md-3 d-flex align-items-end"><button class="btn btn-tf-primary w-100">Save Subscription</button></div>
             </form>
@@ -163,7 +163,24 @@
     </section>
 </div>
 
-<div class="modal fade" id="createSubscriptionPlanModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><form method="POST" action="{{ route('admin.subscription-plans.store') }}">@csrf<div class="modal-header"><h2 class="modal-title h5">Create Plan</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body row g-3"><div class="col-md-7"><label class="form-label">Plan Name</label><input name="name" class="form-control" maxlength="100" required></div><div class="col-md-5"><label class="form-label">Status</label><select name="status" class="form-select"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div><div class="col-12"><label class="form-label">Short Description</label><input name="short_description" class="form-control" maxlength="255" placeholder="Who this plan is for"></div><div class="col-md-3"><label class="form-label">Monthly Price</label><input name="monthly_price" type="number" min="0" step="1" value="0" class="form-control" required></div><div class="col-md-3"><label class="form-label">Yearly Price</label><input name="yearly_price" type="number" min="0" step="1" value="0" class="form-control" required></div><div class="col-md-3"><label class="form-label">Trial Days</label><input name="trial_days" type="number" min="0" step="1" value="14" class="form-control" required></div><div class="col-md-3"><label class="form-label">Sort Order</label><input name="sort_order" type="number" min="0" step="1" value="0" class="form-control"></div><div class="col-md-4"><label class="form-label">Product Limit</label><input name="product_limit" type="number" min="0" step="1" value="0" class="form-control" required></div><div class="col-md-4"><label class="form-label">Staff Limit</label><input name="staff_limit" type="number" min="0" step="1" value="0" class="form-control" required></div><div class="col-md-4"><label class="form-label">Order Limit</label><input name="order_limit" type="number" min="0" step="1" value="0" class="form-control" required></div><div class="col-12"><label class="form-label">Included Modules</label><textarea name="included_modules" rows="2" class="form-control" placeholder="One module per line"></textarea></div><div class="col-12"><label class="form-label">Key Features</label><textarea name="features" rows="2" class="form-control" placeholder="One feature per line"></textarea></div><div class="col-12 d-flex gap-4"><label class="form-check"><input class="form-check-input" type="checkbox" name="is_public" value="1" checked> <span class="form-check-label">Show on public pricing</span></label><label class="form-check"><input class="form-check-input" type="checkbox" name="is_recommended" value="1"> <span class="form-check-label">Recommended plan</span></label></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-tf-primary">Create Plan</button></div></form></div></div></div>
+<div class="modal fade" id="createSubscriptionPlanModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog tf-plan-modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ route('admin.subscription-plans.store') }}">
+                @csrf
+                <div class="modal-header">
+                    <h2 class="modal-title h5">Create Plan</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                @include('super-admin.subscriptions._plan-fields', ['plan' => null])
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-tf-primary">Create Plan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 @foreach($plans as $plan)
 <div class="modal fade" id="editPlanModal-{{ $plan->id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><form method="POST" action="{{ route('admin.subscription-plans.update', $plan) }}">@csrf @method('PATCH')<div class="modal-header"><h2 class="modal-title h5">Edit {{ $plan->name }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body row g-3"><div class="col-md-7"><label class="form-label">Plan Name</label><input name="name" class="form-control" value="{{ $plan->name }}" maxlength="100" required></div><div class="col-md-5"><label class="form-label">Status</label><select name="status" class="form-select"><option value="Active" @selected($plan->status === 'Active')>Active</option><option value="Inactive" @selected($plan->status === 'Inactive')>Inactive</option></select></div><div class="col-12"><label class="form-label">Short Description</label><input name="short_description" class="form-control" value="{{ $plan->short_description }}" maxlength="255"></div><div class="col-md-3"><label class="form-label">Monthly Price</label><input name="monthly_price" type="number" min="0" step="1" value="{{ $plan->priceFor('Monthly') }}" class="form-control" required></div><div class="col-md-3"><label class="form-label">Yearly Price</label><input name="yearly_price" type="number" min="0" step="1" value="{{ $plan->priceFor('Yearly') }}" class="form-control" required></div><div class="col-md-3"><label class="form-label">Trial Days</label><input name="trial_days" type="number" min="0" step="1" value="{{ $plan->trial_days }}" class="form-control" required></div><div class="col-md-3"><label class="form-label">Sort Order</label><input name="sort_order" type="number" min="0" step="1" value="{{ $plan->sort_order }}" class="form-control"></div><div class="col-md-4"><label class="form-label">Product Limit</label><input name="product_limit" type="number" min="0" step="1" value="{{ $plan->product_limit }}" class="form-control" required></div><div class="col-md-4"><label class="form-label">Staff Limit</label><input name="staff_limit" type="number" min="0" step="1" value="{{ $plan->staff_limit }}" class="form-control" required></div><div class="col-md-4"><label class="form-label">Order Limit</label><input name="order_limit" type="number" min="0" step="1" value="{{ $plan->order_limit }}" class="form-control" required></div><div class="col-12"><label class="form-label">Included Modules</label><textarea name="included_modules" rows="2" class="form-control">{{ implode("\n", $plan->included_modules ?? []) }}</textarea></div><div class="col-12"><label class="form-label">Key Features</label><textarea name="features" rows="2" class="form-control">{{ implode("\n", $plan->features ?? []) }}</textarea></div><div class="col-12 d-flex gap-4"><label class="form-check"><input class="form-check-input" type="checkbox" name="is_public" value="1" @checked($plan->is_public)> <span class="form-check-label">Show on public pricing</span></label><label class="form-check"><input class="form-check-input" type="checkbox" name="is_recommended" value="1" @checked($plan->is_recommended)> <span class="form-check-label">Recommended plan</span></label></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-tf-primary">Save Changes</button></div></form></div></div></div>
@@ -174,6 +191,26 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[id^="editPlanModal-"]').forEach((modal) => {
+        const dialog = modal.querySelector('.modal-dialog');
+        const body = modal.querySelector('.modal-body');
+        dialog?.classList.remove('modal-lg', 'modal-dialog-scrollable');
+        dialog?.classList.add('tf-plan-modal-dialog');
+        body?.classList.add('tf-plan-modal-body');
+
+        ['short_description', 'included_modules', 'features'].forEach((name) => {
+            modal.querySelector(`[name="${name}"]`)?.closest('.col-12')?.remove();
+        });
+
+        ['name', 'status', 'monthly_price', 'yearly_price', 'trial_days', 'sort_order', 'product_limit', 'staff_limit', 'order_limit'].forEach((name) => {
+            const field = modal.querySelector(`[name="${name}"]`);
+            const fieldColumn = field?.parentElement;
+            if ([...(fieldColumn?.classList || [])].some((className) => className.startsWith('col-'))) {
+                fieldColumn.className = 'col-lg-3 col-md-6';
+            }
+        });
+    });
+
     const pricingRoot = document.querySelector('[data-subscription-pricing]');
     if (pricingRoot && !pricingRoot.dataset.ready) {
         pricingRoot.dataset.ready = '1';
@@ -208,13 +245,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const plan = form?.querySelector('[data-subscription-plan]');
     const cycle = form?.querySelector('[data-subscription-cycle]');
     const amount = form?.querySelector('[data-subscription-amount]');
+    const startDate = form?.querySelector('[data-subscription-start]');
+    const endDate = form?.querySelector('[data-subscription-end]');
     const syncPlanAmount = () => {
+        if (!plan || !amount) return;
         const selected = plan.selectedOptions[0];
         const key = cycle?.value === 'Yearly' ? 'yearlyPrice' : 'monthlyPrice';
         if (selected?.dataset[key]) amount.value = selected.dataset[key];
     };
+    const syncSubscriptionEndDate = () => {
+        if (!startDate?.value || !endDate) return;
+        const [year, month, day] = startDate.value.split('-').map(Number);
+        if (!year || !month || !day) return;
+        const targetMonthIndex = month - 1 + (cycle?.value === 'Yearly' ? 12 : 1);
+        const targetYear = year + Math.floor(targetMonthIndex / 12);
+        const targetMonth = (targetMonthIndex % 12) + 1;
+        const targetDay = Math.min(day, new Date(targetYear, targetMonth, 0).getDate());
+        endDate.value = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+    };
     plan?.addEventListener('change', syncPlanAmount);
-    cycle?.addEventListener('change', syncPlanAmount);
+    cycle?.addEventListener('change', () => { syncPlanAmount(); syncSubscriptionEndDate(); });
+    startDate?.addEventListener('change', syncSubscriptionEndDate);
+    syncPlanAmount();
 
     document.querySelectorAll('#createSubscriptionPlanModal form, [id^="editPlanModal-"] form').forEach((planForm) => {
         planForm.addEventListener('submit', (event) => {

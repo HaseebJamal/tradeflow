@@ -38,7 +38,7 @@
                     <small class="tf-muted">JPG, JPEG, PNG, or WebP. Max 2MB. Profile images are updated immediately.</small>
                 </div>
                 @if($hasProfileImage)
-                    <div class="col-12"><small class="tf-muted">Saved image: {{ $user->profile_image }}</small></div>
+                    <div class="col-12"><small class="tf-muted">Current profile image is saved.</small></div>
                     <div class="col-12"><label class="form-check"><input name="remove_image" value="1" type="checkbox" class="form-check-input" data-tf-profile-remove> Remove Image</label></div>
                 @endif
                 @if($requiresOwnerApproval)
