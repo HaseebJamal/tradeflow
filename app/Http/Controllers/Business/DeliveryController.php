@@ -46,7 +46,6 @@ class DeliveryController extends Controller
     public function index(Request $request)
     {
         $filters = $request->validate([
-            'delivery_id' => ['nullable', 'integer'],
             'order_number' => ['nullable', 'string', 'max:100'],
             'customer_id' => ['nullable', 'integer'],
             'delivery_staff_id' => ['nullable', 'integer'],
@@ -55,20 +54,13 @@ class DeliveryController extends Controller
             'date_type' => ['nullable', 'in:created_at,assigned_at,started_at,delivered_at,failed_at'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
-            'month' => ['nullable', 'integer', 'min:1', 'max:12'],
-            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
-            'amount_from' => ['nullable', 'integer', 'min:0'],
-            'amount_to' => ['nullable', 'integer', 'min:0', 'gte:amount_from'],
             'clear' => ['nullable', 'boolean'],
         ]);
         $dateColumn = $filters['date_type'] ?? 'created_at';
         $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? now()->startOfMonth()->toDateString());
         $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? now()->toDateString());
-        $hasDateRange = $dateFrom || $dateTo;
-
         $query = $this->deliveryQuery()->with(['invoice.order.customer', 'invoice.order.payments', 'order.customer', 'order.payments', 'staff']);
         $query
-            ->when($filters['delivery_id'] ?? null, fn ($q, $value) => $q->where('id', $value))
             ->when($filters['order_number'] ?? null, fn ($q, $value) => $q->where(function ($delivery) use ($value) {
                 $delivery->whereHas('invoice', fn ($invoice) => $invoice->where('invoice_number', 'like', "%{$value}%"))
                     ->orWhereHas('order', fn ($order) => $order->where('order_number', 'like', "%{$value}%"));
@@ -78,12 +70,8 @@ class DeliveryController extends Controller
             ->when($filters['payment_status'] ?? null, fn ($q, $value) => $q->where('payment_status', $value))
             ->when($filters['status'] ?? null, fn ($q, $value) => $q->where('status', $value))
             ->when($dateFrom, fn ($q, $value) => $q->whereDate($dateColumn, '>=', $value))
-            ->when($dateTo, fn ($q, $value) => $q->whereDate($dateColumn, '<=', $value))
-            ->when(!$hasDateRange && ($filters['month'] ?? null), fn ($q, $value) => $q->whereMonth($dateColumn, $value))
-            ->when(!$hasDateRange && ($filters['year'] ?? null), fn ($q, $value) => $q->whereYear($dateColumn, $value))
-            ->when($filters['amount_from'] ?? null, fn ($q, $value) => $q->where('amount', '>=', $value))
-            ->when($filters['amount_to'] ?? null, fn ($q, $value) => $q->where('amount', '<=', $value));
-        $deliveries = $query->latest()->paginate(12);
+            ->when($dateTo, fn ($q, $value) => $q->whereDate($dateColumn, '<=', $value));
+        $deliveries = $query->latest()->paginate(10)->withQueryString();
         $deliveries->getCollection()->transform(function (Delivery $delivery) {
             if ($order = $delivery->sourceOrder()) {
                 $synced = $this->finance->syncOrderPaymentSummary($order);

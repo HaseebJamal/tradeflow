@@ -31,9 +31,6 @@
                 @if($daysRemaining !== null)
                     <div class="tf-muted small">Days Remaining</div><strong>{{ $daysRemaining }}
                 day{{ $daysRemaining === 1 ? '' : 's' }}</strong>@endif
-                @if($subscription)
-                    <div class="mt-2"><button class="btn btn-tf-primary btn-sm" type="button" data-bs-toggle="modal"
-                data-bs-target="#manageSubscriptionModal">Manage Subscription</button></div>@endif
             </div>
         </div>
         <div class="row g-3">
@@ -246,50 +243,57 @@
             <div class="p-3 border-bottom">
                 <h2 class="h5 mb-0">Billing History</h2>
             </div>
-            <x-table>
+            <x-table class="tf-business-data-table">
                 <thead>
                     <tr>
+                        <th>Date &amp; Time</th>
+                        <th>Billing Cycle</th>
                         <th>Amount</th>
-                        <th>Method</th>
+                        <th>Payment Method</th>
                         <th>Reference</th>
                         <th>Status</th>
-                        <th>Paid At</th>
+                        <th>Recorded By</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($billingHistory as $payment)
                         <tr>
+                            <td><x-date-time :value="$payment->paid_at" /></td>
+                            <td>{{ $payment->subscription?->billing_cycle ?? '-' }}</td>
                             <td>Rs {{ number_format($payment->amount, 2) }}</td>
                             <td>{{ $payment->method }}</td>
                             <td>{{ $payment->reference_number ?: '-' }}</td>
                             <td><span class="tf-badge tf-badge-info">{{ $payment->status }}</span></td>
-                            <td><x-date-time :value="$payment->paid_at" /></td>
+                            <td>{{ $payment->recordedBy?->name ?? '-' }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="text-center tf-muted py-4">No billing payments recorded yet.</td>
+                            <td colspan="7" class="text-center tf-muted py-4">No billing payments recorded yet.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </x-table>
-            <div class="p-3">{{ $billingHistory->links('pagination::bootstrap-5') }}</div>
+            <div class="p-3"><x-table-result-summary :paginator="$billingHistory" />{{ $billingHistory->links('pagination::bootstrap-5') }}</div>
         </div>
 
         <div class="tf-card p-0 mt-4">
             <div class="p-3 border-bottom">
                 <h2 class="h5 mb-0">Request History</h2>
             </div>
-            <x-table>
+            <x-table class="tf-business-data-table">
                 <thead>
                     <tr>
+                        <th>Request ID</th>
                         <th>Type</th>
-                        <th>Current / Requested Plan</th>
-                        <th>Cycle</th>
+                        <th>Current Plan</th>
+                        <th>Requested Plan</th>
+                        <th>Billing Cycle</th>
                         <th>Payment Method</th>
                         <th>Amount</th>
                         <th>Effective Date</th>
                         <th>Status</th>
-                        <th>Requested / Reviewed</th>
+                        <th>Requested At</th>
+                        <th>Reviewed By</th>
                         <th>Admin Note</th>
                         <th class="text-end">Actions</th>
                     </tr>
@@ -297,9 +301,10 @@
                 <tbody>
                     @forelse($requests as $change)
                         <tr>
+                            <td>#{{ $change->id }}</td>
                             <td>{{ $change->type }}</td>
-                            <td>{{ $change->currentPlan?->name ?? '-' }}<span
-                                    class="d-block small tf-muted">{{ $change->requestedPlan?->name ?? '-' }}</span></td>
+                            <td>{{ $change->currentPlan?->name ?? '-' }}</td>
+                            <td>{{ $change->requestedPlan?->name ?? '-' }}</td>
                             <td>{{ $change->billing_cycle }}</td>
                             <td>{{ $change->payment_method ?: '-' }}</td>
                             <td>Rs {{ number_format($change->expected_amount) }}</td>
@@ -308,6 +313,7 @@
                             <td><x-date-time :value="$change->created_at" /><span
                                     class="d-block small tf-muted">{{ $change->reviewed_at ? $change->reviewed_at->format('d M, Y') : 'Not reviewed' }}{{ $change->reviewer?->name ? ' · ' . $change->reviewer->name : '' }}</span>
                             </td>
+                            <td>{{ $change->reviewer?->name ?? 'Not reviewed' }}</td>
                             <td>{{ $change->admin_note ?: '-' }}</td>
                             <td class="text-end">
                                 @if($change->status === 'Pending' && $permissions->allowsUser(auth()->user(), 'subscriptions.cancel', $business))
@@ -318,12 +324,12 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="text-center tf-muted py-4">No subscription requests yet.</td>
+                            <td colspan="13" class="text-center tf-muted py-4">No subscription requests yet.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </x-table>
-            <div class="p-3">{{ $requests->links('pagination::bootstrap-5') }}</div>
+            <div class="p-3"><x-table-result-summary :paginator="$requests" />{{ $requests->links('pagination::bootstrap-5') }}</div>
         </div>
     @endif
 @endsection

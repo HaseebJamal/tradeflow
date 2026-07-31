@@ -12,12 +12,12 @@
 </div>
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div><h2 class="h5 mb-1">Inventory Control</h2><p class="tf-muted mb-0">Manage available stock and stock movement history.</p></div>
-    @companyCan('products.create')<button type="button" class="btn btn-sm btn-tf-primary" data-bs-toggle="modal" data-bs-target="#inventoryProductCreateModal"><i class="bi bi-plus-lg me-1"></i>Add Product</button>@endcompanyCan
+    <div class="d-flex flex-wrap gap-2"><a href="{{ route('business.inventory.history') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard-data me-1"></i>Stock History</a>@companyCan('products.create')<button type="button" class="btn btn-sm btn-tf-primary" data-bs-toggle="modal" data-bs-target="#inventoryProductCreateModal"><i class="bi bi-plus-lg me-1"></i>Add Product</button>@endcompanyCan</div>
 </div>
 @companyCan('inventory.adjust_stock')<div class="tf-card p-4 mb-4">
     <h2 class="h5">Stock Adjustment</h2>
     <form method="POST" action="{{ route('business.inventory.adjust') }}" class="row g-3" data-inventory-product-form>@csrf
-        <div class="col-md-4"><select name="product_id" class="form-select" required><option value="">Select Product</option>@foreach(($inventories ?? collect())->pluck('product')->filter() as $product)<option value="{{ $product->id }}" @selected(old('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
+        <div class="col-md-4"><select name="product_id" class="form-select" required><option value="">Select Product</option>@foreach($inventoryProducts ?? collect() as $product)<option value="{{ $product->id }}" @selected(old('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><select name="type" class="form-select"><option value="added">Add Stock</option><option value="reduced">Reduce Stock</option><option value="adjustment">Set Stock Qty</option><option value="returned">Returned</option><option value="damaged">Damaged</option></select></div>
         <div class="col-md-2"><input name="quantity" type="number" min="1" step="1" value="0" class="form-control js-whole-number" placeholder="Qty"></div>
         <div class="col-md-1"><button class="btn btn-tf-primary w-100"><i class="bi bi-check-lg"></i></button></div>
@@ -26,12 +26,12 @@
 @companyCan('inventory.stock_transfer')<div class="tf-card p-4 mb-4">
     <h2 class="h5">Stock Transfer</h2>
     <form method="POST" action="{{ route('business.inventory.transfer') }}" class="row g-3" data-inventory-product-form>@csrf
-        <div class="col-md-4"><select name="product_id" class="form-select" required><option value="">Select Product</option>@foreach(($inventories ?? collect())->pluck('product')->filter() as $product)<option value="{{ $product->id }}" @selected(old('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
+        <div class="col-md-4"><select name="product_id" class="form-select" required><option value="">Select Product</option>@foreach($inventoryProducts ?? collect() as $product)<option value="{{ $product->id }}" @selected(old('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><input name="quantity" type="number" min="1" step="1" value="0" class="form-control js-whole-number" placeholder="Qty" required></div>
         <div class="col-md-1"><button class="btn btn-outline-primary w-100"><i class="bi bi-arrow-left-right"></i></button></div>
     </form>
 </div>@endcompanyCan
-<x-table>
+<x-table class="tf-business-data-table">
     <thead><tr><th>Product</th><th>Available</th><th>Sold</th><th>Damaged</th><th>Sales Returned</th><th>Purchase Returned</th><th>Alert Qty</th><th>Last Updated</th><th>Actions</th></tr></thead>
     <tbody>
     @forelse($inventories ?? [] as $inventory)
@@ -61,7 +61,7 @@
     @endforelse
     </tbody>
 </x-table>
-<div class="tf-card p-4 mt-4"><h2 class="h5">Stock History</h2><x-table><thead><tr><th>Date &amp; Time</th><th>Product</th><th>Movement Type</th><th>Stock Before</th><th>Quantity</th><th>Operation</th><th>Stock After</th><th>Reference</th><th>User</th></tr></thead><tbody>@forelse($movements ?? [] as $move)@php($isReturn = in_array($move->type, ['PURCHASE_RETURN', 'SALES_RETURN'], true))@php($operation = $move->type === 'PURCHASE_RETURN' ? '-' : ($move->type === 'SALES_RETURN' ? '+' : '—'))<tr><td><x-date-time :value="$move->movement_date ?? $move->created_at" /></td><td>{{ $move->product?->name ?? 'Deleted Product' }}</td><td>{{ $move->type === 'PURCHASE_RETURN' ? 'Purchase Return' : ($move->type === 'SALES_RETURN' ? 'Sales Return' : str_replace('_', ' ', $move->type)) }}</td><td><x-quantity :value="$move->previous_stock" /></td><td><x-quantity :value="abs((float) $move->quantity)" /></td><td>{{ $operation }}</td><td><x-quantity :value="$move->new_stock" /></td><td>{{ $isReturn ? $move->note : '—' }}</td><td>{{ $move->creator?->name ?? 'System' }}</td></tr>@empty<tr><td colspan="9" class="text-center tf-muted py-4">No stock history.</td></tr>@endforelse</tbody></x-table></div>
+<div class="mt-3"><x-table-result-summary :paginator="$inventories" />{{ $inventories->links('pagination::bootstrap-5') }}</div>
 @companyCan('products.create')
 <div class="modal fade" id="inventoryProductCreateModal" tabindex="-1" aria-hidden="true" aria-labelledby="inventoryProductCreateModalTitle">
     <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered"><div class="modal-content">
@@ -72,7 +72,7 @@
                 @php($draftProducts = [[]])
                 @include('business.products._multi-create-fields', ['hideProductFormActions' => true])
             </div>
-            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Another Product</button><button class="btn btn-tf-primary" data-save-products @disabled(($categories ?? collect())->isEmpty() || ($units ?? collect())->isEmpty())>Save Products</button></div></div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Another Product</button><button type="submit" class="btn btn-tf-primary" data-save-products>Save Products</button></div></div>
         </form>
     </div></div>
 </div>

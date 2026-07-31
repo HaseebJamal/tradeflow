@@ -68,7 +68,7 @@ class PurchaseController extends Controller
                 ->orWhere('notes', 'like', '%'.$request->search.'%')))
             ->where('purchase_date', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
             ->where('purchase_date', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
-            ->latest('purchase_date')->paginate(12)->withQueryString();
+            ->latest('purchase_date')->paginate(10)->withQueryString();
 
         $suppliers = Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get();
 

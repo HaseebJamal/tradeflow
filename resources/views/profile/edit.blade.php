@@ -16,12 +16,22 @@
             @endif
             <form method="POST" action="{{ route('profile.update') }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PUT')
                 <div class="col-12 text-center">
-                    @if($hasProfileImage)
-                        <img src="{{ asset('storage/'.$user->profile_image) }}?v={{ $user->updated_at?->timestamp }}" class="profile-avatar mb-2" alt="{{ $user->name }}" data-tf-profile-preview>
-                    @else
-                        <span class="profile-avatar tf-avatar-empty mb-2" data-tf-profile-empty><i class="bi bi-person"></i></span>
-                        <img src="" class="profile-avatar mb-2 d-none" alt="{{ $user->name }}" data-tf-profile-preview>
-                    @endif
+                    <div class="dropdown d-inline-block tf-profile-image-dropdown">
+                        <button type="button" class="tf-profile-image-button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Manage profile image">
+                            @if($hasProfileImage)
+                                <img src="{{ asset('storage/'.$user->profile_image) }}?v={{ $user->updated_at?->timestamp }}" class="profile-avatar" alt="{{ $user->name }}" data-tf-profile-preview>
+                            @else
+                                <span class="profile-avatar tf-avatar-empty" data-tf-profile-empty><i class="bi bi-person"></i></span>
+                                <img src="" class="profile-avatar d-none" alt="{{ $user->name }}" data-tf-profile-preview>
+                            @endif
+                        </button>
+                        <ul class="dropdown-menu tf-profile-image-menu">
+                            <li><label for="profileImageUpload" class="dropdown-item mb-0"><i class="bi bi-image me-2"></i>{{ $hasProfileImage ? 'Replace' : 'Upload' }} Profile Image</label></li>
+                            @if($hasProfileImage)
+                                <li><button type="button" class="dropdown-item text-danger" data-tf-profile-remove-action><i class="bi bi-trash me-2"></i>Remove Profile Image</button></li>
+                            @endif
+                        </ul>
+                    </div>
                     <div class="fw-bold">{{ $user->name }}</div>
                     <small class="tf-muted">{{ $user->role }}</small>
                 </div>
@@ -32,14 +42,9 @@
                     <div class="col-md-6"><label class="form-label">Email</label><input name="email" type="email" class="form-control" value="{{ old('email', $user->email) }}" required></div>
                 @endif
                 <div class="col-md-6"><label class="form-label">{{ $requiresOwnerApproval ? 'Requested Phone' : 'Phone' }}</label><x-phone-input name="phone" :value="old('phone', $pendingProfileRequest?->requested_values['phone'] ?? $user->phone)" :error="$errors->first('phone')" /></div>
-                <div class="col-md-6">
-                    <label class="form-label">Upload New Image</label>
-                    <input name="profile_image" type="file" class="form-control" accept="image/jpeg,image/png,image/webp" data-tf-profile-input>
-                    <small class="tf-muted">JPG, JPEG, PNG, or WebP. Max 2MB. Profile images are updated immediately.</small>
-                </div>
+                <input id="profileImageUpload" name="profile_image" type="file" class="visually-hidden" accept="image/jpeg,image/png,image/webp" data-tf-profile-input data-tf-image-upload tabindex="-1">
                 @if($hasProfileImage)
-                    <div class="col-12"><small class="tf-muted">Current profile image is saved.</small></div>
-                    <div class="col-12"><label class="form-check"><input name="remove_image" value="1" type="checkbox" class="form-check-input" data-tf-profile-remove> Remove Image</label></div>
+                    <input name="remove_image" value="1" type="checkbox" class="d-none" data-tf-profile-remove>
                 @endif
                 @if($requiresOwnerApproval)
                     <div class="col-12"><label class="form-label">Reason for Change</label><textarea name="reason" class="form-control" rows="3" minlength="10" maxlength="2000" placeholder="Required only when changing your name or phone.">{{ old('reason', $pendingProfileRequest?->reason) }}</textarea></div>

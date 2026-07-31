@@ -25,7 +25,7 @@
     <div class="col-md-4"><label class="form-label" for="registrationNumber">Registration Number <span class="tf-muted">Optional</span></label><input id="registrationNumber" name="registration_number" class="form-control" value="{{ old('registration_number', $company->registration_number ?? '') }}"></div>
     <div class="col-md-8"><label class="form-label" for="companyAddress">Address {!! $required !!}</label><textarea id="companyAddress" name="address" class="form-control" rows="2" required>{{ old('address', $company->address ?? '') }}</textarea></div>
     <div class="col-md-4"><label class="form-label" for="taxNumber">Tax / NTN Number <span class="tf-muted">Optional</span></label><input id="taxNumber" name="tax_number" class="form-control" value="{{ old('tax_number', $company->tax_number ?? '') }}"></div>
-    <div class="col-md-6"><label class="form-label" for="companyLogo">Company Logo <span class="tf-muted">Used as the business dashboard profile icon</span></label><input id="companyLogo" name="company_logo" type="file" accept="image/jpeg,image/png,image/webp" class="form-control">@if($editing && $company->logo)<div class="d-flex align-items-center gap-2 mt-2"><img src="{{ asset('storage/'.$company->logo) }}" class="navbar-avatar" alt="Current company logo"><label class="form-check mb-0"><input class="form-check-input" name="remove_company_logo" value="1" type="checkbox"> Remove current logo</label></div>@endif</div>
+    <div class="col-md-6"><label class="form-label" for="companyLogo">Company Logo <span class="tf-muted">Used as the business dashboard profile icon</span></label><input id="companyLogo" name="company_logo" type="file" accept="image/jpeg,image/png,image/webp" class="form-control" data-tf-image-upload><div class="invalid-feedback" data-tf-image-error></div><small class="tf-muted d-block mt-1">JPG, JPEG, PNG, or WebP. Max 2MB.</small><small class="tf-muted d-block mt-1" data-tf-image-file-status></small>@if($editing && $company->logo)<div class="d-flex align-items-center gap-2 mt-2"><img src="{{ asset('storage/'.$company->logo) }}" class="navbar-avatar" alt="Current company logo"><label class="form-check mb-0"><input class="form-check-input" name="remove_company_logo" value="1" type="checkbox"> Remove current logo</label></div>@endif</div>
     <div class="col-md-6"><label class="form-label" for="companyDocument">Business Document <span class="tf-muted">Optional</span></label><input id="companyDocument" name="business_document" type="file" accept=".pdf,image/jpeg,image/png" class="form-control"><small class="tf-muted">Uploading adds a new verification document.</small></div>
 
     <div class="col-12 mt-3"><h2 class="h5 mb-0">Owner Account</h2></div>
@@ -38,8 +38,10 @@
     <div class="col-md-4"><label class="form-label" for="ownerPhone">Owner Phone {!! $required !!}</label><x-phone-input name="owner_phone" id="ownerPhone" :value="old('owner_phone', $company->owner?->phone ?? '')" :required="true" :error="$errors->first('owner_phone')" /><small class="tf-muted">Private owner contact; reports use the company phone only.</small></div>
     <div class="col-md-4">
         <label class="form-label" for="ownerProfileImage">Owner Profile Image <span class="tf-muted">Optional</span></label>
-        <input id="ownerProfileImage" name="owner_profile_image" type="file" accept="image/jpeg,image/png,image/webp" class="form-control @error('owner_profile_image') is-invalid @enderror">
+        <input id="ownerProfileImage" name="owner_profile_image" type="file" accept="image/jpeg,image/png,image/webp" class="form-control @error('owner_profile_image') is-invalid @enderror" data-tf-image-upload>
         <small class="tf-muted">JPG, JPEG, PNG, or WebP. Max 2MB. This is separate from the company logo.</small>
+        <div class="invalid-feedback" data-tf-image-error></div>
+        <small class="tf-muted d-block mt-1" data-tf-image-file-status></small>
         @error('owner_profile_image')
             <div class="invalid-feedback d-block">{{ $message }}</div>
         @enderror

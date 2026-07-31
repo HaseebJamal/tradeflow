@@ -39,7 +39,7 @@ class SalesReturnController extends Controller
         ]);
         $filters['date_from'] ??= now(config('app.timezone'))->toDateString();
         $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
-        $returns = SalesReturn::with(['order.invoice', 'customer', 'items.orderItem'])
+        $returns = SalesReturn::with(['order.invoice', 'customer', 'items.orderItem', 'processor'])
             ->where('business_id', $businessId)
             ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($inner) => $inner
                 ->where('return_number', 'like', "%{$value}%")
@@ -49,7 +49,7 @@ class SalesReturnController extends Controller
                 Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay(),
                 Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay(),
             ])
-            ->latest('returned_at')->paginate(12)->withQueryString();
+            ->latest('returned_at')->paginate(10)->withQueryString();
 
         return view('business.sales-returns.index', compact('returns'));
     }

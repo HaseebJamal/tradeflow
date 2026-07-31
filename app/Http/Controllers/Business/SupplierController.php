@@ -60,7 +60,7 @@ class SupplierController extends Controller
             ->when($dateTo, fn ($q, $value) => $q->whereDate('created_at', '<=', $value));
 
         return view('business.suppliers.index', [
-            'suppliers' => $query->latest()->paginate(12)->withQueryString(),
+            'suppliers' => $query->latest()->paginate(10)->withQueryString(),
             'creators' => User::where('business_id', $businessId)->orderBy('name')->get(),
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,

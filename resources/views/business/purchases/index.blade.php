@@ -32,7 +32,7 @@
     <div class="col-md-1 d-flex gap-2"><button class="btn btn-outline-primary flex-fill">Filter</button><a href="{{ route('business.purchases.index') }}" class="btn btn-outline-secondary" aria-label="Clear filters"><i class="bi bi-arrow-counterclockwise"></i></a></div>
 </form>
 
-<x-table><thead><tr><th>Purchase</th><th>Supplier</th><th>Date</th><th>Total Qty</th><th>Grand total</th><th>Paid / Payable</th><th>Payment</th><th>Purchase status</th><th>Receiving</th><th>Created by</th><th>Actions</th></tr></thead><tbody>@forelse($purchases as $purchase)
+<x-table class="tf-business-data-table tf-purchase-data-table"><thead><tr><th>Purchase</th><th>Supplier</th><th>Date</th><th>Total Qty</th><th>Grand total</th><th>Paid / Payable</th><th>Payment</th><th>Purchase status</th><th>Receiving</th><th>Created by</th><th>Actions</th></tr></thead><tbody>@forelse($purchases as $purchase)
     @php
         $receivedQuantity = (float) $purchase->items->sum('received_quantity');
         $returnedQuantity = (float) $purchase->returns->flatMap(fn ($return) => $return->items)->sum('quantity');
@@ -79,5 +79,5 @@
             </ul>
         </div>
     </td></tr>
-@empty<tr><td colspan="11" class="text-center tf-muted py-5">No purchases found.</td></tr>@endforelse</tbody></x-table><div class="mt-3">{{ $purchases->links() }}</div>
+@empty<tr><td colspan="11" class="text-center tf-muted py-5">No purchases found.</td></tr>@endforelse</tbody></x-table><div class="mt-3"><x-table-result-summary :paginator="$purchases" />{{ $purchases->links('pagination::bootstrap-5') }}</div>
 @endsection

@@ -33,13 +33,13 @@
     <div class="col-md-2"><label class="form-label">IP Address</label><input name="ip_address" value="{{ request('ip_address') }}" class="form-control" placeholder="IPv4 or IPv6"></div>
     <div class="col-md-2 d-flex gap-2"><button class="btn btn-outline-primary flex-fill">Filter</button><a href="{{ route('business.audit-logs.index') }}" class="btn btn-outline-secondary">Clear</a></div>
 </form></div>
-<x-table><thead><tr><th>Date &amp; Time</th><th>User</th><th>Role</th><th>Module</th><th>Action</th><th>IP Address</th></tr></thead><tbody>
+<x-table class="tf-business-data-table"><thead><tr><th>Date &amp; Time</th><th>User</th><th>Role</th><th>Module</th><th>Action</th><th>IP Address</th></tr></thead><tbody>
 @forelse($logs as $log)
     <tr><td><x-date-time :value="$log->occurred_at ?? $log->created_at" /></td><td>{{ $log->user_name ?: $log->user?->name ?: 'System' }}</td><td>{{ $log->role ?: $log->actor_role ?: 'system' }}</td><td><x-activity-label :activity="$log" field="module" /></td><td><x-activity-label :activity="$log" /></td><td>{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</td></tr>
 @empty
     <tr><td colspan="6" class="text-center tf-muted py-4">No audit activity has been recorded yet.</td></tr>
 @endforelse
-</tbody></x-table><div class="mt-3 audit-log-pagination">{{ $logs->links('pagination::bootstrap-5') }}</div>
+</tbody></x-table><div class="mt-3 audit-log-pagination"><x-table-result-summary :paginator="$logs" />{{ $logs->links('pagination::bootstrap-5') }}</div>
 @endsection
 @push('scripts')
 <style>

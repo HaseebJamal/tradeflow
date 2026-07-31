@@ -32,15 +32,11 @@
         <div class="col-md-2"><label class="form-label">Created By</label><select name="created_by" class="form-select"><option value="">All</option>@foreach($creators as $creator)<option value="{{ $creator->id }}" @selected(request('created_by') == $creator->id)>{{ $creator->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', $dateFrom) }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', $dateTo) }}" class="form-control"></div>
-        <div class="col-md-1"><label class="form-label">Month</label><input type="number" min="1" max="12" name="month" value="{{ request('month') }}" class="form-control"></div>
-        <div class="col-md-1"><label class="form-label">Year</label><input type="number" min="2000" max="2100" name="year" value="{{ request('year') }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Amount From</label><input type="number" name="amount_from" value="{{ request('amount_from') }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Amount To</label><input type="number" name="amount_to" value="{{ request('amount_to') }}" class="form-control"></div>
         <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
         <div class="col-md-2"><a href="{{ route('business.sales.index', ['clear' => 1]) }}" class="btn btn-outline-secondary w-100">Clear Filters</a></div>
     </div>
 </form>
-<x-table>
+<x-table class="tf-business-data-table">
     <thead><tr><th>Sale Number</th><th>Source</th><th>Customer</th><th>Product Summary</th><th>Status</th><th>Payment Status</th><th>Payment Type</th><th>Created By</th><th>Sale Date and Time</th><th>Updated At</th><th>Total</th><th>Actions</th></tr></thead>
     <tbody>
     @forelse($orders ?? [] as $order)
@@ -56,12 +52,23 @@
             <td><x-date-time :value="$order->order_date ?: $order->created_at" /></td>
             <td><x-date-time :value="$order->updated_at" /></td>
             <td>Rs {{ number_format($order->grand_total ?: $order->total) }}</td>
-            <td><a href="{{ route('business.sales.show', $order) }}" class="btn btn-sm btn-outline-primary">View</a></td>
+            <td class="text-end text-nowrap">
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic">Actions</button>
+                    <div class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <a href="{{ route('business.sales.show', $order) }}" class="dropdown-item">View</a>
+                        @companyCan('sales.edit')<a href="{{ route('business.sales.edit', $order) }}" class="dropdown-item">Edit</a>@endcompanyCan
+                        @if($order->invoice)<a href="{{ route('business.sales.invoices.show', $order) }}" class="dropdown-item">Invoice</a><a href="{{ route('business.sales.invoices.pdf', $order) }}" class="dropdown-item" target="_blank">Print</a>@endif
+                        @companyCan('sales.returns')<a href="{{ route('business.sales.returns.process', $order) }}" class="dropdown-item">Return</a>@endcompanyCan
+                        @companyCan('sales.delete')<div class="dropdown-divider"></div><form method="POST" action="{{ route('business.sales.destroy', $order) }}" onsubmit="return confirm('Delete this sale when safe?')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>@endcompanyCan
+                    </div>
+                </div>
+            </td>
         </tr>
     @empty
         <tr><td colspan="12" class="text-center tf-muted py-4">No sales yet.</td></tr>
     @endforelse
     </tbody>
 </x-table>
-@if(isset($orders) && method_exists($orders, 'links'))<div class="mt-3">{{ $orders->links() }}</div>@endif
+@if(isset($orders) && method_exists($orders, 'links'))<div class="mt-3"><x-table-result-summary :paginator="$orders" />{{ $orders->links('pagination::bootstrap-5') }}</div>@endif
 @endsection

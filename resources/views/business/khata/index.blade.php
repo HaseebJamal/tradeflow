@@ -2,6 +2,7 @@
 @section('page-title', 'Ledger')
 @section('page-subtitle', 'Double-entry bookkeeping, ledgers, and financial summaries')
 @section('content')
+@php($activeLedgerTab = in_array(request('tab'), ['general', 'customer', 'supplier', 'trial', 'profit', 'balance', 'journal'], true) ? request('tab') : 'general')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
@@ -15,14 +16,15 @@
 
 <ul class="nav nav-tabs mb-3" role="tablist">
     @foreach(['general'=>'General Ledger','customer'=>'Customer Ledger','supplier'=>'Supplier Ledger','trial'=>'Trial Balance','profit'=>'Profit & Loss','balance'=>'Balance Sheet','journal'=>'Journal Entries'] as $key => $label)
-        <li class="nav-item"><button class="nav-link {{ $loop->first ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#tab-{{ $key }}" type="button">{{ $label }}</button></li>
+        <li class="nav-item"><button class="nav-link {{ $activeLedgerTab === $key ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#tab-{{ $key }}" type="button">{{ $label }}</button></li>
     @endforeach
 </ul>
 
 <div class="tab-content">
-    <div class="tab-pane fade show active" id="tab-general">
+    <div class="tab-pane fade {{ $activeLedgerTab === 'general' ? 'show active' : '' }}" id="tab-general">
         <div class="tf-card p-4 mb-3">
             <form class="row g-2 align-items-end">
+                <input type="hidden" name="tab" value="general">
                 <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', now()->startOfMonth()->toDateString()) }}" class="form-control"></div>
                 <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', now()->toDateString()) }}" class="form-control"></div>
                 <div class="col-md-3"><label class="form-label">Account</label><select name="account_id" class="form-select"><option value="">All</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected(request('account_id') == $account->id)>{{ $account->code }} - {{ $account->name }}</option>@endforeach</select></div>
@@ -33,12 +35,10 @@
                 <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
             </form>
         </div>
-        <x-table>
+        <x-table class="tf-business-data-table">
             <thead><tr><th>Posted At</th><th>Voucher</th><th>Account</th><th>Description</th><th>Debit</th><th>Credit</th><th>Running Balance</th></tr></thead>
             <tbody>
-            @php($running = 0)
             @forelse($ledgerLines as $line)
-                @php($running += $line->debit - $line->credit)
                 <tr>
                     <td><x-date-time :value="$line->journalEntry?->posted_at ?? $line->journalEntry?->created_at" /></td>
                     <td>{{ $line->journalEntry?->voucher_number }}</td>
@@ -46,38 +46,41 @@
                     <td>{{ $line->description ?: $line->journalEntry?->description }}</td>
                     <td>Rs {{ number_format($line->debit) }}</td>
                     <td>Rs {{ number_format($line->credit) }}</td>
-                    <td>Rs {{ number_format($running) }}</td>
+                    <td>Rs {{ number_format($line->running_balance, 2) }}</td>
                 </tr>
             @empty
                 <tr><td colspan="7" class="text-center tf-muted py-4">No journal lines yet.</td></tr>
             @endforelse
             </tbody>
         </x-table>
-        <div class="mt-3">{{ $ledgerLines->links() }}</div>
+        <div class="mt-3"><x-table-result-summary :paginator="$ledgerLines" />{{ $ledgerLines->appends(['tab' => 'general'])->links('pagination::bootstrap-5') }}</div>
     </div>
 
-    <div class="tab-pane fade" id="tab-customer">
-        <x-table>
+    <div class="tab-pane fade {{ $activeLedgerTab === 'customer' ? 'show active' : '' }}" id="tab-customer">
+        <x-table class="tf-business-data-table">
             <thead><tr><th>Customer</th><th>Total Debits</th><th>Total Credits</th><th>Outstanding</th><th></th></tr></thead>
             <tbody>@forelse($customerSummaries as $row)<tr><td>{{ $row['customer']->display_name }}</td><td>Rs {{ number_format($row['debit'], 2) }}</td><td>Rs {{ number_format($row['credit'], 2) }}</td><td>Rs {{ number_format($row['balance'], 2) }}</td><td><a href="{{ route('business.customers.show', $row['customer']) }}" class="btn btn-sm btn-outline-primary">Profile</a></td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No customer ledger entries.</td></tr>@endforelse</tbody>
         </x-table>
+        <div class="mt-3"><x-table-result-summary :paginator="$customerSummaries" />{{ $customerSummaries->appends(['tab' => 'customer'])->links('pagination::bootstrap-5') }}</div>
     </div>
 
-    <div class="tab-pane fade" id="tab-supplier">
-        <x-table>
+    <div class="tab-pane fade {{ $activeLedgerTab === 'supplier' ? 'show active' : '' }}" id="tab-supplier">
+        <x-table class="tf-business-data-table">
             <thead><tr><th>Supplier</th><th>Total Purchases / Credits</th><th>Total Payments / Debits</th><th>Remaining Payable</th><th></th></tr></thead>
             <tbody>@forelse($supplierSummaries as $row)<tr><td>{{ $row['supplier']->company_name ?: $row['supplier']->supplier_name }}</td><td>Rs {{ number_format($row['credit']) }}</td><td>Rs {{ number_format($row['debit']) }}</td><td>Rs {{ number_format($row['balance']) }}</td><td><a href="{{ route('business.suppliers.show', $row['supplier']) }}" class="btn btn-sm btn-outline-primary">Profile</a></td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No supplier ledger entries.</td></tr>@endforelse</tbody>
         </x-table>
+        <div class="mt-3"><x-table-result-summary :paginator="$supplierSummaries" />{{ $supplierSummaries->appends(['tab' => 'supplier'])->links('pagination::bootstrap-5') }}</div>
     </div>
 
-    <div class="tab-pane fade" id="tab-trial">
-        <x-table>
+    <div class="tab-pane fade {{ $activeLedgerTab === 'trial' ? 'show active' : '' }}" id="tab-trial">
+        <x-table class="tf-business-data-table">
             <thead><tr><th>Account Code</th><th>Account Name</th><th>Account Type</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
-            <tbody>@foreach($trialBalance as $row)<tr><td>{{ $row['account']->code }}</td><td>{{ $row['account']->name }}</td><td>{{ $row['account']->account_type }}</td><td>Rs {{ number_format($row['debit']) }}</td><td>Rs {{ number_format($row['credit']) }}</td><td>Rs {{ number_format($row['balance']) }}</td></tr>@endforeach</tbody>
+            <tbody>@forelse($trialBalance as $row)<tr><td>{{ $row['account']->code }}</td><td>{{ $row['account']->name }}</td><td>{{ $row['account']->account_type }}</td><td>Rs {{ number_format($row['debit']) }}</td><td>Rs {{ number_format($row['credit']) }}</td><td>Rs {{ number_format($row['balance']) }}</td></tr>@empty<tr><td colspan="6" class="text-center tf-muted py-4">No trial balance entries.</td></tr>@endforelse</tbody>
         </x-table>
+        <div class="mt-3"><x-table-result-summary :paginator="$trialBalance" />{{ $trialBalance->appends(['tab' => 'trial'])->links('pagination::bootstrap-5') }}</div>
     </div>
 
-    <div class="tab-pane fade" id="tab-profit">
+    <div class="tab-pane fade {{ $activeLedgerTab === 'profit' ? 'show active' : '' }}" id="tab-profit">
         <div class="row g-3">
             <div class="col-md-4"><div class="tf-card p-4"><div class="tf-muted">Sales Revenue</div><div class="h3">Rs {{ number_format($totalSales) }}</div></div></div>
             <div class="col-md-4"><div class="tf-card p-4"><div class="tf-muted">Expenses</div><div class="h3">Rs {{ number_format($totalExpenses) }}</div></div></div>
@@ -85,19 +88,21 @@
         </div>
     </div>
 
-    <div class="tab-pane fade" id="tab-balance">
-        <x-table>
+    <div class="tab-pane fade {{ $activeLedgerTab === 'balance' ? 'show active' : '' }}" id="tab-balance">
+        <x-table class="tf-business-data-table">
             <thead><tr><th>Account</th><th>Type</th><th>Balance</th></tr></thead>
-            <tbody>@foreach($trialBalance->whereIn('account.account_type', ['Asset','Liability','Equity']) as $row)<tr><td>{{ $row['account']->name }}</td><td>{{ $row['account']->account_type }}</td><td>Rs {{ number_format($row['balance']) }}</td></tr>@endforeach</tbody>
+            <tbody>@forelse($balanceSheet as $row)<tr><td>{{ $row['account']->name }}</td><td>{{ $row['account']->account_type }}</td><td>Rs {{ number_format($row['balance']) }}</td></tr>@empty<tr><td colspan="3" class="text-center tf-muted py-4">No balance sheet entries.</td></tr>@endforelse</tbody>
         </x-table>
+        <div class="mt-3"><x-table-result-summary :paginator="$balanceSheet" />{{ $balanceSheet->appends(['tab' => 'balance'])->links('pagination::bootstrap-5') }}</div>
     </div>
 
-    <div class="tab-pane fade" id="tab-journal">
+    <div class="tab-pane fade {{ $activeLedgerTab === 'journal' ? 'show active' : '' }}" id="tab-journal">
         <div class="tf-card p-4 mb-4">
             <h2 class="h5">Automatic Journal Entries</h2>
             <p class="tf-muted mb-0">Journal entries are posted automatically from purchases, sales, payments, returns, deliveries, and expenses. Manual entries are disabled to prevent duplicate accounting.</p>
         </div>
-        <x-table><thead><tr><th>Posted At</th><th>Voucher</th><th>Description</th><th>Status</th></tr></thead><tbody>@foreach($journalEntries as $entry)<tr><td><x-date-time :value="$entry->posted_at ?? $entry->created_at" /></td><td>{{ $entry->voucher_number }}</td><td>{{ $entry->description }}</td><td>{{ ucfirst($entry->status) }}</td></tr>@endforeach</tbody></x-table>
+        <x-table class="tf-business-data-table"><thead><tr><th>Posted At</th><th>Voucher</th><th>Description</th><th>Status</th></tr></thead><tbody>@forelse($journalEntries as $entry)<tr><td><x-date-time :value="$entry->posted_at ?? $entry->created_at" /></td><td>{{ $entry->voucher_number }}</td><td>{{ $entry->description }}</td><td>{{ ucfirst($entry->status) }}</td></tr>@empty<tr><td colspan="4" class="text-center tf-muted py-4">No journal entries.</td></tr>@endforelse</tbody></x-table>
+        <div class="mt-3"><x-table-result-summary :paginator="$journalEntries" />{{ $journalEntries->appends(['tab' => 'journal'])->links('pagination::bootstrap-5') }}</div>
     </div>
 </div>
 

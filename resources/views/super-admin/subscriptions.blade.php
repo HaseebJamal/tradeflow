@@ -54,22 +54,7 @@
                 <div class="col-md-6 col-xl-4" data-plan-item>
                     <x-subscription-plan-card :plan="$plan" context="admin">
                         <x-slot:actions>
-                            <div class="dropdown">
-                                <button class="btn btn-outline-primary w-100 dropdown-toggle" type="button" data-bs-toggle="dropdown">Manage Plan</button>
-                                <ul class="dropdown-menu dropdown-menu-end w-100">
-                                    <li><button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#editPlanModal-{{ $plan->id }}"><i class="bi bi-pencil-square me-2"></i>View / Edit</button></li>
-                                    @if($plan->archived_at)
-                                        <li><form method="POST" action="{{ route('admin.subscription-plans.restore', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item"><i class="bi bi-arrow-counterclockwise me-2"></i>Restore</button></form></li>
-                                        @if(! $plan->subscriptions_count)<li><form method="POST" action="{{ route('admin.subscription-plans.destroy', $plan) }}" onsubmit="return confirm('Permanently delete this unused plan?')">@csrf @method('DELETE')<button class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Delete</button></form></li>@endif
-                                    @else
-                                        <li><form method="POST" action="{{ route('admin.subscription-plans.status', $plan) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="{{ $plan->status === 'Active' ? 'Inactive' : 'Active' }}"><button class="dropdown-item">{{ $plan->status === 'Active' ? 'Deactivate' : 'Activate' }}</button></form></li>
-                                        <li><form method="POST" action="{{ route('admin.subscription-plans.visibility', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">Make {{ $plan->is_public ? 'Private' : 'Public' }}</button></form></li>
-                                        @if($plan->status === 'Active')<li><form method="POST" action="{{ route('admin.subscription-plans.recommended', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">{{ $plan->is_recommended ? 'Remove Recommended' : 'Mark Recommended' }}</button></form></li>@endif
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li><form method="POST" action="{{ route('admin.subscription-plans.archive', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning">Archive</button></form></li>
-                                    @endif
-                                </ul>
-                            </div>
+                            <x-subscription-plan-actions :plan="$plan" />
                         </x-slot:actions>
                     </x-subscription-plan-card>
                 </div>
@@ -82,7 +67,7 @@
             @forelse($plans as $plan)
                 <tr data-plan-row data-plan-name="{{ strtolower($plan->name) }}" data-plan-status="{{ $plan->status }}" data-plan-visibility="{{ $plan->is_public ? 'Public' : 'Private' }}" data-plan-yearly="{{ (int) $plan->yearly_price > 0 ? 'yes' : 'no' }}">
                     <td><strong>{{ $plan->name }}</strong><small class="d-block tf-muted">{{ $plan->short_description }}</small></td><td>Rs {{ number_format($plan->priceFor('Monthly')) }}</td><td>Rs {{ number_format($plan->priceFor('Yearly')) }}</td><td>{{ $plan->trial_days }} days</td><td>{{ number_format($plan->product_limit) }}</td><td>{{ number_format($plan->staff_limit) }}</td><td>{{ number_format($plan->order_limit) }}</td><td>{{ $plan->subscriptions_count }}</td><td>{{ $plan->is_public ? 'Public' : 'Private' }}{{ $plan->is_recommended ? ' · Recommended' : '' }}</td><td><span class="tf-badge {{ $plan->status === 'Active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $plan->status }}</span></td>
-                    <td class="text-end text-nowrap"><div class="dropdown"><button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">Actions</button><ul class="dropdown-menu dropdown-menu-end"><li><button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#editPlanModal-{{ $plan->id }}">View / Edit</button></li>@if($plan->archived_at)<li><form method="POST" action="{{ route('admin.subscription-plans.restore', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">Restore</button></form></li>@if(!$plan->subscriptions_count)<li><form method="POST" action="{{ route('admin.subscription-plans.destroy', $plan) }}" onsubmit="return confirm('Permanently delete this unused plan?')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form></li>@endif@else<li><form method="POST" action="{{ route('admin.subscription-plans.status', $plan) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="{{ $plan->status === 'Active' ? 'Inactive' : 'Active' }}"><button class="dropdown-item">{{ $plan->status === 'Active' ? 'Deactivate' : 'Activate' }}</button></form></li><li><form method="POST" action="{{ route('admin.subscription-plans.visibility', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">Make {{ $plan->is_public ? 'Private' : 'Public' }}</button></form></li>@if($plan->status === 'Active')<li><form method="POST" action="{{ route('admin.subscription-plans.recommended', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item">{{ $plan->is_recommended ? 'Remove Recommended' : 'Mark Recommended' }}</button></form></li>@endif<li><hr class="dropdown-divider"></li><li><form method="POST" action="{{ route('admin.subscription-plans.archive', $plan) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning">Archive</button></form></li>@endif</ul></div></td>
+                    <td class="text-end text-nowrap"><x-subscription-plan-actions :plan="$plan" /></td>
                 </tr>
             @empty<tr><td colspan="11" class="text-center tf-muted py-4">No subscription plans created yet.</td></tr>@endforelse
             </tbody></x-table>

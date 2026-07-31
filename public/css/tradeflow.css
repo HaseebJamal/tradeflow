@@ -326,6 +326,28 @@ a:hover {
     object-fit: cover;
     width: 110px;
 }
+.tf-profile-image-button {
+    background: transparent;
+    border: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    padding: 0;
+}
+.tf-profile-image-button:focus-visible {
+    box-shadow: 0 0 0 0.22rem rgba(37, 99, 235, 0.22);
+    outline: 0;
+}
+.tf-profile-image-menu {
+    --bs-dropdown-font-size: 0.875rem;
+    min-width: 10.75rem;
+    padding: 0.25rem 0;
+    z-index: 1080;
+}
+.tf-profile-image-menu .dropdown-item {
+    cursor: pointer;
+    padding: 0.45rem 0.7rem;
+    white-space: nowrap;
+}
 
 .navbar-avatar {
     border-radius: 50%;
@@ -730,9 +752,41 @@ a:hover {
 .btn-tf-primary {
     --bs-btn-bg: var(--tf-blue);
     --bs-btn-border-color: var(--tf-blue);
-    --bs-btn-hover-bg: #1d4ed8;
-    --bs-btn-hover-border-color: #1d4ed8;
+    --bs-btn-hover-bg: var(--tf-blue);
+    --bs-btn-hover-border-color: var(--tf-blue);
     --bs-btn-color: #fff;
+}
+
+/* Filled primary actions invert on hover throughout the application. */
+.btn-primary,
+.btn-tf-primary {
+    --bs-btn-bg: var(--tf-blue);
+    --bs-btn-border-color: var(--tf-blue);
+    --bs-btn-hover-bg: transparent;
+    --bs-btn-hover-border-color: var(--tf-blue);
+    --bs-btn-hover-color: var(--tf-blue);
+    --bs-btn-active-bg: var(--tf-blue);
+    --bs-btn-active-border-color: var(--tf-blue);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--tf-blue);
+    --bs-btn-border-color: var(--tf-blue);
+    --bs-btn-hover-bg: var(--tf-blue);
+    --bs-btn-hover-border-color: var(--tf-blue);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-active-bg: var(--tf-blue);
+    --bs-btn-active-border-color: var(--tf-blue);
+}
+
+.protected-business-details .border > strong {
+    display: block;
+    font-weight: 400;
+    overflow-wrap: anywhere;
+}
+
+.protected-business-details .row > .col-md-6:first-child .border > strong {
+    font-weight: 700;
 }
 
 .btn-tf-navy {
@@ -1379,9 +1433,22 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     resize: vertical;
 }
 
+#createSubscriptionPlanModal .modal-content,
+[id^="editPlanModal-"] .modal-content {
+    overflow: visible;
+}
+
 #createSubscriptionPlanModal .ts-dropdown,
 [id^="editPlanModal-"] .ts-dropdown {
+    max-height: min(260px, calc(100vh - 9rem));
+    overflow: hidden;
     z-index: 1080;
+}
+
+#createSubscriptionPlanModal .ts-dropdown-content,
+[id^="editPlanModal-"] .ts-dropdown-content {
+    max-height: min(212px, calc(100vh - 12rem));
+    overflow-y: auto;
 }
 
 /* Inventory's inline product creator keeps its action footer in view while
@@ -1495,6 +1562,14 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     transition:
         border-color 0.18s ease,
         box-shadow 0.18s ease;
+}
+.tf-pricing-card.tf-dropdown-open {
+    overflow: visible !important;
+    z-index: 2;
+}
+.tf-plan-actions-menu {
+    min-width: 11.5rem;
+    width: max-content;
 }
 .tf-pricing-card:hover {
     border-color: #9dbdff;
@@ -1645,6 +1720,13 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     max-height: min(70vh, 34rem);
     overflow-y: auto;
     z-index: 1090;
+}
+
+/* Row-action menus are temporarily portaled to <body> by tradeflow.js so
+   responsive tables cannot crop them at the viewport edge. */
+.tf-action-dropdown-portal {
+    max-width: calc(100vw - 16px);
+    overflow-x: hidden;
 }
 
 /* Company action menus sit above the filter card and any portaled filter UI. */
@@ -1845,6 +1927,81 @@ body.tf-company-delete-modal-open {
     font-size: 0.78rem;
     letter-spacing: 0.02em;
     text-transform: uppercase;
+}
+
+/* Compact business record lists without changing the shared table layout. */
+.tf-business-data-table .tf-table {
+    font-size: 0.875rem;
+}
+.tf-business-data-table .tf-table th {
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+.tf-business-data-table .tf-table td,
+.tf-business-data-table .tf-table th {
+    padding: 0.6rem 0.7rem;
+    vertical-align: middle;
+}
+
+/* Purchase rows have several financial/status columns. Preserve their
+   readable values and let the existing responsive wrapper scroll instead of
+   squeezing dates, amounts, and badges into broken fragments. */
+.tf-purchase-data-table .tf-table {
+    min-width: 1280px;
+}
+
+.tf-purchase-data-table .tf-table td {
+    white-space: nowrap;
+}
+
+.tf-purchase-data-table .tf-table td:first-child {
+    min-width: 112px;
+}
+
+.tf-purchase-data-table .tf-table td:nth-child(2) {
+    min-width: 105px;
+}
+
+.tf-purchase-data-table .tf-table td:nth-child(3) {
+    min-width: 152px;
+}
+
+.tf-purchase-data-table .tf-table td:nth-child(5),
+.tf-purchase-data-table .tf-table td:nth-child(6) {
+    min-width: 128px;
+}
+
+.tf-purchase-data-table .tf-table td:nth-child(7) {
+    min-width: 100px;
+}
+
+.tf-purchase-data-table .tf-table td:nth-child(8),
+.tf-purchase-data-table .tf-table td:nth-child(9) {
+    min-width: 126px;
+}
+
+.tf-purchase-data-table .tf-table td:last-child {
+    min-width: 96px;
+}
+
+/* Compact, scroll-safe data tables for Super Admin record directories. */
+.tf-admin-data-table .tf-table {
+    font-size: 0.875rem;
+}
+
+.tf-admin-data-table .tf-table th {
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.tf-admin-data-table .tf-table td,
+.tf-admin-data-table .tf-table th {
+    padding: 0.65rem 0.75rem;
+    vertical-align: middle;
+}
+
+.tf-admin-data-table .dropdown-menu {
+    z-index: 1060;
 }
 
 /* Keep the cross-module Super Admin request queue compact and readable. */

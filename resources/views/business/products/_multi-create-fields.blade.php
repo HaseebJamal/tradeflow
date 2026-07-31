@@ -29,6 +29,6 @@
 @unless($hideProductFormActions ?? false)
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-4">
         <button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Another Product</button>
-        <button class="btn btn-tf-primary" data-save-products @disabled(($categories ?? collect())->isEmpty() || ($units ?? collect())->isEmpty())>Save Products</button>
+        <button type="submit" class="btn btn-tf-primary" data-save-products>Save Products</button>
     </div>
 @endunless

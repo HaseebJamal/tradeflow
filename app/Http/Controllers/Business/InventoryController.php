@@ -9,6 +9,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\Unit;
+use App\Models\User;
 use App\Services\BusinessActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,13 +24,60 @@ class InventoryController extends Controller
     {
         $businessId = auth()->user()->business_id;
         return view('business.inventory.index', [
-            'inventories' => Inventory::with('product')->where('business_id', $businessId)->whereHas('product')->paginate(12),
+            'inventories' => Inventory::with('product')->where('business_id', $businessId)->whereHas('product')->latest()->paginate(10)->withQueryString(),
+            'inventoryProducts' => Product::where('business_id', $businessId)->orderBy('name')->get(['id', 'name']),
             'lowStockProducts' => Product::where('business_id', $businessId)
                 ->whereColumn('stock_quantity', '<=', 'low_stock_alert_qty')
                 ->get(),
-            'movements' => InventoryMovement::with('product', 'creator')->where('business_id', $businessId)->latest('movement_date')->take(30)->get(),
             'categories' => Category::where('business_id', $businessId)->where('type', 'Product')->where('status', 'Active')->orderBy('name')->get(),
             'units' => Unit::where('business_id', $businessId)->where('status', 'Active')->orderBy('unit_name')->get(),
+        ]);
+    }
+
+    public function history(Request $request)
+    {
+        $businessId = (int) auth()->user()->business_id;
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'type' => ['nullable', 'string', 'max:100'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'user_id' => ['nullable', 'integer'],
+            'month' => ['nullable', 'integer', 'between:1,12'],
+            'year' => ['nullable', 'integer', 'between:2000,2100'],
+        ]);
+
+        $movementQuery = InventoryMovement::query()
+            ->with(['product', 'creator'])
+            ->where('business_id', $businessId);
+
+        if ($search = trim((string) ($filters['search'] ?? ''))) {
+            $movementQuery->whereHas('product', fn ($query) => $query->where('name', 'like', "%{$search}%"));
+        }
+        if ($type = $filters['type'] ?? null) {
+            $movementQuery->where('type', $type);
+        }
+        if ($dateFrom = $filters['date_from'] ?? null) {
+            $movementQuery->whereDate('movement_date', '>=', $dateFrom);
+        }
+        if ($dateTo = $filters['date_to'] ?? null) {
+            $movementQuery->whereDate('movement_date', '<=', $dateTo);
+        }
+        if ($userId = $filters['user_id'] ?? null) {
+            $movementQuery->where('created_by', $userId);
+        }
+        if ($month = $filters['month'] ?? null) {
+            $movementQuery->whereMonth('movement_date', $month);
+        }
+        if ($year = $filters['year'] ?? null) {
+            $movementQuery->whereYear('movement_date', $year);
+        }
+
+        return view('business.inventory.history', [
+            'movements' => $movementQuery->latest('movement_date')->paginate(10)->withQueryString(),
+            'movementTypes' => InventoryMovement::where('business_id', $businessId)->distinct()->orderBy('type')->pluck('type'),
+            'users' => User::where('business_id', $businessId)->orderBy('name')->get(['id', 'name']),
+            'filters' => $filters,
         ]);
     }
 

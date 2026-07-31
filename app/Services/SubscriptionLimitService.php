@@ -21,15 +21,15 @@ class SubscriptionLimitService
 
     private function assertWithinLimit(int $businessId, string $field, int $current, int $incoming, string $label): void
     {
-        $subscription = Subscription::with('plan')->where('business_id', $businessId)->first();
+        // A pending subscription request is not an active entitlement and must
+        // not block normal business operations while it awaits review.
+        $subscription = Subscription::with('plan')
+            ->where('business_id', $businessId)
+            ->whereIn('status', ['Trial', 'Active', 'Expiring'])
+            ->latest('starts_at')
+            ->first();
         if (! $subscription?->plan) {
             return;
-        }
-
-        if (! in_array($subscription->status, ['Trial', 'Active', 'Expiring'], true)) {
-            throw ValidationException::withMessages([
-                'subscription' => 'Your subscription is not active. Please contact your Platform Administrator.',
-            ]);
         }
 
         $limit = (int) $subscription->plan->{$field};

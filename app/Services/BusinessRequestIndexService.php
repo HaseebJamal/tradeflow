@@ -6,7 +6,11 @@ use App\Models\AuditLog;
 use App\Models\BusinessDetailChangeRequest;
 use App\Models\BusinessFooterChangeRequest;
 use App\Models\EmailChangeRequest;
+use App\Models\Order;
+use App\Models\Product;
 use App\Models\SubscriptionChangeRequest;
+use App\Models\SubscriptionPlan;
+use App\Models\User;
 use App\Models\UserDetailChangeRequest;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -16,6 +20,17 @@ use Illuminate\Validation\ValidationException;
 class BusinessRequestIndexService
 {
     public const SOURCES = ['subscription', 'footer', 'business_detail', 'email', 'profile'];
+
+    private const ACTIONABLE_SUBSCRIPTION_TYPES = [
+        'New Subscription',
+        'Upgrade',
+        'Downgrade',
+        'Billing Cycle Change',
+        'Payment Method Change',
+        'Renewal',
+        'Cancellation',
+        'Resume Cancellation',
+    ];
 
     public function paginate(array $filters): LengthAwarePaginator
     {
@@ -66,7 +81,14 @@ class BusinessRequestIndexService
     public function pendingCount(): int
     {
         return DB::query()->fromSub($this->union(), 'business_requests')
-            ->whereIn('status', ['Pending', 'Changes Requested'])
+            // "Changes Requested" has already been reviewed and is waiting
+            // on the business owner. Legacy generic "Subscription" rows are
+            // historical registration records, not current request-queue work.
+            ->where('status', 'Pending')
+            ->where(function (Builder $query): void {
+                $query->where('source', '!=', 'subscription')
+                    ->orWhereIn('request_type', self::ACTIONABLE_SUBSCRIPTION_TYPES);
+            })
             ->count();
     }
 
@@ -135,11 +157,14 @@ class BusinessRequestIndexService
             ? $this->changesFor($source, $record->old_values, $record->requested_values)
             : $this->changesFor($source, $current, $requested);
 
+        $details = $this->detailValues($source, $record, $current, $requested, $amount, $cycle, $paymentMethod);
+
         return [
             'id' => $record->id,
             'source' => $source,
             'business' => $record->business?->business_name ?? 'Business unavailable',
             'owner' => $record->business?->owner?->name ?? 'Owner not assigned',
+            'requested_by' => $record->requester?->name ?? $record->user?->name ?? 'Business user',
             'type' => $type,
             'current_value' => $current,
             'requested_value' => $requested,
@@ -153,6 +178,9 @@ class BusinessRequestIndexService
             'reviewed_by' => $record->reviewer?->name,
             'reviewed_at' => optional($record->reviewed_at)->format('d M, Y h:i A'),
             'review_note' => $record->review_note ?? $record->admin_note ?? null,
+            'current_details' => $details['current'],
+            'requested_details' => $details['requested'],
+            'payment_details' => $details['payment'],
             'actions' => $this->actionsFor($source, $record),
             'history' => $this->history($record),
         ];
@@ -196,7 +224,7 @@ class BusinessRequestIndexService
     private function relationsFor(string $source): array
     {
         return match ($source) {
-            'subscription' => ['business.owner', 'requester', 'reviewer', 'currentPlan', 'requestedPlan'],
+            'subscription' => ['business.owner', 'business.subscription.plan', 'requester', 'reviewer', 'currentPlan', 'requestedPlan', 'subscription.plan'],
             'footer', 'business_detail' => ['business.owner', 'requester', 'reviewer'],
             'email', 'profile' => ['business.owner', 'user', 'reviewer'],
         };
@@ -266,6 +294,87 @@ class BusinessRequestIndexService
             });
 
         return collect($history)->unique(fn (array $item) => implode('|', [$item['status'], $item['at'], $item['message']]))->values()->all();
+    }
+
+    private function detailValues(string $source, object $record, mixed $current, mixed $requested, mixed $amount, mixed $cycle, mixed $paymentMethod): array
+    {
+        if ($source === 'subscription') {
+            $subscription = $record->subscription ?? $record->business?->subscription;
+            $currentPlan = $subscription?->plan ?? $record->currentPlan;
+            $requestedPlan = $record->requestedPlan;
+            $businessId = $record->business_id;
+            $usage = [
+                'Products used' => Product::where('business_id', $businessId)->count(),
+                'Staff used' => User::where('business_id', $businessId)->where('role', '!=', 'business_owner')->where('status', '!=', 'archived')->count(),
+                'Orders used' => Order::where('business_id', $businessId)->count(),
+            ];
+
+            $currentDetails = [
+                'Plan' => $currentPlan?->name ?? 'No current plan',
+                'Billing cycle' => $subscription?->billing_cycle,
+                'Price' => $subscription ? 'Rs '.number_format((float) $subscription->amount, 2) : null,
+                'Subscription status' => $subscription?->status,
+                'Start date' => $subscription?->starts_at?->format('d M, Y'),
+                'Expiry date' => $subscription?->ends_at?->format('d M, Y'),
+                'Days remaining' => $subscription?->ends_at ? max(0, today()->diffInDays($subscription->ends_at, false)).' days' : null,
+                'Product limit' => $this->limitValue($currentPlan?->product_limit),
+                'Staff limit' => $this->limitValue($currentPlan?->staff_limit),
+                'Order limit' => $this->limitValue($currentPlan?->order_limit),
+            ] + $usage;
+
+            $requestedDetails = [
+                'Plan' => $requestedPlan?->name ?? $requested,
+                'Billing cycle' => $cycle,
+                'Amount' => $amount !== null ? 'Rs '.number_format((float) $amount, 2) : null,
+                'Payment method' => $paymentMethod,
+                'Effective date' => $record->effective_at?->format('d M, Y'),
+                'Product limit' => $this->limitValue($requestedPlan?->product_limit),
+                'Staff limit' => $this->limitValue($requestedPlan?->staff_limit),
+                'Order limit' => $this->limitValue($requestedPlan?->order_limit),
+            ];
+
+            return [
+                'current' => $this->withoutEmpty($currentDetails),
+                'requested' => $this->withoutEmpty($requestedDetails),
+                'payment' => $this->withoutEmpty([
+                    'Payment method' => $paymentMethod,
+                    'Expected amount' => $amount !== null ? 'Rs '.number_format((float) $amount, 2) : null,
+                    'Payment status' => $subscription?->payment_status,
+                    'Payment reference' => $subscription?->payment_reference,
+                ]),
+            ];
+        }
+
+        if (in_array($source, ['business_detail', 'profile'], true)) {
+            return [
+                'current' => $this->labelValues($record->old_values ?? []),
+                'requested' => $this->labelValues($record->requested_values ?? []),
+                'payment' => [],
+            ];
+        }
+
+        return [
+            'current' => $this->withoutEmpty(['Current value' => $current]),
+            'requested' => $this->withoutEmpty(['Requested value' => $requested]),
+            'payment' => [],
+        ];
+    }
+
+    private function labelValues(array $values): array
+    {
+        return collect($values)
+            ->mapWithKeys(fn ($value, $key) => [$this->fieldLabel((string) $key) => $this->displayValue($value)])
+            ->all();
+    }
+
+    private function withoutEmpty(array $values): array
+    {
+        return collect($values)->filter(fn ($value) => filled($value))->all();
+    }
+
+    private function limitValue(mixed $limit): ?string
+    {
+        return $limit === null || (int) $limit <= 0 ? 'Unlimited' : number_format((int) $limit);
     }
 
     private function formatValues(mixed $values): string

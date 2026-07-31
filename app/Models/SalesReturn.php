@@ -16,4 +16,5 @@ class SalesReturn extends Model
     public function order() { return $this->belongsTo(Order::class); }
     public function customer() { return $this->belongsTo(Customer::class); }
     public function items() { return $this->hasMany(SalesReturnItem::class); }
+    public function processor() { return $this->belongsTo(User::class, 'processed_by'); }
 }

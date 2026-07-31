@@ -59,7 +59,7 @@ class ProductController extends Controller
         }
 
         return view('business.products.index', [
-            'products' => $query->latest()->paginate(12)->withQueryString(),
+            'products' => $query->latest()->paginate(10)->withQueryString(),
             'categories' => Category::where('business_id', auth()->user()->business_id)->where('type', 'Product')->orderBy('name')->get(),
         ]);
     }

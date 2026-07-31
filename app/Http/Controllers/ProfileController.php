@@ -138,22 +138,22 @@ class ProfileController extends Controller
             return back()->with('success', 'Your profile-change request was sent to the Business Owner. Your details will remain unchanged until it is approved and applied.');
         }
 
-        if ($request->boolean('remove_image') && $user->profile_image) {
-            if (Storage::disk('public')->exists($user->profile_image)) {
-                Storage::disk('public')->delete($user->profile_image);
-            }
-            $user->profile_image = null;
-        }
+        $oldImage = $user->profile_image;
 
         if ($request->hasFile('profile_image')) {
-            if ($user->profile_image && Storage::disk('public')->exists($user->profile_image)) {
-                Storage::disk('public')->delete($user->profile_image);
-            }
-
             Storage::disk('public')->makeDirectory('profile_images');
             $path = $request->file('profile_image')->store('profile_images', 'public');
             abort_unless($path, 422, 'Profile image could not be saved. Please try again.');
+
+            if ($oldImage && Storage::disk('public')->exists($oldImage)) {
+                Storage::disk('public')->delete($oldImage);
+            }
             $user->profile_image = $path;
+        } elseif ($request->boolean('remove_image') && $oldImage) {
+            if (Storage::disk('public')->exists($oldImage)) {
+                Storage::disk('public')->delete($oldImage);
+            }
+            $user->profile_image = null;
         }
 
         $user->name = $data['name'];

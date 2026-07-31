@@ -36,12 +36,12 @@ class BusinessSubscriptionController extends Controller
             'requests' => SubscriptionChangeRequest::with(['currentPlan', 'requestedPlan', 'reviewer'])
                 ->where('business_id', $business->id)
                 ->latest()
-                ->paginate(12)
+                ->paginate(10)
                 ->withQueryString(),
-            'billingHistory' => PlatformPayment::query()
+            'billingHistory' => PlatformPayment::with(['recordedBy', 'subscription'])
                 ->where('business_id', $business->id)
                 ->latest('paid_at')
-                ->paginate(12, ['*'], 'billing_page')
+                ->paginate(10, ['*'], 'billing_page')
                 ->withQueryString(),
         ]);
     }

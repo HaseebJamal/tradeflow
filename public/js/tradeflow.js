@@ -99,7 +99,7 @@ function positionTradeFlowTomSelectDropdown(control) {
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const opensUp = spaceBelow < Math.min(menuHeight, 260) && spaceAbove > spaceBelow;
-    const modalParent = control.input?.closest('#manageSubscriptionModal .modal-content, #planChangeRequestModal .modal-content');
+    const modalParent = control.input?.closest('.modal .modal-content');
 
     if (modalParent && control.settings.dropdownParent === modalParent) {
         // Tom Select only positions body-portaled menus itself. This menu is
@@ -201,10 +201,9 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         // dropdowns inside their own Tom Select wrapper instead.  This is
         // intentionally route-scoped; other selects retain body portal logic.
         const useInlineOrderDropdown = Boolean(element.closest('[data-order-form]'));
-        // Subscription management is the only modal whose selects must keep
-        // their menu inside the Bootstrap focus trap. Portaling those menus to
-        // body can place them underneath the dialog on some browsers.
-        const useModalDropdownParent = ['manageSubscriptionModal', 'planChangeRequestModal'].includes(containingModal?.id);
+        // Keep every modal select inside its Bootstrap focus stack. A menu
+        // portaled to body can otherwise sit behind the dialog/backdrop.
+        const useModalDropdownParent = Boolean(containingModal);
         const modalDropdownParent = useModalDropdownParent
             ? containingModal.querySelector('.modal-content')
             : null;
@@ -262,15 +261,13 @@ window.reinitializeTradeFlowTomSelect = (root = document) => window.initTradeFlo
 window.initTradeFlowTomSelect();
 document.addEventListener('shown.bs.modal', (event) => {
     const modal = event.target;
-    const modalContent = ['manageSubscriptionModal', 'planChangeRequestModal'].includes(modal?.id)
-        ? modal.querySelector('.modal-content')
-        : null;
-    // Rebuild only a stale, body-portaled instance. This retains each native
-    // select value while ensuring menus always belong to this modal's stack.
-    const hasStaleSubscriptionSelect = modalContent && [...modal.querySelectorAll('select')]
+    const modalContent = modal?.querySelector('.modal-content');
+    // Rebuild only stale body-portaled instances. This retains each native
+    // select value while ensuring each modal owns its own menu stack.
+    const hasStaleModalSelect = modalContent && [...modal.querySelectorAll('select')]
         .some((element) => element.tomselect && element.tomselect.dropdown.parentElement !== modalContent);
 
-    window.initTradeFlowTomSelect(modal, { force: Boolean(hasStaleSubscriptionSelect) });
+    window.initTradeFlowTomSelect(modal, { force: Boolean(hasStaleModalSelect) });
 });
 document.addEventListener('tradeflow:content-loaded', (event) => window.initTradeFlowTomSelect(event.target || document));
 
@@ -285,7 +282,36 @@ function initTradeFlowBootstrapDropdowns(root = document) {
         toggle.setAttribute('data-bs-display', 'dynamic');
         toggle.setAttribute('data-bs-boundary', 'viewport');
         const menu = toggle.parentElement?.querySelector(':scope > .dropdown-menu');
-        if (menu && toggle.closest('.table-responsive, .tf-card, .card')) menu.classList.add('dropdown-menu-end');
+        const isProfileImageMenu = Boolean(toggle.closest('.tf-profile-image-dropdown'));
+        const isActionMenu = Boolean(menu && !isProfileImageMenu && toggle.closest('.table-responsive, .tf-card, .card, .staff-table-wrap'));
+        if (isActionMenu) {
+            toggle.dataset.tfActionDropdown = '1';
+            menu.classList.add('dropdown-menu-end');
+        }
+
+        if (isActionMenu && window.bootstrap?.Dropdown) {
+            // A single Popper configuration keeps action menus attached to
+            // their clicked trigger, inside the viewport, across cards and
+            // horizontally-scrollable tables.
+            window.bootstrap.Dropdown.getInstance(toggle)?.dispose();
+            window.bootstrap.Dropdown.getOrCreateInstance(toggle, {
+                boundary: 'viewport',
+                display: 'dynamic',
+                popperConfig(defaultConfig) {
+                    return {
+                        ...defaultConfig,
+                        placement: 'bottom-end',
+                        strategy: 'fixed',
+                        modifiers: [
+                            ...(defaultConfig.modifiers || []).filter((modifier) => !['offset', 'preventOverflow', 'flip'].includes(modifier.name)),
+                            { name: 'offset', options: { offset: [0, 6] } },
+                            { name: 'preventOverflow', options: { boundary: 'viewport', padding: 8, altAxis: true } },
+                            { name: 'flip', options: { boundary: 'viewport', padding: 8, fallbackPlacements: ['top-end', 'bottom-start', 'top-start'] } },
+                        ],
+                    };
+                },
+            });
+        }
     });
 }
 
@@ -336,12 +362,104 @@ new MutationObserver((records) => {
 }).observe(document.documentElement, { childList: true, subtree: true });
 
 // Responsive table/card wrappers scroll their contents, which can otherwise
-// clip Bootstrap action menus. Open only the active wrapper and restore its
-// normal responsive overflow when the menu closes.
-function closeTradeFlowStaffActions(except = null) {
-    document.querySelectorAll('.staff-table-wrap [data-bs-toggle="dropdown"][aria-expanded="true"]').forEach((toggle) => {
+// clip Bootstrap action menus. Keep the currently opened menu unobstructed,
+// then restore normal overflow as soon as it closes.
+function isTradeFlowActionDropdown(toggle) {
+    return toggle instanceof Element
+        && toggle.matches('[data-bs-toggle="dropdown"]')
+        && !toggle.closest('.tf-profile-image-dropdown')
+        && toggle.dataset.tfActionDropdown === '1';
+}
+
+function positionTradeFlowActionMenu(toggle) {
+    const menu = toggle.__tradeFlowActionMenu;
+    if (!menu || menu.parentElement !== document.body) return;
+
+    const padding = 8;
+    const gap = 6;
+    const trigger = toggle.getBoundingClientRect();
+    menu.style.left = '0px';
+    menu.style.top = '0px';
+    menu.style.visibility = 'hidden';
+
+    const menuWidth = menu.offsetWidth;
+    const menuHeight = Math.min(menu.scrollHeight, window.innerHeight - (padding * 2));
+    const left = Math.max(padding, Math.min(trigger.right - menuWidth, window.innerWidth - menuWidth - padding));
+    const below = trigger.bottom + gap;
+    const top = below + menuHeight <= window.innerHeight - padding
+        ? below
+        : Math.max(padding, trigger.top - menuHeight - gap);
+
+    Object.assign(menu.style, {
+        left: `${Math.round(left)}px`,
+        top: `${Math.round(top)}px`,
+        visibility: 'visible',
+    });
+}
+
+function portalTradeFlowActionMenu(toggle) {
+    if (!isTradeFlowActionDropdown(toggle)) return;
+    const menu = toggle.parentElement?.querySelector(':scope > .dropdown-menu');
+    if (!menu || menu.parentElement === document.body) return;
+
+    const placeholder = document.createComment('tradeflow-action-menu');
+    menu.parentElement.insertBefore(placeholder, menu);
+    toggle.__tradeFlowActionMenu = menu;
+    toggle.__tradeFlowActionMenuPlaceholder = placeholder;
+    toggle.__tradeFlowActionMenuStyle = menu.getAttribute('style');
+    menu.__tradeFlowActionToggle = toggle;
+    menu.classList.add('tf-action-dropdown-portal');
+    Object.assign(menu.style, {
+        position: 'fixed',
+        zIndex: '1080',
+        maxHeight: `calc(100vh - 16px)`,
+    });
+    document.body.appendChild(menu);
+    positionTradeFlowActionMenu(toggle);
+}
+
+function restoreTradeFlowActionMenu(toggle) {
+    const menu = toggle?.__tradeFlowActionMenu;
+    const placeholder = toggle?.__tradeFlowActionMenuPlaceholder;
+    if (!menu || !placeholder?.parentNode) return;
+
+    placeholder.parentNode.insertBefore(menu, placeholder);
+    placeholder.remove();
+    menu.classList.remove('tf-action-dropdown-portal');
+    if (toggle.__tradeFlowActionMenuStyle === null) menu.removeAttribute('style');
+    else menu.setAttribute('style', toggle.__tradeFlowActionMenuStyle);
+    delete menu.__tradeFlowActionToggle;
+    delete toggle.__tradeFlowActionMenu;
+    delete toggle.__tradeFlowActionMenuPlaceholder;
+    delete toggle.__tradeFlowActionMenuStyle;
+}
+
+function tradeFlowDropdownContainers(toggle) {
+    const containers = [];
+    let current = toggle instanceof Element ? toggle.parentElement : null;
+    while (current && current !== document.body) {
+        if (current.matches?.('.table-responsive, .tf-card, .card, .staff-table-wrap')) containers.push(current);
+        current = current.parentElement;
+    }
+    return containers;
+}
+
+function closeTradeFlowActionDropdowns(except = null) {
+    document.querySelectorAll('[data-bs-toggle="dropdown"][aria-expanded="true"]').forEach((toggle) => {
         if (toggle === except) return;
-        window.bootstrap?.Dropdown.getInstance(toggle)?.hide();
+        if (isTradeFlowActionDropdown(toggle)) window.bootstrap?.Dropdown.getInstance(toggle)?.hide();
+    });
+}
+
+let tradeFlowDropdownUpdateFrame;
+function updateTradeFlowActionDropdowns() {
+    cancelAnimationFrame(tradeFlowDropdownUpdateFrame);
+    tradeFlowDropdownUpdateFrame = requestAnimationFrame(() => {
+        document.querySelectorAll('[data-bs-toggle="dropdown"][aria-expanded="true"]').forEach((toggle) => {
+            if (!isTradeFlowActionDropdown(toggle)) return;
+            if (toggle.__tradeFlowActionMenu) positionTradeFlowActionMenu(toggle);
+            else window.bootstrap?.Dropdown.getInstance(toggle)?.update();
+        });
     });
 }
 
@@ -392,29 +510,34 @@ document.addEventListener('show.bs.dropdown', (event) => {
     // open over an Actions menu. Closing it keeps each control usable without
     // resetting its selected value.
     closeTradeFlowTomSelectDropdowns();
-    const wrapper = toggle.closest('.table-responsive, .tf-card, .card');
-    wrapper?.classList.add('tf-dropdown-open');
+    if (!isTradeFlowActionDropdown(toggle)) return;
+    closeTradeFlowActionDropdowns(toggle);
+    // Popper measures after Bootstrap has made the menu visible. Updating in
+    // the next frame accounts for a recent page or table-wrapper scroll.
+    requestAnimationFrame(() => window.bootstrap?.Dropdown.getInstance(toggle)?.update());
+});
 
-    if (!toggle.closest('.staff-table-wrap')) return;
-
-    closeTradeFlowStaffActions(toggle);
+document.addEventListener('shown.bs.dropdown', (event) => {
+    portalTradeFlowActionMenu(event.target);
 });
 
 document.addEventListener('hidden.bs.dropdown', (event) => {
     const toggle = event.target;
-    toggle.closest('.table-responsive, .tf-card, .card')?.classList.remove('tf-dropdown-open');
+    if (!isTradeFlowActionDropdown(toggle)) return;
+    restoreTradeFlowActionMenu(toggle);
 });
 
 document.addEventListener('click', (event) => {
-    const item = event.target.closest('.staff-table-wrap .dropdown-menu .dropdown-item');
+    const item = event.target.closest('.dropdown-menu .dropdown-item');
     if (!item) return;
-    window.bootstrap?.Dropdown.getInstance(item.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]'))?.hide();
+    const toggle = item.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]') || item.closest('.dropdown-menu')?.__tradeFlowActionToggle;
+    if (isTradeFlowActionDropdown(toggle)) window.bootstrap?.Dropdown.getInstance(toggle)?.hide();
 });
 
-window.addEventListener('resize', () => closeTradeFlowStaffActions());
+window.addEventListener('resize', updateTradeFlowActionDropdowns);
 document.addEventListener('scroll', (event) => {
-    if (event.target instanceof Element && event.target.closest('.staff-table-wrap .dropdown-menu')) return;
-    closeTradeFlowStaffActions();
+    if (event.target instanceof Element && event.target.closest('.dropdown-menu')) return;
+    updateTradeFlowActionDropdowns();
 }, true);
 
 function initTradeFlowSidebarSubmenus(root = document) {
@@ -507,6 +630,10 @@ function initNonNegativeNumberGuards(root = document) {
     // A number field that explicitly declares a decimal step is intentional.
     // Do not let the project-wide whole-number guard replace it with step=1.
     const fields = candidates.filter((field) => {
+        // Currency fields are formatted by the shared money-input helper. Do
+        // not apply the whole-number guard to them: prices and amounts may
+        // legitimately contain decimals and grouped display separators.
+        if (isTradeFlowMoneyField(field)) return false;
         if (field.hasAttribute('data-allow-decimal') || field.type !== 'number') return !field.hasAttribute('data-allow-decimal');
 
         const configuredStep = field.getAttribute('step');
@@ -890,42 +1017,174 @@ new MutationObserver((changes) => changes.forEach((change) => {
         initNonNegativeNumberGuards(node);
         initTradeFlowMoneyInputs(node);
         initTradeFlowPasswordControls(node);
+        initTradeFlowImageUploads(node);
+        initTradeFlowProfileImageMenu(node);
     });
 })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 
-// Monetary text inputs display grouped thousands for readability but submit a
-// plain decimal value, so existing Laravel numeric validation/calculations
-// continue to receive raw values.
-function initTradeFlowMoneyInputs(root = document) {
-    const fields = root.matches?.('[data-money-input]')
-        ? [root]
-        : [...(root.querySelectorAll?.('[data-money-input]') || [])];
+// Monetary fields show grouped thousands for readability, while the form
+// payload remains a plain decimal string. The matcher intentionally excludes
+// stock, quantities, percentages, identifiers, and telephone inputs.
+function tradeFlowMoneyDescriptor(field) {
+    return [
+        field.name,
+        field.id,
+        field.placeholder,
+        field.getAttribute('aria-label'),
+        ...[...field.attributes].map((attribute) => `${attribute.name} ${attribute.value}`),
+    ].filter(Boolean).join(' ').toLowerCase();
+}
 
-    const raw = (value) => String(value || '').replace(/,/g, '').trim();
-    const format = (value) => {
-        const clean = raw(value);
-        if (clean === '' || !/^\d*(?:\.\d{0,2})?$/.test(clean)) return clean;
-        const [whole = '0', decimal] = clean.split('.');
-        const grouped = Number.parseInt(whole || '0', 10).toLocaleString('en-US');
-        return decimal === undefined ? grouped : `${grouped}.${decimal}`;
-    };
+function isTradeFlowMoneyField(field) {
+    if (!(field instanceof HTMLInputElement) || field.disabled || field.type === 'hidden') return false;
+    if (field.matches('[data-tf-phone-visible], [data-tf-phone-value], [data-tf-phone-standalone]')) return false;
+    if (field.hasAttribute('data-money-input') || field.dataset.tfMoneyField === '1') return true;
+    if (field.readOnly) return false;
+
+    const descriptor = tradeFlowMoneyDescriptor(field);
+    if (!descriptor || /(?:quantity|\bqty\b|stock|percentage|percent|(?:tax|discount)[_\s-]?(?:type|rate|percent)|barcode|invoice|reference|phone|mobile|whatsapp|\bcnic\b|trial[_\s-]?days|sort[_\s-]?order|product[_\s-]?limit|staff[_\s-]?limit|order[_\s-]?limit|\b(?:id|code)\b)/.test(descriptor)) return false;
+
+    return /(?:^|[^a-z])(?:amount|price|cost|balance|payable|receivable|salary|debit|credit|shipping|cash|other[_\s-]?charges?|subtotal|grand[_\s-]?total|total|due|change)(?:$|[^a-z])/.test(descriptor);
+}
+
+function tradeFlowRawMoney(value) {
+    return String(value ?? '').replace(/,/g, '').trim();
+}
+
+function normalizeTradeFlowMoney(value) {
+    let clean = tradeFlowRawMoney(value).replace(/[^\d.]/g, '');
+    const decimalIndex = clean.indexOf('.');
+    if (decimalIndex !== -1) {
+        clean = `${clean.slice(0, decimalIndex + 1)}${clean.slice(decimalIndex + 1).replace(/\./g, '')}`;
+    }
+
+    const [whole = '', decimal] = clean.split('.');
+    const normalizedWhole = whole.replace(/^0+(?=\d)/, '');
+    return decimal === undefined ? normalizedWhole : `${normalizedWhole || '0'}.${decimal}`;
+}
+
+function formatTradeFlowMoney(value) {
+    const clean = normalizeTradeFlowMoney(value);
+    if (clean === '') return '';
+
+    const [whole = '0', decimal] = clean.split('.');
+    const grouped = (whole || '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return decimal === undefined ? grouped : `${grouped}.${decimal}`;
+}
+
+function tradeFlowMoneyFields(root = document) {
+    const candidates = root instanceof HTMLInputElement
+        ? [root]
+        : [...(root.querySelectorAll?.('input') || [])];
+    return candidates.filter(isTradeFlowMoneyField);
+}
+
+function normalizeTradeFlowMoneyFields(root = document) {
+    tradeFlowMoneyFields(root).forEach((field) => {
+        field.value = normalizeTradeFlowMoney(field.value);
+    });
+}
+
+function formatTradeFlowMoneyField(field, preserveCaret = false) {
+    const original = field.value;
+    const originalCaret = field.selectionStart ?? original.length;
+    const rawPrefix = tradeFlowRawMoney(original.slice(0, originalCaret)).replace(/[^\d.]/g, '');
+    field.value = formatTradeFlowMoney(original);
+
+    if (!preserveCaret || document.activeElement !== field) return;
+
+    let consumed = '';
+    let caret = 0;
+    for (const character of field.value) {
+        caret += 1;
+        if (/\d|\./.test(character)) consumed += character;
+        if (consumed.length >= rawPrefix.length) break;
+    }
+    field.setSelectionRange(caret, caret);
+}
+
+let tradeFlowMoneyFormatPending = false;
+let tradeFlowMoneyFormatScope = document;
+let tradeFlowMoneyActiveField = null;
+
+function queueTradeFlowMoneyFormatting(root = document, activeField = null) {
+    tradeFlowMoneyFormatScope = root || document;
+    tradeFlowMoneyActiveField = activeField instanceof HTMLInputElement ? activeField : null;
+    if (tradeFlowMoneyFormatPending) return;
+    tradeFlowMoneyFormatPending = true;
+    queueMicrotask(() => {
+        tradeFlowMoneyFormatPending = false;
+        const active = tradeFlowMoneyActiveField;
+        tradeFlowMoneyFields(tradeFlowMoneyFormatScope).forEach((field) => {
+            formatTradeFlowMoneyField(field, field === active);
+        });
+        tradeFlowMoneyActiveField = null;
+    });
+}
+
+function initTradeFlowMoneyForm(form) {
+    if (!form || form.dataset.tfMoneyFormReady === '1') return;
+    form.dataset.tfMoneyFormReady = '1';
+
+    // The formdata event covers regular submissions and fetch(new FormData(form))
+    // requests, including inline/modal forms.
+    form.addEventListener('formdata', (event) => {
+        tradeFlowMoneyFields(form).forEach((field) => {
+            if (field.name) event.formData.set(field.name, normalizeTradeFlowMoney(field.value));
+        });
+    });
+}
+
+// Currency inputs are switched to text only because a native number input
+// cannot display commas. Existing listeners see clean values during their
+// event cycle; display grouping resumes in the following microtask.
+function initTradeFlowMoneyInputs(root = document) {
+    const fields = tradeFlowMoneyFields(root);
 
     fields.forEach((field) => {
         if (field.dataset.moneyInputReady === '1') return;
         field.dataset.moneyInputReady = '1';
-        field.value = format(field.value);
-        field.addEventListener('focus', () => { field.value = raw(field.value); });
-        field.addEventListener('blur', () => { field.value = format(field.value); });
-        field.addEventListener('input', () => {
-            const clean = raw(field.value).replace(/[^\d.]/g, '');
-            const [whole = '', ...decimals] = clean.split('.');
-            field.value = decimals.length ? `${whole}.${decimals.join('').slice(0, 2)}` : whole;
-        });
-        field.closest('form')?.addEventListener('submit', () => { field.value = raw(field.value); });
+        field.dataset.tfMoneyField = '1';
+        if (field.type === 'number') {
+            field.dataset.tfMoneyOriginalType = 'number';
+            field.type = 'text';
+        }
+        field.inputMode = 'decimal';
+        field.value = formatTradeFlowMoney(field.value);
+        field.addEventListener('blur', () => formatTradeFlowMoneyField(field));
+        initTradeFlowMoneyForm(field.closest('form'));
     });
 }
 
+function initTradeFlowMoneyDelegation() {
+    if (document.documentElement.dataset.tfMoneyDelegationReady === '1') return;
+    document.documentElement.dataset.tfMoneyDelegationReady = '1';
+
+    const scopeFor = (target) => target instanceof Element ? (target.closest('form') || document) : document;
+    const normalizeForExistingHandlers = (event) => {
+        const scope = scopeFor(event.target);
+        const fields = tradeFlowMoneyFields(scope);
+        if (!fields.length) return;
+        normalizeTradeFlowMoneyFields(scope);
+        queueTradeFlowMoneyFormatting(scope, isTradeFlowMoneyField(event.target) ? event.target : null);
+    };
+
+    document.addEventListener('input', normalizeForExistingHandlers, true);
+    document.addEventListener('change', normalizeForExistingHandlers, true);
+    document.addEventListener('click', normalizeForExistingHandlers, true);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') normalizeForExistingHandlers(event);
+    }, true);
+    document.addEventListener('submit', (event) => {
+        const scope = scopeFor(event.target);
+        normalizeTradeFlowMoneyFields(scope);
+        queueTradeFlowMoneyFormatting(scope);
+    }, true);
+}
+
 window.initTradeFlowMoneyInputs = initTradeFlowMoneyInputs;
+window.formatTradeFlowMoney = formatTradeFlowMoney;
+initTradeFlowMoneyDelegation();
 initTradeFlowMoneyInputs();
 
 let tradeFlowPasswordFieldId = 0;
@@ -1261,22 +1520,123 @@ document.querySelectorAll('.tf-business-type-card input').forEach((input) => {
     refresh();
 });
 
-const profileInput = document.querySelector('[data-tf-profile-input]');
-if (profileInput) {
-    profileInput.addEventListener('change', () => {
-        const file = profileInput.files?.[0];
-        const preview = document.querySelector('[data-tf-profile-preview]');
-        const empty = document.querySelector('[data-tf-profile-empty]');
-        const remove = document.querySelector('[data-tf-profile-remove]');
+function initTradeFlowImageUploads(root = document) {
+    const inputs = root.matches?.('[data-tf-image-upload]')
+        ? [root]
+        : [...(root.querySelectorAll?.('[data-tf-image-upload]') || [])];
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const allowedExtension = /\.(?:jpe?g|png|webp)$/i;
 
-        if (!file || !preview) return;
+    inputs.forEach((input) => {
+        if (!(input instanceof HTMLInputElement) || input.dataset.tfImageUploadReady === '1') return;
+        input.dataset.tfImageUploadReady = '1';
+        const form = input.closest('form');
+        const container = input.parentElement;
+        const error = container?.querySelector('[data-tf-image-error]');
+        const status = container?.querySelector('[data-tf-image-file-status]');
 
-        preview.src = URL.createObjectURL(file);
-        preview.classList.remove('d-none');
-        empty?.classList.add('d-none');
-        if (remove) remove.checked = false;
+        const setError = (message = '') => {
+            input.classList.toggle('is-invalid', Boolean(message));
+            if (error) {
+                error.textContent = message;
+                error.classList.toggle('d-block', Boolean(message));
+            }
+            if (form) {
+                const hasInvalidImage = [...form.querySelectorAll('[data-tf-image-upload]')]
+                    .some((field) => field.classList.contains('is-invalid'));
+                form.querySelectorAll('button[type="submit"], button:not([type])').forEach((button) => {
+                    button.disabled = hasInvalidImage;
+                });
+            }
+        };
+
+        const validate = () => {
+            const file = input.files?.[0];
+            if (!file) {
+                setError('');
+                return true;
+            }
+
+            let message = '';
+            if (!allowedExtension.test(file.name) || !allowedTypes.includes(file.type)) {
+                message = 'Please upload a JPG, JPEG, PNG, or WebP image.';
+            } else if (file.size > 2 * 1024 * 1024) {
+                message = 'Image must not exceed 2MB.';
+            }
+
+            if (message) {
+                input.value = '';
+                status && (status.textContent = '');
+                setError(message);
+                return false;
+            }
+
+            setError('');
+            if (status) status.textContent = `${file.name} selected.`;
+
+            if (input.matches('[data-tf-profile-input]')) {
+                const preview = form?.querySelector('[data-tf-profile-preview]');
+                const empty = form?.querySelector('[data-tf-profile-empty]');
+                const remove = form?.querySelector('[data-tf-profile-remove]');
+                if (preview) {
+                    preview.src = URL.createObjectURL(file);
+                    preview.classList.remove('d-none');
+                    empty?.classList.add('d-none');
+                }
+                if (remove) remove.checked = false;
+            }
+
+            return true;
+        };
+
+        input._tradeFlowValidateImage = validate;
+        input.addEventListener('change', validate);
+
+        if (form && form.dataset.tfImageUploadFormReady !== '1') {
+            form.dataset.tfImageUploadFormReady = '1';
+            form.addEventListener('submit', (event) => {
+                const valid = [...form.querySelectorAll('[data-tf-image-upload]')]
+                    .every((field) => field._tradeFlowValidateImage?.() !== false);
+                if (!valid) event.preventDefault();
+            });
+        }
     });
 }
+
+function initTradeFlowProfileImageMenu(root = document) {
+    const menus = root.matches?.('.tf-profile-image-dropdown')
+        ? [root]
+        : [...(root.querySelectorAll?.('.tf-profile-image-dropdown') || [])];
+
+    menus.forEach((menu) => {
+        if (menu.dataset.tfProfileImageMenuReady === '1') return;
+        menu.dataset.tfProfileImageMenuReady = '1';
+        const form = menu.closest('form');
+        const replace = menu.querySelector('[data-tf-profile-replace]');
+        const removeAction = menu.querySelector('[data-tf-profile-remove-action]');
+        const input = form?.querySelector('[data-tf-profile-input]');
+        const remove = form?.querySelector('[data-tf-profile-remove]');
+        const toggle = menu.querySelector('[data-bs-toggle="dropdown"]');
+
+        replace?.addEventListener('click', () => input?.click());
+        removeAction?.addEventListener('click', () => {
+            if (!remove || !form) return;
+            askTradeFlowConfirmation({
+                title: 'Remove profile image?',
+                text: 'Your custom profile image will be removed and the default avatar will be used.',
+                confirmButtonText: 'Remove image',
+            }, () => {
+                remove.checked = true;
+                input && (input.value = '');
+                window.bootstrap?.Dropdown.getInstance(toggle)?.hide();
+                form.requestSubmit();
+            });
+        });
+    });
+}
+
+initTradeFlowImageUploads();
+initTradeFlowProfileImageMenu();
 
 const TradeFlowPermissions = {
     syncGroup(group) {

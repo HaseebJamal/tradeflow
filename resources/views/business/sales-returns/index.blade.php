@@ -13,23 +13,23 @@
     <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>
     <div class="col-md-3 d-flex gap-2"><button class="btn btn-outline-primary">Filter</button><a href="{{ route('business.sales.returns.index') }}" class="btn btn-outline-secondary">Clear</a></div>
 </form>
-<x-table>
-    <thead><tr><th>Return Number</th><th>Source Sale Number</th><th>Source Type</th><th>Customer</th><th>Returned At</th><th>Refund Method</th><th>Refund Total</th><th>Status</th><th>Actions</th></tr></thead>
+<x-table class="tf-business-data-table">
+    <thead><tr><th>Return Number</th><th>Sale Number</th><th>Customer</th><th>Return Date</th><th>Refund Method</th><th>Refund Amount</th><th>Status</th><th>Created By</th><th>Actions</th></tr></thead>
     <tbody>@forelse($returns as $return)
         <tr>
             <td><strong>{{ $return->return_number ?? '-' }}</strong></td>
             <td><strong>{{ $return->order?->invoice?->invoice_number ?? $return->order?->order_number ?? '-' }}</strong></td>
-            <td>Sale</td>
             <td>{{ $return->customer?->name ?? 'Walk-in Customer' }}</td>
             <td><x-date-time :value="$return->returned_at" /></td>
             <td>{{ $return->refund_method }}</td>
             <td>Rs {{ number_format($return->refund_amount, 2) }}</td>
             <td>{{ $return->order?->status ?? '-' }}</td>
+            <td>{{ $return->processor?->name ?? '-' }}</td>
             <td><a class="btn btn-sm btn-outline-primary" href="{{ route('business.sales.returns.show', $return) }}">View</a></td>
         </tr>
     @empty
         <tr><td colspan="9" class="text-center tf-muted py-5">No sales returns found.</td></tr>
     @endforelse</tbody>
 </x-table>
-<div class="mt-3">{{ $returns->links() }}</div>
+<div class="mt-3"><x-table-result-summary :paginator="$returns" />{{ $returns->links('pagination::bootstrap-5') }}</div>
 @endsection

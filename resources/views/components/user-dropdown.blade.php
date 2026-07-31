@@ -6,15 +6,19 @@
     // /business. Keep an owner's business branding consistent on that page.
     $isBusinessOwnerNotificationPage = $user?->role === 'business_owner'
         && request()->routeIs('notifications.*');
+    $authenticatedBusiness = $user?->business ?? $user?->ownedBusiness;
     $businessWorkspace = $isBusinessContext
         ? $contextBusiness
-        : ((request()->is('business/*') || request()->is('staff/*') || $isBusinessOwnerNotificationPage)
-            ? ($user?->business ?? $user?->ownedBusiness)
+        : (($user?->role === 'business_owner' || request()->is('business/*') || request()->is('staff/*') || $isBusinessOwnerNotificationPage)
+            ? $authenticatedBusiness
             : null);
     // Workspace controls remain available for business users, but the compact
     // profile control must always identify the authenticated person.
+    $canBusinessSettings = (bool) $businessWorkspace
+        && \Illuminate\Support\Facades\Route::has('business.settings')
+        && app(\App\Services\CompanyPermissionService::class)->allowsUser($user, 'settings.view', $businessWorkspace);
     $usesBusinessBranding = (bool) $businessWorkspace
-        && ($isBusinessContext || $user?->role === 'business_owner');
+        && ($isBusinessContext || $user?->role === 'business_owner' || $canBusinessSettings);
     $displayName = $user?->name ?: 'User';
     $navbarDisplayName = $displayName;
     $displayRole = str($user?->role ?: 'user')->replace('_', ' ')->title();
@@ -35,9 +39,7 @@
         : null;
     $hidePasswordOption = in_array($user?->role, ['super_admin', 'business_owner'], true);
     $showAccountSettings = false;
-    $showBusinessSettings = $usesBusinessBranding
-        && \Illuminate\Support\Facades\Route::has('business.settings')
-        && app(\App\Services\CompanyPermissionService::class)->allowsUser($user, 'settings.view');
+    $showBusinessSettings = $canBusinessSettings;
 
     if (!$isBusinessContext && $user?->role === 'super_admin' && \Illuminate\Support\Facades\Route::has('admin.settings')) {
         $settingsRoute = route('admin.settings');

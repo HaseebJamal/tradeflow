@@ -24,6 +24,7 @@
 
 <div class="tf-card p-3 mb-3">
     <form method="GET" class="row g-2 align-items-end" data-audit-period-filter>
+        <div class="col-md-3"><label class="form-label">Search</label><input name="search" value="{{ $filters['search'] ?? '' }}" class="form-control" placeholder="User, action, business, or module"></div>
         <div class="col-md-3"><label class="form-label">Company</label><select name="business_id" class="form-select"><option value="">All companies</option>@foreach($businesses as $business)<option value="{{ $business->id }}" @selected(request('business_id') == $business->id)>{{ $business->business_name }}</option>@endforeach</select></div>
         <div class="col-md-3"><label class="form-label">User</label><select name="user_id" class="form-select"><option value="">All users</option>@foreach($users as $user)<option value="{{ $user->id }}" @selected(request('user_id') == $user->id)>{{ $user->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Role</label><select name="role" class="form-select"><option value="">All roles</option>@foreach($roles as $role)<option value="{{ $role }}" @selected(request('role') === $role)>{{ $role }}</option>@endforeach</select></div>
@@ -41,24 +42,25 @@
 </div>
 
 @if($hasAuditLogPeriod)
-<x-table>
-    <thead><tr><th>Date &amp; Time</th><th>User</th><th>Role</th><th>Module</th><th>Action</th><th>IP Address</th></tr></thead>
+<x-table class="tf-admin-data-table">
+    <thead><tr><th>Date &amp; Time</th><th>User</th><th>Role</th><th>Business</th><th>Module</th><th>Action</th><th>IP Address</th></tr></thead>
     <tbody>
     @forelse($logs as $log)
         <tr>
-            <td><x-date-time :value="$log->occurred_at ?? $log->created_at" /></td>
+            <td>{{ \Illuminate\Support\Carbon::parse($log->occurred_at ?? $log->created_at)->timezone(config('app.timezone'))->format('m/d/Y h:i A') }}</td>
             <td>{{ $log->user_name ?: $log->user?->name ?: 'System' }}</td>
             <td>{{ $log->role ?: $log->actor_role ?: 'system' }}</td>
+            <td>{{ $log->business?->business_name ?: 'Platform' }}</td>
             <td><x-activity-label :activity="$log" field="module" /></td>
             <td><x-activity-label :activity="$log" /></td>
             <td>{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</td>
         </tr>
     @empty
-        <tr><td colspan="6" class="text-center tf-muted py-4">No audit activity has been recorded yet.</td></tr>
+        <tr><td colspan="7" class="text-center tf-muted py-4">No audit activity has been recorded yet.</td></tr>
     @endforelse
     </tbody>
 </x-table>
-<div class="mt-3 audit-log-pagination">{{ $logs->links('pagination::bootstrap-5') }}</div>
+<div class="mt-3 audit-log-pagination"><x-table-result-summary :paginator="$logs" />{{ $logs->links('pagination::bootstrap-5') }}</div>
 @else
     <div class="tf-card p-4 text-center tf-muted">Please select a date/time range to view audit logs.</div>
 @endif

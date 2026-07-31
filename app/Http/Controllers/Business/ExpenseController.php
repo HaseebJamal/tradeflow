@@ -40,7 +40,7 @@ class ExpenseController extends Controller
             ->when($filters['search'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner->where('title', 'like', "%{$value}%")->orWhere('description', 'like', "%{$value}%")));
 
         return view('business.expenses.index', [
-            'expenses' => (clone $query)->latest('expense_date')->paginate(12)->withQueryString(),
+            'expenses' => (clone $query)->latest('expense_date')->paginate(10)->withQueryString(),
             'totalExpenses' => (clone $query)->sum('amount'),
             'monthlySummary' => Expense::where('business_id', $businessId)
                 ->selectRaw('YEAR(expense_date) as year, MONTH(expense_date) as month, SUM(amount) as total')

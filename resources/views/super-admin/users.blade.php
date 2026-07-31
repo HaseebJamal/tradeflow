@@ -23,11 +23,13 @@
         <div class="col-sm-6 col-lg-2"><label for="user-role" class="form-label">Role</label><select id="user-role" name="role" class="form-select"><option value="">All roles</option>@foreach($roles as $role)<option value="{{ $role }}" @selected(request('role') === $role)>{{ Str::headline($role) }}</option>@endforeach</select></div>
         <div class="col-sm-6 col-lg-2"><label for="user-business" class="form-label">Business</label><select id="user-business" name="business_id" class="form-select"><option value="">All businesses</option>@foreach($businesses as $business)<option value="{{ $business->id }}" @selected((string) request('business_id') === (string) $business->id)>{{ $business->business_name }}</option>@endforeach</select></div>
         <div class="col-sm-6 col-lg-2"><label for="user-status" class="form-label">Status</label><select id="user-status" name="status" class="form-select"><option value="">All statuses</option>@foreach(['active', 'suspended', 'inactive'] as $status)<option value="{{ $status }}" @selected(request('status') === $status)>{{ Str::headline($status) }}</option>@endforeach</select></div>
+        <div class="col-sm-6 col-lg-2"><label class="form-label">Last Sign-in From</label><input type="date" name="last_sign_in_from" value="{{ request('last_sign_in_from') }}" class="form-control"></div>
+        <div class="col-sm-6 col-lg-2"><label class="form-label">Last Sign-in To</label><input type="date" name="last_sign_in_to" value="{{ request('last_sign_in_to') }}" class="form-control"></div>
         <div class="col-sm-6 col-lg-2 d-flex gap-2"><button class="btn btn-tf-primary flex-grow-1"><i class="bi bi-funnel me-1"></i>Filter</button><a href="{{ route('admin.users') }}" class="btn btn-outline-secondary" title="Clear filters" aria-label="Clear filters"><i class="bi bi-arrow-counterclockwise"></i></a></div>
     </form>
 </div>
 
-<x-table>
+<x-table class="tf-admin-data-table">
     <thead><tr><th>Account</th><th>Role</th><th>Business</th><th>Last sign-in</th><th>Status</th><th class="text-end">Controls</th></tr></thead>
     <tbody>
     @forelse($users as $user)
@@ -57,5 +59,5 @@
     @endforelse
     </tbody>
 </x-table>
-<div class="mt-3">{{ $users->links() }}</div>
+<div class="mt-3"><x-table-result-summary :paginator="$users" />{{ $users->links() }}</div>
 @endsection

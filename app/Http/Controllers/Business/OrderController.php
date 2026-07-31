@@ -42,18 +42,12 @@ class OrderController extends Controller
             'created_by' => ['nullable', 'integer'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
-            'month' => ['nullable', 'integer', 'min:1', 'max:12'],
-            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
-            'amount_from' => ['nullable', 'integer', 'min:0'],
-            'amount_to' => ['nullable', 'integer', 'min:0', 'gte:amount_from'],
             'clear' => ['nullable', 'boolean'],
         ]);
 
         $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? now()->startOfMonth()->toDateString());
         $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? now()->toDateString());
-        $hasDateRange = $dateFrom || $dateTo;
-
-        $query = Order::with(['customer', 'creator', 'items.product'])
+        $query = Order::with(['customer', 'creator', 'invoice', 'items.product'])
             ->where('business_id', $businessId)
             ->when($filters['order_number'] ?? null, fn ($q, $value) => $q->where(function ($orders) use ($value) {
                 $orders->where('order_number', 'like', "%{$value}%")
@@ -66,14 +60,10 @@ class OrderController extends Controller
             ->when($filters['payment_type'] ?? null, fn ($q, $value) => $q->where('payment_type', $value))
             ->when($filters['created_by'] ?? null, fn ($q, $value) => $q->where('created_by', $value))
             ->when($dateFrom, fn ($q, $value) => $q->whereDate('order_date', '>=', $value))
-            ->when($dateTo, fn ($q, $value) => $q->whereDate('order_date', '<=', $value))
-            ->when(!$hasDateRange && ($filters['month'] ?? null), fn ($q, $value) => $q->whereMonth('order_date', $value))
-            ->when(!$hasDateRange && ($filters['year'] ?? null), fn ($q, $value) => $q->whereYear('order_date', $value))
-            ->when($filters['amount_from'] ?? null, fn ($q, $value) => $q->where('grand_total', '>=', $value))
-            ->when($filters['amount_to'] ?? null, fn ($q, $value) => $q->where('grand_total', '<=', $value));
+            ->when($dateTo, fn ($q, $value) => $q->whereDate('order_date', '<=', $value));
 
         return view('business.orders.index', [
-            'orders' => $query->latest()->paginate(12)->withQueryString(),
+            'orders' => $query->latest()->paginate(10)->withQueryString(),
             'customers' => Customer::where('business_id', $businessId)->orderBy('name')->get(),
             'products' => Product::where('business_id', $businessId)->orderBy('name')->get(),
             'creators' => User::where('business_id', $businessId)->orderBy('name')->get(),

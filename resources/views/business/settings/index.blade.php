@@ -4,7 +4,7 @@
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-<div class="tf-card p-4 mb-4">
+<div class="tf-card p-4 mb-4 protected-business-details">
     <h2 class="h5 mb-1">Protected Business Details</h2>
     <p class="tf-muted mb-3">Business name and login email changes require Super Admin approval. You can update the company logo directly.</p>
     <div class="row g-3">
@@ -22,7 +22,7 @@
         @if($business?->logo)<img src="{{ asset('storage/'.$business->logo) }}" class="profile-avatar" alt="{{ $business->business_name }} logo">@endif
     </div>
     <form method="POST" action="{{ route('business.settings.logo') }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PATCH')
-        <div class="col-md-8"><label class="form-label">Logo</label><input name="logo" type="file" accept="image/jpeg,image/png,image/webp" class="form-control @error('logo') is-invalid @enderror"><small class="tf-muted">JPG, JPEG, PNG, or WebP. Maximum 2 MB.</small>@error('logo')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>
+        <div class="col-md-8"><label class="form-label">Logo</label><input name="logo" type="file" accept="image/jpeg,image/png,image/webp" class="form-control @error('logo') is-invalid @enderror" data-tf-image-upload><small class="tf-muted">JPG, JPEG, PNG, or WebP. Maximum 2 MB.</small><div class="invalid-feedback" data-tf-image-error></div><small class="tf-muted d-block mt-1" data-tf-image-file-status></small>@error('logo')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>
         <div class="col-md-4 d-flex align-items-end"><div class="d-flex flex-wrap gap-2"><label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="remove_logo" value="1"> Remove current logo</label><button class="btn btn-tf-primary">Save Logo</button></div></div>
     </form>
 </div>

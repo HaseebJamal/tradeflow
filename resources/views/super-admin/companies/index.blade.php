@@ -103,10 +103,7 @@
             @endforelse
         </tbody>
     </x-table>
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
-        <small class="tf-muted">Showing {{ $companies->firstItem() ?? 0 }} to {{ $companies->lastItem() ?? 0 }} of {{ $companies->total() }} results</small>
-        {{ $companies->links() }}
-    </div>
+    <div class="mt-3">{{ $companies->links() }}</div>
 
     @foreach($companies as $company)
         @php

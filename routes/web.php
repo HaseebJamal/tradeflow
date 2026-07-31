@@ -37,14 +37,14 @@ use Illuminate\Support\Facades\Route;
 use App\Models\SubscriptionPlan;
 use App\Models\Subscription;
 
-Route::get('/', fn () => view('public.home', [
+Route::get('/', fn() => view('public.home', [
     'pricingPlans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->take(3)->get(),
     'currentSubscription' => auth()->user()?->business_id
         ? Subscription::with('plan')->where('business_id', auth()->user()->business_id)->first()
         : null,
 ]))->name('public.home');
 Route::view('/features', 'public.features')->name('public.features');
-Route::get('/pricing', fn () => view('public.pricing', [
+Route::get('/pricing', fn() => view('public.pricing', [
     'plans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get(),
     'currentSubscription' => auth()->user()?->business_id
         ? Subscription::with('plan')->where('business_id', auth()->user()->business_id)->first()
@@ -117,11 +117,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
         ->name('business-requests.show');
     Route::get('/companies/create', [CompanyController::class, 'create'])->name('companies.create');
     Route::post('/companies', [CompanyController::class, 'store'])->name('companies.store');
-    Route::get('/companies/pending', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'pending'))->name('companies.pending');
-    Route::get('/companies/approved', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'approved'))->name('companies.approved');
-    Route::get('/companies/rejected', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'rejected'))->name('companies.rejected');
-    Route::get('/companies/suspended', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'suspended'))->name('companies.suspended');
-    Route::get('/companies/archived', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'archived'))->name('companies.archived');
+    Route::get('/companies/pending', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'pending'))->name('companies.pending');
+    Route::get('/companies/approved', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'approved'))->name('companies.approved');
+    Route::get('/companies/rejected', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'rejected'))->name('companies.rejected');
+    Route::get('/companies/suspended', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'suspended'))->name('companies.suspended');
+    Route::get('/companies/archived', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'archived'))->name('companies.archived');
     Route::get('/companies/{company}', [CompanyController::class, 'show'])->name('companies.show');
     Route::get('/companies/{company}/document-footer', [CompanyController::class, 'editDocumentFooter'])->name('companies.document-footer.edit');
     Route::put('/companies/{company}/document-footer', [CompanyController::class, 'updateDocumentFooter'])->name('companies.document-footer.update');
@@ -153,24 +153,24 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::post('/permissions/templates', [CompanyPermissionController::class, 'storeTemplate'])->name('permissions.templates.store');
     Route::post('/permissions/templates/{template}/apply', [CompanyPermissionController::class, 'applyTemplate'])->name('permissions.templates.apply');
     Route::get('/notifications-center', [AdminNotificationController::class, 'index'])->name('notifications.index');
-    Route::get('/notifications-center/unread', fn (\Illuminate\Http\Request $request) => app(AdminNotificationController::class)->index($request, 'unread'))->name('notifications.unread');
-    Route::get('/notifications-center/registrations', fn (\Illuminate\Http\Request $request) => app(AdminNotificationController::class)->index($request, 'registrations'))->name('notifications.registrations');
-    Route::get('/notifications-center/alerts', fn (\Illuminate\Http\Request $request) => app(AdminNotificationController::class)->index($request, 'alerts'))->name('notifications.alerts');
+    Route::get('/notifications-center/unread', fn(\Illuminate\Http\Request $request) => app(AdminNotificationController::class)->index($request, 'unread'))->name('notifications.unread');
+    Route::get('/notifications-center/registrations', fn(\Illuminate\Http\Request $request) => app(AdminNotificationController::class)->index($request, 'registrations'))->name('notifications.registrations');
+    Route::get('/notifications-center/alerts', fn(\Illuminate\Http\Request $request) => app(AdminNotificationController::class)->index($request, 'alerts'))->name('notifications.alerts');
     Route::patch('/notifications-center/{notification}/read', [AdminNotificationController::class, 'markRead'])->name('notifications.read');
     Route::patch('/notifications-center/{notification}/unread', [AdminNotificationController::class, 'markUnread'])->name('notifications.unread-item');
     Route::delete('/notifications-center/{notification}', [AdminNotificationController::class, 'destroy'])->name('notifications.destroy');
     Route::get('/notifications-center/{notification}', [AdminNotificationController::class, 'show'])->name('notifications.show');
     Route::get('/notifications-center/{notification}/review', [AdminNotificationController::class, 'review'])->name('notifications.review');
     Route::patch('/notifications-center/read-all', [AdminNotificationController::class, 'markAllRead'])->name('notifications.read-all');
-    Route::get('/approvals/pending', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'pending'))->name('approvals.pending');
+    Route::get('/approvals/pending', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'pending'))->name('approvals.pending');
     Route::get('/approvals/history', [CompanyController::class, 'approvalHistory'])->name('approvals.history');
     Route::get('/approvals/history/{approvalLog}', [CompanyController::class, 'approvalHistoryShow'])->name('approvals.history.show');
-    Route::get('/approvals/rejected', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'rejected'))->name('approvals.rejected');
-    Route::get('/approvals/suspended', fn (\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'suspended'))->name('approvals.suspended');
+    Route::get('/approvals/rejected', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'rejected'))->name('approvals.rejected');
+    Route::get('/approvals/suspended', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'suspended'))->name('approvals.suspended');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.show');
     Route::get('/profile/settings', [ProfileController::class, 'edit'])->name('profile.settings');
     Route::get('/profile/password', [ProfileController::class, 'edit'])->name('profile.password');
-    Route::get('/profile/security', fn () => view('super-admin.profile-security'))->name('profile.security');
+    Route::get('/profile/security', fn() => view('super-admin.profile-security'))->name('profile.security');
     Route::get('/live-activity', [AdminController::class, 'liveActivity'])->name('live-activity');
     Route::get('/businesses', [AdminController::class, 'businesses'])->name('businesses');
     Route::get('/businesses/{business}', [AdminController::class, 'businessShow'])->name('businesses.show');
@@ -198,8 +198,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::patch('/subscription-change-requests/{changeRequest}', [AdminController::class, 'reviewSubscriptionChangeRequest'])->name('subscription-change-requests.review');
     Route::get('/support-tickets', [AdminController::class, 'supportTickets'])->name('support-tickets');
     Route::patch('/support-tickets/{ticket}', [AdminController::class, 'updateTicket'])->name('support-tickets.update');
-    Route::get('/categories', [AdminController::class, 'categories'])->name('categories');
-    Route::post('/categories', [AdminController::class, 'storeCategory'])->name('categories.store');
     Route::get('/payments', [AdminController::class, 'payments'])->name('payments');
     Route::post('/payments', [AdminController::class, 'storePlatformPayment'])->name('payments.store');
     Route::get('/notifications', [AdminController::class, 'notifications'])->name('notifications');
@@ -260,6 +258,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy')->middleware('business.permission:Customers');
     Route::get('/customers/{customer}/statement', [CustomerController::class, 'statement'])->name('customers.statement')->middleware('business.permission:Customers');
     Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory')->middleware('business.permission:Inventory');
+    Route::get('/inventory/history', [InventoryController::class, 'history'])->name('inventory.history')->middleware('business.permission:Inventory');
     Route::post('/inventory/adjust', [InventoryController::class, 'adjust'])->name('inventory.adjust')->middleware('business.permission:Inventory');
     Route::post('/inventory/transfer', [InventoryController::class, 'transfer'])->name('inventory.transfer')->middleware('business.permission:Inventory');
     Route::patch('/inventory/{inventory}/alert', [InventoryController::class, 'updateAlert'])->name('inventory.alert')->middleware('business.permission:Inventory');
@@ -313,8 +312,8 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     });
     // New-sale creation is unavailable while sales remain a history and
     // management module.
-    Route::get('/sales/create', fn () => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('sales.create');
-    Route::post('/sales', fn () => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('sales.store');
+    Route::get('/sales/create', fn() => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('sales.create');
+    Route::post('/sales', fn() => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('sales.store');
     Route::get('/sales/returns', [\App\Http\Controllers\Business\SalesReturnController::class, 'index'])->name('sales.returns.index')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
     Route::get('/sales/returns/create', [\App\Http\Controllers\Business\SalesReturnController::class, 'create'])->name('sales.returns.create')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
     Route::post('/sales/returns/start', [\App\Http\Controllers\Business\SalesReturnController::class, 'start'])->name('sales.returns.start')->middleware(['business.permission:Sales Returns', 'business.permission:Sales']);
@@ -342,17 +341,17 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::patch('/sales/{order}/status', [OrderController::class, 'updateStatus'])->name('sales.status')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
 
     // Legacy order URLs remain available as safe redirects or action aliases.
-    Route::get('/orders', fn () => redirect()->route('business.sales.index'))->name('orders.index')->middleware('business.permission:Sales');
-    Route::get('/orders/create', fn () => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('orders.create');
-    Route::post('/orders', fn () => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('orders.store');
-    Route::get('/orders/{order}/edit', fn ($order) => redirect()->route('business.sales.edit', $order))->name('orders.edit')->middleware('business.permission:Sales');
+    Route::get('/orders', fn() => redirect()->route('business.sales.index'))->name('orders.index')->middleware('business.permission:Sales');
+    Route::get('/orders/create', fn() => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('orders.create');
+    Route::post('/orders', fn() => redirect()->route('business.sales.index')->with('info', 'New sales are not available from this module.'))->name('orders.store');
+    Route::get('/orders/{order}/edit', fn($order) => redirect()->route('business.sales.edit', $order))->name('orders.edit')->middleware('business.permission:Sales');
     Route::put('/orders/{order}', [OrderController::class, 'update'])->name('orders.update')->middleware(['business.permission:Sales', 'company.permission:sales.edit']);
     Route::patch('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
     Route::patch('/orders/{order}/void', [OrderController::class, 'void'])->name('orders.void')->middleware('business.permission:Sales');
     Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy')->middleware('business.permission:Sales');
-    Route::get('/orders/{order}', fn ($order) => redirect()->route('business.sales.show', $order))->name('orders.show')->middleware('business.permission:Sales');
+    Route::get('/orders/{order}', fn($order) => redirect()->route('business.sales.show', $order))->name('orders.show')->middleware('business.permission:Sales');
     Route::patch('/orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status')->middleware(['business.permission:Sales', 'company.permission:sales.update_status']);
-    Route::get('/payments', fn () => redirect()->route('business.sales.payments.index'))->name('payments')->middleware('business.permission:Sales');
+    Route::get('/payments', fn() => redirect()->route('business.sales.payments.index'))->name('payments')->middleware('business.permission:Sales');
     Route::post('/payments', [PaymentController::class, 'store'])->name('payments.store')->middleware(['business.permission:Sales', 'company.permission:sales.payments']);
     Route::get('/khata', [KhataController::class, 'index'])->name('khata')->middleware('business.permission:Accounting');
     Route::post('/khata/journal-entries', [KhataController::class, 'storeJournal'])->name('khata.journal.store')->middleware('business.permission:Accounting');
@@ -367,10 +366,10 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::patch('/deliveries/{delivery}/reopen', [DeliveryController::class, 'reopen'])->name('deliveries.reopen')->middleware('business.permission:Deliveries');
     Route::patch('/deliveries/{delivery}/cancel', [DeliveryController::class, 'cancel'])->name('deliveries.cancel')->middleware('business.permission:Deliveries');
     Route::get('/deliveries/{delivery}/sheet', [DeliveryController::class, 'sheet'])->name('deliveries.sheet')->middleware('business.permission:Deliveries');
-    Route::get('/invoices', fn () => redirect()->route('business.sales.invoices.index'))->name('invoices.index')->middleware('business.permission:Sales');
-    Route::get('/invoices/{order}', fn ($order) => redirect()->route('business.sales.invoices.show', $order))->name('invoices.show')->middleware('business.permission:Sales');
-    Route::get('/invoices/{order}/pdf', fn ($order) => redirect()->route('business.sales.invoices.pdf', $order))->name('invoices.pdf')->middleware('business.permission:Sales');
-    Route::get('/invoices/{order}/pdf/download', fn ($order) => redirect()->route('business.sales.invoices.pdf.download', $order))->name('invoices.pdf.download')->middleware('business.permission:Sales');
+    Route::get('/invoices', fn() => redirect()->route('business.sales.invoices.index'))->name('invoices.index')->middleware('business.permission:Sales');
+    Route::get('/invoices/{order}', fn($order) => redirect()->route('business.sales.invoices.show', $order))->name('invoices.show')->middleware('business.permission:Sales');
+    Route::get('/invoices/{order}/pdf', fn($order) => redirect()->route('business.sales.invoices.pdf', $order))->name('invoices.pdf')->middleware('business.permission:Sales');
+    Route::get('/invoices/{order}/pdf/download', fn($order) => redirect()->route('business.sales.invoices.pdf.download', $order))->name('invoices.pdf.download')->middleware('business.permission:Sales');
     Route::patch('/invoice-records/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update')->middleware('business.permission:Sales');
     Route::patch('/invoice-records/{invoice}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue')->middleware('business.permission:Sales');
     Route::patch('/invoice-records/{invoice}/void', [InvoiceController::class, 'void'])->name('invoices.void')->middleware('business.permission:Sales');

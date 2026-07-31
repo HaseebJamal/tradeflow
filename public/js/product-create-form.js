@@ -52,10 +52,42 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
     const clearErrors = () => {
         errors?.classList.add('d-none');
         form.querySelectorAll('.is-invalid').forEach((field) => field.classList.remove('is-invalid'));
+        form.querySelectorAll('.tomselect.is-invalid').forEach((control) => control.classList.remove('is-invalid'));
+    };
+    const syncTomSelectValues = () => {
+        form.querySelectorAll('select').forEach((select) => {
+            const control = window.getTradeFlowTomSelect?.(select);
+            if (!control) return;
+
+            const value = control.getValue();
+            select.value = Array.isArray(value) ? value[0] || '' : value || '';
+        });
+    };
+    const markInvalid = (field, message = '') => {
+        if (!field) return;
+
+        field.classList.add('is-invalid');
+        const control = window.getTradeFlowTomSelect?.(field);
+        control?.wrapper.classList.add('is-invalid');
+
+        if (!message) return;
+        let feedback = field.closest('[data-product-select-control]')?.parentElement?.querySelector('[data-product-client-error]');
+        if (!feedback) {
+            feedback = document.createElement('div');
+            feedback.className = 'invalid-feedback d-block';
+            feedback.dataset.productClientError = 'true';
+            field.closest('[data-product-select-control]')?.insertAdjacentElement('afterend', feedback);
+        }
+        feedback.textContent = message;
     };
     const updateSaveAvailability = () => {
-        const ready = ['category', 'unit'].every((kind) => [...form.querySelectorAll(`[data-product-field="${fieldFor(kind)}"]`)]
-            .every((select) => [...select.options].some((option) => option.value)));
+        // A product form can be submitted whenever both catalogs are available.
+        // Native required validation still enforces a selection in every product block.
+        const ready = ['category', 'unit'].every((kind) => {
+            const selects = [...form.querySelectorAll(`[data-product-field="${fieldFor(kind)}"]`)];
+
+            return selects.length > 0 && selects.every((select) => !select.disabled);
+        });
         form.querySelectorAll('[data-save-products]').forEach((button) => { button.disabled = !ready; });
     };
     const hydrateSelect = (select, kind) => {
@@ -110,7 +142,7 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
             const match = key.match(/^products\.(\d+)\.(.+)$/);
             if (match) {
                 const field = form.querySelector(`[name="products[${match[1]}][${match[2]}]"]`);
-                field?.classList.add('is-invalid');
+                markInvalid(field, message);
                 messages.push(`Product ${Number(match[1]) + 1}: ${message}`);
             } else {
                 messages.push(message);
@@ -243,8 +275,15 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
     });
 
     form.addEventListener('submit', async (event) => {
+        syncTomSelectValues();
         if (!isAsync) {
-            if (!form.checkValidity()) return;
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                const invalidField = [...form.elements].find((field) => field.willValidate && !field.checkValidity());
+                markInvalid(invalidField, invalidField?.validationMessage || 'This field is required.');
+                invalidField?.focus();
+                return;
+            }
             const submit = form.querySelector('[data-save-products]');
             if (submit?.dataset.submitting === 'true') { event.preventDefault(); return; }
             if (submit) { submit.dataset.submitting = 'true'; submit.disabled = true; submit.textContent = 'Saving Products...'; }

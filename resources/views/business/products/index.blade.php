@@ -23,7 +23,7 @@
         @companyCan('products.export')<div class="col-md-2"><a class="btn btn-outline-secondary w-100" href="{{ route('business.products.export') }}">Export</a></div>@endcompanyCan
     </div>
 </form>
-<x-table class="product-list-table">
+<x-table class="product-list-table tf-business-data-table">
     <thead><tr><th>Image</th><th>Product</th><th>Category</th><th>Unit</th><th>Latest Purchase</th><th>Average Cost</th><th>Retail Price</th><th>Wholesale Price</th><th>Stock</th><th>Barcode</th><th>Status</th><th>Created</th><th class="text-end">Actions</th></tr></thead>
     <tbody>
     @forelse($products ?? [] as $product)
@@ -70,9 +70,9 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="12" class="text-center tf-muted py-4">No products yet.</td></tr>
+        <tr><td colspan="13" class="text-center tf-muted py-4">No products yet.</td></tr>
     @endforelse
     </tbody>
 </x-table>
-@if(isset($products) && method_exists($products, 'links'))<div class="mt-3">{{ $products->links() }}</div>@endif
+@if(isset($products) && method_exists($products, 'links'))<div class="mt-3"><x-table-result-summary :paginator="$products" />{{ $products->links('pagination::bootstrap-5') }}</div>@endif
 @endsection

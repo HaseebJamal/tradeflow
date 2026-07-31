@@ -27,8 +27,10 @@
     <div class="col-12"><h3 class="h6 mb-0">Personal Information</h3></div>
     <div class="col-md-3">
         <label for="staff-profile-image" class="form-label">Profile Image <span class="tf-muted small">Optional</span></label>
-        <input id="staff-profile-image" name="profile_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control @error('profile_image') is-invalid @enderror">
+        <input id="staff-profile-image" name="profile_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control @error('profile_image') is-invalid @enderror" data-tf-image-upload>
         @error('profile_image')<div class="invalid-feedback">{{ $message }}</div>@enderror
+        <div class="invalid-feedback" data-tf-image-error></div>
+        <small class="tf-muted d-block mt-1" data-tf-image-file-status></small>
     </div>
     <div class="col-md-3"><label for="staff-name" class="form-label">Full Name <span class="text-danger" aria-hidden="true">*</span></label><input id="staff-name" name="name" class="form-control @error('name') is-invalid @enderror" value="{{ old('name', $staffMember->name ?? '') }}" maxlength="255" required>@error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
     <div class="col-md-3"><label for="staff-father-name" class="form-label">Father Name <span class="tf-muted small">Optional</span></label><input id="staff-father-name" name="father_name" class="form-control @error('father_name') is-invalid @enderror" value="{{ old('father_name', $staffMember?->staffProfile?->father_name ?? '') }}" maxlength="255">@error('father_name')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>

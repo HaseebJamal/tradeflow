@@ -58,9 +58,17 @@
             @endforelse
         </tbody>
     </x-table>
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3"><small class="tf-muted">Showing {{ $requests->firstItem() ?? 0 }} to {{ $requests->lastItem() ?? 0 }} of {{ $requests->total() }} results</small>{{ $requests->links() }}</div>
+    <div class="mt-3">{{ $requests->links() }}</div>
 
-    <div class="modal fade" id="businessRequestDetailsModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-md"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5">Business Request Details</h2><p class="tf-muted mb-0" data-tf-request-subtitle></p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><section data-tf-request-history-wrap><h3 class="h6">Status History</h3><div data-tf-request-history></div></section><form class="border-top pt-3 mt-3 d-none" data-tf-request-review method="POST"><input type="hidden" name="_token" value="{{ csrf_token() }}"><input type="hidden" name="_method" value="PATCH"><div class="mb-3"><label class="form-label">Decision</label><select name="decision" class="form-select" data-native-select data-tf-request-decision></select></div><button class="btn btn-tf-primary">Save Decision</button></form></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div></div></div></div>
+    <div class="modal fade" id="businessRequestDetailsModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5">Business Request Details</h2><p class="tf-muted mb-0" data-tf-request-subtitle></p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
+        <section class="mb-4"><h3 class="h6">Request Overview</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-request-overview></tbody></table></div></section>
+        <section class="mb-4"><h3 class="h6">Current Information</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-request-current></tbody></table></div></section>
+        <section class="mb-4"><h3 class="h6">Requested Changes</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-request-requested></tbody></table></div></section>
+        <section class="mb-4 d-none" data-tf-request-comparison-section><h3 class="h6">Comparison</h3><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Field</th><th>Current</th><th>Requested</th></tr></thead><tbody data-tf-request-comparison></tbody></table></div></section>
+        <section class="mb-4 d-none" data-tf-request-payment-section><h3 class="h6">Payment Information</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-request-payment></tbody></table></div></section>
+        <section><h3 class="h6">Status History</h3><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Status</th><th>Performed By</th><th>Date &amp; Time</th><th>Reason / Admin Note</th></tr></thead><tbody data-tf-request-history></tbody></table></div></section>
+        <form class="border-top pt-3 mt-3 d-none" data-tf-request-review method="POST"><input type="hidden" name="_token" value="{{ csrf_token() }}"><input type="hidden" name="_method" value="PATCH"><div class="row g-3"><div class="col-md-4"><label class="form-label">Decision</label><select name="decision" class="form-select" data-native-select data-tf-request-decision></select></div><div class="col-md-8"><label class="form-label" data-tf-request-note-label>Admin message</label><textarea class="form-control" rows="2" maxlength="2000" data-tf-request-note></textarea></div></div><button class="btn btn-tf-primary mt-3">Save Decision</button></form>
+    </div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div></div></div></div>
 @endsection
 
 @push('scripts')
@@ -70,7 +78,7 @@
     const instance = modal ? bootstrap.Modal.getOrCreateInstance(modal) : null;
     const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[char]));
     document.addEventListener('click', async event => {
-        const trigger = event.target.closest('[data-tf-business-request-details]');
+        const trigger = event.target.closest('[data-tf-business-request-legacy]');
         if (!trigger || !modal) return;
         try {
             const response = await fetch(trigger.dataset.url, {headers: {'Accept': 'application/json'}});
@@ -89,6 +97,77 @@
             } else { form.classList.add('d-none'); form.action = ''; decision.innerHTML = ''; }
             instance.show();
         } catch (error) { window.Swal ? Swal.fire('Unavailable', 'The related request is no longer available.', 'warning') : alert('The related request is no longer available.'); }
+    });
+})();
+</script>
+<script>
+(() => {
+    const modal = document.getElementById('businessRequestDetailsModal');
+    if (!modal) return;
+    const instance = bootstrap.Modal.getOrCreateInstance(modal);
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+    const rows = values => Object.entries(values || {}).map(([label, value]) => `<tr><th class="fw-medium text-nowrap">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join('') || '<tr><td class="tf-muted">No details available.</td></tr>';
+
+    document.addEventListener('click', async event => {
+        const trigger = event.target.closest('[data-tf-business-request-details]');
+        if (!trigger) return;
+
+        try {
+            const response = await fetch(trigger.dataset.url, {headers: {'Accept': 'application/json'}});
+            if (!response.ok) throw new Error('Request unavailable');
+            const request = await response.json();
+            const comparison = request.changes || {};
+            const payment = request.payment_details || {};
+            const form = modal.querySelector('[data-tf-request-review]');
+            const decision = modal.querySelector('[data-tf-request-decision]');
+            const note = modal.querySelector('[data-tf-request-note]');
+            const noteLabel = modal.querySelector('[data-tf-request-note-label]');
+            const actions = request.actions || {};
+
+            modal.querySelector('[data-tf-request-subtitle]').textContent = `${request.type} · ${request.status}`;
+            modal.querySelector('[data-tf-request-overview]').innerHTML = rows({
+                'Request ID': `#${request.source}-${request.id}`,
+                'Request type': request.type,
+                'Current status': request.status,
+                'Business name': request.business,
+                'Owner name': request.owner,
+                'Requested by': request.requested_by,
+                'Requested at': request.requested_at,
+                'Request reason': request.reason || 'Not provided',
+            });
+            modal.querySelector('[data-tf-request-current]').innerHTML = rows(request.current_details);
+            modal.querySelector('[data-tf-request-requested]').innerHTML = rows(request.requested_details);
+            modal.querySelector('[data-tf-request-comparison]').innerHTML = Object.entries(comparison).map(([label, values]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(values.current)}</td><td>${escapeHtml(values.requested)}</td></tr>`).join('');
+            modal.querySelector('[data-tf-request-comparison-section]').classList.toggle('d-none', Object.keys(comparison).length === 0);
+            modal.querySelector('[data-tf-request-payment]').innerHTML = rows(payment);
+            modal.querySelector('[data-tf-request-payment-section]').classList.toggle('d-none', Object.keys(payment).length === 0);
+            modal.querySelector('[data-tf-request-history]').innerHTML = (request.history || []).map(item => `<tr><td>${escapeHtml(item.status)}</td><td>${escapeHtml(item.performed_by)}</td><td>${escapeHtml(item.at)}</td><td>${escapeHtml(item.message || '—')}</td></tr>`).join('') || '<tr><td colspan="4" class="tf-muted">No history available.</td></tr>';
+
+            if ((actions.url || actions.decision_urls) && actions.decisions?.length && !trigger.dataset.historyOnly) {
+                form.classList.remove('d-none');
+                form.action = actions.url || actions.decision_urls[actions.decisions[0]];
+                decision.innerHTML = actions.decisions.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+                note.name = actions.note_field || 'admin_note';
+                note.value = '';
+                decision.onchange = () => {
+                    form.action = actions.decision_urls?.[decision.value] || actions.url;
+                    const required = ['Rejected', 'Changes Requested'].includes(decision.value);
+                    note.required = required;
+                    noteLabel.textContent = required ? 'Admin message (required)' : 'Admin message';
+                };
+                if (trigger.dataset.decision && actions.decisions.includes(trigger.dataset.decision)) decision.value = trigger.dataset.decision;
+                decision.onchange();
+            } else {
+                form.classList.add('d-none');
+                form.action = '';
+                decision.innerHTML = '';
+                note.value = '';
+            }
+
+            instance.show();
+        } catch (error) {
+            window.Swal ? Swal.fire('Unavailable', 'The related request is no longer available.', 'warning') : alert('The related request is no longer available.');
+        }
     });
 })();
 </script>

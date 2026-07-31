@@ -10,11 +10,16 @@
     if (! is_array($draftProducts) || $draftProducts === []) {
         $draftProducts = [[]];
     }
-    $cannotSave = ($categories ?? collect())->isEmpty() || ($units ?? collect())->isEmpty();
 @endphp
 
 @if($errors->any())
-    <div class="alert alert-danger">Please correct the highlighted product fields.</div>
+    <div class="alert alert-danger" data-tf-persistent-alert data-product-create-errors role="alert">
+        <ul class="mb-0 ps-3">
+            @foreach($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
 @endif
 
 @if($isEdit)
@@ -30,7 +35,7 @@
             </div>
             @include('business.products._master-fields', ['nested' => false, 'index' => 0, 'values' => $product])
             <div class="d-flex justify-content-end mt-4">
-                <button class="btn btn-tf-primary" data-save-products @disabled($cannotSave)>Save Product</button>
+                <button type="submit" class="btn btn-tf-primary" data-save-products>Save Product</button>
             </div>
         </section>
     </form>

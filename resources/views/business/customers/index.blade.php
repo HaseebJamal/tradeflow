@@ -31,17 +31,19 @@
         <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
     </div>
 </form>
-<x-table>
-    <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Type</th><th>City</th><th>Credit Balance</th><th>Status</th><th>Created By</th><th></th></tr></thead>
+<x-table class="tf-business-data-table">
+    <thead><tr><th>Customer</th><th>Shop</th><th>Phone</th><th>Email</th><th>Type</th><th>City</th><th>Credit Balance</th><th>Credit Limit</th><th>Status</th><th>Created By</th><th>Actions</th></tr></thead>
     <tbody>
     @forelse($customers ?? [] as $customer)
         <tr>
-            <td><strong>{{ $customer->display_name }}</strong>@if($customer->business_name)<div class="small tf-muted">Shop: {{ $customer->business_name }}</div>@endif</td>
+            <td><strong>{{ $customer->display_name }}</strong></td>
+            <td>{{ $customer->business_name ?: '-' }}</td>
             <td>{{ $customer->phone }}</td>
             <td>{{ $customer->email ?: '-' }}</td>
             <td>{{ $customer->customer_type }}</td>
             <td>{{ $customer->city }}</td>
             <td>Rs {{ number_format($customer->current_balance) }}</td>
+            <td>Rs {{ number_format($customer->credit_limit) }}</td>
             <td><span class="tf-badge {{ $customer->status === 'Active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $customer->deleted_at ? 'Archived' : $customer->status }}</span></td>
             <td>{{ $customer->creator?->name ?? '-' }}</td>
             <td class="text-end text-nowrap">
@@ -60,9 +62,9 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="9" class="text-center tf-muted py-4">No customers yet.</td></tr>
+        <tr><td colspan="11" class="text-center tf-muted py-4">No customers yet.</td></tr>
     @endforelse
     </tbody>
 </x-table>
-@if(isset($customers) && method_exists($customers, 'links'))<div class="mt-3">{{ $customers->links() }}</div>@endif
+@if(isset($customers) && method_exists($customers, 'links'))<div class="mt-3"><x-table-result-summary :paginator="$customers" />{{ $customers->links('pagination::bootstrap-5') }}</div>@endif
 @endsection

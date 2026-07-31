@@ -19,6 +19,7 @@ class AuditLogController extends Controller
     {
         [$filters, $query] = $this->filteredQuery($request);
         $businessId = $this->businessId();
+        $users = $this->businessUsers()->orderBy('name')->get(['id', 'name', 'role']);
         $metadata = Cache::remember("tradeflow:business:{$businessId}:audit-log-filter-metadata", now()->addMinutes(5), function (): array {
             return [
                 'modules' => $this->businessLogs()->whereNotNull('module')->distinct()->orderBy('module')->pluck('module')->all(),
@@ -27,8 +28,8 @@ class AuditLogController extends Controller
         });
 
         return view('business.audit-logs.index', [
-            'logs' => $query->orderByDesc('created_at')->paginate(12)->withQueryString(),
-            'users' => User::where('business_id', $businessId)->orderBy('name')->get(['id', 'name', 'role']),
+            'logs' => $query->orderByDesc('created_at')->paginate(10)->withQueryString(),
+            'users' => $users,
             'modules' => $metadata['modules'],
             'actions' => $metadata['actions'],
             'filters' => $filters,
@@ -107,6 +108,17 @@ class AuditLogController extends Controller
             'date_from' => null, 'date_to' => null, 'time_from' => null, 'time_to' => null,
             'month' => null, 'year' => null,
         ], $filters);
+        $businessUsers = $this->businessUsers()->get(['id', 'role']);
+        $allowedUserIds = $businessUsers->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $allowedRoles = $businessUsers->pluck('role')->filter()->unique()->values()->all();
+
+        if (filled($filters['user_id'] ?? null) && ! in_array((int) $filters['user_id'], $allowedUserIds, true)) {
+            throw ValidationException::withMessages(['user_id' => 'The selected user is not available for this business.']);
+        }
+
+        if (filled($filters['role'] ?? null) && ! in_array($filters['role'], $allowedRoles, true)) {
+            throw ValidationException::withMessages(['role' => 'The selected role is not available for this business.']);
+        }
         $hasDateRange = filled($filters['date_from']) && filled($filters['date_to']);
         $hasMonthRange = filled($filters['month']) && filled($filters['year']);
 
@@ -168,11 +180,31 @@ class AuditLogController extends Controller
     private function businessLogs()
     {
         $platformRoles = ['super_admin', 'platform_admin', 'platform_sub_admin'];
+        $businessUserIds = $this->businessUsers()->pluck('id')->all();
 
         return AuditLog::query()
             ->where('business_id', $this->businessId())
             ->where(fn ($query) => $query->whereNull('role')->orWhereNotIn('role', $platformRoles))
-            ->where(fn ($query) => $query->whereNull('actor_role')->orWhereNotIn('actor_role', $platformRoles));
+            ->where(fn ($query) => $query->whereNull('actor_role')->orWhereNotIn('actor_role', $platformRoles))
+            ->where(function ($query) use ($businessUserIds) {
+                $query->whereIn('actor_id', $businessUserIds)
+                    ->orWhereIn('user_id', $businessUserIds)
+                    ->orWhere(function ($system) {
+                        $system->whereNull('actor_id')->whereNull('user_id');
+                    });
+            });
+    }
+
+    private function businessUsers()
+    {
+        $businessId = $this->businessId();
+
+        return User::query()
+            ->whereNotIn('role', ['super_admin', 'platform_admin', 'platform_sub_admin'])
+            ->where(function ($query) use ($businessId) {
+                $query->where('business_id', $businessId)
+                    ->orWhereHas('ownedBusiness', fn ($business) => $business->whereKey($businessId));
+            });
     }
 
     private function payload(AuditLog $log, bool $includeDetails = true): array

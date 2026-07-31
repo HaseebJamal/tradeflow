@@ -38,14 +38,15 @@
     </form>
 </div>
 
-<x-table>
-    <thead><tr><th>Supplier</th><th>Company</th><th>Phone</th><th>City</th><th>Opening Balance</th><th>Status</th><th>Created By</th><th>Created At</th><th>Updated At</th><th>Actions</th></tr></thead>
+<x-table class="tf-business-data-table">
+    <thead><tr><th>Supplier</th><th>Company</th><th>Phone</th><th>Email</th><th>City</th><th>Opening Balance</th><th>Status</th><th>Created By</th><th>Created At</th><th>Updated At</th><th>Actions</th></tr></thead>
     <tbody>
         @forelse($suppliers as $supplier)
             <tr>
                 <td>{{ $supplier->supplier_name }}</td>
                 <td>{{ $supplier->company_name ?: '-' }}</td>
                 <td>{{ $supplier->phone ?: '-' }}</td>
+                <td>{{ $supplier->email ?: '-' }}</td>
                 <td>{{ $supplier->city ?: '-' }}</td>
                 <td>Rs {{ number_format($supplier->opening_balance) }}</td>
                 <td><span class="badge {{ $supplier->trashed() ? 'bg-warning text-dark' : ($supplier->status === 'Active' ? 'bg-success' : 'bg-secondary') }}">{{ $supplier->trashed() ? 'Archived' : $supplier->status }}</span></td>
@@ -70,9 +71,9 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="10" class="text-center tf-muted py-4">No suppliers found.</td></tr>
+            <tr><td colspan="11" class="text-center tf-muted py-4">No suppliers found.</td></tr>
         @endforelse
     </tbody>
 </x-table>
-<div class="mt-3">{{ $suppliers->links() }}</div>
+<div class="mt-3"><x-table-result-summary :paginator="$suppliers" />{{ $suppliers->links('pagination::bootstrap-5') }}</div>
 @endsection

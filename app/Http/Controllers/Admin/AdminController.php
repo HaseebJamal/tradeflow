@@ -9,7 +9,6 @@ use App\Models\AuditLog;
 use App\Models\Business;
 use App\Models\BusinessReport;
 use App\Models\BusinessUserAssignment;
-use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Delivery;
 use App\Models\Expense;
@@ -285,14 +284,21 @@ class AdminController extends Controller
 
     public function users(Request $request)
     {
+        $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'role' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', Rule::in(['active', 'suspended', 'inactive'])],
+            'business_id' => ['nullable', 'integer', 'exists:businesses,id'],
+            'last_sign_in_from' => ['nullable', 'date'],
+            'last_sign_in_to' => ['nullable', 'date', 'after_or_equal:last_sign_in_from'],
+        ]);
         $query = User::with('business');
         if ($search = $request->string('search')->trim()->value()) {
             $query->where(fn ($builder) => $builder
                 ->where('name', 'like', "%{$search}%")
                 ->orWhere('phone', 'like', "%{$search}%")
-                ->orWhere(fn ($emailQuery) => $emailQuery
-                    ->whereNull('business_id')
-                    ->where('email', 'like', "%{$search}%")));
+                ->orWhere('email', 'like', "%{$search}%")
+                ->orWhereHas('business', fn ($business) => $business->where('business_name', 'like', "%{$search}%")));
         }
 
         $query
@@ -301,7 +307,12 @@ class AdminController extends Controller
             ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
 
         return view('super-admin.users', [
-            'users' => $query->latest()->paginate(12)->withQueryString(),
+            'users' => $query
+                ->when($request->filled('last_sign_in_from'), fn ($builder) => $builder->where('last_login_at', '>=', Carbon::parse($request->input('last_sign_in_from'), config('app.timezone'))->startOfDay()))
+                ->when($request->filled('last_sign_in_to'), fn ($builder) => $builder->where('last_login_at', '<=', Carbon::parse($request->input('last_sign_in_to'), config('app.timezone'))->endOfDay()))
+                ->latest()
+                ->paginate(10)
+                ->withQueryString(),
             'businesses' => Business::orderBy('business_name')->get(['id', 'business_name']),
             'roles' => User::query()->select('role')->distinct()->orderBy('role')->pluck('role'),
             'counts' => [
@@ -473,12 +484,17 @@ class AdminController extends Controller
 
     public function destroyPlan(Request $request, SubscriptionPlan $plan)
     {
-        if ($plan->subscriptions()->exists()) {
-            $old = $plan->status;
-            $plan->update(['status' => 'Inactive']);
-            $this->audit('Subscription plan deactivated because it has subscription history: '.$plan->name, $request, 'Subscriptions', $plan->id, ['status' => $old], ['status' => 'Inactive']);
+        $hasReferences = $plan->subscriptions()->exists()
+            || (Schema::hasTable('subscription_change_requests') && SubscriptionChangeRequest::query()
+                ->where('current_plan_id', $plan->id)
+                ->orWhere('requested_plan_id', $plan->id)
+                ->exists())
+            || (Schema::hasColumn('businesses', 'selected_plan_id') && Business::where('selected_plan_id', $plan->id)->exists())
+            || (Schema::hasTable('platform_settings') && Schema::hasColumn('platform_settings', 'default_plan_id')
+                && DB::table('platform_settings')->where('default_plan_id', $plan->id)->exists());
 
-            return back()->with('success', 'Plan has subscription history, so it was deactivated instead of deleted.');
+        if ($hasReferences) {
+            return back()->withErrors(['plan' => 'This plan cannot be deleted because it is currently assigned or referenced.']);
         }
 
         $old = $plan->only(['name', 'price', 'monthly_price', 'yearly_price', 'trial_days', 'product_limit', 'staff_limit', 'order_limit', 'status']);
@@ -909,10 +925,45 @@ class AdminController extends Controller
         return $slug;
     }
 
-    public function supportTickets()
+    public function supportTickets(Request $request)
     {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'type' => ['nullable', 'string', 'max:100'],
+            'priority' => ['nullable', Rule::in(['Low', 'Medium', 'High', 'Urgent'])],
+            'status' => ['nullable', Rule::in(['Open', 'Assigned', 'In Progress', 'Waiting for User', 'Escalated', 'Resolved', 'Closed', 'Reopened', 'Pending'])],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'clear' => ['nullable', 'boolean'],
+        ]);
+
+        $filters += ['date_from' => null, 'date_to' => null];
+        if (! $request->boolean('clear') && ! $filters['date_from'] && ! $filters['date_to']) {
+            $filters['date_from'] = today()->toDateString();
+            $filters['date_to'] = today()->toDateString();
+        }
+
+        $tickets = SupportTicket::with(['business', 'user', 'assignedAdmin', 'assignedSubAdmin', 'messages.sender'])
+            ->when($filters['search'] ?? null, function ($query, $value) {
+                $query->where(function ($inner) use ($value) {
+                    $inner->where('ticket_number', 'like', "%{$value}%")
+                        ->orWhere('subject', 'like', "%{$value}%")
+                        ->orWhereHas('business', fn ($business) => $business->where('business_name', 'like', "%{$value}%"));
+                });
+            })
+            ->when($filters['type'] ?? null, fn ($query, $value) => $query->where('type', $value))
+            ->when($filters['priority'] ?? null, fn ($query, $value) => $query->where('priority', $value))
+            ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
+            ->when($filters['date_from'] ?? null, fn ($query, $value) => $query->where('created_at', '>=', Carbon::parse($value, config('app.timezone'))->startOfDay()))
+            ->when($filters['date_to'] ?? null, fn ($query, $value) => $query->where('created_at', '<=', Carbon::parse($value, config('app.timezone'))->endOfDay()))
+            ->latest()
+            ->paginate(10)
+            ->withQueryString();
+
         return view('super-admin.support-tickets', [
-            'tickets' => SupportTicket::with(['business', 'user', 'assignedAdmin', 'assignedSubAdmin', 'messages.sender'])->latest()->paginate(12),
+            'tickets' => $tickets,
+            'filters' => $filters,
+            'ticketTypes' => SupportTicket::query()->whereNotNull('type')->distinct()->orderBy('type')->pluck('type'),
         ]);
     }
 
@@ -957,22 +1008,13 @@ class AdminController extends Controller
         return back()->with('success', 'Ticket updated.');
     }
 
-    public function categories()
-    {
-        return view('super-admin.categories', ['categories' => Category::whereNull('business_id')->latest()->paginate(12)]);
-    }
-
-    public function storeCategory(Request $request)
-    {
-        Category::updateOrCreate(['id' => $request->id], $request->validate(['name' => ['required', 'max:100'], 'status' => ['required', 'in:Active,Inactive']]) + ['type' => 'Product', 'business_id' => null]);
-        return back()->with('success', 'Category saved.');
-    }
-
     public function payments()
     {
         $filters = request()->validate([
             'business_id' => ['nullable', 'exists:businesses,id'],
             'status' => ['nullable', Rule::in(['Received', 'Pending', 'Rejected', 'Refunded'])],
+            'method' => ['nullable', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
+            'search' => ['nullable', 'string', 'max:255'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'clear' => ['nullable', 'boolean'],
@@ -990,10 +1032,17 @@ class AdminController extends Controller
         $payments = PlatformPayment::with(['business.owner', 'subscription.plan', 'recordedBy'])
             ->when($filters['business_id'] ?? null, fn ($query, $value) => $query->where('business_id', $value))
             ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
+            ->when($filters['method'] ?? null, fn ($query, $value) => $query->where('method', $value))
+            ->when($filters['search'] ?? null, function ($query, $value) {
+                $query->where(function ($inner) use ($value) {
+                    $inner->where('reference_number', 'like', "%{$value}%")
+                        ->orWhereHas('business.owner', fn ($owner) => $owner->where('name', 'like', "%{$value}%"));
+                });
+            })
             ->when($filters['date_from'] ?? null, fn ($query, $value) => $query->where('paid_at', '>=', Carbon::parse($value)->startOfDay()))
             ->when($filters['date_to'] ?? null, fn ($query, $value) => $query->where('paid_at', '<=', Carbon::parse($value)->endOfDay()))
             ->latest('paid_at')
-            ->paginate(12)
+            ->paginate(10)
             ->withQueryString();
 
         return view('super-admin.payments', [
@@ -1009,10 +1058,8 @@ class AdminController extends Controller
             'business_id' => ['required', 'exists:businesses,id'],
             'amount' => ['required', 'integer', 'min:1'],
             'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
-            'reference_number' => ['nullable', 'string', 'max:120'],
             'status' => ['required', Rule::in(['Received', 'Pending', 'Rejected', 'Refunded'])],
             'paid_at' => ['required', 'date'],
-            'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $business = Business::with('subscription')->findOrFail($data['business_id']);
@@ -1049,7 +1096,7 @@ class AdminController extends Controller
         });
 
         return view('super-admin.audit-logs', [
-            'logs' => $query?->orderByDesc('created_at')->paginate(12)->withQueryString(),
+            'logs' => $query?->orderByDesc('created_at')->paginate(10)->withQueryString(),
             'modules' => $metadata['modules'],
             'users' => User::orderBy('name')->get(['id', 'name']),
             'businesses' => Business::orderBy('business_name')->get(['id', 'business_name']),
@@ -1159,6 +1206,10 @@ class AdminController extends Controller
 
     public function businessReports(Request $request)
     {
+        $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'sort' => ['nullable', Rule::in(['sales_desc', 'sales_asc', 'expenses_desc', 'expenses_asc', 'profit_desc', 'profit_asc'])],
+        ]);
         $this->useCurrentBusinessReportDates($request);
         $query = BusinessReport::with('business');
         foreach (['business_id', 'report_type', 'status'] as $filter) {
@@ -1172,15 +1223,15 @@ class AdminController extends Controller
             ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
         $this->applyBusinessReportPeriod($expenses, 'expense_date', $request);
         $companySummaries = $this->companyPerformanceQuery($request)
-            ->paginate(12, ['*'], 'company_page')
+            ->paginate(10, ['*'], 'company_page')
             ->withQueryString();
         $purchases = Purchase::query()
             ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
         $this->applyBusinessReportPeriod($purchases, 'purchase_date', $request);
 
         return view('super-admin.business-reports.index', [
-            'reports' => $query->latest()->paginate(12)->withQueryString(),
-            'businesses' => Business::all(),
+            'reports' => $query->latest()->paginate(10)->withQueryString(),
+            'businesses' => Business::orderBy('business_name')->get(),
             'totalBusinesses' => Business::count(),
             'activeBusinesses' => Business::whereIn('status', ['Approved', 'approved'])->count(),
             'platformSales' => (clone $sales)->sum('grand_total'),
@@ -1283,12 +1334,19 @@ class AdminController extends Controller
     private function companyPerformanceQuery(Request $request)
     {
         $period = fn ($builder, string $column) => $this->applyBusinessReportPeriod($builder, $column, $request);
+        $sort = $request->input('sort', 'sales_desc');
 
         return Business::query()
             ->when($request->filled('business_id'), fn ($builder) => $builder->whereKey($request->integer('business_id')))
+            ->when($request->filled('search'), fn ($builder) => $builder->where('business_name', 'like', '%'.$request->input('search').'%'))
             ->withSum(['orders as sales_total' => fn ($builder) => $period($builder->whereNotIn('status', ['Cancelled', 'Void', 'Returned']), 'order_date')], 'grand_total')
             ->withSum(['expenses as expense_total' => fn ($builder) => $period($builder, 'expense_date')], 'amount')
-            ->orderByDesc('sales_total');
+            ->when($sort === 'sales_asc', fn ($builder) => $builder->orderBy('sales_total'))
+            ->when($sort === 'expenses_desc', fn ($builder) => $builder->orderByDesc('expense_total'))
+            ->when($sort === 'expenses_asc', fn ($builder) => $builder->orderBy('expense_total'))
+            ->when($sort === 'profit_desc', fn ($builder) => $builder->orderByRaw('(COALESCE(sales_total, 0) - COALESCE(expense_total, 0)) DESC'))
+            ->when($sort === 'profit_asc', fn ($builder) => $builder->orderByRaw('(COALESCE(sales_total, 0) - COALESCE(expense_total, 0)) ASC'))
+            ->when($sort === 'sales_desc', fn ($builder) => $builder->orderByDesc('sales_total'));
     }
 
     private function applyBusinessReportPeriod($query, string $column, Request $request)
@@ -1432,7 +1490,7 @@ class AdminController extends Controller
 
         $query = AuditLog::query()
             ->select(['id', 'user_id', 'user_name', 'role', 'actor_role', 'business_id', 'module', 'action', 'ip_address', 'occurred_at', 'created_at'])
-            ->with('user:id,name')
+            ->with(['user:id,name', 'business:id,business_name'])
             ->when($filters['user_id'] ?? null, fn ($q, $value) => $q->where('user_id', $value))
             ->when($filters['business_id'] ?? null, fn ($q, $value) => $q->where('business_id', $value))
             ->when($filters['role'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner->where('role', $value)->orWhere('actor_role', $value)))
@@ -1443,7 +1501,10 @@ class AdminController extends Controller
             ->when($filters['search'] ?? null, fn ($q, $value) => $q->where(fn ($inner) => $inner
                 ->where('description', 'like', "%{$value}%")
                 ->orWhere('route', 'like', "%{$value}%")
-                ->orWhere('action', 'like', "%{$value}%")));
+                ->orWhere('action', 'like', "%{$value}%")
+                ->orWhere('user_name', 'like', "%{$value}%")
+                ->orWhereHas('user', fn ($user) => $user->where('name', 'like', "%{$value}%"))
+                ->orWhereHas('business', fn ($business) => $business->where('business_name', 'like', "%{$value}%"))));
 
         return [$filters, $query];
     }

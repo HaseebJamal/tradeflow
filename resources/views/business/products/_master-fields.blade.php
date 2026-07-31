@@ -39,7 +39,7 @@
             </select>
             @companyCan('categories.create')<button type="button" class="btn btn-sm btn-outline-primary px-2 py-1 lh-sm text-nowrap" data-inline-catalog-open="category" aria-label="Create new category">+ New</button>@endcompanyCan
         </div>
-        @error($errorKey('category_id'))<div class="invalid-feedback">{{ $message }}</div>@enderror
+        @error($errorKey('category_id'))<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
         @if(($categories ?? collect())->isEmpty())<div class="form-text text-danger" data-product-catalog-empty="category">Please create a category first.</div>@endif
     </div>
     <div class="col-md-3">
@@ -53,7 +53,7 @@
             </select>
             @companyCan('units.create')<button type="button" class="btn btn-sm btn-outline-primary px-2 py-1 lh-sm text-nowrap" data-inline-catalog-open="unit" aria-label="Create new unit">+ New</button>@endcompanyCan
         </div>
-        @error($errorKey('unit_id'))<div class="invalid-feedback">{{ $message }}</div>@enderror
+        @error($errorKey('unit_id'))<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
         @if(($units ?? collect())->isEmpty())<div class="form-text text-danger" data-product-catalog-empty="unit">Please create a unit first.</div>@endif
     </div>
 

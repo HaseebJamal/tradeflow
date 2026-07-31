@@ -20,7 +20,6 @@
 
 <form class="tf-card p-4 mb-3">
     <div class="row g-2 align-items-end">
-        <div class="col-md-1"><label class="form-label">ID</label><input name="delivery_id" value="{{ request('delivery_id') }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Invoice Number</label><input name="order_number" value="{{ request('order_number') }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="">All</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(request('customer_id') == $customer->id)>{{ $customer->display_name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select"><option value="">All</option>@foreach($staff as $member)<option value="{{ $member->id }}" @selected(request('delivery_staff_id') == $member->id)>{{ $member->name }}</option>@endforeach</select></div>
@@ -29,16 +28,12 @@
         <div class="col-md-2"><label class="form-label">Date Type</label><select name="date_type" class="form-select">@foreach(['created_at'=>'Created Date','assigned_at'=>'Assigned Date','started_at'=>'Started Date','delivered_at'=>'Delivered Date','failed_at'=>'Failed Date'] as $value => $label)<option value="{{ $value }}" @selected(request('date_type', $dateType) === $value)>{{ $label }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', $dateFrom) }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', $dateTo) }}" class="form-control"></div>
-        <div class="col-md-1"><label class="form-label">Month</label><input type="number" min="1" max="12" name="month" value="{{ request('month') }}" class="form-control"></div>
-        <div class="col-md-1"><label class="form-label">Year</label><input type="number" min="2000" max="2100" name="year" value="{{ request('year') }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Amount From</label><input type="number" name="amount_from" value="{{ request('amount_from') }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Amount To</label><input type="number" name="amount_to" value="{{ request('amount_to') }}" class="form-control"></div>
         <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
         <div class="col-md-2"><a href="{{ route('business.deliveries', ['clear' => 1]) }}" class="btn btn-outline-secondary w-100">Clear Filters</a></div>
     </div>
 </form>
 
-<x-table>
+<x-table class="tf-business-data-table">
     <thead><tr><th>Delivery ID</th><th>Invoice Number</th><th>Customer</th><th>Delivery Staff</th><th>Status</th><th>Payment Status</th><th>Amount</th><th>Assigned At</th><th>Started At</th><th>Delivered At</th><th>Failed At</th><th>Created At</th><th>Actions</th></tr></thead>
     <tbody>
     @forelse($deliveries ?? [] as $delivery)
@@ -87,5 +82,5 @@
     @endforelse
     </tbody>
 </x-table>
-@if(isset($deliveries) && method_exists($deliveries, 'links'))<div class="mt-3">{{ $deliveries->links() }}</div>@endif
+@if(isset($deliveries) && method_exists($deliveries, 'links'))<div class="mt-3"><x-table-result-summary :paginator="$deliveries" />{{ $deliveries->links('pagination::bootstrap-5') }}</div>@endif
 @endsection

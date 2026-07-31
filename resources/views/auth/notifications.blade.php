@@ -79,5 +79,5 @@
         </tbody>
     </x-table>
 </div>
-@if($notifications->total())<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3"><small class="tf-muted">Showing {{ $notifications->firstItem() }} to {{ $notifications->lastItem() }} of {{ $notifications->total() }} results</small>{{ $notifications->links('pagination::bootstrap-5') }}</div>@endif
+@if($notifications->total())<div class="mt-3">{{ $notifications->links('pagination::bootstrap-5') }}</div>@endif
 @endsection

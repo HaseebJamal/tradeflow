@@ -28,7 +28,6 @@
         ['Audit Logs', 'admin.audit-logs', 'bi-activity', 'Review security activity'],
         ['Payments', 'admin.payments', 'bi-cash-stack', 'Payment records'],
         ['Business Reports', 'admin.business-reports', 'bi-graph-up', 'Review reports'],
-        ['Categories', 'admin.categories', 'bi-tags', 'Catalog categories'],
         ['Platform Users', 'admin.users', 'bi-people', 'Manage accounts'],
     ] as [$label, $route, $icon, $note])<div class="col-md-6"><a href="{{ route($route) }}" class="p-3 border rounded h-100 d-flex align-items-center gap-2 text-decoration-none"><i class="bi {{ $icon }} fs-5"></i><span><strong class="d-block">{{ $label }}</strong><small class="tf-muted">{{ $note }}</small></span></a></div>@endforeach</div></div></div>
 </div>
