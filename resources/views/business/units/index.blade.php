@@ -15,7 +15,7 @@
     @companyCan('units.create')<a class="btn btn-tf-primary" href="{{ route('business.units.create') }}"><i class="bi bi-plus-lg me-1"></i>Add Unit</a>@endcompanyCan
 </div>
 
-<x-table>
+<x-table class="tf-business-data-table" data-tf-datatable>
     <thead><tr><th>Unit Name</th><th>Short Code</th><th>Unit Type</th><th>Status</th><th>Created At</th><th class="text-end">Actions</th></tr></thead>
     <tbody>
         @forelse($units as $unit)
@@ -44,11 +44,11 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="6" class="text-center text-muted py-4">No units found. Add the units used by this business before creating products.</td></tr>
+            <tr data-tf-datatable-empty><td colspan="6" class="text-center text-muted py-4">No units found. Add the units used by this business before creating products.</td></tr>
         @endforelse
     </tbody>
 </x-table>
-<div class="mt-3">{{ $units->links() }}</div>
+
 @endsection
 @push('scripts')
 @if(session('error'))<script>document.addEventListener('DOMContentLoaded', () => Swal.fire({icon:'warning', text:@json(session('error'))}));</script>@endif

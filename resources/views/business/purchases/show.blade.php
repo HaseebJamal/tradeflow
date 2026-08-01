@@ -16,7 +16,50 @@
     <div class="tf-card p-4 mb-4"><h2 class="h5">Purchase summary</h2><dl class="row mb-0"><dt class="col-7">Grand total</dt><dd class="col-5 text-end">Rs {{ number_format($purchase->grand_total, 2) }}</dd><dt class="col-7">Paid amount</dt><dd class="col-5 text-end">Rs {{ number_format($purchase->paid_amount, 2) }}</dd><dt class="col-7">Remaining payable</dt><dd class="col-5 text-end">Rs {{ number_format($purchase->balance, 2) }}</dd><dt class="col-7">Payment method</dt><dd class="col-5 text-end">{{ $purchase->payment_method ?: 'Not paid' }}</dd></dl></div>
     @if($purchase->status === 'Draft')<div class="tf-card p-4 mb-4"><h2 class="h5">Draft controls</h2>@companyCan('purchases.edit')<a href="{{ route('business.purchases.edit', $purchase) }}" class="btn btn-outline-primary w-100 mb-2">Edit Draft</a>@endcompanyCan @companyCan('purchases.cancel')<form method="POST" action="{{ route('business.purchases.cancel', $purchase) }}">@csrf<button class="btn btn-outline-danger w-100">Cancel Purchase</button></form>@endcompanyCan</div>@endif
     @if(in_array($purchase->status, ['Confirmed','Ordered'], true) && !in_array($purchase->receiving_status, ['Fully Received','Returned'], true))<div class="tf-card p-4 mb-4"><h2 class="h5">Goods receipt</h2><p class="tf-muted small">Record selected accepted, damaged, or rejected quantities. Selling prices are not changed.</p>@companyCan('purchases.receive')<a href="{{ route('business.purchases.receiving.create', $purchase) }}" class="btn btn-tf-primary w-100">Receive Goods</a>@endcompanyCan @companyCan('purchases.cancel')<form method="POST" action="{{ route('business.purchases.cancel', $purchase) }}" class="mt-2">@csrf<button class="btn btn-outline-danger w-100">Cancel Purchase</button></form>@endcompanyCan</div>@endif
-    @if(in_array($purchase->status, ['Confirmed','Received','Ordered'], true) && $purchase->balance > 0)<div id="record-supplier-payment" class="tf-card p-4 mb-4"><h2 class="h5">Record supplier payment</h2>@companyCan('purchases.pay')<form method="POST" action="{{ route('business.purchases.pay', $purchase) }}" class="row g-2">@csrf<div class="col-12"><input name="amount" type="number" min="0.01" max="{{ number_format((float) $purchase->balance, 2, '.', '') }}" step="any" class="form-control" placeholder="Payment amount" required></div><div class="col-12"><select name="method" class="form-select"><option>Cash</option><option>Bank Transfer</option><option>JazzCash</option><option>Easypaisa</option><option>Cheque</option><option>Other</option></select></div><div class="col-12"><input name="reference_number" class="form-control" placeholder="Reference number"></div><div class="col-12"><input name="payment_date" type="date" value="{{ now()->toDateString() }}" class="form-control" required></div><div class="col-12"><button class="btn btn-outline-primary w-100">Record Payment</button></div></form>@endcompanyCan</div>@endif
+    @if(in_array($purchase->status, ['Confirmed','Received','Ordered'], true) && $purchase->balance > 0)<div id="record-supplier-payment" class="tf-card p-4 mb-4"><h2 class="h5">Record supplier payment</h2>@companyCan('purchases.pay')<form method="POST" action="{{ route('business.purchases.pay', $purchase) }}" class="row g-2" data-supplier-payment-form data-payment-due="{{ (int) $purchase->balance }}">@csrf<div class="col-12"><label class="form-label">Payment Due</label><input class="form-control" type="text" value="Rs {{ number_format($purchase->balance) }}" readonly tabindex="-1"></div><div class="col-12"><label class="form-label" data-supplier-tender-label>Cash Given</label><input name="amount" type="text" inputmode="numeric" class="form-control" placeholder="Cash given" required autocomplete="off" data-supplier-tender></div><div class="col-12"><label class="form-label">Payment Method</label><select name="method" class="form-select" data-supplier-payment-method><option>Cash</option><option>Bank Transfer</option><option>JazzCash</option><option>Easypaisa</option><option>Cheque</option><option>Other</option></select></div><div class="col-12"><input name="reference_number" class="form-control" placeholder="Reference number"></div><div class="col-12"><input name="payment_date" type="date" value="{{ now()->toDateString() }}" class="form-control" required></div><div class="col-12"><button class="btn btn-outline-primary w-100">Record Payment</button></div></form>@endcompanyCan</div>@endif
     <div class="tf-card p-4"><h2 class="h5">Activity</h2><dl class="small mb-0"><dt>Created by</dt><dd>{{ $purchase->creator?->name ?? 'System' }} &middot; {{ $purchase->created_at?->format('d M Y h:i A') }}</dd><dt>Updated by</dt><dd>{{ $purchase->updater?->name ?? 'Not updated' }} &middot; {{ $purchase->updated_at?->format('d M Y h:i A') }}</dd><dt>Confirmed by</dt><dd>{{ $purchase->confirmer?->name ?? 'Not confirmed' }}{{ $purchase->confirmed_at ? ' &middot; '.$purchase->confirmed_at->format('d M Y h:i A') : '' }}</dd></dl></div>
 </div></div>
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.querySelector('[data-supplier-payment-form]');
+    if (!form || form.dataset.cashTenderReady) return;
+    form.dataset.cashTenderReady = '1';
+
+    const normalizeMoney = value => String(value ?? '')
+        .replace(/^\s*Rs\.?\s*/i, '')
+        .replace(/[\s,]/g, '');
+    const due = Number(normalizeMoney(form.dataset.paymentDue)) || 0;
+    const tender = form.querySelector('[data-supplier-tender]');
+    const method = form.querySelector('[data-supplier-payment-method]');
+    const label = form.querySelector('[data-supplier-tender-label]');
+    const isCash = () => method.value === 'Cash';
+
+    const refresh = () => {
+        const normalizedTender = normalizeMoney(tender.value);
+        const tenderIsWhole = /^\d+$/.test(normalizedTender);
+        const amount = tenderIsWhole ? Number(normalizedTender) : 0;
+        const cash = isCash();
+        label.textContent = cash ? 'Cash Given' : 'Payment Amount';
+        tender.placeholder = cash ? 'Cash given' : 'Payment amount';
+        tender.setCustomValidity(!tenderIsWhole
+            ? 'Enter a whole-number payment amount.'
+            : (amount > due ? 'Payment amount cannot exceed the remaining payable.' : ''));
+    };
+
+    tender.addEventListener('input', refresh);
+    method.addEventListener('change', refresh);
+    form.addEventListener('submit', event => {
+        refresh();
+        if (!tender.checkValidity()) {
+            event.preventDefault();
+            tender.reportValidity();
+            return;
+        }
+        tender.value = normalizeMoney(tender.value);
+    });
+    refresh();
+});
+</script>
+@endpush
 @endsection

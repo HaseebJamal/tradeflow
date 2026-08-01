@@ -23,7 +23,9 @@ use Throwable;
 
 class ProductController extends Controller
 {
-    public function __construct(private BarcodeService $barcodes) {}
+    public function __construct(private BarcodeService $barcodes)
+    {
+    }
 
     public function index(Request $request)
     {
@@ -33,14 +35,14 @@ class ProductController extends Controller
         } elseif (in_array(request('status'), ['Active', 'Inactive'], true)) {
             $query->where('status', request('status'));
         }
-        if (request('search')) {
-            $query->where(fn ($q) => $q->where('name', 'like', '%'.request('search').'%')->orWhere('barcode', 'like', '%'.request('search').'%'));
+        if (request('product_id')) {
+            $query->where('id', request('product_id'));
         }
         if (request('category_id')) {
             $query->where('category_id', request('category_id'));
         }
         if (request('batch_number')) {
-            $query->where('batch_number', 'like', '%'.request('batch_number').'%');
+            $query->where('batch_number', 'like', '%' . request('batch_number') . '%');
         }
         if (request('created_by')) {
             $query->where('created_by', request('created_by'));
@@ -60,7 +62,16 @@ class ProductController extends Controller
 
         return view('business.products.index', [
             'products' => $query->latest()->paginate(10)->withQueryString(),
-            'categories' => Category::where('business_id', auth()->user()->business_id)->where('type', 'Product')->orderBy('name')->get(),
+
+            'categories' => Category::where('business_id', auth()->user()->business_id)
+                ->where('type', 'Product')
+                ->orderBy('name')
+                ->get(),
+
+            'productOptions' => Product::where('business_id', auth()->user()->business_id)
+                ->select('id', 'name', 'barcode')
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 
@@ -96,61 +107,61 @@ class ProductController extends Controller
             $products = DB::transaction(function () use ($request, $businessId, &$storedImages) {
                 return collect($request->validated('products'))
                     ->map(function (array $data, $index) use ($request, $businessId, &$storedImages) {
-                    $unit = Unit::where('business_id', $businessId)->findOrFail($data['unit_id']);
-                    $image = $request->file("products.{$index}.product_image");
-                    $imagePath = $image?->store('products', 'public');
-                    if ($imagePath) {
-                        $storedImages[] = $imagePath;
-                    }
-                    $product = Product::create([
-                        'business_id' => $businessId,
-                        'category_id' => $data['category_id'],
-                        'unit_id' => $unit->id,
-                        'name' => $data['product_name'],
-                        'unit' => $unit->short_code,
-                        'image' => $imagePath,
-                        'batch_number' => $data['batch_number'] ?? null,
-                        'manufacturing_date' => $data['manufacturing_date'] ?? null,
-                        'expiry_date' => $data['expiry_date'] ?? null,
-                        'expiry_alert_days' => $data['expiry_alert_days'] ?? null,
-                        'has_batch_tracking' => (bool) ($data['has_batch_tracking'] ?? false),
-                        'brand' => $data['brand'] ?? null,
-                        'manufacturer' => $data['manufacturer'] ?? null,
-                        'warehouse_location' => $data['warehouse_location'] ?? null,
-                        'description' => $data['description'] ?? null,
-                        'status' => $data['status'],
-                        // Purchase cost is calculated only from accepted goods
-                        // receipts. Product setup controls selling prices only.
-                        'purchase_cost' => 0,
-                        'wholesale_price' => round((float) ($data['wholesale_price'] ?? 0), 2),
-                        'retail_price' => round((float) ($data['retail_price'] ?? 0), 2),
-                        'opening_stock' => 0,
-                        'current_stock' => 0,
-                        'stock_quantity' => 0,
-                        'minimum_order_quantity' => 1,
-                        'low_stock_alert_qty' => 10,
-                        'created_by' => $request->user()->id,
-                        'added_date' => now(),
-                    ]);
+                        $unit = Unit::where('business_id', $businessId)->findOrFail($data['unit_id']);
+                        $image = $request->file("products.{$index}.product_image");
+                        $imagePath = $image?->store('products', 'public');
+                        if ($imagePath) {
+                            $storedImages[] = $imagePath;
+                        }
+                        $product = Product::create([
+                            'business_id' => $businessId,
+                            'category_id' => $data['category_id'],
+                            'unit_id' => $unit->id,
+                            'name' => $data['product_name'],
+                            'unit' => $unit->short_code,
+                            'image' => $imagePath,
+                            'batch_number' => $data['batch_number'] ?? null,
+                            'manufacturing_date' => $data['manufacturing_date'] ?? null,
+                            'expiry_date' => $data['expiry_date'] ?? null,
+                            'expiry_alert_days' => $data['expiry_alert_days'] ?? null,
+                            'has_batch_tracking' => (bool) ($data['has_batch_tracking'] ?? false),
+                            'brand' => $data['brand'] ?? null,
+                            'manufacturer' => $data['manufacturer'] ?? null,
+                            'warehouse_location' => $data['warehouse_location'] ?? null,
+                            'description' => $data['description'] ?? null,
+                            'status' => $data['status'],
+                            // Purchase cost is calculated only from accepted goods
+                            // receipts. Product setup controls selling prices only.
+                            'purchase_cost' => 0,
+                            'wholesale_price' => round((float) ($data['wholesale_price'] ?? 0), 2),
+                            'retail_price' => round((float) ($data['retail_price'] ?? 0), 2),
+                            'opening_stock' => 0,
+                            'current_stock' => 0,
+                            'stock_quantity' => 0,
+                            'minimum_order_quantity' => 1,
+                            'low_stock_alert_qty' => 10,
+                            'created_by' => $request->user()->id,
+                            'added_date' => now(),
+                        ]);
 
-                    $product = $this->barcodes->assign($product);
-                    Inventory::create([
-                        'business_id' => $businessId,
-                        'product_id' => $product->id,
-                        'available_stock' => 0,
-                        'low_stock_alert' => $product->low_stock_alert_qty,
-                    ]);
-                    AuditLog::create([
-                        'business_id' => $businessId,
-                        'module' => 'Products',
-                        'action' => 'product_created',
-                        'description' => 'Created product '.$product->name,
-                        'record_type' => 'Product',
-                        'record_id' => $product->id,
-                        'new_values' => $product->only(['name', 'category_id', 'unit_id', 'status']),
-                    ]);
+                        $product = $this->barcodes->assign($product);
+                        Inventory::create([
+                            'business_id' => $businessId,
+                            'product_id' => $product->id,
+                            'available_stock' => 0,
+                            'low_stock_alert' => $product->low_stock_alert_qty,
+                        ]);
+                        AuditLog::create([
+                            'business_id' => $businessId,
+                            'module' => 'Products',
+                            'action' => 'product_created',
+                            'description' => 'Created product ' . $product->name,
+                            'record_type' => 'Product',
+                            'record_id' => $product->id,
+                            'new_values' => $product->only(['name', 'category_id', 'unit_id', 'status']),
+                        ]);
 
-                    return $product;
+                        return $product;
                     })
                     ->values();
             });
@@ -165,12 +176,12 @@ class ProductController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => $message,
-                'products' => $products->map(fn (Product $product) => ['id' => $product->id, 'name' => $product->name])->values(),
+                'products' => $products->map(fn(Product $product) => ['id' => $product->id, 'name' => $product->name])->values(),
             ], 201);
         }
 
         return redirect()->route('business.products.index')
-            ->with('success', $products->count() === 1 ? 'Product created.' : $products->count().' products created.');
+            ->with('success', $products->count() === 1 ? 'Product created.' : $products->count() . ' products created.');
     }
 
     public function show(int $product)
@@ -191,9 +202,9 @@ class ProductController extends Controller
         return view('business.products.create', [
             'product' => $product,
             'categories' => Category::where('business_id', auth()->user()->business_id)->where('type', 'Product')
-                ->where(fn ($query) => $query->where('status', 'Active')->orWhere('id', $product->category_id))->orderBy('name')->get(),
+                ->where(fn($query) => $query->where('status', 'Active')->orWhere('id', $product->category_id))->orderBy('name')->get(),
             'units' => Unit::where('business_id', auth()->user()->business_id)
-                ->where(fn ($query) => $query->where('status', 'Active')->orWhere('id', $product->unit_id))
+                ->where(fn($query) => $query->where('status', 'Active')->orWhere('id', $product->unit_id))
                 ->orderBy('unit_name')
                 ->get(),
         ]);
@@ -225,7 +236,7 @@ class ProductController extends Controller
             || StockMovement::where('product_id', $product->id)->where('reason', '!=', 'Opening Stock')->exists();
 
         if ($hasHistory) {
-            if (! $product->trashed()) {
+            if (!$product->trashed()) {
                 $product->update(['status' => 'Inactive']);
                 $product->delete();
 
@@ -337,9 +348,17 @@ class ProductController extends Controller
         $products = Product::with('category')->where('business_id', auth()->user()->business_id)->get();
         $csv = "Name,Category,Unit,Purchase Cost,Wholesale Price,Retail Price,Stock,Barcode,Status\n";
         foreach ($products as $product) {
-            $csv .= implode(',', array_map(fn ($value) => '"'.str_replace('"', '""', (string) $value).'"', [
-                $product->name, $product->category?->name, $product->unit, $product->purchase_cost, $product->wholesale_price, $product->retail_price, $product->stock_quantity, $product->barcode, $product->status,
-            ]))."\n";
+            $csv .= implode(',', array_map(fn($value) => '"' . str_replace('"', '""', (string) $value) . '"', [
+                $product->name,
+                $product->category?->name,
+                $product->unit,
+                $product->purchase_cost,
+                $product->wholesale_price,
+                $product->retail_price,
+                $product->stock_quantity,
+                $product->barcode,
+                $product->status,
+            ])) . "\n";
         }
 
         return response($csv, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename=products.csv']);

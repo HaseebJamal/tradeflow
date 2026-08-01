@@ -51,7 +51,13 @@ class SalesReturnController extends Controller
             ])
             ->latest('returned_at')->paginate(10)->withQueryString();
 
-        return view('business.sales-returns.index', compact('returns'));
+        $references = collect()
+            ->merge(Order::where('business_id', $businessId)->whereNotNull('order_number')->latest('order_date')->pluck('order_number'))
+            ->merge(Order::where('business_id', $businessId)->whereHas('invoice')->with('invoice:id,order_id,invoice_number')->latest('order_date')->get()->pluck('invoice.invoice_number'))
+            ->merge(SalesReturn::where('business_id', $businessId)->latest('returned_at')->pluck('return_number'))
+            ->filter()->unique()->values();
+
+        return view('business.sales-returns.index', compact('returns', 'references'));
     }
 
     public function create(Request $request)
@@ -61,7 +67,14 @@ class SalesReturnController extends Controller
             ->filter(fn (Order $order) => $this->remainingReturnableQuantity($order) > 0)
             ->values();
 
-        return view('business.sales-returns.create', compact('orders'));
+        $order = null;
+        if ($request->filled('order_id')) {
+            $order = $this->eligibleOrders((int) $request->user()->business_id)
+                ->whereKey($request->integer('order_id'))
+                ->firstOrFail();
+        }
+
+        return view('business.sales-returns.create', compact('orders', 'order'));
     }
 
     public function start(Request $request)
@@ -74,7 +87,12 @@ class SalesReturnController extends Controller
             return back()->withErrors(['order_id' => 'This sale has no remaining items available for return.']);
         }
 
-        return redirect()->route('business.sales.returns.process', $order);
+        $orders = $this->eligibleOrders((int) $request->user()->business_id)
+            ->get()
+            ->filter(fn (Order $candidate) => $this->remainingReturnableQuantity($candidate) > 0)
+            ->values();
+
+        return view('business.sales-returns.create', compact('orders', 'order'));
     }
 
     public function process(Request $request, Order $order)
@@ -201,9 +219,9 @@ class SalesReturnController extends Controller
             'notification_message' => 'Sales return '.$salesReturn->return_number.' has been processed successfully.',
         ]);
 
-        return redirect()->route('business.sales.returns.show', $salesReturn)->with('tradeflow_return_alert', [
+        return redirect()->route('business.sales.returns.create')->with('tradeflow_return_alert', [
             'title' => 'Sales Return Completed',
-            'message' => 'Sales return has been processed successfully. Stock, customer balance, payment and related accounting entries have been updated. Return No: '.$salesReturn->return_number,
+            'message' => 'Sales return '.$salesReturn->return_number.' has been processed successfully. You can process another return now.',
         ]);
     }
 

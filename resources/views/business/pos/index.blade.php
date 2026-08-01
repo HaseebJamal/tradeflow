@@ -14,6 +14,17 @@
         'registerId' => $register?->id,
         'canUseCustomPrice' => $canUseCustomPrice,
         'canCreateCustomer' => $canCreateCustomer,
+        'quotation' => $quotation ? [
+            'id' => $quotation->id,
+            'customer_id' => $quotation->customer_id,
+            'items' => $quotation->items->map(fn ($item) => [
+                'id' => $item->product_id,
+                'quantity' => (int) $item->quantity,
+                'price' => (int) $item->unit_price,
+                'discount' => (int) $item->discount_value,
+                'tax' => (int) $item->tax_value,
+            ])->values(),
+        ] : null,
     ]);
 @endphp
 <div class="tf-pos" data-pos-root data-pos-initialized="0" data-pos-config="{{ $posConfig }}">
@@ -83,7 +94,8 @@
                 <div class="row g-2 mt-1"><div class="col-6"><label class="form-label">Discount %</label><input class="form-control js-whole-number" data-pos-discount type="number" min="0" max="100" step="1" value="0"></div><div class="col-6"><label class="form-label">Tax %</label><input class="form-control js-whole-number" data-pos-tax type="number" min="0" max="100" step="1" value="0"></div></div>
                 <input type="hidden" data-pos-payment-type value="Cash">
                 <div class="tf-pos-payable" aria-live="polite"><span>Payable Amount</span><strong data-total="grand">Rs 0</strong></div>
-                <label class="form-label mt-2">Cash Received</label><input class="form-control tf-pos-cash-input" data-pos-cash type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="">
+                <label class="form-label mt-2" data-pos-tender-label>Cash Received</label><input class="form-control tf-pos-cash-input js-whole-number" data-pos-cash type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="">
+                <div class="mt-2" data-pos-change-row><label class="form-label">Change Return</label><input class="form-control" data-pos-change type="text" value="Rs 0" readonly tabindex="-1"></div>
                 <label class="form-label mt-2">Payment Method</label><select class="form-select" data-pos-payment-method data-native-select><option>Cash</option><option>Credit</option><option>Split</option><option>Bank Transfer</option><option>JazzCash Manual</option><option>Easypaisa Manual</option><option>Cheque</option></select>
                 <label class="form-label mt-2">Reference</label><input class="form-control" data-pos-reference maxlength="255" autocomplete="off">
             </div>

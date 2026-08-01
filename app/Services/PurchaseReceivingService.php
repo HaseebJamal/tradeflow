@@ -46,11 +46,25 @@ class PurchaseReceivingService
             }
 
             $items = $locked->items()->lockForUpdate()->get()->keyBy('id');
-            $lines = collect($data['items'])->filter(function (array $line): bool {
-                return (float) ($line['accepted_quantity'] ?? 0) > 0
-                    || (float) ($line['damaged_quantity'] ?? 0) > 0
-                    || (float) ($line['rejected_quantity'] ?? 0) > 0;
-            });
+            $processedItemIds = [];
+            $lines = collect($data['items'])->map(function (array $line, int $index) use ($items, &$processedItemIds): array {
+                $item = $items->get((int) ($line['purchase_item_id'] ?? 0));
+                if (! $item) {
+                    throw ValidationException::withMessages(["items.$index.purchase_item_id" => 'This receipt item does not belong to the selected purchase.']);
+                }
+                if (isset($processedItemIds[$item->id])) {
+                    throw ValidationException::withMessages(["items.$index.purchase_item_id" => 'Each purchase item can only be submitted once per goods receipt.']);
+                }
+                $processedItemIds[$item->id] = true;
+
+                return [
+                    'index' => $index,
+                    'item' => $item,
+                    'accepted' => $this->quantity($line['accepted_quantity'] ?? 0),
+                    'damaged' => $this->quantity($line['damaged_quantity'] ?? 0),
+                    'rejected' => $this->quantity($line['rejected_quantity'] ?? 0),
+                ];
+            })->filter(fn (array $line): bool => $line['accepted'] > 0 || $line['damaged'] > 0 || $line['rejected'] > 0);
             if ($lines->isEmpty()) throw ValidationException::withMessages(['items' => 'Enter an accepted, damaged, or rejected quantity for at least one item.']);
 
             $receipt = GoodsReceipt::create([
@@ -68,15 +82,15 @@ class PurchaseReceivingService
             $rejectedValue = 0.0;
             $products = collect();
             foreach ($lines as $line) {
-                $item = $items->get((int) ($line['purchase_item_id'] ?? 0));
-                if (!$item) throw ValidationException::withMessages(['items' => 'A receipt item does not belong to this purchase.']);
-                $accepted = $this->quantity($line['accepted_quantity'] ?? 0);
-                $damaged = $this->quantity($line['damaged_quantity'] ?? 0);
-                $rejected = $this->quantity($line['rejected_quantity'] ?? 0);
+                $index = $line['index'];
+                $item = $line['item'];
+                $accepted = $line['accepted'];
+                $damaged = $line['damaged'];
+                $rejected = $line['rejected'];
                 $processed = round($accepted + $damaged + $rejected, 3);
-                $remaining = round((float) $item->quantity - (float) $item->received_quantity - (float) $item->damaged_quantity - (float) $item->rejected_quantity, 3);
+                $remaining = max(0, round((float) $item->quantity - (float) $item->received_quantity - (float) $item->damaged_quantity - (float) $item->rejected_quantity, 3));
                 if ($processed <= 0 || $processed > $remaining + 0.0001) {
-                    throw ValidationException::withMessages(['items' => 'Received quantities cannot exceed the remaining quantity for '.$item->product_name_snapshot.'.']);
+                    throw ValidationException::withMessages(["items.$index" => 'Total processed quantity cannot exceed the remaining quantity ('.$remaining.') for '.$item->product_name_snapshot.'.']);
                 }
 
                 $lineRate = round((float) $item->line_total / max(0.001, (float) $item->quantity), 2);
@@ -212,8 +226,10 @@ class PurchaseReceivingService
 
     private function quantity(mixed $value): float
     {
-        $quantity = round((float) $value, 3);
-        if ($quantity < 0) throw ValidationException::withMessages(['items' => 'Receipt quantities cannot be negative.']);
-        return $quantity;
+        if (! preg_match('/^\d+$/', trim((string) $value))) {
+            throw ValidationException::withMessages(['items' => 'Receipt quantities must be whole numbers.']);
+        }
+
+        return (float) $value;
     }
 }

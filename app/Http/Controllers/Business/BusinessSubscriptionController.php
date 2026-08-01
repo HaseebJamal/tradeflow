@@ -28,22 +28,73 @@ class BusinessSubscriptionController extends Controller
     {
         $business = $this->businessFor($request);
         $this->assertSubscriptionManager($request, $business);
+        $plans = SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get();
+
+        // A business may still be subscribed to a plan that was later hidden,
+        // archived, or made inactive for new subscriptions. Keep that plan in
+        // the UI as a read-only Current Plan card; it must not disappear just
+        // because it is no longer offered to new businesses.
+        if ($currentPlan = $business->subscription?->plan) {
+            if (! $plans->contains('id', $currentPlan->id)) {
+                $plans->prepend($currentPlan);
+            }
+        }
 
         return view('business.subscription.index', [
             'business' => $business,
             'subscription' => $business->subscription,
-            'plans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get(),
-            'requests' => SubscriptionChangeRequest::with(['currentPlan', 'requestedPlan', 'reviewer'])
-                ->where('business_id', $business->id)
-                ->latest()
-                ->paginate(10)
-                ->withQueryString(),
-            'billingHistory' => PlatformPayment::with(['recordedBy', 'subscription'])
-                ->where('business_id', $business->id)
-                ->latest('paid_at')
-                ->paginate(10, ['*'], 'billing_page')
-                ->withQueryString(),
+            'plans' => $plans,
         ]);
+    }
+
+    public function history(Request $request)
+    {
+        $business = $this->businessFor($request);
+        $this->assertSubscriptionManager($request, $business);
+
+        $billingSorts = ['paid_at', 'amount', 'method', 'reference_number', 'status', 'recorded_by'];
+        $billingSort = in_array($request->query('billing_sort'), $billingSorts, true)
+            ? $request->query('billing_sort')
+            : 'paid_at';
+        $billingDirection = $request->query('billing_direction') === 'asc' ? 'asc' : 'desc';
+
+        $billingQuery = PlatformPayment::with(['recordedBy', 'subscription.plan'])
+            ->where('business_id', $business->id)
+            ->when($request->filled('billing_cycle'), fn ($query) => $query->whereHas(
+                'subscription',
+                fn ($subscription) => $subscription->where('billing_cycle', $request->query('billing_cycle'))
+            ))
+            ->when($request->filled('payment_status'), fn ($query) => $query->where('status', $request->query('payment_status')))
+            ->when($request->filled('date_from'), fn ($query) => $query->whereDate('paid_at', '>=', $request->query('date_from')))
+            ->when($request->filled('date_to'), fn ($query) => $query->whereDate('paid_at', '<=', $request->query('date_to')))
+            ->orderBy($billingSort, $billingDirection)
+            ->orderByDesc('id');
+
+        $requestSorts = ['id', 'type', 'billing_cycle', 'payment_method', 'expected_amount', 'effective_at', 'status', 'created_at', 'reviewed_at'];
+        $requestSort = in_array($request->query('request_sort'), $requestSorts, true)
+            ? $request->query('request_sort')
+            : 'created_at';
+        $requestDirection = $request->query('request_direction') === 'asc' ? 'asc' : 'desc';
+
+        $requestsQuery = SubscriptionChangeRequest::with(['currentPlan', 'requestedPlan', 'requester', 'reviewer'])
+            ->where('business_id', $business->id)
+            ->orderBy($requestSort, $requestDirection)
+            ->orderByDesc('id');
+
+        $billingHistory = $billingQuery->paginate(10, ['*'], 'billing_page')->withQueryString();
+        $billingHistory->appends(['tab' => 'billing']);
+        $subscriptionRequests = $requestsQuery->paginate(10, ['*'], 'request_page')->withQueryString();
+        $subscriptionRequests->appends(['tab' => 'requests']);
+
+        return view('business.subscription.history', compact(
+            'business',
+            'billingHistory',
+            'subscriptionRequests',
+            'billingSort',
+            'billingDirection',
+            'requestSort',
+            'requestDirection',
+        ));
     }
 
     public function storeRequest(Request $request)

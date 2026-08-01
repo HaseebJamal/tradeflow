@@ -30,7 +30,12 @@ class PurchaseReturnController extends Controller
             ->where('created_at', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
             ->latest('created_at')->paginate(12)->withQueryString();
 
-        return view('business.purchase-returns.index', compact('returns'));
+        $references = collect()
+            ->merge(Purchase::where('business_id', $businessId)->whereNotNull('purchase_number')->latest('purchase_date')->pluck('purchase_number'))
+            ->merge(PurchaseReturn::where('business_id', $businessId)->latest('created_at')->pluck('return_number'))
+            ->filter()->unique()->values();
+
+        return view('business.purchase-returns.index', compact('returns', 'references'));
     }
 
     public function create(Request $request)
@@ -58,7 +63,15 @@ class PurchaseReturnController extends Controller
         $data = $request->validate(['purchase_id' => ['required', 'integer']]);
         $purchase = Purchase::where('business_id', $request->user()->business_id)->findOrFail($data['purchase_id']);
 
-        return redirect()->route('business.purchase-returns.create', ['purchase_id' => $purchase->id]);
+        $purchase = Purchase::with(['supplier', 'items.product', 'returns.items'])
+            ->where('business_id', $request->user()->business_id)
+            ->whereNotIn('status', ['Ordered', 'Returned'])
+            ->findOrFail($purchase->id);
+        $purchases = Purchase::with('supplier')->where('business_id', $request->user()->business_id)
+            ->whereNotIn('status', ['Ordered', 'Returned'])
+            ->latest('purchase_date')->get();
+
+        return view('business.purchase-returns.create', compact('purchases', 'purchase'));
     }
 
     public function show(Request $request, PurchaseReturn $purchaseReturn)

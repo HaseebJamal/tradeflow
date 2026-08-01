@@ -91,12 +91,12 @@
 
     <div class="col-md-4">
         <label class="form-label" for="{{ $fieldId('retail_price') }}">Retail Selling Price</label>
-        <input id="{{ $fieldId('retail_price') }}" name="{{ $fieldName('retail_price') }}" data-product-field="retail_price" type="number" min="0" step="any" data-allow-decimal class="form-control @error($errorKey('retail_price')) is-invalid @enderror" value="{{ $fieldValue('retail_price', 0) }}">
+        <input id="{{ $fieldId('retail_price') }}" name="{{ $fieldName('retail_price') }}" data-product-field="retail_price" type="number" min="0" step="1" class="form-control js-whole-number @error($errorKey('retail_price')) is-invalid @enderror" value="{{ $fieldValue('retail_price', 0) }}">
         @error($errorKey('retail_price'))<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
     <div class="col-md-4">
         <label class="form-label" for="{{ $fieldId('wholesale_price') }}">Wholesale Selling Price</label>
-        <input id="{{ $fieldId('wholesale_price') }}" name="{{ $fieldName('wholesale_price') }}" data-product-field="wholesale_price" type="number" min="0" step="any" data-allow-decimal class="form-control @error($errorKey('wholesale_price')) is-invalid @enderror" value="{{ $fieldValue('wholesale_price', 0) }}">
+        <input id="{{ $fieldId('wholesale_price') }}" name="{{ $fieldName('wholesale_price') }}" data-product-field="wholesale_price" type="number" min="0" step="1" class="form-control js-whole-number @error($errorKey('wholesale_price')) is-invalid @enderror" value="{{ $fieldValue('wholesale_price', 0) }}">
         @error($errorKey('wholesale_price'))<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
     <div class="col-md-4">

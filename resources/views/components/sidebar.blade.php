@@ -7,10 +7,13 @@
         default => 'business',
     };
     $sidebarUser = auth()->user();
-    $sidebarBusiness = $area === 'business' && $sidebarUser?->role !== 'super_admin'
-        ? ($sidebarUser?->business ?? $sidebarUser?->ownedBusiness)
+    // Business workspaces always use the tenant brand. Super Admin preview
+    // sessions resolve their tenant from the context middleware rather than
+    // the Super Admin's own (normally empty) business relationship.
+    $sidebarBusiness = $area === 'business'
+        ? (request()->attributes->get('super_admin_business_context') ?? $sidebarUser?->business ?? $sidebarUser?->ownedBusiness)
         : null;
-    $sidebarBusinessName = $sidebarBusiness?->business_name;
+    $sidebarBrandName = $sidebarBusiness?->business_name ?: $platformSettings->company_name;
     $sidebarLogoPath = ltrim((string) ($sidebarBusiness?->logo ?? ''), '/');
     $sidebarLogoPath = preg_replace('#^(?:public/|storage/)#', '', $sidebarLogoPath);
     $hasSidebarBusinessLogo = filled($sidebarLogoPath)
@@ -174,14 +177,14 @@
         <a class="tf-brand text-white d-flex align-items-center mb-0" href="{{ route('public.home') }}">
             <span class="tf-brand-mark bg-blue tf-sidebar-company-mark">
                 @if($hasSidebarBusinessLogo)
-                    <img src="{{ asset('storage/'.$sidebarLogoPath) }}" alt="{{ $sidebarBusinessName }} logo">
+                    <img src="{{ asset('storage/'.$sidebarLogoPath) }}" alt="{{ $sidebarBrandName }} logo">
                 @elseif($hasSidebarPlatformLogo)
                     <img src="{{ asset('storage/'.$sidebarPlatformLogoPath) }}" alt="{{ $platformSettings->company_name }} logo" class="tf-brand-logo">
                 @else
                     <i class="bi bi-box-seam"></i>
                 @endif
             </span>
-            <span class="tf-sidebar-text tf-sidebar-company-name" title="{{ $sidebarBusinessName ?: 'TradeFlow' }}">{{ $sidebarBusinessName ?: 'TradeFlow' }}</span>
+            <span class="tf-sidebar-text tf-sidebar-company-name" title="{{ $sidebarBrandName }}">{{ $sidebarBrandName }}</span>
         </a>
         <button type="button" class="btn btn-sm btn-outline-light tf-sidebar-toggle tf-sidebar-toggle-inside d-none d-lg-inline-flex" data-tf-sidebar-toggle aria-label="Toggle sidebar" title="Toggle sidebar"><i class="bi bi-list"></i></button>
         <button type="button" class="btn btn-sm btn-outline-light tf-sidebar-close d-lg-none" data-tf-sidebar-close aria-label="Close sidebar"><i class="bi bi-x-lg"></i></button>

@@ -793,12 +793,18 @@ class AdminController extends Controller
                     'ends_at' => $trial ? Carbon::parse($start)->addDays((int) $changeRequest->trial_days)->toDateString() : Carbon::parse($end)->toDateString(),
                     'trial_start_at' => $trial ? Carbon::parse($start)->toDateString() : null,
                     'trial_end_at' => $trial ? Carbon::parse($start)->addDays((int) $changeRequest->trial_days)->toDateString() : null,
-                    'status' => $trial ? 'Trial' : ($data['decision'] === 'Activate' ? 'Active' : 'Pending'),
+                    // An Approved request is the business decision that applies
+                    // this plan. Keeping the request as Approved while leaving
+                    // the actual subscription Pending creates two conflicting
+                    // sources of truth for the business workspace.
+                    'status' => $trial ? 'Trial' : 'Active',
                     'payment_status' => $data['decision'] === 'Activate' ? 'Received' : 'Pending',
-                    'renewed_at' => $data['decision'] === 'Activate' ? now() : $subscription->renewed_at,
+                    'renewed_at' => now(),
                 ])->save();
-                $title = $trial ? 'Trial Activated' : ($data['decision'] === 'Activate' ? 'Subscription Activated' : 'Subscription Approved');
-                $message = $trial ? 'Your '.$plan->name.' trial is now active.' : ($data['decision'] === 'Activate' ? 'Your '.$plan->name.' subscription is now active.' : 'Your '.$type.' request was approved and is awaiting payment confirmation.');
+                $title = $trial ? 'Trial Activated' : 'Subscription Activated';
+                $message = $trial
+                    ? 'Your '.$plan->name.' trial is now active.'
+                    : 'Your '.$plan->name.' subscription is now active.'.($data['decision'] === 'Approved' ? ' Payment confirmation remains pending.' : '');
                 }
                 $changeRequest->business?->owner?->notify(new SubscriptionStatusNotification($title, $message, $changeRequest->business_id));
             } elseif ($data['decision'] === 'Changes Requested') {

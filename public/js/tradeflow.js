@@ -271,6 +271,38 @@ document.addEventListener('shown.bs.modal', (event) => {
 });
 document.addEventListener('tradeflow:content-loaded', (event) => window.initTradeFlowTomSelect(event.target || document));
 
+// Opt-in only: server-paginated tables remain untouched. The Unit and
+// Category directories use client-side DataTables over their scoped records.
+window.initTradeFlowDataTables = function initTradeFlowDataTables(root = document) {
+    if (!window.jQuery?.fn?.DataTable) return;
+
+    const containers = root.matches?.('[data-tf-datatable]')
+        ? [root]
+        : [...(root.querySelectorAll?.('[data-tf-datatable]') || [])];
+
+    containers.forEach((container) => {
+        const table = container.matches?.('table') ? container : container.querySelector('table');
+        if (!table || window.jQuery.fn.dataTable.isDataTable(table)) return;
+
+        table.querySelectorAll('[data-tf-datatable-empty]').forEach((row) => row.remove());
+        window.jQuery(table).DataTable({
+            pageLength: 10,
+            lengthMenu: [10, 25, 50, 100],
+            searching: false,
+            order: [],
+            autoWidth: false,
+            columnDefs: [{ orderable: false, targets: -1 }],
+            language: {
+                emptyTable: 'No records found.',
+                info: 'Showing _START_ to _END_ of _TOTAL_ results',
+                infoEmpty: 'Showing 0 to 0 of 0 results',
+            },
+        });
+    });
+};
+
+window.initTradeFlowDataTables();
+
 function initTradeFlowBootstrapDropdowns(root = document) {
     const toggles = root.matches?.('[data-bs-toggle="dropdown"]')
         ? [root]
@@ -353,6 +385,7 @@ new MutationObserver((records) => {
     cancelAnimationFrame(tradeFlowTomSelectFrame);
     tradeFlowTomSelectFrame = requestAnimationFrame(() => roots.forEach((root) => {
         window.initTradeFlowTomSelect(root);
+        window.initTradeFlowDataTables(root);
         initTradeFlowBootstrapDropdowns(root);
         initTradeFlowNotificationDropdowns(root);
         initNonNegativeNumberGuards(root);
@@ -623,21 +656,19 @@ window.initTradeFlowCodeLookups = initTradeFlowCodeLookups;
 initTradeFlowCodeLookups();
 
 function initNonNegativeNumberGuards(root = document) {
-    const selector = 'input[type="number"]:not([data-allow-negative]):not([data-allow-decimal]), [data-non-negative]';
+    const selector = 'input[type="number"]:not([data-allow-negative]):not([data-allow-decimal]), [data-non-negative], input[data-money-input], input[data-tf-money-field]';
     const candidates = root.matches?.(selector)
         ? [root]
         : [...(root.querySelectorAll?.(selector) || [])];
-    // A number field that explicitly declares a decimal step is intentional.
-    // Do not let the project-wide whole-number guard replace it with step=1.
     const fields = candidates.filter((field) => {
-        // Currency fields are formatted by the shared money-input helper. Do
-        // not apply the whole-number guard to them: prices and amounts may
-        // legitimately contain decimals and grouped display separators.
-        if (isTradeFlowMoneyField(field)) return false;
-        if (field.hasAttribute('data-allow-decimal') || field.type !== 'number') return !field.hasAttribute('data-allow-decimal');
-
-        const configuredStep = field.getAttribute('step');
-        return configuredStep !== 'any' && !/^\d*\.\d+$/.test(configuredStep || '');
+        // Calculated totals and other transport/display values must never
+        // participate in input validation. Their values are not user-entered
+        // and may legitimately be formatted (for example, 1,030.00).
+        return !field.hasAttribute('data-allow-decimal')
+            && !field.disabled
+            && !field.readOnly
+            && field.type !== 'hidden'
+            && !field.matches('[data-display-only], [data-calculated], [data-generated]');
     });
     fields.forEach((field) => {
         if (field.dataset.nonNegativeReady === '1') return;
@@ -656,8 +687,11 @@ function initNonNegativeNumberGuards(root = document) {
         }
 
         if (!field.hasAttribute('min')) field.min = requiresPositiveQuantity ? '1' : '0';
-        field.step = '1';
+        if (field.type === 'number') field.step = '1';
         field.inputMode = 'numeric';
+
+        const existing = String(field.value ?? '').replace(/,/g, '').trim();
+        if (/^\d+\.\d+$/.test(existing)) field.value = String(Math.round(Number(existing)));
 
         const feedbackFor = () => {
             if (!field.id) field.id = `tradeflow-number-${Math.random().toString(36).slice(2)}`;
@@ -672,7 +706,8 @@ function initNonNegativeNumberGuards(root = document) {
         };
 
         const setWholeNumberValidity = () => {
-            const valid = field.value === '' || /^\d+$/.test(field.value);
+            const raw = String(field.value ?? '').replace(/,/g, '');
+            const valid = raw === '' || /^\d+$/.test(raw);
             const feedback = feedbackFor();
             field.classList.toggle('is-invalid', !valid);
             feedback.classList.toggle('d-none', valid);
@@ -1044,7 +1079,7 @@ function isTradeFlowMoneyField(field) {
     const descriptor = tradeFlowMoneyDescriptor(field);
     if (!descriptor || /(?:quantity|\bqty\b|stock|percentage|percent|(?:tax|discount)[_\s-]?(?:type|rate|percent)|barcode|invoice|reference|phone|mobile|whatsapp|\bcnic\b|trial[_\s-]?days|sort[_\s-]?order|product[_\s-]?limit|staff[_\s-]?limit|order[_\s-]?limit|\b(?:id|code)\b)/.test(descriptor)) return false;
 
-    return /(?:^|[^a-z])(?:amount|price|cost|balance|payable|receivable|salary|debit|credit|shipping|cash|other[_\s-]?charges?|subtotal|grand[_\s-]?total|total|due|change)(?:$|[^a-z])/.test(descriptor);
+    return /(?:^|[^a-z])(?:amount|price|cost|balance|payable|receivable|salary|debit|credit|shipping|cash|other[_\s-]?charges?|subtotal|grand[_\s-]?total|total|due|change|tax|discount)(?:$|[^a-z])/.test(descriptor);
 }
 
 function tradeFlowRawMoney(value) {
@@ -1052,24 +1087,21 @@ function tradeFlowRawMoney(value) {
 }
 
 function normalizeTradeFlowMoney(value) {
-    let clean = tradeFlowRawMoney(value).replace(/[^\d.]/g, '');
-    const decimalIndex = clean.indexOf('.');
-    if (decimalIndex !== -1) {
-        clean = `${clean.slice(0, decimalIndex + 1)}${clean.slice(decimalIndex + 1).replace(/\./g, '')}`;
-    }
+    const raw = tradeFlowRawMoney(value);
+    if (raw === '') return '';
 
-    const [whole = '', decimal] = clean.split('.');
-    const normalizedWhole = whole.replace(/^0+(?=\d)/, '');
-    return decimal === undefined ? normalizedWhole : `${normalizedWhole || '0'}.${decimal}`;
+    // Historical decimal values are rendered as whole-number business input.
+    // New decimal keystrokes and pastes are blocked by the shared guard.
+    if (/^\d+\.\d+$/.test(raw)) return String(Math.round(Number(raw)));
+
+    return raw.replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '');
 }
 
 function formatTradeFlowMoney(value) {
     const clean = normalizeTradeFlowMoney(value);
     if (clean === '') return '';
 
-    const [whole = '0', decimal] = clean.split('.');
-    const grouped = (whole || '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return decimal === undefined ? grouped : `${grouped}.${decimal}`;
+    return (clean || '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 function tradeFlowMoneyFields(root = document) {
@@ -1088,7 +1120,7 @@ function normalizeTradeFlowMoneyFields(root = document) {
 function formatTradeFlowMoneyField(field, preserveCaret = false) {
     const original = field.value;
     const originalCaret = field.selectionStart ?? original.length;
-    const rawPrefix = tradeFlowRawMoney(original.slice(0, originalCaret)).replace(/[^\d.]/g, '');
+    const rawPrefix = tradeFlowRawMoney(original.slice(0, originalCaret)).replace(/[^\d]/g, '');
     field.value = formatTradeFlowMoney(original);
 
     if (!preserveCaret || document.activeElement !== field) return;
@@ -1097,7 +1129,7 @@ function formatTradeFlowMoneyField(field, preserveCaret = false) {
     let caret = 0;
     for (const character of field.value) {
         caret += 1;
-        if (/\d|\./.test(character)) consumed += character;
+        if (/\d/.test(character)) consumed += character;
         if (consumed.length >= rawPrefix.length) break;
     }
     field.setSelectionRange(caret, caret);
@@ -1149,11 +1181,15 @@ function initTradeFlowMoneyInputs(root = document) {
             field.dataset.tfMoneyOriginalType = 'number';
             field.type = 'text';
         }
-        field.inputMode = 'decimal';
+        field.inputMode = 'numeric';
         field.value = formatTradeFlowMoney(field.value);
         field.addEventListener('blur', () => formatTradeFlowMoneyField(field));
         initTradeFlowMoneyForm(field.closest('form'));
     });
+
+    // Text-based money controls are marked above, then receive the same
+    // whole-number guard as native number controls.
+    initNonNegativeNumberGuards(root);
 }
 
 function initTradeFlowMoneyDelegation() {
@@ -2134,8 +2170,15 @@ document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreat
         feedback.classList.toggle('d-none', !invalid);
     };
 
+    const isEditable = (input) => !input.disabled
+        && !input.readOnly
+        && input.type !== 'hidden'
+        && !input.matches('[data-display-only], [data-calculated], [data-generated]');
+
     const normalize = (input) => {
-        const value = input.value.trim();
+        if (!isEditable(input)) return true;
+        const value = input.value.trim().replace(/,/g, '').replace(/^Rs\s*/i, '');
+        if (value !== input.value) input.value = value;
         const valid = value === '' || /^\d+$/.test(value);
         setError(input, !valid);
         return valid;
@@ -2143,6 +2186,7 @@ document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreat
 
     const initialize = (root = document) => {
         root.querySelectorAll?.(selector).forEach((input) => {
+            if (!isEditable(input)) return;
             input.setAttribute('step', '1');
             input.setAttribute('inputmode', 'numeric');
             normalize(input);
@@ -2155,7 +2199,7 @@ document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreat
 
     document.addEventListener('keydown', (event) => {
         const input = event.target.closest?.(selector);
-        if (!input || event.ctrlKey || event.metaKey || event.altKey) return;
+        if (!input || !isEditable(input) || event.ctrlKey || event.metaKey || event.altKey) return;
         if (blockedKeys.has(event.key)) {
             event.preventDefault();
             setError(input, true);
@@ -2164,7 +2208,7 @@ document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreat
 
     document.addEventListener('paste', (event) => {
         const input = event.target.closest?.(selector);
-        if (!input) return;
+        if (!input || !isEditable(input)) return;
 
         const pasted = event.clipboardData?.getData('text')?.trim() || '';
         if (!/^\d+$/.test(pasted)) {
@@ -2175,7 +2219,7 @@ document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreat
 
     document.addEventListener('input', (event) => {
         const input = event.target.closest?.(selector);
-        if (input) normalize(input);
+        if (input && isEditable(input)) normalize(input);
     });
 })();
 

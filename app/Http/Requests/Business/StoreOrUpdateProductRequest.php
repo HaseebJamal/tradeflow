@@ -31,8 +31,8 @@ class StoreOrUpdateProductRequest extends FormRequest
                 Rule::exists('units', 'id')->where(fn ($query) => $query->where('business_id', $this->user()->business_id)->whereNull('deleted_at')),
             ],
             'status' => ['required', 'in:Active,Inactive'],
-            'retail_price' => ['nullable', 'numeric', 'min:0'],
-            'wholesale_price' => ['nullable', 'numeric', 'min:0'],
+            'retail_price' => ['nullable', 'integer', 'min:0'],
+            'wholesale_price' => ['nullable', 'integer', 'min:0'],
             'description' => ['nullable', 'string'], 'brand' => ['nullable', 'max:100'], 'manufacturer' => ['nullable', 'max:100'], 'warehouse_location' => ['nullable', 'max:150'], 'has_batch_tracking' => ['nullable', 'boolean'],
         ];
     }

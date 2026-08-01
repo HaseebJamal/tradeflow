@@ -44,8 +44,8 @@ class StoreProductsRequest extends FormRequest
             'products.*.expiry_date' => ['nullable', 'date'],
             'products.*.expiry_alert_days' => ['nullable', 'integer', 'min:0'],
             'products.*.status' => ['required', Rule::in(['Active', 'Inactive'])],
-            'products.*.retail_price' => ['nullable', 'numeric', 'min:0'],
-            'products.*.wholesale_price' => ['nullable', 'numeric', 'min:0'],
+            'products.*.retail_price' => ['nullable', 'integer', 'min:0'],
+            'products.*.wholesale_price' => ['nullable', 'integer', 'min:0'],
             'products.*.description' => ['nullable', 'string'],
         ];
     }

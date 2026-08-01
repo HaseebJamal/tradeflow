@@ -23,7 +23,7 @@
 </div>
 <form class="tf-card p-4 mb-3" data-code-lookup-form data-code-lookup-url="{{ route('business.sales.lookup') }}">
     <div class="row g-2 align-items-end">
-        <div class="col-md-2"><label class="form-label">Sale Number</label><input name="order_number" value="{{ request('order_number') }}" class="form-control" autocomplete="off" data-code-lookup autofocus></div>
+        <div class="col-md-2"><label class="form-label">Sale Number</label><select name="order_number" class="form-select" autofocus><option value="">All</option>@foreach($saleNumbers as $saleNumber)<option value="{{ $saleNumber }}" @selected(request('order_number') === $saleNumber)>{{ $saleNumber }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="">All</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(request('customer_id') == $customer->id)>{{ $customer->display_name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Product</label><select name="product_id" class="form-select"><option value="">All</option>@foreach($products as $product)<option value="{{ $product->id }}" @selected(request('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option>@foreach(['New','Accepted','Packing','Ready','Out For Delivery','Delivered','Completed','Partially Returned','Returned','Cancelled','Void'] as $status)<option @selected(request('status')===$status)>{{ $status }}</option>@endforeach</select></div>

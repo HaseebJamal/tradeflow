@@ -10,6 +10,7 @@ use App\Models\HeldPosSale;
 use App\Models\Order;
 use App\Models\PosRegister;
 use App\Models\Product;
+use App\Models\SalesQuotation;
 use App\Services\PosSaleService;
 use App\Services\PosDeliveryAssignmentService;
 use App\Services\ThermalDocumentService;
@@ -22,6 +23,14 @@ class PosController extends Controller
     public function index(Request $request)
     {
         $businessId = $request->user()->business_id;
+        $quotation = null;
+        if ($request->filled('quotation')) {
+            $quotation = SalesQuotation::with('items')
+                ->where('business_id', $businessId)
+                ->whereIn('status', ['Draft', 'Sent', 'Accepted'])
+                ->find($request->integer('quotation'));
+            abort_unless($quotation && ! $quotation->valid_until?->isPast(), 404);
+        }
         return view('business.pos.index', [
             'register' => PosRegister::where('business_id', $businessId)->where('user_id', $request->user()->id)->where('status', 'Open')->latest('opened_at')->first(),
             'products' => $this->availableProducts($businessId)->take(60)->get(),
@@ -30,6 +39,7 @@ class PosController extends Controller
             'heldSales' => HeldPosSale::where('business_id', $businessId)->where('user_id', $request->user()->id)->where('status', 'Held')->latest('held_at')->get(['id', 'hold_number', 'held_at']),
             'canUseCustomPrice' => app(\App\Services\CompanyPermissionService::class)->allowsUser($request->user(), 'pos.custom_price'),
             'canCreateCustomer' => app(\App\Services\CompanyPermissionService::class)->allowsUser($request->user(), 'customers.create'),
+            'quotation' => $quotation,
         ]);
     }
 

@@ -43,9 +43,9 @@ class PurchaseController extends Controller
     {
         $businessId = $this->businessId();
         $filters = $request->validate([
+            'purchase_id' => ['nullable', 'integer'],
             'supplier_id' => ['nullable', 'integer'],
             'status' => ['nullable', 'string', 'max:60'],
-            'search' => ['nullable', 'string', 'max:120'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'create' => ['nullable', 'boolean'],
@@ -59,21 +59,24 @@ class PurchaseController extends Controller
             'items:id,purchase_id,received_quantity',
             'returns.items:id,purchase_return_id,quantity',
         ])->withCount('payments')->withSum('items', 'quantity')->where('business_id', $businessId)
+            ->when($request->filled('purchase_id'), fn ($query) => $query->whereKey($request->integer('purchase_id')))
             ->when($request->filled('supplier_id'), fn ($query) => $query->where('supplier_id', $request->integer('supplier_id')))
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->value()))
-            ->when($request->filled('search'), fn ($query) => $query->where(fn ($inner) => $inner
-                ->where('purchase_number', 'like', '%'.$request->search.'%')
-                ->orWhereHas('invoice', fn ($invoice) => $invoice->where('invoice_number', 'like', '%'.$request->search.'%'))
-                ->orWhereHas('supplier', fn ($supplier) => $supplier->where('supplier_name', 'like', '%'.$request->search.'%'))
-                ->orWhere('notes', 'like', '%'.$request->search.'%')))
-            ->where('purchase_date', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
-            ->where('purchase_date', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
+            ->when(! $request->filled('purchase_id'), fn ($query) => $query
+                ->where('purchase_date', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
+                ->where('purchase_date', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay()))
             ->latest('purchase_date')->paginate(10)->withQueryString();
 
         $suppliers = Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get();
+        $purchaseOptions = Purchase::query()
+            ->with('supplier:id,supplier_name,company_name')
+            ->where('business_id', $businessId)
+            ->latest('purchase_date')
+            ->get(['id', 'supplier_id', 'purchase_number', 'supplier_invoice_number']);
 
         return view('business.purchases.index', [
             'purchases' => $purchases,
+            'purchaseOptions' => $purchaseOptions,
             'suppliers' => $suppliers,
             'products' => $request->boolean('create') ? Product::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get() : collect(),
             'accounts' => Account::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(),
@@ -107,7 +110,7 @@ class PurchaseController extends Controller
     {
         $businessId = $this->businessId();
         $data = $this->validatedPurchase($request);
-        $this->ensureActionPermission($data['intent'] === 'confirm' ? 'purchases.confirm' : 'purchases.create');
+        $this->ensureActionPermission('purchases.confirm');
 
         $purchase = DB::transaction(function () use ($data, $businessId): Purchase {
             Business::query()->lockForUpdate()->findOrFail($businessId);
@@ -123,7 +126,7 @@ class PurchaseController extends Controller
             'status' => $purchase->status,
         ]);
 
-        return redirect()->route('business.purchases.show', $purchase)->with('success', $purchase->status === 'Draft' ? 'Purchase draft saved.' : 'Purchase confirmed and supplier payable recorded.');
+        return redirect()->route('business.purchases.show', $purchase)->with('success', 'Purchase confirmed and supplier payable recorded.');
     }
 
     public function edit(Purchase $purchase)
@@ -145,7 +148,7 @@ class PurchaseController extends Controller
     {
         $purchase = $this->scoped($purchase);
         $data = $this->validatedPurchase($request);
-        $this->ensureActionPermission($data['intent'] === 'confirm' ? 'purchases.confirm' : 'purchases.edit');
+        $this->ensureActionPermission('purchases.confirm');
 
         $purchase = DB::transaction(function () use ($purchase, $data): Purchase {
             $locked = Purchase::where('business_id', $purchase->business_id)->lockForUpdate()->findOrFail($purchase->id);
@@ -156,7 +159,7 @@ class PurchaseController extends Controller
         });
         $this->activity->record($purchase->business_id, 'Purchases', 'Purchase '.$purchase->status.' after edit: '.$purchase->purchase_number, $purchase->id);
 
-        return redirect()->route('business.purchases.show', $purchase)->with('success', $purchase->status === 'Draft' ? 'Purchase draft updated.' : 'Purchase confirmed and supplier payable recorded.');
+        return redirect()->route('business.purchases.show', $purchase)->with('success', 'Purchase confirmed and supplier payable recorded.');
     }
 
     public function show(Request $request, Purchase $purchase)
@@ -253,7 +256,6 @@ class PurchaseController extends Controller
     private function validatedPurchase(Request $request): array
     {
         $data = $request->validate([
-            'intent' => ['nullable', Rule::in(['draft', 'confirm'])],
             'submission_token' => ['required', 'uuid'],
             'supplier_id' => ['required', 'integer'],
             'purchase_date' => ['required', 'date'],
@@ -263,28 +265,24 @@ class PurchaseController extends Controller
             'purchase_order_reference' => ['nullable', 'string', 'max:255'],
             'payment_terms' => ['nullable', Rule::in(['Cash', 'Due on Receipt', 'Net 7', 'Net 15', 'Net 30', 'Custom'])],
             'due_date' => ['nullable', 'date'],
-            'other_charges' => ['nullable', 'numeric', 'min:0'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer'],
-            'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
-            'items.*.unit_cost' => ['required', 'numeric', 'min:0'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.unit_cost' => ['required', 'integer', 'min:0'],
             'items.*.discount_type' => ['nullable', Rule::in(['percentage', 'fixed'])],
-            'items.*.discount_value' => ['nullable', 'numeric', 'min:0'],
+            'items.*.discount_value' => ['nullable', 'integer', 'min:0'],
             'items.*.tax_type' => ['nullable', Rule::in(['percentage', 'fixed'])],
-            'items.*.tax_value' => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_value' => ['nullable', 'integer', 'min:0'],
             'payment_type' => ['nullable', Rule::in(['Full Credit', 'Partial Payment', 'Full Payment'])],
-            'paid_amount' => ['nullable', 'numeric', 'min:0'],
+            'paid_amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
             'payment_date' => ['nullable', 'date'],
-            'payment_reference' => ['nullable', 'string', 'max:255'],
             'cheque_number' => ['nullable', 'string', 'max:255'],
             'cheque_due_date' => ['nullable', 'date'],
             'payment_account_id' => ['nullable', 'integer'],
         ]);
 
-        $data['intent'] ??= 'confirm';
         $data['payment_terms'] ??= 'Due on Receipt';
-        $data['other_charges'] = round((float) ($data['other_charges'] ?? 0), 2);
         $data['supplier_invoice_date'] ??= Carbon::parse($data['purchase_date'] ?? now(), config('app.timezone'))->toDateString();
         $data['due_date'] = $this->resolveDueDate($data);
 
@@ -309,9 +307,12 @@ class PurchaseController extends Controller
         $subtotal = round(collect($prepared)->sum('lineSubtotal'), 2);
         $discount = round(collect($prepared)->sum('lineDiscount'), 2);
         $tax = round(collect($prepared)->sum('lineTax'), 2);
-        $grandTotal = round($subtotal - $discount + $tax + $data['other_charges'], 2);
+        // New purchases no longer accept other charges. Preserve a historical
+        // value when editing so existing financial records are never altered.
+        $otherCharges = round((float) ($purchase?->other_charges ?? 0), 2);
+        $grandTotal = round($subtotal - $discount + $tax + $otherCharges, 2);
         $payment = $this->resolveInitialPayment($data, $grandTotal);
-        $confirmed = $data['intent'] === 'confirm';
+        $confirmed = true;
 
         $purchaseNumber = $purchase?->purchase_number ?? $this->numbers->next('purchase');
         $supplierInvoiceNumber = trim((string) ($data['supplier_invoice_number'] ?? ''))
@@ -329,14 +330,14 @@ class PurchaseController extends Controller
             'subtotal' => $subtotal,
             'discount_amount' => $discount,
             'tax_amount' => $tax,
-            'other_charges' => $data['other_charges'],
+            'other_charges' => $otherCharges,
             'grand_total' => $grandTotal,
             'paid_amount' => $confirmed ? $payment['paid_amount'] : 0,
             'balance' => $confirmed ? $payment['balance'] : $grandTotal,
             'payment_status' => $confirmed ? $payment['status'] : 'Unpaid',
             'payment_method' => $confirmed ? $payment['method'] : null,
             'payment_date' => $confirmed ? $payment['date'] : null,
-            'payment_reference' => $confirmed ? $payment['reference'] : null,
+            'payment_reference' => $confirmed ? $purchase?->payment_reference : null,
             'cheque_number' => $confirmed ? $payment['cheque_number'] : null,
             'cheque_due_date' => $confirmed ? $payment['cheque_due_date'] : null,
             'payment_account_id' => $confirmed ? $payment['account_id'] : null,
@@ -392,7 +393,7 @@ class PurchaseController extends Controller
                     'is_advance' => true,
                     'remaining_amount' => $payment['paid_amount'],
                     'method' => $payment['method'],
-                    'reference_number' => $payment['reference'],
+                    'reference_number' => $purchase?->payment_reference,
                     'cheque_number' => $payment['cheque_number'],
                     'cheque_due_date' => $payment['cheque_due_date'],
                     'payment_date' => $payment['date'],
@@ -450,7 +451,6 @@ class PurchaseController extends Controller
             'status' => $paid <= 0 ? 'Unpaid' : ($balance > 0 ? 'Partial' : 'Paid'),
             'method' => $paid > 0 ? $method : null,
             'date' => $paid > 0 ? ($data['payment_date'] ?? now()->toDateString()) : null,
-            'reference' => $data['payment_reference'] ?? null,
             'cheque_number' => $method === 'Cheque' ? ($data['cheque_number'] ?? null) : null,
             'cheque_due_date' => $method === 'Cheque' ? ($data['cheque_due_date'] ?? null) : null,
             'account_id' => $data['payment_account_id'] ?? null,
@@ -516,8 +516,12 @@ class PurchaseController extends Controller
         $purchase = $this->scoped($purchase);
         $this->ensureActionPermission('purchases.pay');
         abort_if(in_array($purchase->status, ['Draft', 'Cancelled'], true), 422, 'A draft or cancelled purchase cannot be paid.');
+        // Supplier-payment screens display currency with commas. Normalize the
+        // submitted tender before integer validation, while leaving decimals
+        // and negative values invalid under the existing whole-number rules.
+        $request->merge(['amount' => $this->normalizePaymentTender($request->input('amount'))]);
         $data = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0.01', 'max:'.$purchase->balance],
+            'amount' => ['required', 'integer', 'min:1'],
             'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
             'reference_number' => ['nullable', 'string', 'max:255'],
             'payment_date' => ['required', 'date'],
@@ -525,43 +529,56 @@ class PurchaseController extends Controller
             'cheque_due_date' => ['nullable', 'date'],
             'account_id' => ['nullable', 'integer'],
         ]);
-        DB::transaction(function () use ($purchase, $data) {
+        $paymentOutcome = DB::transaction(function () use ($purchase, $data) {
             $locked = Purchase::where('business_id', $purchase->business_id)->lockForUpdate()->findOrFail($purchase->id);
             if (!empty($data['account_id']) && !Account::where('business_id', $locked->business_id)->whereKey($data['account_id'])->exists()) {
                 throw ValidationException::withMessages(['account_id' => 'Select a payment account from this business.']);
             }
-            if ((float) $data['amount'] > (float) $locked->balance) {
+            $tenderedAmount = (float) $data['amount'];
+            $currentPayable = max(0, (float) $locked->balance);
+            if ($tenderedAmount > $currentPayable) {
                 throw ValidationException::withMessages(['amount' => 'Payment amount cannot exceed the remaining payable.']);
             }
-            $payment = SupplierPayment::create($data + [
+            $appliedAmount = min($tenderedAmount, $currentPayable);
+            if ($appliedAmount <= 0) {
+                throw ValidationException::withMessages(['amount' => 'This purchase no longer has a remaining payable balance.']);
+            }
+            $payment = SupplierPayment::create(array_merge($data, [
+                'amount' => $appliedAmount,
                 'business_id' => $locked->business_id,
                 'supplier_id' => $locked->supplier_id,
                 'purchase_id' => $locked->id,
                 'created_by' => auth()->id(),
                 'is_advance' => $locked->receiving_status === 'Not Received',
-                'remaining_amount' => $locked->receiving_status === 'Not Received' ? $data['amount'] : 0,
+                'remaining_amount' => $locked->receiving_status === 'Not Received' ? $appliedAmount : 0,
                 'reference_number' => $data['reference_number'] ?? null,
                 'cheque_number' => $data['method'] === 'Cheque' ? ($data['cheque_number'] ?? null) : null,
                 'cheque_due_date' => $data['method'] === 'Cheque' ? ($data['cheque_due_date'] ?? null) : null,
-            ]);
-            $paid = round((float) $locked->paid_amount + (float) $data['amount'], 2); $balance = round((float) $locked->grand_total - $paid, 2);
+            ]));
+            $paid = round((float) $locked->paid_amount + $appliedAmount, 2); $balance = max(0, round((float) $locked->grand_total - $paid, 2));
             $locked->update(['paid_amount' => $paid, 'balance' => $balance, 'payment_status' => $balance <= 0 ? 'Paid' : 'Partial', 'updated_by' => auth()->id()]);
             $locked->invoice?->update(['paid_amount' => $paid, 'balance' => $balance, 'status' => $balance <= 0 ? 'Paid' : 'Partial']);
             $this->postPayment($locked, $payment);
+            return compact('appliedAmount');
         });
         $purchase->refresh();
         $this->activity->record($purchase->business_id, 'Purchases', 'Supplier payment recorded for '.$purchase->purchase_number, $purchase->id, null, [
-            'amount' => $data['amount'],
+            'amount' => $paymentOutcome['appliedAmount'],
             'method' => $data['method'],
             'balance' => $purchase->balance,
         ]);
         return back()->with('success', 'Supplier payment recorded and posted to accounting.');
     }
 
+    private function normalizePaymentTender(mixed $value): string
+    {
+        return preg_replace('/[\s,]/', '', preg_replace('/^\s*Rs\.?\s*/i', '', (string) $value)) ?? '';
+    }
+
     public function processReturn(Request $request, Purchase $purchase)
     {
         $purchase = $this->scoped($purchase);
-        $data = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'items' => ['required', 'array', 'min:1'], 'items.*.purchase_item_id' => ['required', 'integer'], 'items.*.quantity' => ['required', 'numeric', 'min:0.001']]);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'items' => ['required', 'array', 'min:1'], 'items.*.purchase_item_id' => ['required', 'integer'], 'items.*.quantity' => ['required', 'integer', 'min:1']]);
         try {
             $purchaseReturn = DB::transaction(function () use ($purchase, $data) {
             $return = PurchaseReturn::create(['business_id' => $purchase->business_id, 'purchase_id' => $purchase->id, 'supplier_id' => $purchase->supplier_id, 'created_by' => auth()->id(), 'return_number' => $this->numbers->next('purchase_return'), 'return_date' => now()->toDateString(), 'reason' => $data['reason']]);
@@ -625,9 +642,9 @@ class PurchaseController extends Controller
             'notification_message' => 'Purchase return '.$purchaseReturn->return_number.' has been processed successfully.',
         ]);
 
-        return redirect()->route('business.purchase-returns.show', $purchaseReturn)->with('tradeflow_return_alert', [
+        return redirect()->route('business.purchase-returns.create')->with('tradeflow_return_alert', [
             'title' => 'Purchase Return Completed',
-            'message' => 'Purchase return has been processed successfully. Stock, supplier balance, payable and related accounting entries have been updated. Return No: '.$purchaseReturn->return_number,
+            'message' => 'Purchase return '.$purchaseReturn->return_number.' has been processed successfully. You can process another return now.',
         ]);
     }
 

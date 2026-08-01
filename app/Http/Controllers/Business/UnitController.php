@@ -23,13 +23,13 @@ class UnitController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->string('search')->trim();
-            $query->where(fn ($builder) => $builder
+            $query->where(fn($builder) => $builder
                 ->where('unit_name', 'like', "%{$search}%")
                 ->orWhere('short_code', 'like', "%{$search}%"));
         }
 
         return view('business.units.index', [
-            'units' => $query->latest()->paginate(12)->withQueryString(),
+            'units' => $query->latest()->get(),
         ]);
     }
 
@@ -139,25 +139,37 @@ class UnitController extends Controller
     {
         $normalised = strtolower(trim(preg_replace('/[^a-z0-9]+/i', ' ', $unitName)));
         $aliases = [
-            'piece' => 'PC', 'pieces' => 'PC', 'pc' => 'PC',
-            'kilogram' => 'KG', 'kilograms' => 'KG', 'kg' => 'KG', 'kilo' => 'KG',
-            'liter' => 'L', 'litre' => 'L', 'liters' => 'L', 'litres' => 'L',
-            'carton' => 'CTN', 'cartons' => 'CTN',
-            'bottle' => 'BTL', 'bottles' => 'BTL',
+            'piece' => 'PC',
+            'pieces' => 'PC',
+            'pc' => 'PC',
+            'kilogram' => 'KG',
+            'kilograms' => 'KG',
+            'kg' => 'KG',
+            'kilo' => 'KG',
+            'liter' => 'L',
+            'litre' => 'L',
+            'liters' => 'L',
+            'litres' => 'L',
+            'carton' => 'CTN',
+            'cartons' => 'CTN',
+            'bottle' => 'BTL',
+            'bottles' => 'BTL',
         ];
         $words = array_values(array_filter(explode(' ', $normalised)));
         $base = $aliases[$normalised] ?? (count($words) > 1
-            ? implode('', array_map(fn ($word) => strtoupper(substr($word, 0, 1)), $words))
+            ? implode('', array_map(fn($word) => strtoupper(substr($word, 0, 1)), $words))
             : strtoupper(substr($words[0] ?? 'UNIT', 0, 3)));
         $base = substr($base ?: 'UNIT', 0, 18);
         $candidate = $base;
         $suffix = 2;
 
-        while (Unit::withTrashed()
-            ->where('business_id', $businessId)
-            ->where('short_code', $candidate)
-            ->exists()) {
-            $candidate = substr($base, 0, 20 - strlen((string) $suffix)).$suffix;
+        while (
+            Unit::withTrashed()
+                ->where('business_id', $businessId)
+                ->where('short_code', $candidate)
+                ->exists()
+        ) {
+            $candidate = substr($base, 0, 20 - strlen((string) $suffix)) . $suffix;
             $suffix++;
         }
 

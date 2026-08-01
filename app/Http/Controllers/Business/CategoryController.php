@@ -19,9 +19,11 @@ class CategoryController extends Controller
         } elseif (in_array($request->input('status'), ['Active', 'Inactive'], true)) {
             $query->where('status', $request->input('status'));
         }
-        if ($request->filled('search')) $query->where('name', 'like', '%'.$request->input('search').'%');
-
-        return view('business.categories.index', ['categories' => $query->latest()->paginate(12)->withQueryString()]);
+        if ($request->filled('search'))
+            $query->where('name', 'like', '%' . $request->input('search') . '%');
+        return view('business.categories.index', [
+            'categories' => $query->latest()->get(),
+        ]);
     }
 
     public function create()

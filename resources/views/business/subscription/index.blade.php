@@ -2,6 +2,7 @@
 
 @section('page-title', 'Subscription')
 @section('page-subtitle', 'Review your plan, usage, and upgrade options')
+@section('disable-dashboard-autofocus', 'true')
 
 @section('content')
     @if(session('success'))
@@ -13,19 +14,29 @@
         $selectedPlanId = (int) request('plan');
         $selectedBillingCycle = in_array(request('billing_cycle'), ['Monthly', 'Yearly'], true) ? request('billing_cycle') : '';
         $permissions = app(\App\Services\CompanyPermissionService::class);
-        $canViewHistory = auth()->user()?->role === 'business_owner' || $permissions->allowsUser(auth()->user(), 'subscriptions.view_history', $business);
-        $isLiveSubscription = in_array($subscription?->status, ['Trial', 'Active', 'Expiring'], true);
         $expiry = $subscription?->status === 'Trial' ? $subscription?->trial_end_at : $subscription?->ends_at;
         $daysRemaining = $expiry ? max(0, now()->startOfDay()->diffInDays($expiry->copy()->startOfDay(), false)) : null;
         $canSubscriptionAction = fn(string $key) => auth()->user()?->role === 'business_owner' || $permissions->allowsUser(auth()->user(), 'subscriptions.manage', $business) || $permissions->allowsUser(auth()->user(), $key, $business);
+        $statusBadge = fn(?string $status) => match (strtolower((string) $status)) {
+            'active', 'approved', 'received', 'paid' => 'tf-badge-success',
+            'pending', 'pending review', 'trial', 'expiring' => 'tf-badge-warning',
+            'cancelled', 'rejected', 'suspended', 'expired', 'failed' => 'tf-badge-danger',
+            default => 'tf-badge-info',
+        };
     @endphp
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h2 class="h5 mb-0">Current Plan</h2>
+        <a class="btn btn-outline-primary" href="{{ route('business.subscription.history') }}">
+            <i class="bi bi-clock-history me-1"></i>Subscription History
+        </a>
+    </div>
 
     <div class="tf-card p-4 mb-4">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
             <div>
-                <div class="tf-muted small">Current Plan</div>
                 <h2 class="h4 mb-1">{{ $subscription?->plan?->name ?? 'No active plan' }}</h2><span
-                    class="tf-badge {{ $isLiveSubscription ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $subscription?->status ?? 'Not assigned' }}</span>
+                    class="tf-badge {{ $statusBadge($subscription?->status) }}">{{ $subscription?->status ?? 'Not assigned' }}</span>
             </div>
             <div class="text-lg-end">
                 @if($daysRemaining !== null)
@@ -55,11 +66,6 @@
                     <div class="border rounded p-3 h-100"><small class="tf-muted d-block">Scheduled
                             Cancellation</small><strong>{{ $subscription->cancellation_scheduled_at->format('d M, Y') }}</strong>
                     </div>
-            </div>@endif
-            @if($requests->where('status', 'Pending')->isNotEmpty())
-                <div class="col-sm-6 col-lg-3">
-                    <div class="border rounded p-3 h-100"><small class="tf-muted d-block">Pending
-                            Changes</small><strong>{{ $requests->where('status', 'Pending')->count() }}</strong></div>
             </div>@endif
         </div>
     </div>
@@ -101,9 +107,9 @@
                         <li>{{ (int) $plan->trial_days }} trial days</li>
                         @foreach(array_slice($plan->features ?? [], 0, 3) as $feature)<li>{{ $feature }}</li>@endforeach
                     </ul>
-                    @if($isCurrentPlan && $isLiveSubscription)
+                    @if($isCurrentPlan)
                         <button class="btn btn-outline-secondary w-100 mt-auto"
-                            disabled>{{ $subscription?->status === 'Trial' ? 'Current Trial' : 'Current Plan' }}</button>
+                            disabled>Current Plan</button>
                     @elseif(in_array($relation, ['Upgrade', 'Downgrade'], true) && $canRequest)
                         <button type="button"
                             class="btn {{ $relation === 'Upgrade' ? 'btn-tf-primary' : 'btn-outline-primary' }} w-100 mt-auto"
@@ -238,100 +244,6 @@
         </div>
     @endif
 
-    @if($canViewHistory)
-        <div class="tf-card p-0 mt-4">
-            <div class="p-3 border-bottom">
-                <h2 class="h5 mb-0">Billing History</h2>
-            </div>
-            <x-table class="tf-business-data-table">
-                <thead>
-                    <tr>
-                        <th>Date &amp; Time</th>
-                        <th>Billing Cycle</th>
-                        <th>Amount</th>
-                        <th>Payment Method</th>
-                        <th>Reference</th>
-                        <th>Status</th>
-                        <th>Recorded By</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($billingHistory as $payment)
-                        <tr>
-                            <td><x-date-time :value="$payment->paid_at" /></td>
-                            <td>{{ $payment->subscription?->billing_cycle ?? '-' }}</td>
-                            <td>Rs {{ number_format($payment->amount, 2) }}</td>
-                            <td>{{ $payment->method }}</td>
-                            <td>{{ $payment->reference_number ?: '-' }}</td>
-                            <td><span class="tf-badge tf-badge-info">{{ $payment->status }}</span></td>
-                            <td>{{ $payment->recordedBy?->name ?? '-' }}</td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="7" class="text-center tf-muted py-4">No billing payments recorded yet.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </x-table>
-            <div class="p-3"><x-table-result-summary :paginator="$billingHistory" />{{ $billingHistory->links('pagination::bootstrap-5') }}</div>
-        </div>
-
-        <div class="tf-card p-0 mt-4">
-            <div class="p-3 border-bottom">
-                <h2 class="h5 mb-0">Request History</h2>
-            </div>
-            <x-table class="tf-business-data-table">
-                <thead>
-                    <tr>
-                        <th>Request ID</th>
-                        <th>Type</th>
-                        <th>Current Plan</th>
-                        <th>Requested Plan</th>
-                        <th>Billing Cycle</th>
-                        <th>Payment Method</th>
-                        <th>Amount</th>
-                        <th>Effective Date</th>
-                        <th>Status</th>
-                        <th>Requested At</th>
-                        <th>Reviewed By</th>
-                        <th>Admin Note</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($requests as $change)
-                        <tr>
-                            <td>#{{ $change->id }}</td>
-                            <td>{{ $change->type }}</td>
-                            <td>{{ $change->currentPlan?->name ?? '-' }}</td>
-                            <td>{{ $change->requestedPlan?->name ?? '-' }}</td>
-                            <td>{{ $change->billing_cycle }}</td>
-                            <td>{{ $change->payment_method ?: '-' }}</td>
-                            <td>Rs {{ number_format($change->expected_amount) }}</td>
-                            <td>{{ $change->effective_at?->format('d M, Y') ?? '-' }}</td>
-                            <td><span class="tf-badge tf-badge-info">{{ $change->status }}</span></td>
-                            <td><x-date-time :value="$change->created_at" /><span
-                                    class="d-block small tf-muted">{{ $change->reviewed_at ? $change->reviewed_at->format('d M, Y') : 'Not reviewed' }}{{ $change->reviewer?->name ? ' · ' . $change->reviewer->name : '' }}</span>
-                            </td>
-                            <td>{{ $change->reviewer?->name ?? 'Not reviewed' }}</td>
-                            <td>{{ $change->admin_note ?: '-' }}</td>
-                            <td class="text-end">
-                                @if($change->status === 'Pending' && $permissions->allowsUser(auth()->user(), 'subscriptions.cancel', $business))
-                                    <form method="POST" action="{{ route('business.subscription.requests.cancel', $change) }}">@csrf
-                                        @method('PATCH')<button class="btn btn-sm btn-outline-danger">Cancel Request</button></form>
-                                @endif
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="13" class="text-center tf-muted py-4">No subscription requests yet.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </x-table>
-            <div class="p-3"><x-table-result-summary :paginator="$requests" />{{ $requests->links('pagination::bootstrap-5') }}</div>
-        </div>
-    @endif
 @endsection
 
 @push('scripts')

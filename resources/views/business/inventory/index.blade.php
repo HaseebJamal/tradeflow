@@ -23,14 +23,6 @@
         <div class="col-md-1"><button class="btn btn-tf-primary w-100"><i class="bi bi-check-lg"></i></button></div>
     </form>
 </div>@endcompanyCan
-@companyCan('inventory.stock_transfer')<div class="tf-card p-4 mb-4">
-    <h2 class="h5">Stock Transfer</h2>
-    <form method="POST" action="{{ route('business.inventory.transfer') }}" class="row g-3" data-inventory-product-form>@csrf
-        <div class="col-md-4"><select name="product_id" class="form-select" required><option value="">Select Product</option>@foreach($inventoryProducts ?? collect() as $product)<option value="{{ $product->id }}" @selected(old('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
-        <div class="col-md-2"><input name="quantity" type="number" min="1" step="1" value="0" class="form-control js-whole-number" placeholder="Qty" required></div>
-        <div class="col-md-1"><button class="btn btn-outline-primary w-100"><i class="bi bi-arrow-left-right"></i></button></div>
-    </form>
-</div>@endcompanyCan
 <x-table class="tf-business-data-table">
     <thead><tr><th>Product</th><th>Available</th><th>Sold</th><th>Damaged</th><th>Sales Returned</th><th>Purchase Returned</th><th>Alert Qty</th><th>Last Updated</th><th>Actions</th></tr></thead>
     <tbody>

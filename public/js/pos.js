@@ -38,6 +38,9 @@
     const paymentType = $('[data-pos-payment-type]');
     const paymentMethod = $('[data-pos-payment-method]');
     const cash = $('[data-pos-cash]');
+    const tenderLabel = $('[data-pos-tender-label]');
+    const changeRow = $('[data-pos-change-row]');
+    const changeReturn = $('[data-pos-change]');
     const reference = $('[data-pos-reference]');
     const completeButton = $('[data-pos-complete]');
     const registerStatus = $('[data-pos-register-status]');
@@ -78,7 +81,7 @@
     const currency = (amount) => `Rs ${Math.round(Number(amount) || 0).toLocaleString()}`;
     const whole = (value) => Math.max(0, Math.trunc(Number(value) || 0));
     const roundCash = (value) => Math.round(Number(value) || 0);
-    const cashIsValid = () => /^\d+(?:\.\d{1,2})?$/.test(cash.value.trim());
+    const cashIsValid = () => /^\d+$/.test(cash.value.trim());
     const csrfHeaders = { 'X-CSRF-TOKEN': config.csrf, Accept: 'application/json', 'Content-Type': 'application/json' };
     const flash = (icon, title, text = '') => window.Swal
         ? Swal.fire({
@@ -194,7 +197,7 @@
             tax: taxAmount,
             grand,
             paid: paymentType.value === 'Credit' ? 0 : Math.min(roundedCash, grand),
-            due: Math.max(0, grand - roundedCash),
+            due: Math.max(0, grand - (paymentType.value === 'Credit' ? 0 : Math.min(roundedCash, grand))),
             change: Math.max(0, roundedCash - grand),
         };
     };
@@ -205,13 +208,23 @@
         const values = totals();
         const payable = $('[data-total="grand"]');
         if (payable) payable.textContent = currency(values.grand);
+        const isCash = paymentType.value === 'Cash';
+        if (tenderLabel) tenderLabel.textContent = isCash ? 'Cash Received' : 'Payment Amount';
+        if (changeRow) changeRow.classList.toggle('d-none', !isCash);
+        if (changeReturn) changeReturn.value = currency(isCash ? values.change : 0);
+        cash.max = isCash ? '' : String(values.grand);
+        const tenderInvalid = cash.value !== '' && !cashIsValid();
+        const nonCashOverpayment = !isCash && paymentType.value !== 'Credit' && roundCash(cash.value) > values.grand;
+        cash.setCustomValidity(tenderInvalid
+            ? 'Enter a whole-number payment amount.'
+            : (nonCashOverpayment ? `Payment amount cannot exceed ${currency(values.grand)} for this payment method.` : ''));
         const customerAllowed = !['Credit', 'Split'].includes(paymentType.value)
             || (Boolean(customer.value) && quickCustomerIsValid());
         const roundedCash = roundCash(cash.value);
         const paymentAllowed = paymentType.value === 'Credit'
             || (paymentType.value === 'Cash'
                 ? cashIsValid() && roundedCash >= values.grand
-                : cashIsValid() && roundedCash > 0);
+                : cashIsValid() && roundedCash > 0 && roundedCash <= values.grand);
         completeButton.disabled = !config.registerId || cart.size === 0 || !customerAllowed || !paymentAllowed || submitting;
         return values;
     };
@@ -430,6 +443,7 @@
         focusElement(search);
     };
     const checkoutPayload = () => ({
+        quotation_id: config.quotation?.id || null,
         customer_id: isQuickCustomer() ? null : customer.value || null,
         quick_customer: isQuickCustomer() ? {
             name: quickCustomerName?.value.trim() || '',
@@ -480,6 +494,11 @@
         }
         if (paymentType.value !== 'Cash' && paymentType.value !== 'Credit' && roundCash(cash.value) < 1) {
             flash('warning', 'Invalid received amount', 'Enter a valid received amount.');
+            focusElement(cash, true);
+            return;
+        }
+        if (paymentType.value !== 'Cash' && paymentType.value !== 'Credit' && roundCash(cash.value) > values.grand) {
+            flash('warning', 'Payment exceeds amount due', `Payment amount cannot exceed ${currency(values.grand)} for this payment method.`);
             focusElement(cash, true);
             return;
         }
@@ -812,6 +831,10 @@
         paymentMethod.value = paymentType.value === 'Cash' ? 'Cash' : paymentType.value;
         updateTotals();
     });
+    paymentMethod.addEventListener('change', () => {
+        paymentType.value = paymentMethod.value;
+        updateTotals();
+    });
     search.addEventListener('input', () => {
         keyboardProductSelection = false;
         clearTimeout(searchTimer);
@@ -907,6 +930,25 @@
         }));
     root.addEventListener('wheel', (event) => { if (event.target === cash) event.preventDefault(); }, { passive: false });
 
+    if (config.quotation?.items?.length) {
+        config.quotation.items.forEach((quotedLine) => {
+            const card = visibleProductCards().find((candidate) => Number(parseProduct(candidate)?.id) === Number(quotedLine.id));
+            const quotedProduct = card ? parseProduct(card) : null;
+            if (!quotedProduct) return;
+            cart.set(Number(quotedLine.id), {
+                id: Number(quotedLine.id),
+                name: quotedProduct.name,
+                barcode: quotedProduct.barcode || '',
+                stock: Number(quotedProduct.stock_quantity ?? quotedProduct.stock ?? 0),
+                unit: quotedProduct.unit || '',
+                quantity: whole(quotedLine.quantity),
+                price: whole(quotedLine.price),
+                discount: whole(quotedLine.discount),
+                tax: whole(quotedLine.tax),
+            });
+        });
+        customer.value = String(config.quotation.customer_id || '');
+    }
     setActiveProduct(visibleProductCards().length ? 0 : -1);
     syncCustomerMode(false);
     search.value = '';

@@ -91,23 +91,9 @@ class InventoryController extends Controller
             'reason' => ['nullable', 'string', 'max:255'],
         ], ['product_id.required' => 'Please select a product.', 'product_id.exists' => 'Please select a valid product.']);
 
-        $this->recordMovement($data, false);
+        $this->recordMovement($data);
 
         return back()->with('success', 'Stock adjusted.');
-    }
-
-    public function transfer(Request $request)
-    {
-        $data = $request->validate([
-            'product_id' => ['required', Rule::exists('products', 'id')->where(fn ($query) => $query->where('business_id', auth()->user()->business_id))],
-            'quantity' => ['required', 'integer', 'min:1'],
-            'note' => ['nullable', 'string', 'max:255'],
-        ], ['product_id.required' => 'Please select a product.', 'product_id.exists' => 'Please select a valid product.']);
-
-        $data['type'] = 'transfer';
-        $this->recordMovement($data, true);
-
-        return back()->with('success', 'Stock transfer recorded.');
     }
 
     public function updateAlert(Request $request, Inventory $inventory)
@@ -120,18 +106,18 @@ class InventoryController extends Controller
         return back()->with('success', 'Low stock alert updated.');
     }
 
-    private function recordMovement(array $data, bool $isTransfer): void
+    private function recordMovement(array $data): void
     {
         $businessId = (int) auth()->user()->business_id;
 
-        DB::transaction(function () use ($data, $businessId, $isTransfer): void {
+        DB::transaction(function () use ($data, $businessId): void {
             $product = Product::where('business_id', $businessId)
                 ->lockForUpdate()
                 ->findOrFail($data['product_id']);
             $type = $data['type'];
             $quantity = (int) $data['quantity'];
             $previousStock = (int) $product->stock_quantity;
-            $decreasesStock = in_array($type, ['reduced', 'damaged', 'transfer'], true);
+            $decreasesStock = in_array($type, ['reduced', 'damaged'], true);
 
             if ($decreasesStock && $quantity > $previousStock) {
                 throw ValidationException::withMessages([
@@ -141,7 +127,7 @@ class InventoryController extends Controller
 
             $newStock = match ($type) {
                 'added', 'returned' => $previousStock + $quantity,
-                'reduced', 'damaged', 'transfer' => $previousStock - $quantity,
+                'reduced', 'damaged' => $previousStock - $quantity,
                 'adjustment' => $quantity,
             };
             $movementQuantity = $type === 'adjustment' ? abs($newStock - $previousStock) : $quantity;
@@ -150,7 +136,6 @@ class InventoryController extends Controller
                 'reduced' => 'REMOVE_STOCK',
                 'returned' => 'RETURNED',
                 'damaged' => 'DAMAGED',
-                'transfer' => 'TRANSFER_OUT',
                 default => 'ADJUSTMENT',
             };
 
@@ -183,14 +168,14 @@ class InventoryController extends Controller
                 'product_id' => $product->id,
                 'type' => $type,
                 'quantity' => $movementQuantity,
-                'reason' => $isTransfer ? 'Stock transfer' : 'Manual inventory movement',
+                'reason' => 'Manual inventory movement',
                 'note' => $note,
                 'user_id' => auth()->id(),
                 'created_by' => auth()->id(),
             ]);
         });
 
-        $this->activity->record($businessId, 'Inventory', $isTransfer ? 'Stock transfer recorded' : 'Inventory adjustment recorded', null, null, [
+        $this->activity->record($businessId, 'Inventory', 'Inventory adjustment recorded', null, null, [
             'product_id' => (int) $data['product_id'],
             'type' => $data['type'],
             'quantity' => (int) $data['quantity'],

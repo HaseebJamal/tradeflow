@@ -8,7 +8,7 @@
     <div class="d-flex gap-2"><a href="{{ route('business.sales.index') }}" class="btn btn-outline-secondary">All Sales</a><a href="{{ route('business.sales.returns.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>New Return</a></div>
 </div>
 <form class="tf-card p-3 mb-3 row g-2 align-items-end">
-    <div class="col-md-5"><label class="form-label">Search sale or return number</label><input name="search" value="{{ request('search') }}" class="form-control" autocomplete="off" autofocus></div>
+    <div class="col-md-5"><label class="form-label">Search sale or return number</label><select name="search" class="form-select" data-placeholder="All sales and returns" autofocus><option value="">All</option>@foreach($references as $reference)<option value="{{ $reference }}" @selected(request('search') === $reference)>{{ $reference }}</option>@endforeach</select></div>
     <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>
     <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>
     <div class="col-md-3 d-flex gap-2"><button class="btn btn-outline-primary">Filter</button><a href="{{ route('business.sales.returns.index') }}" class="btn btn-outline-secondary">Clear</a></div>

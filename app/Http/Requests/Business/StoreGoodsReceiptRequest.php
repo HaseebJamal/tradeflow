@@ -20,9 +20,9 @@ class StoreGoodsReceiptRequest extends FormRequest
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.purchase_item_id' => ['required', 'integer'],
-            'items.*.accepted_quantity' => ['nullable', 'numeric', 'min:0'],
-            'items.*.damaged_quantity' => ['nullable', 'numeric', 'min:0'],
-            'items.*.rejected_quantity' => ['nullable', 'numeric', 'min:0'],
+            'items.*.accepted_quantity' => ['nullable', 'integer', 'min:0'],
+            'items.*.damaged_quantity' => ['nullable', 'integer', 'min:0'],
+            'items.*.rejected_quantity' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

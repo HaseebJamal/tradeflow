@@ -23,8 +23,8 @@
 </section>
 @endif
 
-<form class="tf-card p-3 mb-3 row g-2 align-items-end" data-code-lookup-form data-code-lookup-url="{{ route('business.purchases.lookup') }}">
-    <div class="col-md-3"><label class="form-label">Search</label><input name="search" value="{{ request('search') }}" class="form-control" placeholder="Purchase number, invoice, or supplier" autocomplete="off" data-code-lookup autofocus></div>
+<form class="tf-card p-3 mb-3 row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label">Search</label><select name="purchase_id" class="form-select" data-placeholder="All Purchases" autofocus><option value="">All Purchases</option>@foreach($purchaseOptions as $option)<option value="{{ $option->id }}" @selected((int) request('purchase_id') === $option->id)>{{ $option->purchase_number }}{{ $option->supplier_invoice_number ? ' · ' . $option->supplier_invoice_number : '' }}{{ $option->supplier?->supplier_name ? ' · ' . $option->supplier->supplier_name : '' }}</option>@endforeach</select></div>
     <div class="col-md-2"><label class="form-label">Supplier</label><select name="supplier_id" class="form-select"><option value="">All suppliers</option>@foreach($suppliers as $supplier)<option value="{{ $supplier->id }}" @selected(request('supplier_id') == $supplier->id)>{{ $supplier->supplier_name }}</option>@endforeach</select></div>
     <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All statuses</option>@foreach(['Draft','Confirmed','Received','Cancelled','Closed','Ordered','Partially Returned','Returned'] as $status)<option @selected(request('status') === $status)>{{ $status }}</option>@endforeach</select></div>
     <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>

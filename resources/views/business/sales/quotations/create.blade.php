@@ -1,22 +1,23 @@
 @extends('layouts.dashboard')
-@section('page-title', 'New Sales Quotation')
+@section('page-title', $quotation ? 'Edit Sales Quotation' : 'New Sales Quotation')
 @section('page-subtitle', 'Price a future sale without changing stock or accounts')
 @section('content')
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-<form method="POST" action="{{ route('business.sales.quotations.store') }}" class="tf-card p-4" data-quotation-form>
+<form method="POST" action="{{ $quotation ? route('business.sales.quotations.update', $quotation) : route('business.sales.quotations.store') }}" class="tf-card p-4" data-quotation-form>
     @csrf
+    @if($quotation)@method('PUT')@endif
     <div class="row g-3 mb-4">
-        <div class="col-md-4"><label class="form-label">Customer</label><select name="customer_id" class="form-select js-select2"><option value="">Walk-in / prospective customer</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(old('customer_id') == $customer->id)>{{ $customer->business_name ?: $customer->name }}</option>@endforeach</select></div>
-        <div class="col-md-3"><label class="form-label">Quotation Date</label><input name="quotation_date" type="date" value="{{ old('quotation_date', now()->toDateString()) }}" class="form-control" required></div>
-        <div class="col-md-3"><label class="form-label">Valid Until</label><input name="valid_until" type="date" value="{{ old('valid_until') }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option @selected(old('status', 'Draft') === 'Draft')>Draft</option><option @selected(old('status') === 'Sent')>Sent</option></select></div>
+        <div class="col-md-4"><label class="form-label">Customer</label><select name="customer_id" class="form-select js-select2"><option value="">Walk-in-customer</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(old('customer_id', $quotation?->customer_id) == $customer->id)>{{ $customer->business_name ?: $customer->name }}</option>@endforeach</select></div>
+        <div class="col-md-3"><label class="form-label">Quotation Date</label><input name="quotation_date" type="date" value="{{ old('quotation_date', $quotation?->quotation_date?->toDateString() ?? now()->toDateString()) }}" class="form-control" required></div>
+        <div class="col-md-3"><label class="form-label">Valid Until</label><input name="valid_until" type="date" value="{{ old('valid_until', $quotation?->valid_until?->toDateString()) }}" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="Draft" @selected(old('status', $quotation?->status ?? 'Draft') === 'Draft')>Draft</option><option value="Sent" @selected(old('status', $quotation?->status) === 'Sent')>Sent</option></select></div>
     </div>
 
     <section class="border rounded p-3 mb-3 bg-light" aria-label="Add quotation item">
         <div class="d-flex justify-content-between align-items-center mb-2"><h2 class="h6 mb-0">Add quotation item</h2><small class="tf-muted">Choose whether each discount and tax value is a percentage or a fixed amount.</small></div>
         <div class="row g-2 align-items-end">
             <div class="col-xl-3"><label class="form-label">Product</label><select class="form-select js-select2" data-quotation-entry-product><option value="">Select product</option>@foreach($products as $product)<option value="{{ $product->id }}" data-price="{{ $product->wholesale_price }}">{{ $product->name }} (<x-quantity :value="$product->stock_quantity" /> {{ $product->unit }})</option>@endforeach</select></div>
-            <div class="col-xl-1"><label class="form-label">Qty</label><input type="number" min="1" step="1" value="0" class="form-control js-no-number-spinner js-no-wheel-change" data-quotation-entry-qty></div>
+            <div class="col-xl-1"><label class="form-label">Qty</label><input type="number" min="0" step="1" value="0" class="form-control js-no-number-spinner js-no-wheel-change js-whole-number" data-quotation-entry-qty></div>
             <div class="col-xl-1"><label class="form-label">Unit Price</label><input type="number" min="0" step="1" class="form-control js-no-number-spinner js-no-wheel-change" data-quotation-entry-price data-whole-number></div>
             <div class="col-xl-2"><label class="form-label">Discount</label><div class="input-group tf-adjustment-group"><select class="form-select tf-adjustment-type" data-quotation-entry-discount-type aria-label="Discount type"><option value="percentage">%</option><option value="fixed">Rs</option></select><input type="number" min="0" step="1" value="0" class="form-control js-no-number-spinner js-no-wheel-change" data-quotation-entry-discount-value data-whole-number aria-label="Discount value"></div></div>
             <div class="col-xl-2"><label class="form-label">Tax</label><div class="input-group tf-adjustment-group"><select class="form-select tf-adjustment-type" data-quotation-entry-tax-type aria-label="Tax type"><option value="percentage">%</option><option value="fixed">Rs</option></select><input type="number" min="0" step="1" value="0" class="form-control js-no-number-spinner js-no-wheel-change" data-quotation-entry-tax-value data-whole-number aria-label="Tax value"></div></div>
@@ -27,7 +28,7 @@
     </section>
 
     <div class="table-responsive border rounded"><table class="table align-middle mb-0"><thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Tax</th><th>Line Total</th><th>Edit</th><th>Delete</th></tr></thead><tbody data-quotation-items><tr data-quotation-empty><td colspan="9" class="text-center tf-muted py-4">No quotation items added yet.</td></tr></tbody></table></div>
-    <div class="tf-quotation-footer mt-3"><div class="tf-quotation-total"><small class="d-block tf-muted">Total</small><strong data-quotation-grand-total>Rs 0.00</strong></div><div class="tf-quotation-actions"><a href="{{ route('business.sales.quotations.index') }}" class="btn btn-outline-secondary">Cancel</a><button class="btn btn-tf-primary" data-save-quotation>Save quotation</button></div></div>
+    <div class="tf-quotation-footer mt-3"><div class="tf-quotation-total"><small class="d-block tf-muted">Total</small><strong data-quotation-grand-total>Rs 0.00</strong></div><div class="tf-quotation-actions"><a href="{{ route('business.sales.quotations.index') }}" class="btn btn-outline-secondary">Cancel</a><button class="btn btn-tf-primary" data-save-quotation>{{ $quotation ? 'Save changes' : 'Save quotation' }}</button></div></div>
 </form>
 
 @push('scripts')
@@ -48,10 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const total = form.querySelector('[data-quotation-entry-total]');
     const error = form.querySelector('[data-quotation-entry-error]');
     const addButton = form.querySelector('[data-add-quotation-item]');
-    const initialItems = @json(array_values(old('items', [])));
+    const initialItems = @json(array_values(old('items', $quotation?->items?->map(fn ($item) => ['product_id' => $item->product_id, 'quantity' => $item->quantity, 'unit_price' => $item->unit_price, 'discount_type' => $item->discount_type, 'discount_value' => $item->discount_value, 'tax_type' => $item->tax_type, 'tax_value' => $item->tax_value])->all() ?? [])));
     let editing = null;
 
-    const money = value => `Rs ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const money = value => `Rs ${Math.round(Number(value || 0)).toLocaleString()}`;
     const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[character]));
     const whole = input => Math.max(0, parseInt(input.value || '0', 10) || 0);
     const rows = () => [...body.querySelectorAll('[data-quotation-row]')];
@@ -74,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const sync = () => {
         const option = product.selectedOptions[0];
-        if (product.value && !price.value) price.value = option?.dataset.price || 0;
+        if (product.value && !price.value) price.value = String(Math.round(Number(option?.dataset.price || 0)));
         total.value = money(lineAmounts().total);
     };
     const writeRow = (row, item) => {
@@ -107,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const existing = rows().find(row => row.dataset.productId === product.value);
         const target = editing || existing || document.createElement('tr');
         const existingQuantity = existing && existing !== editing ? Number(existing.querySelector('[name$="[quantity]"]').value) : 0;
-        writeRow(target, { product_id: product.value, product_name: option.text, quantity: existingQuantity + Number(qty.value), unit_price: price.value, discount_type: discountType.value, discount_value: whole(discountValue), tax_type: taxType.value, tax_value: whole(taxValue) });
+        writeRow(target, { product_id: product.value, product_name: option.text, quantity: existingQuantity + Number(qty.value), unit_price: whole(price), discount_type: discountType.value, discount_value: whole(discountValue), tax_type: taxType.value, tax_value: whole(taxValue) });
         if (!editing && !existing) body.appendChild(target);
         render(); reset();
     };

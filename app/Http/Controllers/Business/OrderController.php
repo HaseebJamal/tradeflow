@@ -67,6 +67,10 @@ class OrderController extends Controller
             'customers' => Customer::where('business_id', $businessId)->orderBy('name')->get(),
             'products' => Product::where('business_id', $businessId)->orderBy('name')->get(),
             'creators' => User::where('business_id', $businessId)->orderBy('name')->get(),
+            'saleNumbers' => Order::where('business_id', $businessId)
+                ->whereNotNull('order_number')
+                ->latest('order_date')
+                ->pluck('order_number'),
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
         ]);

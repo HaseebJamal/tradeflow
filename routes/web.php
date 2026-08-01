@@ -102,6 +102,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/support', [SupportController::class, 'index'])->name('support');
         Route::post('/support', [SupportController::class, 'store'])->name('support.store');
         Route::get('/subscription', [BusinessSubscriptionController::class, 'index'])->name('subscription.index')->middleware('business.permission:Subscriptions');
+        Route::get('/subscription/history', [BusinessSubscriptionController::class, 'history'])->name('subscription.history')->middleware('business.permission:Subscriptions');
         Route::post('/subscription/requests', [BusinessSubscriptionController::class, 'storeRequest'])->name('subscription.requests.store')->middleware('business.permission:Subscriptions');
         Route::patch('/subscription/requests/{changeRequest}/cancel', [BusinessSubscriptionController::class, 'cancelRequest'])->name('subscription.requests.cancel')->middleware('business.permission:Subscriptions');
     });
@@ -260,7 +261,6 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory')->middleware('business.permission:Inventory');
     Route::get('/inventory/history', [InventoryController::class, 'history'])->name('inventory.history')->middleware('business.permission:Inventory');
     Route::post('/inventory/adjust', [InventoryController::class, 'adjust'])->name('inventory.adjust')->middleware('business.permission:Inventory');
-    Route::post('/inventory/transfer', [InventoryController::class, 'transfer'])->name('inventory.transfer')->middleware('business.permission:Inventory');
     Route::patch('/inventory/{inventory}/alert', [InventoryController::class, 'updateAlert'])->name('inventory.alert')->middleware('business.permission:Inventory');
     Route::resource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update'])->middleware('business.permission:Customers');
     Route::patch('/suppliers/{supplier}/archive', [SupplierController::class, 'archive'])->name('suppliers.archive')->middleware('business.permission:Suppliers');
@@ -289,6 +289,11 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/sales/quotations', [\App\Http\Controllers\Business\SalesQuotationController::class, 'index'])->name('sales.quotations.index')->middleware('business.permission:Sales');
     Route::get('/sales/quotations/create', [\App\Http\Controllers\Business\SalesQuotationController::class, 'create'])->name('sales.quotations.create')->middleware('business.permission:Sales');
     Route::post('/sales/quotations', [\App\Http\Controllers\Business\SalesQuotationController::class, 'store'])->name('sales.quotations.store')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
+    Route::get('/sales/quotations/{quotation}', [\App\Http\Controllers\Business\SalesQuotationController::class, 'show'])->name('sales.quotations.show')->middleware('business.permission:Sales');
+    Route::get('/sales/quotations/{quotation}/edit', [\App\Http\Controllers\Business\SalesQuotationController::class, 'edit'])->name('sales.quotations.edit')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
+    Route::put('/sales/quotations/{quotation}', [\App\Http\Controllers\Business\SalesQuotationController::class, 'update'])->name('sales.quotations.update')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
+    Route::post('/sales/quotations/{quotation}/convert', [\App\Http\Controllers\Business\SalesQuotationController::class, 'convert'])->name('sales.quotations.convert')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
+    Route::delete('/sales/quotations/{quotation}', [\App\Http\Controllers\Business\SalesQuotationController::class, 'destroy'])->name('sales.quotations.destroy')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
     // Sales is the consolidated home for orders, customer payments, and sales invoices.
     Route::get('/sales', [OrderController::class, 'index'])->name('sales.index')->middleware('business.permission:Sales');
     Route::get('/sales/lookup', [OrderController::class, 'lookup'])->name('sales.lookup')->middleware('business.permission:Sales');
