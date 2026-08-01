@@ -44,8 +44,25 @@ class AuthController extends Controller
         try {
             $status = Password::sendResetLink(['email' => $email]);
         } catch (\Throwable $exception) {
+            // The broker stores the token before it sends the notification.
+            // Do not leave an undelivered token behind when SMTP fails, as it
+            // would throttle the next request as if an email had been sent.
+            try {
+                $user = User::query()->where('email', $email)->first();
+                if ($user) {
+                    Password::broker()->getRepository()->delete($user);
+                }
+            } catch (\Throwable $cleanupException) {
+                Log::warning('TradeFlow could not remove an undelivered password reset token.', [
+                    'email' => $email,
+                    'exception' => $cleanupException->getMessage(),
+                ]);
+            }
+
             Log::error('TradeFlow password reset email could not be sent.', ['email' => $email, 'exception' => $exception->getMessage()]);
-            return back()->withErrors(['email' => 'We could not send the reset email right now. Please try again shortly.'])->onlyInput('email');
+            return back()
+                ->with('password_reset_failure_message', 'We could not send the reset email right now. Please try again shortly.')
+                ->onlyInput('email');
         }
 
         if ($status !== Password::RESET_LINK_SENT) {

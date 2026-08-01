@@ -8,6 +8,7 @@
         <h1 class="h3 fw-bold">Forgot Password</h1>
         <p class="tf-muted">Enter the email address for your {{ $platformSettings->company_name }} account and we will send a secure reset link.</p>
         @if(session('status'))<div class="alert alert-success">{{ session('status') }}</div>@endif
+        @if(session('password_reset_failure_message'))<div class="alert alert-danger">{{ session('password_reset_failure_message') }}</div>@endif
         <form method="POST" action="{{ route('password.email') }}" class="d-grid gap-3" data-password-reset-request-form data-resend-until="{{ $resendUntil }}" data-tf-tab-order>
             @csrf
             <div>
