@@ -212,6 +212,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::get('/business-reports', [AdminController::class, 'businessReports'])->name('business-reports');
     Route::get('/business-reports/export/excel', [AdminController::class, 'businessReportsExcel'])->name('business-reports.export.excel');
     Route::get('/business-reports/export/pdf', [AdminController::class, 'businessReportsPdf'])->name('business-reports.export.pdf');
+    Route::get('/business-reports/history', [AdminController::class, 'businessReportHistory'])->name('business-reports.history');
     Route::get('/business-reports/reports/{report}/edit', [AdminController::class, 'editBusinessReport'])->name('business-reports.edit');
     Route::put('/business-reports/reports/{report}', [AdminController::class, 'updateBusinessReport'])->name('business-reports.update');
     Route::get('/business-reports/{business}', [AdminController::class, 'businessReportShow'])->name('business-reports.show');

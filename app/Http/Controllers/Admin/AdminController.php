@@ -1217,11 +1217,6 @@ class AdminController extends Controller
             'sort' => ['nullable', Rule::in(['sales_desc', 'sales_asc', 'expenses_desc', 'expenses_asc', 'profit_desc', 'profit_asc'])],
         ]);
         $this->useCurrentBusinessReportDates($request);
-        $query = BusinessReport::with('business');
-        foreach (['business_id', 'report_type', 'status'] as $filter) {
-            if ($request->filled($filter)) $query->where($filter, $request->input($filter));
-        }
-        $this->applyBusinessReportPeriod($query, 'created_at', $request);
         $sales = Order::whereNotIn('status', ['Cancelled', 'Void', 'Returned'])
             ->when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')));
         $this->applyBusinessReportPeriod($sales, 'order_date', $request);
@@ -1236,7 +1231,6 @@ class AdminController extends Controller
         $this->applyBusinessReportPeriod($purchases, 'purchase_date', $request);
 
         return view('super-admin.business-reports.index', [
-            'reports' => $query->latest()->paginate(10)->withQueryString(),
             'businesses' => Business::orderBy('business_name')->get(),
             'totalBusinesses' => Business::count(),
             'activeBusinesses' => Business::whereIn('status', ['Approved', 'approved'])->count(),
@@ -1252,6 +1246,28 @@ class AdminController extends Controller
                 'receivables' => (clone $sales)->sum('balance'), 'payables' => Purchase::when($request->filled('business_id'), fn ($builder) => $builder->where('business_id', $request->integer('business_id')))->sum('balance'),
             ],
             'companySummaries' => $companySummaries,
+        ]);
+    }
+
+    public function businessReportHistory(Request $request)
+    {
+        $request->validate([
+            'business_id' => ['nullable', 'integer', 'exists:businesses,id'],
+            'report_type' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', Rule::in(['Pending Review', 'Verified', 'Rejected'])],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+        ]);
+
+        $reports = BusinessReport::query()
+            ->with('business')
+            ->when($request->filled('business_id'), fn ($query) => $query->where('business_id', $request->integer('business_id')))
+            ->when($request->filled('report_type'), fn ($query) => $query->where('report_type', $request->string('report_type')->value()))
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->value()));
+        $this->applyBusinessReportPeriod($reports, 'created_at', $request);
+
+        return view('super-admin.business-reports.history', [
+            'reports' => $reports->latest()->paginate(10)->withQueryString(),
         ]);
     }
 
@@ -1334,7 +1350,7 @@ class AdminController extends Controller
         $report->update($data);
         $this->audit('Business report metadata updated: #'.$report->id, $request);
 
-        return redirect()->route('admin.business-reports')->with('success', 'Report metadata updated. Financial values remain read-only.');
+        return redirect()->route('admin.business-reports.history')->with('success', 'Report metadata updated. Financial values remain read-only.');
     }
 
     private function companyPerformanceQuery(Request $request)
