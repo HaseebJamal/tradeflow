@@ -118,6 +118,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
         ->name('business-requests.show');
     Route::get('/companies/create', [CompanyController::class, 'create'])->name('companies.create');
     Route::post('/companies', [CompanyController::class, 'store'])->name('companies.store');
+    Route::get('/companies/{company}/onboarding', [CompanyController::class, 'onboarding'])->name('companies.onboarding');
+    Route::post('/companies/{company}/onboarding/email', [CompanyController::class, 'sendOnboardingEmail'])->name('companies.onboarding.email');
+    Route::post('/companies/{company}/onboarding/whatsapp-draft', [CompanyController::class, 'openOnboardingWhatsAppDraft'])->name('companies.onboarding.whatsapp');
+    Route::post('/companies/{company}/onboarding/done', [CompanyController::class, 'finishOnboarding'])->name('companies.onboarding.done');
     Route::get('/companies/pending', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'pending'))->name('companies.pending');
     Route::get('/companies/approved', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'approved'))->name('companies.approved');
     Route::get('/companies/rejected', fn(\Illuminate\Http\Request $request) => app(CompanyController::class)->index($request, 'rejected'))->name('companies.rejected');

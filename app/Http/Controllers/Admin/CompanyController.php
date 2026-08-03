@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCompanyRequest;
 use App\Http\Requests\Admin\UpdateCompanyRequest;
+use App\Mail\CompanyOnboardingAccessMail;
 use App\Models\ActivityLog;
 use App\Models\Business;
 use App\Models\Subscription;
@@ -32,9 +33,11 @@ use App\Notifications\BusinessDocumentVerificationNotification;
 use App\Services\AccountingService;
 use App\Services\BusinessWorkspaceAccessService;
 use App\Services\BusinessDocumentFooterService;
+use App\Services\CompanyOnboardingAccessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -162,7 +165,7 @@ class CompanyController extends Controller
             : null;
 
         try {
-            $company = DB::transaction(function () use ($request, $data, $ownerImage) {
+            $created = DB::transaction(function () use ($request, $data, $ownerImage) {
                 if (Business::whereRaw('LOWER(business_name) = ?', [mb_strtolower($data['business_name'])])->lockForUpdate()->exists()) {
                     throw ValidationException::withMessages(['business_name' => 'A company with this name already exists.']);
                 }
@@ -207,7 +210,7 @@ class CompanyController extends Controller
                 User::where('role', 'super_admin')->where('status', 'active')->get()
                     ->each(fn (User $admin) => $admin->notify(new CompanyRegistrationNotification($company)));
 
-                return $company;
+                return compact('company', 'owner');
             });
         } catch (Throwable $exception) {
             if ($ownerImage) {
@@ -230,9 +233,99 @@ class CompanyController extends Controller
             throw $exception;
         }
 
+        $company = $created['company'];
+        $owner = $created['owner'];
+
         $this->audit($request, 'company created', $company, null, $company->only(['business_name', 'status']));
         $this->audit($request, 'footer settings created', $company, null, ['changed_fields' => ['default_footer']]);
         $this->audit($request, 'company permissions assigned', $company, null, ['permissions' => $data['permissions'] ?? []]);
+        app(CompanyOnboardingAccessService::class)->remember($request, $company, $owner, $data['temporary_password']);
+
+        return redirect()->route('admin.companies.onboarding', $company)
+            ->with('success', 'Company created successfully.');
+    }
+
+    public function onboarding(Request $request, Business $company, CompanyOnboardingAccessService $onboarding)
+    {
+        $company->loadMissing('owner');
+        $context = $onboarding->context($request, $company);
+
+        if (! $context) {
+            return redirect()->route('admin.companies.show', $company)
+                ->with('info', 'The one-time onboarding details are no longer available. Generate new credentials to share access again.');
+        }
+
+        return view('super-admin.companies.onboarding', [
+            'company' => $company,
+            'context' => $context,
+            'emailSubject' => $onboarding->emailSubject($context),
+            'emailMessage' => $onboarding->emailMessage($context),
+            'copyMessage' => $onboarding->copyMessage($context),
+        ]);
+    }
+
+    public function sendOnboardingEmail(Request $request, Business $company, CompanyOnboardingAccessService $onboarding)
+    {
+        $company->loadMissing('owner');
+        $context = $onboarding->context($request, $company);
+        if (! $context) {
+            return redirect()->route('admin.companies.show', $company)
+                ->with('error', 'The one-time onboarding details are no longer available.');
+        }
+
+        if (blank($context['owner_email'])) {
+            return back()->with('error', 'The owner does not have an email address.');
+        }
+
+        $data = $request->validate([
+            'subject' => ['required', 'string', 'max:255'],
+            'message' => ['required', 'string', 'max:5000'],
+        ]);
+
+        try {
+            Mail::to($context['owner_email'])->send(new CompanyOnboardingAccessMail($data['subject'], $data['message']));
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->audit($request, 'onboarding access email failed', $company, null, ['channel' => 'email', 'status' => 'failed']);
+
+            return back()->withInput()->with('error', 'Access details could not be sent. The company was created and remains available.');
+        }
+
+        $this->audit($request, 'onboarding access email sent', $company, null, [
+            'channel' => 'email',
+            'status' => 'sent',
+            'owner_id' => $company->owner_id,
+            'sent_at' => now()->toDateTimeString(),
+        ]);
+
+        return back()->with('success', 'Access details sent successfully.');
+    }
+
+    public function openOnboardingWhatsAppDraft(Request $request, Business $company, CompanyOnboardingAccessService $onboarding)
+    {
+        $company->loadMissing('owner');
+        $context = $onboarding->context($request, $company);
+        if (! $context) {
+            return redirect()->route('admin.companies.show', $company)
+                ->with('error', 'The one-time onboarding details are no longer available.');
+        }
+
+        if (blank($context['whatsapp_digits'])) {
+            return back()->with('error', 'The owner does not have a valid international phone number.');
+        }
+
+        $this->audit($request, 'onboarding WhatsApp draft opened', $company, null, [
+            'channel' => 'whatsapp',
+            'status' => 'draft_opened',
+            'owner_id' => $company->owner_id,
+        ]);
+
+        return redirect()->away('https://wa.me/'.$context['whatsapp_digits'].'?text='.rawurlencode($onboarding->whatsAppMessage($context)));
+    }
+
+    public function finishOnboarding(Request $request, Business $company, CompanyOnboardingAccessService $onboarding)
+    {
+        $onboarding->forget($request);
 
         return redirect()->route('admin.companies.show', $company)
             ->with('success', 'Company created successfully.');

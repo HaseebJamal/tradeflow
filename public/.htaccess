@@ -5,6 +5,11 @@
 
     RewriteEngine On
 
+    # Canonicalize manually entered or bookmarked front-controller URLs while
+    # preserving the application path and query string.
+    RewriteCond %{THE_REQUEST} \s/+(.*/)?index\.php(?:/([^?\s]*))?(?:\?[^\s]*)?\s [NC]
+    RewriteRule ^index\.php(?:/(.*))?$ /%1%2 [R=301,L,NE]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
