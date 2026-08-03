@@ -138,7 +138,7 @@
                         <div class="col-md-6"><label class="form-label">City</label><input name="city" class="form-control form-control-lg" required></div>
                         <div class="col-md-6"><label class="form-label">Business Type</label><select name="business_type" class="form-select form-select-lg js-select2" required><option value="">Select type</option><option>Manufacturer</option><option>Distributor</option><option>Wholesaler</option><option>Retail Shop</option><option>Other</option></select></div>
                         <div class="col-md-6"><label class="form-label">Selected Plan</label><input class="form-control form-control-lg" value="{{ $selected['name'] }}" readonly></div>
-                        <div class="col-md-6"><label class="form-label">Preferred Payment Method</label><select name="payment_method" class="form-select form-select-lg" data-subscribe-payment><option>Cash</option><option>Bank Transfer</option><option>JazzCash Manual</option><option>Easypaisa Manual</option></select></div>
+                        <div class="col-md-6"><label class="form-label">Preferred Payment Method</label><select name="payment_method" class="form-select form-select-lg" data-subscribe-payment><option>Cash</option><option>Bank Transfer</option><option>Jazz Cash</option><option>Easypaisa</option></select></div>
                         <div class="col-12">
                             <div class="tf-manual-note"><i class="bi bi-info-circle me-2"></i>No online payment is charged now. {{ $platformSettings->company_name }} will verify your business and manually activate your subscription.</div>
                         </div>

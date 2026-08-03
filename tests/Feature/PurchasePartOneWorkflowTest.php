@@ -60,6 +60,29 @@ class PurchasePartOneWorkflowTest extends TestCase
         $this->assertSame(0.00, $paid['balance']);
     }
 
+    public function test_formatted_purchase_cost_is_normalized_without_truncation(): void
+    {
+        $controller = app(PurchaseController::class);
+        $normalize = new ReflectionMethod($controller, 'normalizeWholePurchaseMoney');
+        $lineAmounts = new ReflectionMethod($controller, 'lineAmounts');
+
+        $this->assertSame('7500', $normalize->invoke($controller, '7,500'));
+        $this->assertSame('20000', $normalize->invoke($controller, 'Rs 20,000'));
+        $this->assertSame('7500.00', $normalize->invoke($controller, '7,500.00'));
+
+        $amounts = $lineAmounts->invoke($controller, [
+            'quantity' => 23,
+            'unit_cost' => $normalize->invoke($controller, '7,500'),
+            'discount_type' => 'percentage',
+            'discount_value' => 0,
+            'tax_type' => 'percentage',
+            'tax_value' => 0,
+        ]);
+
+        $this->assertSame(172500.0, $amounts['subtotal']);
+        $this->assertSame(172500.0, $amounts['total']);
+    }
+
     public function test_goods_receipts_preserve_the_auditable_receipt_quantities(): void
     {
         $this->assertContains('receiving_status', (new \App\Models\Purchase())->getFillable());

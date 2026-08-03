@@ -193,6 +193,9 @@ class PosSaleService
                 $product = $products->get((int) $productId);
                 $defaultPrice = (int) ($product->retail_price ?: $product->wholesale_price ?: 0);
                 $price = $quotation ? (int) $line['unit_price'] : $defaultPrice;
+                if (! $quotation && $defaultPrice > 0 && isset($line['unit_price']) && (int) $line['unit_price'] === 0) {
+                    throw ValidationException::withMessages(['items' => 'A product with a selling price cannot be completed with a zero unit price.']);
+                }
                 if (isset($line['unit_price']) && (int) $line['unit_price'] !== $defaultPrice && ! $quotation) {
                     if (! $this->permissions->allowsUser(auth()->user(), 'pos.custom_price')) {
                         throw ValidationException::withMessages(['items' => 'You do not have permission to use a custom price.']);

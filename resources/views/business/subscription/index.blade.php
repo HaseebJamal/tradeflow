@@ -116,6 +116,7 @@
                             data-bs-toggle="modal" data-bs-target="#planChangeRequestModal"
                             data-subscription-plan-request data-request-type="{{ $relation }}"
                             data-plan-id="{{ $plan->id }}" data-plan-name="{{ $plan->name }}"
+                            data-product-limit="{{ $plan->product_limit }}" data-staff-limit="{{ $plan->staff_limit }}" data-order-limit="{{ $plan->order_limit }}"
                             data-monthly-price="{{ $plan->priceFor('Monthly') }}"
                             data-yearly-price="{{ $plan->priceFor('Yearly') }}"
                             data-effective-at="{{ $relation === 'Downgrade' ? ($subscription?->ends_at?->format('d M, Y') ?? now()->format('d M, Y')) : now()->format('d M, Y') }}">
@@ -138,8 +139,8 @@
                                         <option value="">Payment method</option>
                                         <option value="Cash">Cash</option>
                                         <option value="Bank Transfer">Bank Transfer</option>
-                                        <option value="JazzCash Manual">JazzCash Manual</option>
-                                        <option value="Easypaisa Manual">Easypaisa Manual</option>
+                                        <option value="Jazz Cash">Jazz Cash</option>
+                                        <option value="Easypaisa">Easypaisa</option>
                                     </select></div>
                             </div>
                             <button class="btn {{ $relation === 'Upgrade' ? 'btn-tf-primary' : 'btn-outline-primary' }} w-100 mt-2"
@@ -190,7 +191,7 @@
                         <div class="mb-3" data-manage-payment><label class="form-label">Payment Method</label><select
                                 class="form-select" name="payment_method">
                                 <option value="">Select method</option>
-                                @foreach(['Cash', 'Bank Transfer', 'JazzCash Manual', 'Easypaisa Manual'] as $method)<option
+                                @foreach(['Cash', 'Bank Transfer', 'Jazz Cash', 'Easypaisa'] as $method)<option
                                     value="{{ $method }}" @selected($subscription->payment_method === $method)>{{ $method }}
                                 </option>@endforeach
                             </select></div>
@@ -232,7 +233,7 @@
                         <div class="mb-0"><label class="form-label" for="planChangePaymentMethod">Payment Method</label><select
                                 class="form-select" id="planChangePaymentMethod" name="payment_method" data-plan-change-payment required>
                                 <option value="">Select method</option>
-                                @foreach(['Cash', 'Bank Transfer', 'JazzCash Manual', 'Easypaisa Manual'] as $method)<option
+                                @foreach(['Cash', 'Bank Transfer', 'Jazz Cash', 'Easypaisa'] as $method)<option
                                     value="{{ $method }}" @selected($subscription->payment_method === $method)>{{ $method }}</option>@endforeach
                             </select></div>
                     </div>
@@ -302,8 +303,22 @@
                 price.textContent = money(selectedCard.dataset[cycle.value === 'Yearly' ? 'yearlyPrice' : 'monthlyPrice']);
             };
 
+            const usage = @json($subscriptionUsage);
             document.querySelectorAll('[data-subscription-plan-request]').forEach(function (button) {
-                button.addEventListener('click', function () {
+                button.addEventListener('click', function (event) {
+                    if (button.dataset.requestType === 'Downgrade') {
+                        const exceeded = [
+                            ['Products', usage.products, Number(button.dataset.productLimit || 0)],
+                            ['Staff', usage.staff, Number(button.dataset.staffLimit || 0)],
+                            ['Orders', usage.orders, Number(button.dataset.orderLimit || 0)],
+                        ].filter(([, used, limit]) => limit > 0 && used > limit);
+                        if (exceeded.length) {
+                            event.preventDefault(); event.stopPropagation();
+                            const lines = exceeded.map(([name, used, limit]) => `${name}: ${used} used / ${limit} allowed`).join('<br>');
+                            Swal.fire({ icon: 'warning', title: `Cannot downgrade to ${button.dataset.planName}`, html: `Your current usage exceeds this plan's limits:<br><br>${lines}<br><br>Reduce usage before submitting this downgrade request.` });
+                            return;
+                        }
+                    }
                     selectedCard = button;
                     type.value = button.dataset.requestType;
                     plan.value = button.dataset.planId;
@@ -317,10 +332,19 @@
             });
             cycle.addEventListener('change', syncPlanChange);
             planChangeForm.addEventListener('submit', function (event) {
-                if (plan.value && payment.value) return;
                 event.preventDefault();
-                const missing = !plan.value ? 'Please choose a plan from an available plan card.' : 'Please select a payment method.';
-                window.Swal ? Swal.fire({ icon: 'warning', text: missing }) : window.alert(missing);
+                if (!plan.value || !payment.value) {
+                    const missing = !plan.value ? 'Please choose a plan from an available plan card.' : 'Please select a payment method.';
+                    window.Swal ? Swal.fire({ icon: 'warning', text: missing }) : window.alert(missing);
+                    return;
+                }
+                const downgrade = type.value === 'Downgrade';
+                Swal.fire({ icon: 'question', title: `Submit ${downgrade ? 'downgrade' : 'upgrade'} request?`, text: `You are requesting to change your plan from {{ $subscription->plan?->name }} to ${target.textContent}.${downgrade ? ' Plan limits will apply after approval.' : ''}`, showCancelButton: true, confirmButtonText: 'Submit Request', cancelButtonText: 'Cancel' }).then(function (result) {
+                    if (!result.isConfirmed) return;
+                    const submit = planChangeForm.querySelector('button[type="submit"]');
+                    submit.disabled = true; submit.textContent = 'Submitting...';
+                    planChangeForm.submit();
+                });
             });
         });
     </script>

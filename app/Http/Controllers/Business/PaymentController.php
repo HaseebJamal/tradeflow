@@ -54,7 +54,7 @@ class PaymentController extends Controller
         $data = $request->validate([
             'order_id' => ['nullable', 'exists:orders,id'],
             'customer_id' => ['required', 'exists:customers,id'],
-            'method' => ['required', 'in:Cash,Bank Transfer,JazzCash manual,Easypaisa manual,Cheque,JazzCash,Easypaisa'],
+            'method' => ['required', 'in:Cash,Bank Transfer,Jazz Cash,Easypaisa,Cheque'],
             'amount' => ['required', 'integer', 'min:1'],
             'transaction_reference' => ['nullable', 'max:255'],
             'reference_number' => ['nullable', 'max:255'],

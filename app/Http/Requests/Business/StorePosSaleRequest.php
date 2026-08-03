@@ -12,14 +12,47 @@ class StorePosSaleRequest extends FormRequest
         return $this->user() !== null;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $normalizeMoney = static function (mixed $value): mixed {
+            if (! is_string($value)) {
+                return $value;
+            }
+
+            return str_replace(',', '', preg_replace('/^\s*Rs\.?\s*/i', '', trim($value)) ?? '');
+        };
+
+        $items = $this->input('items');
+        if (is_array($items)) {
+            foreach ($items as $index => $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                foreach (['unit_price', 'discount_rate', 'tax_rate'] as $field) {
+                    if (array_key_exists($field, $item)) {
+                        $items[$index][$field] = $normalizeMoney($item[$field]);
+                    }
+                }
+            }
+        }
+
+        $this->merge([
+            'cash_received' => $normalizeMoney($this->input('cash_received')),
+            'discount' => $normalizeMoney($this->input('discount')),
+            'tax_rate' => $normalizeMoney($this->input('tax_rate')),
+            'items' => $items,
+        ]);
+    }
+
     public function rules(): array
     {
         return [
             'customer_id' => ['nullable', 'integer'],
             'discount' => ['nullable', 'integer', 'min:0', 'max:100'],
             'tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
-            'payment_type' => ['required', Rule::in(['Cash', 'Credit', 'Split', 'Bank Transfer', 'JazzCash Manual', 'Easypaisa Manual', 'Cheque'])],
-            'payment_method' => ['required', Rule::in(['Cash', 'Credit', 'Split', 'Bank Transfer', 'JazzCash Manual', 'Easypaisa Manual', 'Cheque'])],
+            'payment_type' => ['required', Rule::in(['Cash', 'Credit', 'Split', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque'])],
+            'payment_method' => ['required', Rule::in(['Cash', 'Credit', 'Split', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque'])],
             'cash_received' => ['nullable', 'integer', 'min:0'],
             'reference' => ['nullable', 'string', 'max:255'],
             'quotation_id' => ['nullable', 'integer'],

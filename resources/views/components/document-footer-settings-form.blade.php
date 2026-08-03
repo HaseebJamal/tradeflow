@@ -15,7 +15,7 @@
 <div class="tf-card p-4">
     <div class="row g-4">
         <div class="col-lg-7">
-            <form method="POST" action="{{ $action }}" class="row g-3">
+            <form method="POST" action="{{ $action }}" class="row g-3" data-tf-confirm-message="These changes will update the footer shown on your business documents." data-tf-confirm-title="Save footer settings?" data-tf-confirm-button="Save Changes" data-tf-confirm-icon="question" data-tf-confirm-color="#2563eb" data-tf-confirm-saving-text="Saving...">
                 @csrf
                 @method($method)
                 @if($lockedCompany)
@@ -32,7 +32,6 @@
                     <div class="col-md-6"><label class="form-label" for="footerTaxNumber">NTN / Tax Number</label><input id="footerTaxNumber" name="tax_number" class="form-control @error('tax_number') is-invalid @enderror" maxlength="100" value="{{ old('tax_number', $business->tax_number) }}">@error('tax_number')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                     <div class="col-md-6"><label class="form-label" for="poweredByText">Powered by Text</label><input id="poweredByText" name="powered_by_text" class="form-control @error('powered_by_text') is-invalid @enderror" maxlength="100" value="{{ old('powered_by_text', $footer->powered_by_text ?: 'Powered by TradeFlow') }}">@error('powered_by_text')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                 @else
-                    <div class="col-12"><div class="alert alert-info mb-0">Company name, business email, and Powered by TradeFlow text are managed from the company profile. You can manage the remaining document-footer details here.</div></div>
                     <div class="col-12"><h2 class="h6 mb-0">Company Details Used by Footer</h2></div>
                     <div class="col-md-6"><label class="form-label">Company Name</label><input class="form-control" value="{{ $business->business_name }}" readonly aria-readonly="true"><small class="tf-muted">This value is managed from the company profile.</small></div>
                     <div class="col-md-6"><label class="form-label">Business Email</label><input class="form-control" value="{{ $business->owner?->email }}" readonly aria-readonly="true"><small class="tf-muted">This value is managed from the company profile.</small></div>
@@ -48,7 +47,14 @@
                 <div class="col-md-6"><label class="form-label" for="footerMessage">Footer Message</label><input id="footerMessage" name="footer_message" class="form-control @error('footer_message') is-invalid @enderror" maxlength="500" value="{{ old('footer_message', $footer->footer_message) }}">@error('footer_message')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                 <div class="col-12"><h2 class="h6 mb-2">Show on Documents</h2><div class="row g-2">
                     @foreach(['show_company_name' => 'Business Name', 'show_footer_title' => 'Footer Title', 'show_footer_message' => 'Footer Message', 'show_phone' => 'Phone', 'show_email' => 'Business Email', 'show_address' => 'Address', 'show_website' => 'Website', 'show_tax_number' => 'NTN / Tax Number', 'show_powered_by' => 'Powered by TradeFlow'] as $field => $label)
-                        <div class="col-md-6"><input type="hidden" name="{{ $field }}" value="0"><label class="form-check border rounded p-2 h-100"><input class="form-check-input me-2" type="checkbox" name="{{ $field }}" value="1" @checked(old($field, $footer->{$field}))> {{ $label }}</label></div>
+                        @php($checkboxId = 'footer_visibility_'.$field)
+                        <div class="col-md-6">
+                            <input type="hidden" name="{{ $field }}" value="0">
+                            <div class="form-check border rounded p-2 h-100 d-flex align-items-center">
+                                <input id="{{ $checkboxId }}" class="form-check-input flex-shrink-0 m-0 me-2" type="checkbox" name="{{ $field }}" value="1" @checked(old($field, $footer->{$field}))>
+                                <label class="form-check-label flex-grow-1" for="{{ $checkboxId }}">{{ $label }}</label>
+                            </div>
+                        </div>
                     @endforeach
                 </div></div>
                 <div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-tf-primary">Save Footer Settings</button><a class="btn btn-outline-secondary" href="{{ $backRoute }}">Back</a></div>

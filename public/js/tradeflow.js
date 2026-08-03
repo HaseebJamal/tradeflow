@@ -309,41 +309,45 @@ function initTradeFlowBootstrapDropdowns(root = document) {
         : [...(root.querySelectorAll?.('[data-bs-toggle="dropdown"]') || [])];
 
     toggles.forEach((toggle) => {
-        if (toggle.dataset.tradeFlowDropdownReady === '1') return;
-        toggle.dataset.tradeFlowDropdownReady = '1';
-        toggle.setAttribute('data-bs-display', 'dynamic');
-        toggle.setAttribute('data-bs-boundary', 'viewport');
         const menu = toggle.parentElement?.querySelector(':scope > .dropdown-menu');
         const isProfileImageMenu = Boolean(toggle.closest('.tf-profile-image-dropdown'));
-        const isActionMenu = Boolean(menu && !isProfileImageMenu && toggle.closest('.table-responsive, .tf-card, .card, .staff-table-wrap'));
-        if (isActionMenu) {
-            toggle.dataset.tfActionDropdown = '1';
-            menu.classList.add('dropdown-menu-end');
+        const isActionLabel = toggle.textContent.replace(/\s+/g, ' ').trim().toLowerCase() === 'actions';
+        const isActionMenu = Boolean(menu && !isProfileImageMenu && (
+            isActionLabel || toggle.closest('tr, .table-responsive, .dataTables_wrapper, .dataTables_scrollBody, .staff-table-wrap, [data-tf-action-dropdown]')
+        ));
+
+        if (!isActionMenu) {
+            if (toggle.dataset.tradeFlowDropdownReady !== '1') {
+                toggle.dataset.tradeFlowDropdownReady = '1';
+                toggle.setAttribute('data-bs-display', 'dynamic');
+                toggle.setAttribute('data-bs-boundary', 'viewport');
+            }
+            return;
         }
 
-        if (isActionMenu && window.bootstrap?.Dropdown) {
-            // A single Popper configuration keeps action menus attached to
-            // their clicked trigger, inside the viewport, across cards and
-            // horizontally-scrollable tables.
-            window.bootstrap.Dropdown.getInstance(toggle)?.dispose();
-            window.bootstrap.Dropdown.getOrCreateInstance(toggle, {
-                boundary: 'viewport',
-                display: 'dynamic',
-                popperConfig(defaultConfig) {
-                    return {
-                        ...defaultConfig,
-                        placement: 'bottom-end',
-                        strategy: 'fixed',
-                        modifiers: [
-                            ...(defaultConfig.modifiers || []).filter((modifier) => !['offset', 'preventOverflow', 'flip'].includes(modifier.name)),
-                            { name: 'offset', options: { offset: [0, 6] } },
-                            { name: 'preventOverflow', options: { boundary: 'viewport', padding: 8, altAxis: true } },
-                            { name: 'flip', options: { boundary: 'viewport', padding: 8, fallbackPlacements: ['top-end', 'bottom-start', 'top-start'] } },
-                        ],
-                    };
-                },
-            });
-        }
+        if (toggle.dataset.tfActionDropdownReady === '1') return;
+
+        // Row Actions menus are portaled only while open so responsive table
+        // overflow cannot crop them. Their fixed coordinates are managed by
+        // the shared action-menu controller below, not by Popper.
+        toggle.dataset.tradeFlowDropdownReady = '1';
+        toggle.dataset.tfActionDropdown = '1';
+        toggle.dataset.tfActionDropdownReady = '1';
+        toggle.setAttribute('data-bs-display', 'static');
+        toggle.setAttribute('data-bs-boundary', 'viewport');
+        menu.classList.remove('tf-action-dropdown-portal');
+        menu.classList.add('dropdown-menu-end');
+        ['display', 'position', 'inset', 'top', 'right', 'bottom', 'left', 'transform', 'width', 'max-width', 'height', 'min-height', 'max-height', 'overflow', 'overflow-x', 'overflow-y', 'visibility', 'z-index'].forEach((property) => {
+            menu.style.removeProperty(property);
+        });
+
+        if (!window.bootstrap?.Dropdown) return;
+
+        window.bootstrap.Dropdown.getInstance(toggle)?.dispose();
+        window.bootstrap.Dropdown.getOrCreateInstance(toggle, {
+            boundary: 'viewport',
+            display: 'static',
+        });
     });
 }
 
@@ -390,65 +394,72 @@ new MutationObserver((records) => {
         initTradeFlowNotificationDropdowns(root);
         initNonNegativeNumberGuards(root);
         initTradeFlowSidebarSubmenus(root);
-        initTradeFlowStaffActionDropdowns(root);
     }));
 }).observe(document.documentElement, { childList: true, subtree: true });
 
-// Responsive table/card wrappers scroll their contents, which can otherwise
-// clip Bootstrap action menus. Keep the currently opened menu unobstructed,
-// then restore normal overflow as soon as it closes.
 function isTradeFlowActionDropdown(toggle) {
     return toggle instanceof Element
         && toggle.matches('[data-bs-toggle="dropdown"]')
         && !toggle.closest('.tf-profile-image-dropdown')
-        && toggle.dataset.tfActionDropdown === '1';
+        && (toggle.dataset.tfActionDropdown === '1' || toggle.textContent.replace(/\s+/g, ' ').trim().toLowerCase() === 'actions');
+}
+
+function getTradeFlowActionMenu(toggle) {
+    return toggle?.closest('.dropdown')?.querySelector(':scope > .dropdown-menu') || null;
 }
 
 function positionTradeFlowActionMenu(toggle) {
-    const menu = toggle.__tradeFlowActionMenu;
+    const menu = toggle?.__tradeFlowActionMenu;
     if (!menu || menu.parentElement !== document.body) return;
 
     const padding = 8;
     const gap = 6;
-    const trigger = toggle.getBoundingClientRect();
-    menu.style.left = '0px';
-    menu.style.top = '0px';
-    menu.style.visibility = 'hidden';
+    const rect = toggle.getBoundingClientRect();
 
-    const menuWidth = menu.offsetWidth;
-    const menuHeight = Math.min(menu.scrollHeight, window.innerHeight - (padding * 2));
-    const left = Math.max(padding, Math.min(trigger.right - menuWidth, window.innerWidth - menuWidth - padding));
-    const below = trigger.bottom + gap;
+    // A hidden, block-level menu can be measured without being visible while
+    // its first fixed position is calculated.
+    menu.style.setProperty('left', '0px', 'important');
+    menu.style.setProperty('top', '0px', 'important');
+    menu.style.setProperty('max-height', `${Math.max(0, window.innerHeight - (padding * 2))}px`, 'important');
+    menu.style.setProperty('visibility', 'hidden', 'important');
+
+    const menuRect = menu.getBoundingClientRect();
+    const menuWidth = Math.min(menuRect.width || 220, Math.max(0, window.innerWidth - (padding * 2)));
+    const menuHeight = Math.min(menu.scrollHeight || menuRect.height, Math.max(0, window.innerHeight - (padding * 2)));
+    const left = Math.max(padding, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - padding));
+    const below = rect.bottom + gap;
     const top = below + menuHeight <= window.innerHeight - padding
         ? below
-        : Math.max(padding, trigger.top - menuHeight - gap);
+        : Math.max(padding, rect.top - menuHeight - gap);
 
-    Object.assign(menu.style, {
-        left: `${Math.round(left)}px`,
-        top: `${Math.round(top)}px`,
-        visibility: 'visible',
-    });
+    menu.style.setProperty('left', `${Math.round(left)}px`, 'important');
+    menu.style.setProperty('top', `${Math.round(top)}px`, 'important');
+    menu.style.setProperty('visibility', 'visible', 'important');
 }
 
 function portalTradeFlowActionMenu(toggle) {
     if (!isTradeFlowActionDropdown(toggle)) return;
-    const menu = toggle.parentElement?.querySelector(':scope > .dropdown-menu');
+
+    const menu = getTradeFlowActionMenu(toggle);
     if (!menu || menu.parentElement === document.body) return;
 
     const placeholder = document.createComment('tradeflow-action-menu');
-    menu.parentElement.insertBefore(placeholder, menu);
+    menu.parentNode.insertBefore(placeholder, menu);
     toggle.__tradeFlowActionMenu = menu;
     toggle.__tradeFlowActionMenuPlaceholder = placeholder;
     toggle.__tradeFlowActionMenuStyle = menu.getAttribute('style');
     menu.__tradeFlowActionToggle = toggle;
     menu.classList.add('tf-action-dropdown-portal');
-    Object.assign(menu.style, {
-        position: 'fixed',
-        zIndex: '1080',
-        maxHeight: `calc(100vh - 16px)`,
-    });
     document.body.appendChild(menu);
-    positionTradeFlowActionMenu(toggle);
+
+    menu.style.setProperty('display', 'block', 'important');
+    menu.style.setProperty('position', 'fixed', 'important');
+    menu.style.setProperty('inset', 'auto', 'important');
+    menu.style.setProperty('right', 'auto', 'important');
+    menu.style.setProperty('bottom', 'auto', 'important');
+    menu.style.setProperty('transform', 'none', 'important');
+    menu.style.setProperty('z-index', '1080', 'important');
+    menu.style.setProperty('visibility', 'hidden', 'important');
 }
 
 function restoreTradeFlowActionMenu(toggle) {
@@ -467,16 +478,6 @@ function restoreTradeFlowActionMenu(toggle) {
     delete toggle.__tradeFlowActionMenuStyle;
 }
 
-function tradeFlowDropdownContainers(toggle) {
-    const containers = [];
-    let current = toggle instanceof Element ? toggle.parentElement : null;
-    while (current && current !== document.body) {
-        if (current.matches?.('.table-responsive, .tf-card, .card, .staff-table-wrap')) containers.push(current);
-        current = current.parentElement;
-    }
-    return containers;
-}
-
 function closeTradeFlowActionDropdowns(except = null) {
     document.querySelectorAll('[data-bs-toggle="dropdown"][aria-expanded="true"]').forEach((toggle) => {
         if (toggle === except) return;
@@ -484,86 +485,42 @@ function closeTradeFlowActionDropdowns(except = null) {
     });
 }
 
-let tradeFlowDropdownUpdateFrame;
+let tradeFlowActionMenuUpdateFrame;
 function updateTradeFlowActionDropdowns() {
-    cancelAnimationFrame(tradeFlowDropdownUpdateFrame);
-    tradeFlowDropdownUpdateFrame = requestAnimationFrame(() => {
+    cancelAnimationFrame(tradeFlowActionMenuUpdateFrame);
+    tradeFlowActionMenuUpdateFrame = requestAnimationFrame(() => {
         document.querySelectorAll('[data-bs-toggle="dropdown"][aria-expanded="true"]').forEach((toggle) => {
-            if (!isTradeFlowActionDropdown(toggle)) return;
-            if (toggle.__tradeFlowActionMenu) positionTradeFlowActionMenu(toggle);
-            else window.bootstrap?.Dropdown.getInstance(toggle)?.update();
+            if (isTradeFlowActionDropdown(toggle)) positionTradeFlowActionMenu(toggle);
         });
     });
 }
-
-function initTradeFlowStaffActionDropdowns(root = document) {
-    const toggles = root.matches?.('.staff-table-wrap [data-bs-toggle="dropdown"]')
-        ? [root]
-        : [...(root.querySelectorAll?.('.staff-table-wrap [data-bs-toggle="dropdown"]') || [])];
-
-    toggles.forEach((toggle) => {
-        if (toggle.dataset.staffActionDropdownReady === '1' || !window.bootstrap?.Dropdown) return;
-        toggle.dataset.staffActionDropdownReady = '1';
-
-        window.bootstrap.Dropdown.getOrCreateInstance(toggle, {
-            boundary: 'viewport',
-            display: 'dynamic',
-            popperConfig(defaultConfig) {
-                return {
-                    ...defaultConfig,
-                    strategy: 'fixed',
-                    placement: 'bottom-end',
-                    modifiers: [
-                        ...(defaultConfig.modifiers || []).filter((modifier) => !['flip', 'preventOverflow', 'offset'].includes(modifier.name)),
-                        { name: 'offset', options: { offset: [0, 6] } },
-                        {
-                            name: 'preventOverflow',
-                            options: { boundary: 'viewport', padding: 12, altAxis: true },
-                        },
-                        {
-                            name: 'flip',
-                            options: {
-                                boundary: 'viewport',
-                                padding: 12,
-                                fallbackPlacements: ['top-end', 'bottom-start', 'top-start'],
-                            },
-                        },
-                    ],
-                };
-            },
-        });
-    });
-}
-
-initTradeFlowStaffActionDropdowns();
 
 document.addEventListener('show.bs.dropdown', (event) => {
     const toggle = event.target;
-    // A filter select (for example, the Company Plan filter) must never stay
-    // open over an Actions menu. Closing it keeps each control usable without
-    // resetting its selected value.
-    closeTradeFlowTomSelectDropdowns();
     if (!isTradeFlowActionDropdown(toggle)) return;
+
+    // Keep Actions menus mutually exclusive before lifting the new one above
+    // responsive table overflow.
+    closeTradeFlowTomSelectDropdowns();
     closeTradeFlowActionDropdowns(toggle);
-    // Popper measures after Bootstrap has made the menu visible. Updating in
-    // the next frame accounts for a recent page or table-wrapper scroll.
-    requestAnimationFrame(() => window.bootstrap?.Dropdown.getInstance(toggle)?.update());
+    portalTradeFlowActionMenu(toggle);
 });
 
 document.addEventListener('shown.bs.dropdown', (event) => {
-    portalTradeFlowActionMenu(event.target);
+    const toggle = event.target;
+    if (isTradeFlowActionDropdown(toggle)) positionTradeFlowActionMenu(toggle);
 });
 
 document.addEventListener('hidden.bs.dropdown', (event) => {
     const toggle = event.target;
-    if (!isTradeFlowActionDropdown(toggle)) return;
-    restoreTradeFlowActionMenu(toggle);
+    if (isTradeFlowActionDropdown(toggle)) restoreTradeFlowActionMenu(toggle);
 });
 
 document.addEventListener('click', (event) => {
     const item = event.target.closest('.dropdown-menu .dropdown-item');
     if (!item) return;
-    const toggle = item.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]') || item.closest('.dropdown-menu')?.__tradeFlowActionToggle;
+    const toggle = item.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]')
+        || item.closest('.dropdown-menu')?.__tradeFlowActionToggle;
     if (isTradeFlowActionDropdown(toggle)) window.bootstrap?.Dropdown.getInstance(toggle)?.hide();
 });
 
@@ -1014,21 +971,33 @@ document.addEventListener('submit', (event) => {
     if (!form || form.dataset.tfConfirmApproved === '1') return;
 
     event.preventDefault();
-    const action = form.querySelector('button[type="submit"], button:not([type])')?.textContent?.replace(/\s+/g, ' ').trim() || 'Continue';
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    const submitter = event.submitter instanceof HTMLButtonElement
+        ? event.submitter
+        : form.querySelector('button[type="submit"], button:not([type])');
+    const action = submitter?.textContent?.replace(/\s+/g, ' ').trim() || 'Continue';
     const proceed = () => {
         form.dataset.tfConfirmApproved = '1';
+        if (submitter && form.dataset.tfConfirmSavingText) {
+            submitter.disabled = true;
+            submitter.textContent = form.dataset.tfConfirmSavingText;
+        }
         form.requestSubmit();
     };
     if (!window.Swal) return proceed();
 
     window.Swal.fire({
-        icon: 'warning',
-        title: `${action}?`,
+        icon: form.dataset.tfConfirmIcon || 'warning',
+        title: form.dataset.tfConfirmTitle || `${action}?`,
         text: form.dataset.tfConfirmMessage,
         showCancelButton: true,
-        confirmButtonText: action,
+        confirmButtonText: form.dataset.tfConfirmButton || action,
         cancelButtonText: 'Cancel',
-        confirmButtonColor: '#dc3545',
+        confirmButtonColor: form.dataset.tfConfirmColor || '#dc3545',
         reverseButtons: true,
     }).then((result) => { if (result.isConfirmed) proceed(); });
 }, true);
@@ -1220,6 +1189,7 @@ function initTradeFlowMoneyDelegation() {
 
 window.initTradeFlowMoneyInputs = initTradeFlowMoneyInputs;
 window.formatTradeFlowMoney = formatTradeFlowMoney;
+window.tradeFlowRawMoney = tradeFlowRawMoney;
 initTradeFlowMoneyDelegation();
 initTradeFlowMoneyInputs();
 

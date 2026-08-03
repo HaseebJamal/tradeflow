@@ -1699,15 +1699,10 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
 
 .table-responsive {
     overflow-x: auto;
+    overflow-y: visible;
     -webkit-overflow-scrolling: touch;
 }
 
-/* Bootstrap action menus must be allowed to escape responsive table/card wrappers. */
-.table-responsive.tf-dropdown-open,
-.tf-card.tf-dropdown-open,
-.card.tf-dropdown-open {
-    overflow: visible !important;
-}
 .table-responsive .dropdown-menu,
 .tf-card .dropdown-menu,
 .card .dropdown-menu {
@@ -1722,18 +1717,16 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     z-index: 1090;
 }
 
-/* Row-action menus are temporarily portaled to <body> by tradeflow.js so
-   responsive tables cannot crop them at the viewport edge. */
-.tf-action-dropdown-portal {
+/* Only open row-action menus leave their table wrapper. Their coordinates are
+   set from the originating Actions button by the shared JavaScript helper. */
+body > .dropdown-menu.tf-action-dropdown-portal {
+    max-height: calc(100vh - 16px) !important;
     max-width: calc(100vw - 16px);
     overflow-x: hidden;
+    overflow-y: auto;
+    position: fixed !important;
 }
 
-/* Company action menus sit above the filter card and any portaled filter UI. */
-.admin-company-table.tf-dropdown-open {
-    position: relative;
-    z-index: 1100;
-}
 .admin-company-table .dropdown-menu {
     background-color: var(--bs-dropdown-bg, #fff);
     isolation: isolate;
@@ -1741,8 +1734,7 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     z-index: 1110;
 }
 
-/* Company deletion uses SweetAlert. It must always sit above portaled
-   Tom Select and Bootstrap menus, while SweetAlert handles its focus trap. */
+/* Company deletion uses SweetAlert above normal Bootstrap menus. */
 body.tf-company-delete-modal-open {
     overflow: hidden !important;
     overscroll-behavior: none;
@@ -1864,14 +1856,8 @@ body.tf-company-delete-modal-open {
     z-index: 10;
 }
 
-/* Keep staff actions above the responsive table without affecting its normal scroll state. */
 .staff-table-wrap {
     position: relative;
-}
-.staff-table-wrap.tf-dropdown-open {
-    overflow: visible !important;
-    position: relative;
-    z-index: 1120;
 }
 .staff-table-wrap .dropdown-menu {
     max-height: min(70vh, 34rem);

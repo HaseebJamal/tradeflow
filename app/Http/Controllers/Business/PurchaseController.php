@@ -255,6 +255,8 @@ class PurchaseController extends Controller
 
     private function validatedPurchase(Request $request): array
     {
+        $this->normalizePurchaseMoneyInput($request);
+
         $data = $request->validate([
             'submission_token' => ['required', 'uuid'],
             'supplier_id' => ['required', 'integer'],
@@ -275,7 +277,7 @@ class PurchaseController extends Controller
             'items.*.tax_value' => ['nullable', 'integer', 'min:0'],
             'payment_type' => ['nullable', Rule::in(['Full Credit', 'Partial Payment', 'Full Payment'])],
             'paid_amount' => ['nullable', 'integer', 'min:0'],
-            'payment_method' => ['nullable', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
+            'payment_method' => ['nullable', Rule::in(['Cash', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque', 'Other'])],
             'payment_date' => ['nullable', 'date'],
             'cheque_number' => ['nullable', 'string', 'max:255'],
             'cheque_due_date' => ['nullable', 'date'],
@@ -291,6 +293,39 @@ class PurchaseController extends Controller
         }
 
         return $data;
+    }
+
+    private function normalizePurchaseMoneyInput(Request $request): void
+    {
+        $items = $request->input('items', []);
+
+        if (is_array($items)) {
+            foreach ($items as $index => $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                foreach (['unit_cost', 'discount_value', 'tax_value'] as $field) {
+                    if (array_key_exists($field, $item)) {
+                        $items[$index][$field] = $this->normalizeWholePurchaseMoney($item[$field]);
+                    }
+                }
+            }
+        }
+
+        $request->merge([
+            'items' => $items,
+            'paid_amount' => $this->normalizeWholePurchaseMoney($request->input('paid_amount')),
+        ]);
+    }
+
+    private function normalizeWholePurchaseMoney(mixed $value): mixed
+    {
+        if ($value === null || ! is_scalar($value)) {
+            return $value;
+        }
+
+        return preg_replace('/[\s,]/', '', preg_replace('/^\s*Rs\.?\s*/i', '', (string) $value)) ?? '';
     }
 
     private function persistPurchase(array $data, int $businessId, ?Purchase $purchase = null): Purchase
@@ -522,7 +557,7 @@ class PurchaseController extends Controller
         $request->merge(['amount' => $this->normalizePaymentTender($request->input('amount'))]);
         $data = $request->validate([
             'amount' => ['required', 'integer', 'min:1'],
-            'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
+            'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque', 'Other'])],
             'reference_number' => ['nullable', 'string', 'max:255'],
             'payment_date' => ['required', 'date'],
             'cheque_number' => ['nullable', 'string', 'max:255'],

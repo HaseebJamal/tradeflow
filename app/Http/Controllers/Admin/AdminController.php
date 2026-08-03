@@ -372,7 +372,7 @@ class AdminController extends Controller
             'subscription_plan_id' => ['nullable', 'integer', 'exists:subscription_plans,id'],
             'status' => ['nullable', 'in:Pending,Trial,Active,Expiring,Expired,Suspended,Cancelled'],
             'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
-            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
+            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,Jazz Cash,Easypaisa'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
         ]);
@@ -566,7 +566,7 @@ class AdminController extends Controller
             'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
             'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
             'amount' => ['nullable', 'integer', 'min:0'],
-            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
+            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,Jazz Cash,Easypaisa'],
             'payment_reference' => ['nullable', 'string', 'max:120'],
             'payment_status' => ['nullable', 'in:Pending,Received,Failed'],
             'trial_start_at' => ['nullable', 'date'],
@@ -617,7 +617,7 @@ class AdminController extends Controller
             'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
             'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
             'amount' => ['nullable', 'integer', 'min:0'],
-            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
+            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,Jazz Cash,Easypaisa'],
             'payment_reference' => ['nullable', 'string', 'max:120'],
             'payment_status' => ['nullable', 'in:Pending,Received,Failed'],
             'trial_start_at' => ['nullable', 'date'],
@@ -748,7 +748,7 @@ class AdminController extends Controller
     {
         $data = $request->validate([
             'decision' => ['required', 'in:Approved,Activate,Rejected,Changes Requested'],
-            'admin_note' => ['nullable', 'string', 'max:2000'],
+            'admin_note' => ['nullable', 'string', 'max:2000', Rule::requiredIf($request->input('decision') === 'Rejected')],
         ]);
         abort_unless(in_array($changeRequest->status, ['Pending', 'Changes Requested'], true), 422, 'This subscription request has already been reviewed.');
 
@@ -1019,7 +1019,7 @@ class AdminController extends Controller
         $filters = request()->validate([
             'business_id' => ['nullable', 'exists:businesses,id'],
             'status' => ['nullable', Rule::in(['Received', 'Pending', 'Rejected', 'Refunded'])],
-            'method' => ['nullable', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
+            'method' => ['nullable', Rule::in(['Cash', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque', 'Other'])],
             'search' => ['nullable', 'string', 'max:255'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
@@ -1063,7 +1063,7 @@ class AdminController extends Controller
         $data = $request->validate([
             'business_id' => ['required', 'exists:businesses,id'],
             'amount' => ['required', 'integer', 'min:1'],
-            'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque', 'Other'])],
+            'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque', 'Other'])],
             'status' => ['required', Rule::in(['Received', 'Pending', 'Rejected', 'Refunded'])],
             'paid_at' => ['required', 'date'],
         ]);

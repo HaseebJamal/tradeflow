@@ -266,7 +266,7 @@ class DeliveryController extends Controller
         $delivery = $this->scopedDelivery($delivery);
         $data = $request->validate([
             'collected_amount' => ['required', 'integer', 'min:1'],
-            'payment_method' => ['required', 'in:Cash,Bank Transfer Manual,JazzCash Manual,Easypaisa Manual,Cheque'],
+            'payment_method' => ['required', 'in:Cash,Bank Transfer Manual,Jazz Cash,Easypaisa,Cheque'],
             'payment_reference' => ['nullable', 'string', 'max:255'],
             'payment_proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);

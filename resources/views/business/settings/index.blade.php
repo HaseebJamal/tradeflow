@@ -21,7 +21,7 @@
         <div><h2 class="h5 mb-1">Company Logo</h2><p class="tf-muted mb-0">Upload, replace, or remove your business logo.</p></div>
         @if($business?->logo)<img src="{{ asset('storage/'.$business->logo) }}" class="profile-avatar" alt="{{ $business->business_name }} logo">@endif
     </div>
-    <form method="POST" action="{{ route('business.settings.logo') }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PATCH')
+    <form method="POST" action="{{ route('business.settings.logo') }}" enctype="multipart/form-data" class="row g-3" data-tf-confirm-message="These changes will update your business settings." data-tf-confirm-title="Save changes?" data-tf-confirm-button="Save Changes" data-tf-confirm-icon="question" data-tf-confirm-color="#2563eb" data-tf-confirm-saving-text="Saving...">@csrf @method('PATCH')
         <div class="col-md-8"><label class="form-label">Logo</label><input name="logo" type="file" accept="image/jpeg,image/png,image/webp" class="form-control @error('logo') is-invalid @enderror" data-tf-image-upload><small class="tf-muted">JPG, JPEG, PNG, or WebP. Maximum 2 MB.</small><div class="invalid-feedback" data-tf-image-error></div><small class="tf-muted d-block mt-1" data-tf-image-file-status></small>@error('logo')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>
         <div class="col-md-4 d-flex align-items-end"><div class="d-flex flex-wrap gap-2"><label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="remove_logo" value="1"> Remove current logo</label><button class="btn btn-tf-primary">Save Logo</button></div></div>
     </form>

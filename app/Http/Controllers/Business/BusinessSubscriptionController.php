@@ -44,6 +44,7 @@ class BusinessSubscriptionController extends Controller
             'business' => $business,
             'subscription' => $business->subscription,
             'plans' => $plans,
+            'subscriptionUsage' => $this->subscriptionUsage($business),
         ]);
     }
 
@@ -105,7 +106,7 @@ class BusinessSubscriptionController extends Controller
             'request_type' => ['nullable', 'in:New Subscription,Upgrade,Downgrade,Billing Cycle Change,Payment Method Change,Renewal,Cancellation,Resume Cancellation'],
             'requested_plan_id' => ['nullable', 'integer', 'exists:subscription_plans,id'],
             'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
-            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,JazzCash Manual,Easypaisa Manual'],
+            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,Jazz Cash,Easypaisa'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
         $subscription = $business->subscription;
@@ -321,11 +322,24 @@ class BusinessSubscriptionController extends Controller
 
     private function assertDowngradeFits(Business $business, SubscriptionPlan $plan): void
     {
-        $staff = User::where('business_id', $business->id)->where('role', '!=', 'business_owner')->where('status', '!=', 'archived')->count();
-        if (($plan->product_limit && Product::where('business_id', $business->id)->count() > $plan->product_limit)
-            || ($plan->staff_limit && $staff > $plan->staff_limit)
-            || ($plan->order_limit && Order::where('business_id', $business->id)->count() > $plan->order_limit)) {
-            throw ValidationException::withMessages(['requested_plan_id' => 'Your current usage exceeds the selected plan limits. Reduce usage before downgrading.']);
+        $usage = $this->subscriptionUsage($business);
+        $exceeded = [];
+        foreach (['products' => 'product_limit', 'staff' => 'staff_limit', 'orders' => 'order_limit'] as $metric => $limit) {
+            if ($plan->{$limit} && $usage[$metric] > $plan->{$limit}) {
+                $exceeded[] = ucfirst($metric).': '.$usage[$metric].' used / '.$plan->{$limit}.' allowed';
+            }
         }
+        if ($exceeded) {
+            throw ValidationException::withMessages(['requested_plan_id' => "Cannot downgrade to {$plan->name}.\n".implode("\n", $exceeded)."\nReduce usage before submitting this downgrade request."]);
+        }
+    }
+
+    private function subscriptionUsage(Business $business): array
+    {
+        return [
+            'products' => Product::where('business_id', $business->id)->count(),
+            'staff' => User::where('business_id', $business->id)->where('role', '!=', 'business_owner')->where('status', '!=', 'archived')->count(),
+            'orders' => Order::where('business_id', $business->id)->count(),
+        ];
     }
 }

@@ -223,7 +223,7 @@ class ProductController extends Controller
             $data['image'] = $image->store('products', 'public');
         }
         $product->update($data);
-        return redirect()->route('business.products.show', $product)->with('success', 'Product updated.');
+        return redirect()->route('business.products.index')->with('success', 'Product updated successfully.');
     }
 
     public function destroy(int $product)

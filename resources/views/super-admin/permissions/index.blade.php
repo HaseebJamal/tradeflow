@@ -33,7 +33,7 @@
     </div>
 
     @if($selectedCompany)
-        <form method="POST" action="{{ route('admin.permissions.company.update') }}" class="tf-card p-4" data-company-permission-form>
+        <form method="POST" action="{{ route('admin.permissions.company.update') }}" class="tf-card p-4" data-company-permission-form data-tf-confirm-message="Save these permission changes for {{ $selectedCompany->business_name }}? Access changes will apply immediately." data-tf-confirm-icon="question" data-tf-confirm-color="#2563eb">
             @csrf
             @method('PUT')
             <input type="hidden" name="company_id" value="{{ $selectedCompany->id }}">

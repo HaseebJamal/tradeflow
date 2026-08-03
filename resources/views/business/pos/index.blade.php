@@ -96,7 +96,7 @@
                 <div class="tf-pos-payable" aria-live="polite"><span>Payable Amount</span><strong data-total="grand">Rs 0</strong></div>
                 <label class="form-label mt-2" data-pos-tender-label>Cash Received</label><input class="form-control tf-pos-cash-input js-whole-number" data-pos-cash type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="">
                 <div class="mt-2" data-pos-change-row><label class="form-label">Change Return</label><input class="form-control" data-pos-change type="text" value="Rs 0" readonly tabindex="-1"></div>
-                <label class="form-label mt-2">Payment Method</label><select class="form-select" data-pos-payment-method data-native-select><option>Cash</option><option>Credit</option><option>Split</option><option>Bank Transfer</option><option>JazzCash Manual</option><option>Easypaisa Manual</option><option>Cheque</option></select>
+                <label class="form-label mt-2">Payment Method</label><select class="form-select" data-pos-payment-method data-native-select><option>Cash</option><option>Credit</option><option>Split</option><option>Bank Transfer</option><option>Jazz Cash</option><option>Easypaisa</option><option>Cheque</option></select>
                 <label class="form-label mt-2">Reference</label><input class="form-control" data-pos-reference maxlength="255" autocomplete="off">
             </div>
             <div class="tf-pos-complete">

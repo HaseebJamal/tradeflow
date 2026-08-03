@@ -52,7 +52,7 @@
                 ['Inventory Control','Track available, sold, damaged, returned, and low stock quantities.','bi-clipboard-data'],
                 ['Order Management','Create orders, update status, and generate invoices from order data.','bi-bag-check'],
                 ['Khata Ledger','Maintain credit and debit history for every customer.','bi-journal-text'],
-                ['Manual Payments','Record Cash, Bank Transfer, JazzCash, Easypaisa, and Cheque manually.','bi-cash-stack'],
+                ['Manual Payments','Record Cash, Bank Transfer, Jazz Cash, Easypaisa, and Cheque manually.','bi-cash-stack'],
                 ['Delivery Desk','Assign delivery staff and update delivery progress without GPS dependency.','bi-truck'],
                 ['Reports','Review sales, expenses, inventory, credit, and profit/loss.','bi-graph-up-arrow'],
             ] as [$title,$text,$icon])
@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="col-lg-7">
                 <div class="accordion tf-faq" id="faqAccordion">
                     @foreach([
-                        'Does '.$platformSettings->company_name.' connect directly with JazzCash or Easypaisa?' => 'No. In this MVP, JazzCash and Easypaisa are recorded manually. Businesses can save payment method, amount, date, reference number, and proof image without using paid APIs.',
+                        'Does '.$platformSettings->company_name.' connect directly with Jazz Cash or Easypaisa?' => 'No. In this MVP, Jazz Cash and Easypaisa are recorded manually. Businesses can save payment method, amount, date, reference number, and proof image without using paid APIs.',
                         'Can multiple businesses use the same '.$platformSettings->company_name.' platform?' => 'Yes. '.$platformSettings->company_name.' is designed as a multi-business SaaS platform where each approved business can manage its own products, orders, customers, payments, and reports separately.',
                         'Can Super Admin see business reports?' => 'Yes. Super Admin can review business-level reports for monitoring, verification, and support, but cannot directly change business products, orders, inventory, or khata records.',
                         'Can staff have limited access?' => 'Yes. Business owners can create custom roles and choose the exact business permissions each staff member receives.',

@@ -78,10 +78,32 @@
         if (select) element.select?.();
     });
 
-    const currency = (amount) => `Rs ${Math.round(Number(amount) || 0).toLocaleString()}`;
-    const whole = (value) => Math.max(0, Math.trunc(Number(value) || 0));
-    const roundCash = (value) => Math.round(Number(value) || 0);
-    const cashIsValid = () => /^\d+$/.test(cash.value.trim());
+    const rawMoney = (value) => {
+        const normalized = typeof window.tradeFlowRawMoney === 'function'
+            ? window.tradeFlowRawMoney(value)
+            : String(value ?? '').replace(/,/g, '').trim();
+
+        return String(normalized).replace(/^Rs\.?\s*/i, '').trim();
+    };
+    const whole = (value) => {
+        const raw = rawMoney(value);
+        return /^\d+$/.test(raw) ? Math.max(0, Math.trunc(Number(raw))) : 0;
+    };
+    const authoritativePrice = (value) => {
+        const raw = rawMoney(value);
+        return /^\d+(?:\.\d+)?$/.test(raw) ? Math.max(0, Math.trunc(Number(raw))) : 0;
+    };
+    const sellingPrice = (product) => {
+        if (product?.price !== undefined && product.price !== null) {
+            return authoritativePrice(product.price);
+        }
+
+        const retailPrice = authoritativePrice(product?.retail_price);
+        return retailPrice > 0 ? retailPrice : authoritativePrice(product?.wholesale_price);
+    };
+    const currency = (amount) => `Rs ${whole(amount).toLocaleString()}`;
+    const roundCash = (value) => whole(value);
+    const cashIsValid = () => /^\d+$/.test(rawMoney(cash.value));
     const csrfHeaders = { 'X-CSRF-TOKEN': config.csrf, Accept: 'application/json', 'Content-Type': 'application/json' };
     const flash = (icon, title, text = '') => window.Swal
         ? Swal.fire({
@@ -282,19 +304,20 @@
         setActiveProduct(targetIndex, { focus });
     };
     const productCard = (product) => {
+        const price = sellingPrice(product);
         const payload = JSON.stringify({
             id: product.id,
             name: product.name,
             barcode: product.barcode,
             unit: product.unit,
-            price: product.retail_price ?? product.price ?? product.wholesale_price ?? 0,
+            price,
             stock: product.stock_quantity ?? product.stock ?? 0,
             image: product.image,
         }).replace(/'/g, '&#039;');
         return `<button type="button" class="tf-pos-product-card" data-product='${payload}' tabindex="-1" role="option" aria-selected="false">
             <div class="tf-pos-product-image">${product.image ? `<img src="${escapeHtml(`/storage/${product.image}`)}" alt="">` : '<i class="bi bi-box-seam"></i>'}</div>
             <strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.barcode || '')}</small>
-            <span>${currency(product.retail_price ?? product.price ?? product.wholesale_price ?? 0)}</span><em>${product.stock_quantity ?? product.stock ?? 0} ${escapeHtml(product.unit || '')}</em>
+            <span>${currency(price)}</span><em>${product.stock_quantity ?? product.stock ?? 0} ${escapeHtml(product.unit || '')}</em>
         </button>`;
     };
     const renderProducts = (products) => {
@@ -318,7 +341,7 @@
             <td class="tf-pos-line-total"><strong data-cart-line-total>${currency(line.lineTotal)}</strong></td><td><div class="d-flex gap-1">${actions}</div>${isEditing ? '<small class="d-block text-danger mt-1" data-cart-error aria-live="polite"></small>' : ''}</td>
         </tr>`;
     };
-    const numberWithCommas = (value) => Number(value || 0).toLocaleString();
+    const numberWithCommas = (value) => whole(value).toLocaleString();
     const renderCart = () => {
         totals();
         if (selectedCartId !== null && !cart.has(selectedCartId)) selectedCartId = null;
@@ -327,6 +350,7 @@
         cartBody.innerHTML = cart.size
             ? [...cart.values()].map(cartRow).join('')
             : '<tr data-pos-empty><td colspan="8" class="text-center text-muted py-5">Scan or select a product to start a sale.</td></tr>';
+        window.initTradeFlowMoneyInputs?.(cartBody);
         return updateTotals();
     };
     const refreshEditedRow = (row, line) => {
@@ -350,7 +374,7 @@
                 barcode: product.barcode || '',
                 stock,
                 quantity: 1,
-                price: whole(product.retail_price ?? product.price ?? product.wholesale_price ?? 0),
+                price: sellingPrice(product),
                 discount: 0,
                 tax: 0,
                 unit: product.unit || '',
@@ -455,7 +479,7 @@
         tax_rate: whole(tax.value),
         payment_type: paymentType.value,
         payment_method: paymentMethod.value,
-        cash_received: cash.value || 0,
+        cash_received: cash.value === '' ? 0 : whole(cash.value),
         reference: reference.value.trim() || null,
         items: [...cart.values()].map((line) => ({
             product_id: line.id,
@@ -690,10 +714,11 @@
         const field = input.dataset.cartField;
         const max = field === 'quantity' ? line.stock : field === 'discount' || field === 'tax' ? 100 : null;
         let message = '';
-        if (!/^\d+$/.test(input.value)) {
+        const rawValue = rawMoney(input.value);
+        if (!/^\d+$/.test(rawValue)) {
             message = 'Only whole numbers are allowed.';
         } else {
-            const value = Number(input.value);
+            const value = whole(rawValue);
             if (value < (field === 'quantity' ? 1 : 0)) {
                 message = field === 'quantity' ? 'Quantity must be at least 1.' : `Enter a value between 0 and ${max}.`;
             } else if (max !== null && value > max) {

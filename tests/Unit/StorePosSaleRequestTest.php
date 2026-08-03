@@ -19,6 +19,27 @@ class StorePosSaleRequestTest extends TestCase
         $this->assertTrue($decimalTender->fails());
     }
 
+    public function test_formatted_pos_money_values_are_normalized_before_validation(): void
+    {
+        $request = StorePosSaleRequest::create('/', 'POST', [
+            ...$this->payload('9,350'),
+            'items' => [[
+                'product_id' => 1,
+                'quantity' => 3,
+                'unit_price' => '8,500',
+                'discount_rate' => '0',
+                'tax_rate' => '0',
+            ]],
+        ]);
+
+        $method = new \ReflectionMethod($request, 'prepareForValidation');
+        $method->setAccessible(true);
+        $method->invoke($request);
+
+        $this->assertSame('9350', $request->input('cash_received'));
+        $this->assertSame('8500', $request->input('items.0.unit_price'));
+    }
+
     private function payload(string $cashReceived): array
     {
         return [

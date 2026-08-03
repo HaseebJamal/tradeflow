@@ -154,6 +154,44 @@
                     const required = ['Rejected', 'Changes Requested'].includes(decision.value);
                     note.required = required;
                     noteLabel.textContent = required ? 'Admin message (required)' : 'Admin message';
+
+                    const confirmations = {
+                        Approved: {
+                            title: 'Approve this request?',
+                            button: 'Approve Request',
+                            message: 'This will approve and apply the requested change where applicable.',
+                            icon: 'question',
+                            color: '#198754',
+                        },
+                        Rejected: {
+                            title: 'Reject this request?',
+                            button: 'Reject Request',
+                            message: 'This request will be rejected. The business owner will be notified.',
+                            icon: 'warning',
+                            color: '#dc3545',
+                        },
+                        'Changes Requested': {
+                            title: 'Request changes?',
+                            button: 'Request Changes',
+                            message: 'The request will be sent back to the business owner with your message.',
+                            icon: 'warning',
+                            color: '#f59e0b',
+                        },
+                    };
+                    const confirmation = confirmations[decision.value];
+                    if (confirmation) {
+                        form.dataset.tfConfirmTitle = confirmation.title;
+                        form.dataset.tfConfirmButton = confirmation.button;
+                        form.dataset.tfConfirmMessage = confirmation.message;
+                        form.dataset.tfConfirmIcon = confirmation.icon;
+                        form.dataset.tfConfirmColor = confirmation.color;
+                    } else {
+                        delete form.dataset.tfConfirmTitle;
+                        delete form.dataset.tfConfirmButton;
+                        delete form.dataset.tfConfirmMessage;
+                        delete form.dataset.tfConfirmIcon;
+                        delete form.dataset.tfConfirmColor;
+                    }
                 };
                 if (trigger.dataset.decision && actions.decisions.includes(trigger.dataset.decision)) decision.value = trigger.dataset.decision;
                 decision.onchange();

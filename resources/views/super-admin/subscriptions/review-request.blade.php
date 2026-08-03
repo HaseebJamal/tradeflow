@@ -54,7 +54,7 @@
     <div class="col-lg-4">
         <div class="tf-card p-4"><h2 class="h5 mb-3">Current Subscription</h2><p class="mb-1"><strong>{{ $currentSubscription?->plan?->name ?? 'No current subscription' }}</strong></p><p class="tf-muted mb-1">{{ $currentSubscription?->status ?? 'Not assigned' }}{{ $currentSubscription?->billing_cycle ? ' - '.$currentSubscription->billing_cycle : '' }}</p><p class="tf-muted mb-0">Expires: {{ $currentSubscription?->ends_at?->format('d M, Y') ?? '-' }}</p></div>
         @if($canProcess)
-            <div class="tf-card p-4 mt-4"><h2 class="h5 mb-3">Decision</h2><form method="POST" action="{{ route('admin.subscription-change-requests.review', $changeRequest) }}">@csrf @method('PATCH')<label class="form-label" for="decisionNote">Decision Note</label><textarea class="form-control mb-3" id="decisionNote" name="admin_note" rows="3" maxlength="2000" placeholder="Explain requested changes or the decision, if needed">{{ $changeRequest->admin_note }}</textarea><div class="d-grid gap-2"><button class="btn btn-outline-primary w-100" name="decision" value="Approved">Approve Request</button><button class="btn btn-success w-100" name="decision" value="Activate">Activate Subscription</button><button class="btn btn-outline-warning w-100" name="decision" value="Changes Requested">Request Changes</button><button class="btn btn-outline-danger w-100" name="decision" value="Rejected">Reject Request</button></div></form></div>
+            <div class="tf-card p-4 mt-4"><h2 class="h5 mb-3">Decision</h2><form method="POST" action="{{ route('admin.subscription-change-requests.review', $changeRequest) }}" data-subscription-decision-form>@csrf @method('PATCH')<label class="form-label" for="decisionNote">Decision Note</label><textarea class="form-control mb-3" id="decisionNote" name="admin_note" rows="3" maxlength="2000" placeholder="Explain requested changes or the decision, if needed">{{ $changeRequest->admin_note }}</textarea><div class="d-grid gap-2"><button class="btn btn-outline-primary w-100" name="decision" value="Approved">Approve Request</button><button class="btn btn-success w-100" name="decision" value="Activate">Activate Subscription</button><button class="btn btn-outline-warning w-100" name="decision" value="Changes Requested">Request Changes</button><button class="btn btn-outline-danger w-100" name="decision" value="Rejected">Reject Request</button></div></form></div>
         @endif
     </div>
 </div>
@@ -63,6 +63,28 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const decisionForm = document.querySelector('[data-subscription-decision-form]');
+    if (decisionForm) {
+        decisionForm.querySelectorAll('button[name="decision"]').forEach(function (button) {
+            button.addEventListener('click', function (event) {
+                event.preventDefault();
+                const decision = button.value;
+                const note = decisionForm.querySelector('[name="admin_note"]');
+                if (decision === 'Rejected' && !note.value.trim()) {
+                    Swal.fire({ icon: 'warning', title: 'Rejection reason required', text: 'Please enter an Admin Message before rejecting this request.' });
+                    note.focus(); return;
+                }
+                const rejected = decision === 'Rejected';
+                Swal.fire({ icon: rejected ? 'warning' : 'question', title: rejected ? 'Reject this request?' : 'Approve this request?', text: rejected ? 'This request will be rejected and the requested plan change will not be applied.' : 'This will apply the requested subscription change to the business.', showCancelButton: true, confirmButtonText: rejected ? 'Reject Request' : 'Approve Request', confirmButtonColor: rejected ? '#dc3545' : undefined }).then(function (result) {
+                    if (!result.isConfirmed) return;
+                    button.disabled = true;
+                    button.textContent = 'Processing...';
+                    const input = document.createElement('input'); input.type = 'hidden'; input.name = 'decision'; input.value = decision;
+                    decisionForm.appendChild(input); decisionForm.submit();
+                });
+            });
+        });
+    }
     const form = document.querySelector('[data-subscription-review-form]');
     if (!form) return;
     const plan = form.querySelector('[data-review-plan]');

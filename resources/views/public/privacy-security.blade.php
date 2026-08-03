@@ -12,7 +12,7 @@
                 ['Secure File Uploads','Uploaded images and documents are validated by file type and size before storage.'],
                 ['Password Protection','Passwords are hashed using Laravel authentication security.'],
                 ['Manual Payment Records Only','Payments are stored as manual records with method, amount, date, reference number, and proof image.'],
-                ['No Paid API Dependency',$platformSettings->company_name.' does not connect to JazzCash, Easypaisa, WhatsApp, SMS, Google Maps, or payment gateway APIs in this MVP.'],
+                ['No Paid API Dependency',$platformSettings->company_name.' does not connect to Jazz Cash, Easypaisa, WhatsApp, SMS, Google Maps, or payment gateway APIs in this MVP.'],
             ] as [$title,$text])
             <div class="col-md-6 col-xl-4"><div class="tf-card p-4 h-100"><h2 class="h5">{{ $title }}</h2><p class="tf-muted mb-0">{{ $text }}</p></div></div>
             @endforeach

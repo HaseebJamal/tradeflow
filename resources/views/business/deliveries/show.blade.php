@@ -98,7 +98,7 @@
     <p class="tf-muted">Cash to collect: <strong>Rs {{ number_format($remaining) }}</strong></p>
     <form method="POST" action="{{ route('business.deliveries.collection', $delivery) }}" enctype="multipart/form-data" class="row g-3">@csrf
         <div class="col-md-3"><label class="form-label">Amount Collected</label><input name="collected_amount" type="number" min="1" max="{{ $remaining }}" step="1" class="form-control" required></div>
-        <div class="col-md-3"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select" required>@foreach(['Cash', 'Bank Transfer Manual', 'JazzCash Manual', 'Easypaisa Manual', 'Cheque'] as $method)<option>{{ $method }}</option>@endforeach</select></div>
+        <div class="col-md-3"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select" required>@foreach(['Cash', 'Bank Transfer Manual', 'Jazz Cash', 'Easypaisa', 'Cheque'] as $method)<option>{{ $method }}</option>@endforeach</select></div>
         <div class="col-md-3"><label class="form-label">Reference Optional</label><input name="payment_reference" class="form-control"></div>
         <div class="col-md-3"><label class="form-label">Payment Proof Optional</label><input name="payment_proof_image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="form-control"></div>
         <div class="col-12"><button class="btn btn-tf-primary">Record Collection</button></div>
