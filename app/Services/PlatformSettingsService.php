@@ -10,14 +10,28 @@ class PlatformSettingsService
 {
     private const CACHE_KEY = 'tradeflow.platform-settings';
 
+    /**
+     * Return the only set of values used when platform branding is restored.
+     */
+    public function defaultBranding(): array
+    {
+        return [
+            'company_name' => config('tradeflow.platform.name', 'TradeFlow'),
+            'logo' => config('tradeflow.platform.logo'),
+            'support_email' => config('tradeflow.platform.support_email'),
+            'support_phone' => config('tradeflow.platform.support_phone'),
+        ];
+    }
+
     public function current(): PlatformSetting
     {
+        $defaults = $this->defaultBranding();
+
         if (! Schema::hasTable('platform_settings')) {
-            return new PlatformSetting(['company_name' => 'TradeFlow', 'max_upload_size' => 2048]);
+            return new PlatformSetting($defaults + ['max_upload_size' => 2048]);
         }
 
-        return Cache::rememberForever(self::CACHE_KEY, fn () => PlatformSetting::query()->firstOrCreate([], [
-            'company_name' => 'TradeFlow',
+        return Cache::rememberForever(self::CACHE_KEY, fn () => PlatformSetting::query()->firstOrCreate([], $defaults + [
             'max_upload_size' => 2048,
         ]));
     }
@@ -29,6 +43,6 @@ class PlatformSettingsService
 
     public function name(): string
     {
-        return $this->current()->company_name ?: 'TradeFlow';
+        return $this->current()->company_name ?: $this->defaultBranding()['company_name'];
     }
 }

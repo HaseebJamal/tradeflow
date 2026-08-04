@@ -213,6 +213,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::get('/audit-logs/export/pdf', [AdminController::class, 'exportAuditLogsPdf'])->name('audit-logs.export.pdf');
     Route::get('/settings', [AdminController::class, 'settings'])->name('settings');
     Route::put('/settings', [AdminController::class, 'updateSettings'])->name('settings.update');
+    Route::put('/settings/restore-default-logo', [AdminController::class, 'restoreDefaultLogo'])->name('settings.restore-default-logo');
+    Route::put('/settings/reset-defaults', [AdminController::class, 'resetSettingsDefaults'])->name('settings.reset-defaults');
     Route::get('/business-reports', [AdminController::class, 'businessReports'])->name('business-reports');
     Route::get('/business-reports/export/excel', [AdminController::class, 'businessReportsExcel'])->name('business-reports.export.excel');
     Route::get('/business-reports/export/pdf', [AdminController::class, 'businessReportsPdf'])->name('business-reports.export.pdf');

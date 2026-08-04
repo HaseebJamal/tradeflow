@@ -140,10 +140,18 @@ a:hover {
 
 .tf-sidebar-company-name {
     display: block;
-    max-width: 160px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    flex: 1 1 auto;
+    font-size: 0.82rem;
+    line-height: 1.2;
+    max-width: none;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.tf-sidebar .tf-brand:has(.tf-sidebar-company-name) {
+    flex: 1 1 0;
+    min-width: 0;
 }
 
 .tf-hero {

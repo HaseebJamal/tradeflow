@@ -1210,6 +1210,62 @@ class AdminController extends Controller
         return back()->with('success', 'Settings updated.');
     }
 
+    public function restoreDefaultLogo(Request $request)
+    {
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $oldLogo = $settings->logo;
+        $defaultLogo = $settingsService->defaultBranding()['logo'];
+
+        try {
+            DB::transaction(function () use ($settings, $defaultLogo): void {
+                $settings->update(['logo' => $defaultLogo]);
+            });
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->with('error', 'Unable to restore the default platform logo. Please try again.');
+        }
+
+        if ($oldLogo && $oldLogo !== $defaultLogo) {
+            $oldLogoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim($oldLogo, '/'));
+            Storage::disk('public')->delete($oldLogoPath);
+        }
+
+        $settingsService->forget();
+        $this->audit('Default platform logo restored', $request, 'Settings', $settings->id, ['logo' => 'custom'], ['logo' => 'default']);
+
+        return back()->with('success', 'Default platform logo restored successfully.');
+    }
+
+    public function resetSettingsDefaults(Request $request)
+    {
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $defaults = $settingsService->defaultBranding();
+        $oldValues = $settings->only(array_keys($defaults));
+
+        try {
+            DB::transaction(function () use ($settings, $defaults): void {
+                $settings->update($defaults);
+            });
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->with('error', 'Unable to reset platform settings. Please try again.');
+        }
+
+        if ($oldValues['logo'] && $oldValues['logo'] !== $defaults['logo']) {
+            $oldLogoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim($oldValues['logo'], '/'));
+            Storage::disk('public')->delete($oldLogoPath);
+        }
+
+        $settingsService->forget();
+        $this->audit('Platform settings reset to defaults', $request, 'Settings', $settings->id, ['fields' => array_keys($oldValues)], ['fields' => array_keys($defaults)]);
+
+        return back()->with('success', 'Platform settings reset to default.');
+    }
+
     public function businessReports(Request $request)
     {
         $request->validate([
