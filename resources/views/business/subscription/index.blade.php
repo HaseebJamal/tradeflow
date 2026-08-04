@@ -339,7 +339,7 @@
                     return;
                 }
                 const downgrade = type.value === 'Downgrade';
-                Swal.fire({ icon: 'question', title: `Submit ${downgrade ? 'downgrade' : 'upgrade'} request?`, text: `You are requesting to change your plan from {{ $subscription->plan?->name }} to ${target.textContent}.${downgrade ? ' Plan limits will apply after approval.' : ''}`, showCancelButton: true, confirmButtonText: 'Submit Request', cancelButtonText: 'Cancel' }).then(function (result) {
+                Swal.fire({ icon: 'question', title: `Submit ${downgrade ? 'downgrade' : 'upgrade'} request?`, text: `You are requesting to change your plan from {{ $subscription?->plan?->name ?? 'No active plan' }} to ${target.textContent}.${downgrade ? ' Plan limits will apply after approval.' : ''}`, showCancelButton: true, confirmButtonText: 'Submit Request', cancelButtonText: 'Cancel' }).then(function (result) {
                     if (!result.isConfirmed) return;
                     const submit = planChangeForm.querySelector('button[type="submit"]');
                     submit.disabled = true; submit.textContent = 'Submitting...';

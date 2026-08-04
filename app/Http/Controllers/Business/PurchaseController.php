@@ -58,7 +58,12 @@ class PurchaseController extends Controller
             'supplier',
             'invoice',
             'creator',
-            'latestPayment:id,purchase_id,method,payment_date',
+            'latestPayment' => fn ($query) => $query->select([
+                'supplier_payments.id',
+                'supplier_payments.purchase_id',
+                'supplier_payments.method',
+                'supplier_payments.payment_date',
+            ]),
             'items:id,purchase_id,received_quantity',
             'returns.items:id,purchase_return_id,quantity',
         ])->withCount('payments')->withSum('items', 'quantity')->where('business_id', $businessId)

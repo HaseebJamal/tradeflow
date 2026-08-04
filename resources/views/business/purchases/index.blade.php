@@ -48,7 +48,7 @@
         <div class="dropdown">
             <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Actions</button>
             <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="{{ route('business.purchases.show', $purchase) }}"><i class="bi bi-eye me-2"></i>View Details</a></li>
+                <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#purchaseDetailsModal{{ $purchase->id }}"><i class="bi bi-eye me-2"></i>View Details</button></li>
                 @companyCan('purchases.edit')
                     @if($canEdit)
                         <li><a class="dropdown-item" href="{{ route('business.purchases.edit', $purchase) }}"><i class="bi bi-pencil me-2"></i>Edit</a></li>
@@ -81,5 +81,47 @@
             </ul>
         </div>
     </td></tr>
-@empty<tr><td colspan="11" class="text-center tf-muted py-5">No purchases found.</td></tr>@endforelse</tbody></x-table><div class="mt-3"><x-table-result-summary :paginator="$purchases" />{{ $purchases->links('pagination::bootstrap-5') }}</div>
+@empty<tr><td colspan="11" class="text-center tf-muted py-5">No purchases found.</td></tr>@endforelse</tbody></x-table>
+
+@foreach($purchases as $purchase)
+    @php
+        $modalPaymentMethod = $purchase->payment_method ?: $purchase->latestPayment?->method;
+        $modalPaymentMethodLabel = $modalPaymentMethod ?: ((float) $purchase->paid_amount > 0 ? 'Payment recorded' : 'Not paid');
+    @endphp
+    <div class="modal fade" id="purchaseDetailsModal{{ $purchase->id }}" tabindex="-1" aria-labelledby="purchaseDetailsModalLabel{{ $purchase->id }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header py-3">
+                    <div>
+                        <h2 class="modal-title fs-5 mb-0" id="purchaseDetailsModalLabel{{ $purchase->id }}">Purchase Details</h2>
+                        <small class="text-muted">{{ $purchase->purchase_number }}</small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-3">
+                    <div class="row g-3 small">
+                        <div class="col-6"><div class="text-muted mb-1">Supplier</div><div>{{ $purchase->supplier?->supplier_name ?? 'Not provided' }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Purchase date</div><div><x-date-time :value="$purchase->purchase_date" /></div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Supplier invoice</div><div>{{ $purchase->supplier_invoice_number ?: 'Not provided' }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Due date</div><div>{{ $purchase->due_date?->format('d M, Y') ?: 'Not provided' }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Grand total</div><div>Rs {{ number_format($purchase->grand_total, 2) }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Paid amount</div><div>Rs {{ number_format($purchase->paid_amount, 2) }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Remaining payable</div><div>Rs {{ number_format($purchase->balance, 2) }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Payment method</div><div>{{ $modalPaymentMethodLabel }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Payment status</div><div>{{ $purchase->payment_status }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Purchase status</div><div>{{ $purchase->status }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Receiving</div><div>{{ $purchase->receiving_status ?: 'Not Received' }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Created by</div><div>{{ $purchase->creator?->name ?? 'System' }}</div></div>
+                    </div>
+                </div>
+                <div class="modal-footer py-3">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <a href="{{ route('business.purchases.show', $purchase) }}" class="btn btn-tf-primary">View Full Details</a>
+                </div>
+            </div>
+        </div>
+    </div>
+@endforeach
+
+<div class="mt-3"><x-table-result-summary :paginator="$purchases" />{{ $purchases->links('pagination::bootstrap-5') }}</div>
 @endsection

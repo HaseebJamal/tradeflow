@@ -25,7 +25,6 @@
                 'Owner Email' => $context['owner_email'] ?: 'Not provided',
                 'Owner Phone' => $context['owner_phone'] ?: 'Not provided',
                 'Login Email' => $context['login_email'] ?: 'Not provided',
-                'Login URL' => $context['login_url'],
             ] as $label => $value)
                 <div class="col-md-6">
                     <div class="border rounded p-3 h-100">
@@ -70,7 +69,7 @@
 </div>
 
 <div class="modal fade" id="companyOnboardingEmailModal" tabindex="-1" aria-labelledby="companyOnboardingEmailModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-dialog-scrollable">
         <form method="POST" action="{{ route('admin.companies.onboarding.email', $company) }}" class="modal-content" data-onboarding-email-form>
             @csrf
             <div class="modal-header">
@@ -89,7 +88,7 @@
                 </div>
                 <div>
                     <label class="form-label" for="onboardingEmailMessage">Message</label>
-                    <textarea id="onboardingEmailMessage" name="message" class="form-control @error('message') is-invalid @enderror" rows="13" required maxlength="5000">{{ old('message', $emailMessage) }}</textarea>
+                    <textarea id="onboardingEmailMessage" name="message" class="form-control @error('message') is-invalid @enderror" rows="7" required maxlength="5000">{{ old('message', $emailMessage) }}</textarea>
                     @error('message')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
             </div>
