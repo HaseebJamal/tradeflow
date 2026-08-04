@@ -325,10 +325,36 @@ class CompanyController extends Controller
 
     public function finishOnboarding(Request $request, Business $company, CompanyOnboardingAccessService $onboarding)
     {
-        $onboarding->forget($request);
+        if (! $onboarding->context($request, $company)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Company onboarding is no longer available.'], 422);
+            }
 
-        return redirect()->route('admin.companies.show', $company)
-            ->with('success', 'Company created successfully.');
+            return redirect()->route('admin.companies.show', $company)
+                ->with('error', 'The one-time onboarding details are no longer available.');
+        }
+
+        try {
+            $onboarding->forget($request);
+            $this->audit($request, 'company onboarding completed', $company, null, ['status' => 'completed']);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Company onboarding could not be completed. Please try again.'], 500);
+            }
+
+            return back()->with('error', 'Company onboarding could not be completed. Please try again.');
+        }
+
+        $redirect = route('admin.companies.show', $company);
+
+        if ($request->expectsJson()) {
+            return response()->json(['redirect' => $redirect]);
+        }
+
+        return redirect()->to($redirect)
+            ->with('success', 'Company setup has been completed successfully.');
     }
 
     public function show(Request $request, Business $company)

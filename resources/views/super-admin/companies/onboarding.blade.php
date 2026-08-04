@@ -61,9 +61,9 @@
 
             <button class="btn btn-outline-primary" type="button" data-onboarding-copy><i class="bi bi-clipboard me-1"></i>Copy Access Details</button>
 
-            <form method="POST" action="{{ route('admin.companies.onboarding.done', $company) }}" class="ms-sm-auto">
+            <form method="POST" action="{{ route('admin.companies.onboarding.done', $company) }}" class="ms-sm-auto" data-onboarding-done-form>
                 @csrf
-                <button class="btn btn-outline-secondary" type="submit">Done</button>
+                <button class="btn btn-outline-secondary" type="submit" data-onboarding-done-submit>Done</button>
             </form>
         </div>
     </div>
@@ -130,6 +130,69 @@ document.addEventListener('DOMContentLoaded', function () {
         const submit = emailForm.querySelector('[data-onboarding-email-submit]');
         submit.disabled = true;
         submit.textContent = 'Sending...';
+    });
+
+    const doneForm = document.querySelector('[data-onboarding-done-form]');
+    const doneSubmit = doneForm?.querySelector('[data-onboarding-done-submit]');
+    let completingOnboarding = false;
+
+    doneForm?.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (completingOnboarding || !window.Swal) return;
+
+        const confirmation = await Swal.fire({
+            icon: 'warning',
+            title: 'Complete Onboarding?',
+            text: 'Make sure you have copied or shared the owner\'s access details. The temporary password cannot be viewed again after leaving this page.',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Complete',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#2563eb',
+            reverseButtons: true,
+        });
+
+        if (!confirmation.isConfirmed) return;
+
+        completingOnboarding = true;
+        doneSubmit.disabled = true;
+        doneSubmit.textContent = 'Completing...';
+        Swal.fire({
+            title: 'Completing onboarding...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => Swal.showLoading(),
+        });
+
+        try {
+            const response = await fetch(doneForm.action, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': doneForm.querySelector('[name="_token"]').value,
+                },
+                body: new FormData(doneForm),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.redirect) throw new Error(payload.message || 'Unable to complete onboarding.');
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Onboarding Completed',
+                text: 'Company setup has been completed successfully.',
+                confirmButtonText: 'OK',
+            });
+            window.location.assign(payload.redirect);
+        } catch (error) {
+            await Swal.fire({
+                icon: 'error',
+                title: 'Unable to Complete',
+                text: 'Company onboarding could not be completed. Please try again.',
+                confirmButtonText: 'OK',
+            });
+            completingOnboarding = false;
+            doneSubmit.disabled = false;
+            doneSubmit.textContent = 'Done';
+        }
     });
 
     @if($errors->has('subject') || $errors->has('message'))

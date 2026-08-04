@@ -60,7 +60,7 @@
                     @if($planModules->isNotEmpty())<div class="col-12"><div class="border rounded p-3"><small class="tf-muted d-block mb-2">Included Modules</small><div class="d-flex flex-wrap gap-2">@foreach($planModules as $module)<span class="tf-badge tf-badge-info">{{ $module }}</span>@endforeach</div></div></div>@endif
                 </div>
             @else
-                <div class="alert alert-warning mb-0">No plan selection recorded.</div>
+                <p class="tf-muted mb-0">No plan selection recorded.</p>
             @endif
         </div>
 

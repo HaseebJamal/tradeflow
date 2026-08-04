@@ -77,8 +77,6 @@
                         <div class="col-12"><div class="border rounded p-3"><small class="tf-muted d-block mb-2">Included Modules</small><div class="d-flex flex-wrap gap-2">@foreach($planModules as $module)<span class="badge text-bg-light border text-dark">{{ $module }}</span>@endforeach</div></div></div>
                     @endif
                 </div>
-            @else
-                <div class="alert alert-warning mb-0">No plan selection recorded. Assign and confirm a plan before approving this registration.</div>
             @endif
 
             @if($currentStatus === 'pending')
