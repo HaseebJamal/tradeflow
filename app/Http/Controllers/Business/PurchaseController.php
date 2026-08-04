@@ -22,6 +22,7 @@ use App\Services\ProductPurchaseCostService;
 use App\Services\DocumentNumberService;
 use App\Services\CompanyPermissionService;
 use App\Services\PurchaseReceivingService;
+use App\Services\PurchaseFinancialSummaryService;
 use App\Services\ThermalDocumentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -37,6 +38,7 @@ class PurchaseController extends Controller
         private ProductPurchaseCostService $productCosts,
         private DocumentNumberService $numbers,
         private PurchaseReceivingService $receiving,
+        private PurchaseFinancialSummaryService $financialSummary,
     ) {}
 
     public function index(Request $request)
@@ -56,6 +58,7 @@ class PurchaseController extends Controller
             'supplier',
             'invoice',
             'creator',
+            'latestPayment:id,purchase_id,method,payment_date',
             'items:id,purchase_id,received_quantity',
             'returns.items:id,purchase_return_id,quantity',
         ])->withCount('payments')->withSum('items', 'quantity')->where('business_id', $businessId)
@@ -164,7 +167,7 @@ class PurchaseController extends Controller
 
     public function show(Request $request, Purchase $purchase)
     {
-        $purchase = $this->scoped($purchase)->load(['supplier', 'items.product', 'invoice', 'payments.creator', 'payments.account', 'returns.items', 'goodsReceipts.items.product', 'goodsReceipts.creator', 'creator', 'updater', 'confirmer']);
+        $purchase = $this->scoped($purchase)->load(['supplier', 'items.product', 'invoice', 'payments.creator', 'payments.account', 'latestPayment', 'returns.items', 'goodsReceipts.items.product', 'goodsReceipts.creator', 'creator', 'updater', 'confirmer']);
         $document = $request->validate(['document' => ['nullable', Rule::in(['print', 'pdf'])]])['document'] ?? null;
 
         if (! $document) {
@@ -569,6 +572,7 @@ class PurchaseController extends Controller
             if (!empty($data['account_id']) && !Account::where('business_id', $locked->business_id)->whereKey($data['account_id'])->exists()) {
                 throw ValidationException::withMessages(['account_id' => 'Select a payment account from this business.']);
             }
+            $locked = $this->financialSummary->sync($locked);
             $tenderedAmount = (float) $data['amount'];
             $currentPayable = max(0, (float) $locked->balance);
             if ($tenderedAmount > $currentPayable) {
@@ -590,10 +594,12 @@ class PurchaseController extends Controller
                 'cheque_number' => $data['method'] === 'Cheque' ? ($data['cheque_number'] ?? null) : null,
                 'cheque_due_date' => $data['method'] === 'Cheque' ? ($data['cheque_due_date'] ?? null) : null,
             ]));
-            $paid = round((float) $locked->paid_amount + $appliedAmount, 2); $balance = max(0, round((float) $locked->grand_total - $paid, 2));
-            $locked->update(['paid_amount' => $paid, 'balance' => $balance, 'payment_status' => $balance <= 0 ? 'Paid' : 'Partial', 'updated_by' => auth()->id()]);
-            $locked->invoice?->update(['paid_amount' => $paid, 'balance' => $balance, 'status' => $balance <= 0 ? 'Paid' : 'Partial']);
             $this->postPayment($locked, $payment);
+            $locked = $this->financialSummary->sync($locked);
+            $locked->update([
+                'payment_method' => $payment->method,
+                'payment_date' => $payment->payment_date,
+            ]);
             return compact('appliedAmount');
         });
         $purchase->refresh();
@@ -616,6 +622,9 @@ class PurchaseController extends Controller
         $data = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'items' => ['required', 'array', 'min:1'], 'items.*.purchase_item_id' => ['required', 'integer'], 'items.*.quantity' => ['required', 'integer', 'min:1']]);
         try {
             $purchaseReturn = DB::transaction(function () use ($purchase, $data) {
+            // Capture the open liability before this return's line items are
+            // created. The summary service includes persisted returns.
+            $summaryBeforeReturn = $this->financialSummary->summary($purchase);
             $return = PurchaseReturn::create(['business_id' => $purchase->business_id, 'purchase_id' => $purchase->id, 'supplier_id' => $purchase->supplier_id, 'created_by' => auth()->id(), 'return_number' => $this->numbers->next('purchase_return'), 'return_date' => now()->toDateString(), 'reason' => $data['reason']]);
             $total = 0;
             $returnedProducts = collect();
@@ -648,12 +657,11 @@ class PurchaseController extends Controller
             }
             if ($total <= 0) throw ValidationException::withMessages(['items' => 'Select at least one item to return.']);
             $return->update(['total_amount' => $total]);
-            $refund = max(0, $total - $purchase->balance); $newBalance = max(0, $purchase->balance - $total); $newPaid = max(0, $purchase->paid_amount - $refund);
-            $purchase->update(['balance' => $newBalance, 'paid_amount' => $newPaid, 'payment_status' => $newBalance <= 0 ? 'Paid' : 'Partial']);
+            $refund = max(0, round($total - $summaryBeforeReturn['balance'], 2));
             $returnedProducts->unique('id')->each(fn (Product $product) => $this->productCosts->refresh($product));
-            $purchase->invoice?->update(['balance' => $newBalance, 'paid_amount' => $newPaid, 'status' => 'Partially Returned']);
             $this->postReturn($purchase, $return->id, $total, $refund);
             $this->receiving->refreshReceivingStatus($purchase);
+            $purchase = $this->financialSummary->sync($purchase);
                 return $return;
             });
         } catch (ValidationException $exception) {

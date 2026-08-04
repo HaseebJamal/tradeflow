@@ -26,6 +26,7 @@ class PurchaseReceivingService
         private AccountingService $accounting,
         private ProductPurchaseCostService $productCosts,
         private DocumentNumberService $numbers,
+        private PurchaseFinancialSummaryService $financialSummary,
     ) {}
 
     /**
@@ -126,6 +127,10 @@ class PurchaseReceivingService
             }
 
             $this->refreshReceivingStatus($locked);
+            // Receipt/rejection data changes the supplier liability. Rebuild
+            // the cached payment summary from auditable records before the
+            // invoice mirror is written.
+            $locked = $this->financialSummary->sync($locked);
             PurchaseInvoice::updateOrCreate(
                 ['purchase_id' => $locked->id],
                 [
@@ -142,9 +147,9 @@ class PurchaseReceivingService
             if ($acceptedValue > 0) $this->post($locked, $receipt, 'goods_receipt_inventory', $acceptedValue, [['Inventory', $acceptedValue, 0], ['Purchases', 0, $acceptedValue]]);
             if ($rejectedValue > 0) {
                 $this->post($locked, $receipt, 'goods_receipt_credit', $rejectedValue, [['Accounts Payable', $rejectedValue, 0], ['Purchases', 0, $rejectedValue]]);
-                $this->applySupplierCredit($locked, $rejectedValue);
             }
             $this->applyAvailableAdvances($locked, $receipt);
+            $locked = $this->financialSummary->sync($locked);
             $products->unique('id')->each(fn (Product $product) => $this->productCosts->refresh($product));
 
             return $receipt->fresh(['items.product']);
@@ -164,13 +169,6 @@ class PurchaseReceivingService
         elseif ($processed >= $ordered - 0.0001 && $ordered > 0) $status = 'Fully Received';
         elseif ($processed > 0) $status = 'Partially Received';
         $purchase->update(['receiving_status' => $status, 'received_at' => $processed > 0 ? ($purchase->received_at ?? now()) : null, 'updated_by' => auth()->id()]);
-    }
-
-    private function applySupplierCredit(Purchase $purchase, float $amount): void
-    {
-        $paid = (float) $purchase->paid_amount;
-        $balance = max(0, round((float) $purchase->balance - $amount, 2));
-        $purchase->update(['balance' => $balance, 'payment_status' => $paid > $balance + $amount ? 'Refund Due' : ($balance <= 0 ? 'Paid' : ($paid > 0 ? 'Partial' : 'Unpaid'))]);
     }
 
     private function post(Purchase $purchase, GoodsReceipt $receipt, string $source, float $amount, array $lines): void
