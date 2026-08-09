@@ -62,7 +62,7 @@ class CustomerController extends Controller
     public function show(Customer $customer)
     {
         abort_unless($customer->business_id === auth()->user()->business_id, 403);
-        $customer->load(['orders.items', 'ledgers', 'payments']);
+        $customer->load(['orders.items', 'ledgers', 'payments', 'creator']);
         $totalSales = $customer->orders
             ->reject(fn ($order) => in_array($order->status, ['Cancelled', 'Void'], true))
             ->sum(fn ($order) => $order->grand_total ?: $order->total);
@@ -75,7 +75,11 @@ class CustomerController extends Controller
             'outstanding' => max(0, (float) $customer->current_balance),
             'lastOrder' => $customer->orders->sortByDesc('created_at')->first(),
             'lastPayment' => $customer->payments->sortByDesc('payment_date')->first(),
-            'journalLines' => JournalEntryLine::with(['journalEntry', 'account'])->where('customer_id', $customer->id)->latest()->limit(50)->get(),
+            'journalLines' => JournalEntryLine::with(['journalEntry', 'account'])
+                ->where('customer_id', $customer->id)
+                ->latest()
+                ->paginate(10, ['*'], 'ledger_page')
+                ->withQueryString(),
         ]);
     }
 
@@ -111,6 +115,13 @@ class CustomerController extends Controller
         abort_unless($customer->business_id === auth()->user()->business_id, 404);
         $data = $request->validate(['status' => ['required', 'in:Active,Blocked,Inactive']]);
         $customer->update(['status' => $data['status']]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Customer '.($data['status'] === 'Active' ? 'activated' : 'deactivated').' successfully.',
+                'status' => $data['status'],
+            ]);
+        }
 
         return back()->with('success', 'Customer status updated to '.$data['status'].'.');
     }

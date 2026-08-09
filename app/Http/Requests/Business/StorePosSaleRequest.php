@@ -61,6 +61,8 @@ class StorePosSaleRequest extends FormRequest
             'quick_customer.phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'quick_customer.city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'quick_customer.address' => ['nullable', 'string', 'max:500'],
+            'delivery_required' => ['nullable', 'boolean'],
+            'delivery_address' => [Rule::requiredIf(fn () => $this->boolean('delivery_required')), 'nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],

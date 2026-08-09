@@ -21,9 +21,6 @@
                         <a class="btn btn-sm btn-outline-secondary" href="{{ route('business.pos.receipt.print', ['invoice' => $receiptNumber]) }}" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Print</a>
                         <a class="btn btn-sm btn-outline-success" href="{{ route('business.pos.receipt.download', ['invoice' => $receiptNumber]) }}"><i class="bi bi-download me-1"></i>Download</a>
                     @endcompanyCan
-                    @if($canAssignDelivery && $order->invoice)
-                        <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#assignDelivery{{ $order->invoice->id }}"><i class="bi bi-truck me-1"></i>Assign Delivery</button>
-                    @endif
                 </div>
             </td>
         </tr>
@@ -34,24 +31,4 @@
 </x-table>
 <div class="mt-3">{{ $orders->links() }}</div>
 
-@if($canAssignDelivery)
-    @foreach($orders as $order)
-        @continue(! $order->invoice)
-        <div class="modal fade" id="assignDelivery{{ $order->invoice->id }}" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <form class="modal-content" method="POST" action="{{ route('business.pos.delivery.assign', $order->invoice) }}">
-                    @csrf
-                    <div class="modal-header"><h2 class="modal-title h5">Assign Delivery</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                    <div class="modal-body">
-                        <div class="alert alert-light border py-2"><strong>{{ $order->invoice->invoice_number }}</strong><br><small>{{ $order->customer?->name ?? 'Walk-in Customer' }}</small></div>
-                        <div class="mb-3"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select" data-native-select required><option value="">Select delivery staff</option>@foreach($deliveryStaff as $staff)<option value="{{ $staff->id }}">{{ $staff->name }}</option>@endforeach</select></div>
-                        <div class="mb-3"><label class="form-label">Delivery Address</label><textarea name="address" class="form-control" rows="3" required>{{ $order->customer?->address }}</textarea></div>
-                        @if($deliveryStaff->isEmpty())<div class="alert alert-warning mt-3 mb-0">No active delivery staff are available for this business.</div>@endif
-                    </div>
-                    <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-tf-primary" @disabled($deliveryStaff->isEmpty())>Assign Delivery</button></div>
-                </form>
-            </div>
-        </div>
-    @endforeach
-@endif
 @endsection

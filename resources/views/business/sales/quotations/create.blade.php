@@ -3,6 +3,17 @@
 @section('page-subtitle', 'Price a future sale without changing stock or accounts')
 @section('content')
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
+@php
+    $initialQuotationItems = old('items', $quotation?->items?->map(fn ($item) => [
+        'product_id' => $item->product_id,
+        'quantity' => $item->quantity,
+        'unit_price' => $item->unit_price,
+        'discount_type' => $item->discount_type,
+        'discount_value' => $item->discount_value,
+        'tax_type' => $item->tax_type,
+        'tax_value' => $item->tax_value,
+    ])->values()->all() ?? []);
+@endphp
 <form method="POST" action="{{ $quotation ? route('business.sales.quotations.update', $quotation) : route('business.sales.quotations.store') }}" class="tf-card p-4" data-quotation-form>
     @csrf
     @if($quotation)@method('PUT')@endif
@@ -49,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const total = form.querySelector('[data-quotation-entry-total]');
     const error = form.querySelector('[data-quotation-entry-error]');
     const addButton = form.querySelector('[data-add-quotation-item]');
-    const initialItems = @json(array_values(old('items', $quotation?->items?->map(fn ($item) => ['product_id' => $item->product_id, 'quantity' => $item->quantity, 'unit_price' => $item->unit_price, 'discount_type' => $item->discount_type, 'discount_value' => $item->discount_value, 'tax_type' => $item->tax_type, 'tax_value' => $item->tax_value])->all() ?? [])));
+    const initialItems = @json(array_values($initialQuotationItems));
     let editing = null;
 
     const money = value => `Rs ${Math.round(Number(value || 0)).toLocaleString()}`;

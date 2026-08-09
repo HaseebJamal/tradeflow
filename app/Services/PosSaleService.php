@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Account;
 use App\Models\Customer;
+use App\Models\Delivery;
 use App\Models\HeldPosSale;
 use App\Models\Inventory;
 use App\Models\InventoryMovement;
@@ -141,6 +142,14 @@ class PosSaleService
             if (in_array($paymentType, ['Credit', 'Split'], true) && ! $customer) {
                 throw ValidationException::withMessages(['customer_id' => 'A registered customer is required for credit or split sales.']);
             }
+            $deliveryRequired = filter_var($data['delivery_required'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $deliveryAddress = trim((string) ($data['delivery_address'] ?? ''));
+            if ($deliveryRequired && ! $customer) {
+                throw ValidationException::withMessages(['customer_id' => 'Select or create a customer before requesting delivery.']);
+            }
+            if ($deliveryRequired && $deliveryAddress === '') {
+                throw ValidationException::withMessages(['delivery_address' => 'A delivery address is required when delivery is requested.']);
+            }
 
             $quotation = null;
             if (! empty($data['quotation_id'])) {
@@ -254,6 +263,8 @@ class PosSaleService
                 'payment_type' => $paymentType,
                 'payment_status' => $paid >= $grandTotal ? 'Paid' : ($paid > 0 ? 'Partial' : 'Pending'),
                 'sale_channel' => 'pos',
+                'delivery_required' => $deliveryRequired,
+                'delivery_address' => $deliveryRequired ? $deliveryAddress : null,
                 'status' => 'Completed',
             ]);
 
@@ -293,11 +304,25 @@ class PosSaleService
                 $invoice->items()->create(['product_id' => $item->product_id, 'product_name_snapshot' => $item->product_name_snapshot, 'quantity' => $item->quantity, 'unit' => $item->unit, 'unit_price' => $item->unit_price, 'line_total' => $item->line_total]);
             }
 
+            if ($deliveryRequired) {
+                Delivery::create([
+                    'business_id' => $businessId,
+                    'invoice_id' => $invoice->id,
+                    'order_id' => $order->id,
+                    'customer_id' => $customer->id,
+                    'address' => $deliveryAddress,
+                    'amount' => $order->balance > 0 ? $order->balance : $order->grand_total,
+                    'payment_status' => $order->payment_status,
+                    'status' => 'Pending',
+                    'created_by' => $userId,
+                ]);
+            }
+
             $this->postAccounting($order->fresh(['items']), $paid, $customer?->id);
             if ($quotation) {
                 $quotation->update(['status' => 'Converted']);
             }
-            $this->activity->record($businessId, 'POS', 'Completed POS sale '.$number, $order->id, null, ['grand_total' => $grandTotal, 'paid_amount' => $paid]);
+            $this->activity->record($businessId, 'POS', 'Completed POS sale '.$number, $order->id, null, ['grand_total' => $grandTotal, 'paid_amount' => $paid, 'delivery_required' => $deliveryRequired]);
 
             return $order->fresh(['customer', 'items.product', 'invoice', 'payments']);
         });

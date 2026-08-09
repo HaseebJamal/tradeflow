@@ -3,7 +3,7 @@
 @section('title', 'Pricing | TradeFlow')
 
 @section('content')
-<section class="tf-section tf-pricing-page" style="padding-top:130px">
+<section class="tf-section tf-pricing-page pp-pricing" style="padding-top:130px">
     <div class="container">
         <div class="text-center mx-auto mb-4" style="max-width:680px">
             <span class="tf-badge tf-badge-info mb-2">Flexible plans</span>
@@ -11,14 +11,14 @@
             <p class="tf-muted mb-0">Choose a plan with a {{ $plans->first()?->trial_days ?? 14 }}-day trial. You can upgrade when your business needs more room.</p>
         </div>
 
-        <div class="tf-pricing-cycle mb-4" data-subscription-pricing>
+        <div class="pp-pricing-toggle" data-subscription-pricing>
             <button type="button" class="active" data-cycle="Monthly">Monthly</button>
             <button type="button" data-cycle="Yearly">Yearly</button>
         </div>
 
-        <div class="row g-4 justify-content-center">
+        <div class="pp-pricing-grid">
             @forelse($plans as $plan)
-                <div class="col-md-6 col-xl-4">
+                <div class="pp-pricing-grid-item">
                     <x-subscription-plan-card :plan="$plan" context="landing" :current-subscription="$currentSubscription" />
                 </div>
             @empty

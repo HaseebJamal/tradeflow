@@ -1,69 +1,106 @@
 @extends('layouts.dashboard')
+
 @section('page-title', 'Customer Profile')
 @section('page-subtitle', $customer->display_name)
+
 @section('content')
-@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-<div class="row g-4">
-    <div class="col-lg-4">
-        <div class="tf-card p-4">
-            <h2 class="h4">{{ $customer->display_name }}</h2>
-            <p class="tf-muted">{{ $customer->customer_type }}, {{ $customer->city }} {{ $customer->province ? ', '.$customer->province : '' }}</p>
-            <div class="h3 text-danger">Rs {{ number_format($outstanding) }}</div><small class="tf-muted">Outstanding receivable</small>
-            <div class="row g-2 mt-3">
-                <div class="col-6"><div class="border rounded p-2"><small class="tf-muted">Orders</small><strong class="d-block">{{ $customer->orders->count() }}</strong></div></div>
-                <div class="col-6"><div class="border rounded p-2"><small class="tf-muted">Total Sales</small><strong class="d-block">Rs {{ number_format($totalSales) }}</strong></div></div>
-                <div class="col-6"><div class="border rounded p-2"><small class="tf-muted">Payments</small><strong class="d-block">Rs {{ number_format($paymentsReceived) }}</strong></div></div>
-                <div class="col-6"><div class="border rounded p-2"><small class="tf-muted">Available Credit</small><strong class="d-block">Rs {{ number_format(max(0, $customer->credit_limit - $outstanding)) }}</strong></div></div>
-                <div class="col-6"><div class="border rounded p-2"><small class="tf-muted">Last Order</small><strong class="d-block">{{ $lastOrder?->created_at?->format('M d') ?? '-' }}</strong></div></div>
-                <div class="col-6"><div class="border rounded p-2"><small class="tf-muted">Last Payment</small><strong class="d-block">{{ $lastPayment?->payment_date?->format('M d') ?? '-' }}</strong></div></div>
+@if(session('success'))<div class="alert alert-success" role="alert">{{ session('success') }}</div>@endif
+@if($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
+
+<div class="row g-4 tf-customer-profile-layout">
+    <main class="col-lg-8">
+        <section class="tf-card tf-customer-overview-card p-4 mb-4" aria-labelledby="customer-overview-title">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                <div><span class="tf-dashboard-eyebrow">Customer profile</span><h2 id="customer-overview-title" class="h4 mb-1">{{ $customer->display_name }}</h2><p class="tf-muted mb-0">{{ $customer->business_name ?: 'No shop name recorded' }}</p></div>
+                @if(in_array($customer->status, ['Active', 'Inactive'], true))
+                    @companyCan('customers.edit')<x-inline-status-switch :status="$customer->status" :action="route('business.customers.status', $customer)" entity="customer {{ $customer->display_name }}" />@else<span class="tf-badge {{ $customer->status === 'Active' ? 'tf-badge-success' : 'tf-badge-secondary' }}">{{ $customer->status }}</span>@endcompanyCan
+                @else
+                    <span class="tf-badge tf-badge-warning">{{ $customer->status }}</span>
+                @endif
             </div>
-            <div class="d-flex flex-wrap gap-2 mt-3">
-                @companyCan('customers.view')<a href="{{ route('business.customers.statement', $customer) }}" class="btn btn-outline-primary btn-sm">Export Statement</a>@endcompanyCan
-                @companyCan('customers.edit')
-                    @if($customer->status !== 'Active')<form method="POST" action="{{ route('business.customers.status', $customer) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="Active"><button class="btn btn-outline-success btn-sm">Activate</button></form>@endif
-                    @if($customer->status !== 'Inactive')<form method="POST" action="{{ route('business.customers.status', $customer) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="Inactive"><button class="btn btn-outline-secondary btn-sm">Deactivate</button></form>@endif
-                @endcompanyCan
-                @companyCan('customers.archive')<form method="POST" action="{{ route('business.customers.archive', $customer) }}">@csrf @method('PATCH')<button class="btn btn-outline-warning btn-sm">Archive</button></form>@endcompanyCan
-                @companyCan('customers.archive')<form method="POST" action="{{ route('business.customers.destroy', $customer) }}" onsubmit="return confirm('Delete permanently if unused, otherwise archive?')">@csrf @method('DELETE')<button class="btn btn-outline-danger btn-sm">Delete</button></form>@endcompanyCan
+            <dl class="tf-customer-info-grid mb-0">
+                <div><dt>Phone</dt><dd>{{ $customer->phone ?: '—' }}</dd></div>
+                <div><dt>Email</dt><dd class="text-break">{{ $customer->email ?: '—' }}</dd></div>
+                <div><dt>Type</dt><dd>{{ $customer->customer_type ?: '—' }}</dd></div>
+                <div><dt>City / Location</dt><dd>{{ collect([$customer->city, $customer->province])->filter()->implode(', ') ?: '—' }}</dd></div>
+                <div class="tf-customer-info-wide"><dt>Address</dt><dd>{{ $customer->address ?: '—' }}</dd></div>
+                <div><dt>Created by</dt><dd>{{ $customer->creator?->name ?: '—' }}</dd></div>
+                <div><dt>Created at</dt><dd>{{ $customer->created_at?->format('d M Y, h:i A') ?: '—' }}</dd></div>
+            </dl>
+        </section>
+
+        <section class="mb-4" aria-labelledby="customer-financial-title">
+            <div class="d-flex justify-content-between align-items-center mb-3"><div><span class="tf-dashboard-eyebrow">Financial summary</span><h2 id="customer-financial-title" class="h5 mb-0">Account position</h2></div></div>
+            <div class="row g-3">
+                @foreach([
+                    ['Outstanding Receivable', 'Rs '.number_format($outstanding), $outstanding > 0 ? 'warning' : 'success'],
+                    ['Credit Limit', 'Rs '.number_format($customer->credit_limit), 'blue'],
+                    ['Available Credit', 'Rs '.number_format(max(0, $customer->credit_limit - $outstanding)), 'success'],
+                    ['Total Sales', 'Rs '.number_format($totalSales), 'blue'],
+                    ['Payments', 'Rs '.number_format($paymentsReceived), 'success'],
+                    ['Orders', number_format($customer->orders->count()), 'slate'],
+                    ['Last Order', $lastOrder?->created_at?->format('d M Y') ?? '—', 'slate'],
+                    ['Last Payment', $lastPayment?->payment_date?->format('d M Y') ?? '—', 'slate'],
+                ] as [$label, $value, $tone])
+                    <div class="col-6 col-xl-3"><article class="tf-customer-kpi is-{{ $tone }}"><small>{{ $label }}</small><strong>{{ $value }}</strong></article></div>
+                @endforeach
             </div>
-        </div>
-        @companyCan('customers.edit')<div class="tf-card p-4 mt-4">
-            <h3 class="h5">Update Customer</h3>
-            @if($errors->any())
-                <div class="alert alert-danger py-2">{{ $errors->first() }}</div>
-            @endif
-            <form method="POST" action="{{ route('business.customers.update', $customer) }}" class="row g-2">
-                @csrf @method('PATCH')
-                <div class="col-12"><input name="name" value="{{ $customer->name }}" class="form-control" placeholder="Owner name"></div>
-                <div class="col-12"><input name="business_name" value="{{ $customer->business_name }}" class="form-control" placeholder="Shop name"></div>
-                <div class="col-6"><x-phone-input name="phone" :value="old('phone', $customer->phone)" :error="$errors->first('phone')" /></div>
-                <div class="col-6"><input name="email" value="{{ $customer->email }}" class="form-control" placeholder="Email"></div>
-                <div class="col-6"><input name="city" value="{{ $customer->city }}" class="form-control" placeholder="City"></div>
-                <div class="col-6"><input name="province" value="{{ $customer->province }}" class="form-control" placeholder="Province"></div>
-                <div class="col-6"><select name="customer_type" class="form-select">@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option @selected($customer->customer_type === $type)>{{ $type }}</option>@endforeach</select></div>
-                <div class="col-6"><select name="status" class="form-select"><option @selected($customer->status === 'Active')>Active</option><option @selected($customer->status === 'Blocked')>Blocked</option><option @selected($customer->status === 'Inactive')>Inactive</option></select></div>
-                <div class="col-6"><label class="form-label small">Credit Limit</label><input name="credit_limit" type="number" min="0" step="1" value="{{ old('credit_limit', (int) $customer->credit_limit) }}" class="form-control js-whole-number" placeholder="Credit limit"><small class="text-muted">Optional - defaults to Rs 0</small></div>
-                <div class="col-6"><label class="form-label small">Current Balance</label><input name="current_balance" type="number" min="0" step="1" value="{{ old('current_balance', (int) $customer->current_balance) }}" class="form-control js-whole-number" placeholder="Current balance"></div>
-                <div class="col-12"><input name="address" value="{{ $customer->address }}" class="form-control" placeholder="Address"></div>
-                <div class="col-12"><button class="btn btn-outline-primary btn-sm">Save Changes</button></div>
-            </form>
-        </div>@endcompanyCan
-    </div>
-    <div class="col-lg-8">
-        <div class="tf-card p-4 mb-4">
-            <h3 class="h5">Customer Ledger</h3>
-            <x-table>
-                <thead><tr><th>Date</th><th>Voucher / Order</th><th>Account</th><th>Description</th><th>Debit</th><th>Credit</th></tr></thead>
+        </section>
+
+        <section class="tf-card tf-customer-ledger-card p-0" aria-labelledby="customer-ledger-title">
+            <div class="tf-customer-ledger-heading"><div><span class="tf-dashboard-eyebrow">Ledger</span><h2 id="customer-ledger-title" class="h5 mb-1">Customer Ledger</h2><p class="tf-muted small mb-0">Posted account activity for this customer.</p></div></div>
+            <x-table class="tf-customer-ledger-table">
+                <thead><tr><th>Date</th><th>Voucher / Order</th><th>Account</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
                 <tbody>
                 @forelse($journalLines as $line)
-                    <tr><td>{{ $line->journalEntry?->entry_date?->format('M d, Y') }}</td><td>{{ $line->journalEntry?->voucher_number }}</td><td>{{ $line->account?->name }}</td><td>{{ $line->description }}</td><td>Rs {{ number_format($line->debit) }}</td><td>Rs {{ number_format($line->credit) }}</td></tr>
+                    <tr><td>{{ $line->journalEntry?->entry_date?->format('d M Y') ?: '—' }}</td><td>{{ $line->journalEntry?->voucher_number ?: '—' }}</td><td>{{ $line->account?->name ?: '—' }}</td><td>{{ $line->description ?: '—' }}</td><td class="text-end text-nowrap">Rs {{ number_format($line->debit) }}</td><td class="text-end text-nowrap">Rs {{ number_format($line->credit) }}</td></tr>
                 @empty
-                    @foreach($customer->ledgers as $ledger)<tr><td>{{ $ledger->created_at->format('M d') }}</td><td>{{ $ledger->order?->order_number ?? '-' }}</td><td>Legacy Khata</td><td>{{ $ledger->description }}</td><td>Rs {{ number_format($ledger->amount) }}</td><td>-</td></tr>@endforeach
-                    @if($customer->ledgers->isEmpty())<tr><td colspan="6" class="text-center tf-muted py-4">No ledger entries.</td></tr>@endif
+                    @forelse($customer->ledgers as $ledger)
+                        <tr><td>{{ $ledger->created_at?->format('d M Y') ?: '—' }}</td><td>{{ $ledger->order?->order_number ?? '—' }}</td><td>Legacy Khata</td><td>{{ $ledger->description ?: '—' }}</td><td class="text-end text-nowrap">Rs {{ number_format($ledger->amount) }}</td><td class="text-end">—</td></tr>
+                    @empty
+                        <tr><td colspan="6" class="text-center tf-muted py-5">No ledger entries found.</td></tr>
+                    @endforelse
                 @endforelse
                 </tbody>
             </x-table>
-        </div>
-    </div>
+            @if(method_exists($journalLines, 'links') && $journalLines->hasPages())<div class="tf-customer-ledger-pagination px-3 py-3">{{ $journalLines->withQueryString()->links('pagination::bootstrap-5') }}</div>@endif
+        </section>
+    </main>
+
+    <aside class="col-lg-4">
+        <section class="tf-card tf-customer-side-card p-4 mb-4" aria-labelledby="customer-controls-title">
+            <span class="tf-dashboard-eyebrow">Quick controls</span><h2 id="customer-controls-title" class="h5 mb-3">Customer Actions</h2>
+            <a href="{{ route('business.customers.statement', $customer) }}" class="btn btn-outline-primary w-100"><i class="bi bi-receipt me-2"></i>Export Statement</a>
+            @companyCan('customers.archive')
+                <div class="border-top mt-4 pt-4"><small class="text-danger fw-semibold d-block mb-2">Danger zone</small>
+                    <div class="dropdown"><button class="btn btn-outline-danger w-100 dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport"><i class="bi bi-three-dots me-1"></i>More Actions</button><div class="dropdown-menu dropdown-menu-end shadow-sm w-100">
+                        <form method="POST" action="{{ route('business.customers.archive', $customer) }}" data-tf-confirm-message="Archive {{ $customer->display_name }}? Its history will be retained." data-tf-confirm-title="Archive customer" data-tf-confirm-button="Archive Customer" data-tf-confirm-color="#f59e0b">@csrf @method('PATCH')<button class="dropdown-item text-warning"><i class="bi bi-archive me-2"></i>Archive</button></form>
+                        <form method="POST" action="{{ route('business.customers.destroy', $customer) }}" data-tf-confirm-message="Delete {{ $customer->display_name }}? Customers with history will be archived instead." data-tf-confirm-title="Delete customer" data-tf-confirm-button="Delete Customer" data-tf-confirm-color="#ef4444">@csrf @method('DELETE')<button class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Delete</button></form>
+                    </div></div>
+                </div>
+            @endcompanyCan
+        </section>
+    </aside>
 </div>
+
+@companyCan('customers.edit')
+<section class="tf-card tf-customer-update-card p-4 mt-4" id="update-customer" aria-labelledby="update-customer-title">
+    <div class="mb-3"><span class="tf-dashboard-eyebrow">Customer details</span><h2 id="update-customer-title" class="h5 mb-1">Update Customer</h2><p class="tf-muted small mb-0">Update contact and credit details. Status is managed from the profile switch above.</p></div>
+    <form method="POST" action="{{ route('business.customers.update', $customer) }}" class="row g-3">
+        @csrf @method('PATCH')
+        <input type="hidden" name="status" value="{{ $customer->status }}">
+        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-name">Owner Name <span class="text-danger">*</span></label><input id="update-customer-name" name="name" value="{{ old('name', $customer->name) }}" class="form-control" required></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-shop">Shop Name</label><input id="update-customer-shop" name="shop_name" value="{{ old('shop_name', $customer->business_name) }}" class="form-control"></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-phone">Phone</label><x-phone-input id="update-customer-phone" name="phone" :value="old('phone', $customer->phone)" :error="$errors->first('phone')" /></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-email">Email</label><input id="update-customer-email" name="email" type="email" value="{{ old('email', $customer->email) }}" class="form-control"></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-city">City</label><input id="update-customer-city" name="city" value="{{ old('city', $customer->city) }}" class="form-control"></div>
+        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-province">Province / Location</label><input id="update-customer-province" name="province" value="{{ old('province', $customer->province) }}" class="form-control"></div>
+        <div class="col-12 col-md-4"><label class="form-label" for="update-customer-type">Type</label><select id="update-customer-type" name="customer_type" class="form-select">@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option value="{{ $type }}" @selected(old('customer_type', $customer->customer_type) === $type)>{{ $type }}</option>@endforeach</select></div>
+        <div class="col-12 col-md-4"><label class="form-label" for="update-customer-credit-limit">Credit Limit</label><div class="input-group"><span class="input-group-text">Rs</span><input id="update-customer-credit-limit" name="credit_limit" type="number" min="0" step="1" value="{{ old('credit_limit', (int) $customer->credit_limit) }}" class="form-control js-whole-number"></div><small class="tf-muted">Defaults to Rs 0.</small></div>
+        <div class="col-12 col-md-4"><label class="form-label" for="update-customer-balance">Current Balance</label><div class="input-group"><span class="input-group-text">Rs</span><input id="update-customer-balance" name="current_balance" type="number" min="0" step="1" value="{{ old('current_balance', (int) $customer->current_balance) }}" class="form-control js-whole-number"></div></div>
+        <div class="col-12"><label class="form-label" for="update-customer-address">Address</label><input id="update-customer-address" name="address" value="{{ old('address', $customer->address) }}" class="form-control"></div>
+        <div class="col-12 d-flex justify-content-end"><button class="btn btn-tf-primary px-4">Save Changes</button></div>
+    </form>
+</section>
+@endcompanyCan
 @endsection

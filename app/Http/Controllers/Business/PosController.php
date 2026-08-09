@@ -12,13 +12,12 @@ use App\Models\PosRegister;
 use App\Models\Product;
 use App\Models\SalesQuotation;
 use App\Services\PosSaleService;
-use App\Services\PosDeliveryAssignmentService;
 use App\Services\ThermalDocumentService;
 use Illuminate\Http\Request;
 
 class PosController extends Controller
 {
-    public function __construct(private PosSaleService $pos, private PosDeliveryAssignmentService $deliveryAssignments, private ThermalDocumentService $thermal) {}
+    public function __construct(private PosSaleService $pos, private ThermalDocumentService $thermal) {}
 
     public function index(Request $request)
     {
@@ -123,12 +122,9 @@ class PosController extends Controller
     public function history(Request $request)
     {
         $orders = Order::with(['customer', 'invoice'])->where('business_id', $request->user()->business_id)->where('sale_channel', 'pos')->latest('order_date')->paginate(12);
-        $canAssignDelivery = app(\App\Services\CompanyPermissionService::class)->allowsUser($request->user(), 'deliveries.assign');
 
         return view('business.pos.history', [
             'orders' => $orders,
-            'canAssignDelivery' => $canAssignDelivery,
-            'deliveryStaff' => $canAssignDelivery ? $this->deliveryAssignments->eligibleStaff($request->user()) : collect(),
         ]);
     }
 

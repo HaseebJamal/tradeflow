@@ -41,10 +41,10 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            // Keep public file URLs relative to the incoming request host. This
-            // lets the application work over LAN even when DHCP changes this
-            // computer's IP address, without storing an IP address in .env.
-            'url' => env('FILESYSTEM_PUBLIC_URL', '/storage'),
+            // Use the app-served public-media route. This is reliable on
+            // Windows/XAMPP too, where public/storage can be a regular folder
+            // rather than the required symbolic link.
+            'url' => env('FILESYSTEM_PUBLIC_URL', rtrim((string) env('APP_URL', ''), '/').'/media'),
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

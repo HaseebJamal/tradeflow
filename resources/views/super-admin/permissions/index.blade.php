@@ -1,7 +1,7 @@
 @extends('layouts.dashboard')
 
 @section('page-title', $title)
-@section('page-subtitle', 'Manage each company\'s complete module and action access in one place')
+@section('page-subtitle', 'Manage complete module and action access for every company in one place')
 
 @section('content')
     @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif

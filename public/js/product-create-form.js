@@ -10,6 +10,7 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
     const addButton = form.querySelector('[data-add-product-section]');
     const errors = form.querySelector('[data-product-create-errors]');
     const isAsync = form.dataset.productCreateAsync === 'true';
+    let submissionConfirmed = false;
     const fieldFor = (kind) => kind === 'category' ? 'category_id' : 'unit_id';
     const catalogs = {
         category: [...form.querySelectorAll('[data-product-field="category_id"] option')].filter((option) => option.value).map((option) => ({ value: option.value, text: option.text })),
@@ -170,6 +171,26 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         syncCatalogs();
         clearErrors();
     };
+    const confirmProductSave = async () => {
+        const count = sections?.querySelectorAll('[data-product-section]').length || 1;
+        const productLabel = count === 1 ? 'this product' : `${count} products`;
+
+        if (window.Swal?.fire) {
+            const result = await window.Swal.fire({
+                cancelButtonText: 'Review details',
+                confirmButtonText: 'Yes, save',
+                icon: 'question',
+                reverseButtons: true,
+                showCancelButton: true,
+                text: `You are about to save ${productLabel}.`,
+                title: 'Save product details?',
+            });
+
+            return result.isConfirmed;
+        }
+
+        return window.confirm(`Save ${productLabel}?`);
+    };
 
     if (isAsync) {
         form.closest('.modal')?.addEventListener('hidden.bs.modal', resetForNextCreate);
@@ -284,6 +305,14 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
                 invalidField?.focus();
                 return;
             }
+            if (!submissionConfirmed) {
+                event.preventDefault();
+                if (!await confirmProductSave()) return;
+
+                submissionConfirmed = true;
+                form.requestSubmit();
+                return;
+            }
             const submit = form.querySelector('[data-save-products]');
             if (submit?.dataset.submitting === 'true') { event.preventDefault(); return; }
             if (submit) { submit.dataset.submitting = 'true'; submit.disabled = true; submit.textContent = 'Saving Products...'; }
@@ -293,6 +322,7 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         event.preventDefault();
         clearErrors();
         if (!form.checkValidity()) { form.reportValidity(); return; }
+        if (!await confirmProductSave()) return;
         const submit = form.querySelector('[data-save-products]');
         if (submit?.dataset.submitting === 'true') return;
         submit.dataset.submitting = 'true';

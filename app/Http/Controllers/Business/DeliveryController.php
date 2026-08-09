@@ -57,8 +57,10 @@ class DeliveryController extends Controller
             'clear' => ['nullable', 'boolean'],
         ]);
         $dateColumn = $filters['date_type'] ?? 'created_at';
-        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? now()->startOfMonth()->toDateString());
-        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? now()->toDateString());
+        // Keep the initial delivery queue unfiltered. Date constraints remain
+        // available through the toolbar, but must not silently hide records.
+        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? null);
+        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? null);
         $query = $this->deliveryQuery()->with(['invoice.order.customer', 'invoice.order.payments', 'order.customer', 'order.payments', 'staff']);
         $query
             ->when($filters['order_number'] ?? null, fn ($q, $value) => $q->where(function ($delivery) use ($value) {
@@ -87,6 +89,22 @@ class DeliveryController extends Controller
             ->with(['invoice.order', 'order'])
             ->get()
             ->sum(fn (Delivery $delivery) => $delivery->sourceOrder() ? (float) $delivery->sourceOrder()->balance : (float) $delivery->amount);
+        $invoiceOptions = $this->deliveryQuery()
+            ->with(['invoice', 'order.invoice'])
+            ->latest()
+            ->limit(100)
+            ->get()
+            ->map(function (Delivery $delivery) {
+                $invoiceNumber = $delivery->sourceInvoice()?->invoice_number
+                    ?? $delivery->sourceOrder()?->order_number;
+
+                return $invoiceNumber
+                    ? ['value' => $invoiceNumber, 'label' => $invoiceNumber]
+                    : null;
+            })
+            ->filter()
+            ->unique('value')
+            ->values();
 
         return view('business.deliveries.index', [
             'deliveries' => $deliveries,
@@ -100,6 +118,7 @@ class DeliveryController extends Controller
             ],
             'staff' => $this->posDeliveryAssignments->eligibleStaff($request->user()),
             'customers' => \App\Models\Customer::where('business_id', auth()->user()->business_id)->orderBy('name')->get(),
+            'invoiceOptions' => $invoiceOptions,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
             'dateType' => $dateColumn,
@@ -124,7 +143,12 @@ class DeliveryController extends Controller
 
     public function update(Request $request, Delivery $delivery)
     {
-        $this->requirePermission('deliveries.edit');
+        abort_unless(
+            $this->permissions->allowsUser($request->user(), 'deliveries.view')
+                && ($this->permissions->allowsUser($request->user(), 'deliveries.edit')
+                    || $this->permissions->allowsUser($request->user(), 'deliveries.assign')),
+            403
+        );
         $delivery = $this->scopedDelivery($delivery);
         $data = $request->validate([
             'delivery_staff_id' => ['nullable', 'exists:users,id'],
@@ -143,7 +167,12 @@ class DeliveryController extends Controller
             }
             $data['delivery_staff_id'] = $staff->id;
         }
-        if (!empty($data['delivery_staff_id']) && (int) $data['delivery_staff_id'] !== (int) $delivery->delivery_staff_id && is_null($delivery->assigned_at)) $data['assigned_at'] = now();
+        if (!empty($data['delivery_staff_id']) && (int) $data['delivery_staff_id'] !== (int) $delivery->delivery_staff_id) {
+            $data['assigned_at'] = $delivery->assigned_at ?? now();
+            if ($delivery->status === 'Pending') {
+                $data['status'] = 'Assigned';
+            }
+        }
         $delivery->update($data);
         $this->activity->record($delivery->business_id, 'Deliveries', 'Delivery details updated', $delivery->id, null, ['invoice_id' => $delivery->invoice_id]);
 
@@ -154,7 +183,10 @@ class DeliveryController extends Controller
     {
         $this->requirePermission('deliveries.update_status');
         $delivery = $this->scopedDelivery($delivery);
-        if (!in_array($delivery->status, ['Pending', 'Assigned', 'Picked Up'], true)) {
+        if (! $delivery->delivery_staff_id) {
+            return back()->withErrors(['delivery_staff_id' => 'Assign a delivery staff member before starting this delivery.']);
+        }
+        if (!in_array($delivery->status, ['Assigned', 'Picked Up'], true)) {
             return back()->withErrors(['status' => 'Only assigned deliveries can be started.']);
         }
         $delivery->update(['status' => 'Out For Delivery', 'started_at' => $delivery->started_at ?? now()]);

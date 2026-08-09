@@ -93,6 +93,13 @@ class UnitController extends Controller
         $unit->update(['status' => $unit->status === 'Active' ? 'Inactive' : 'Active']);
         $this->audit($request, $unit->status === 'Active' ? 'Unit Activated' : 'Unit Deactivated', $unit);
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Unit '.($unit->status === 'Active' ? 'activated' : 'deactivated').' successfully.',
+                'status' => $unit->status,
+            ]);
+        }
+
         return back()->with('success', 'Unit status updated.');
     }
 

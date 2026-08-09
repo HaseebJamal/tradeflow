@@ -52,7 +52,7 @@
             @if(filled($context['whatsapp_digits']))
                 <form method="POST" action="{{ route('admin.companies.onboarding.whatsapp', $company) }}" target="_blank">
                     @csrf
-                    <button class="btn btn-outline-success" type="submit"><i class="bi bi-whatsapp me-1"></i>Open WhatsApp Draft</button>
+                    <button class="btn btn-outline-success" type="submit"><i class="bi bi-whatsapp me-1"></i>Open WhatsApp</button>
                 </form>
             @else
                 <button class="btn btn-outline-secondary" type="button" disabled title="The owner has no valid international phone number."><i class="bi bi-whatsapp me-1"></i>Open WhatsApp Draft</button>

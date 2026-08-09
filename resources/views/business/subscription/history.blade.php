@@ -110,27 +110,27 @@
                 <thead>
                     <tr>
                         <th><a class="text-decoration-none text-reset" href="{{ $billingSortUrl('paid_at') }}">Date &amp; Time <i class="bi {{ $sortIcon('paid_at', $billingSort, $billingDirection) }} small"></i></a></th>
-                        <th>Billing Cycle</th>
+                        <th>Plan</th><th>Billing Cycle</th>
                         <th><a class="text-decoration-none text-reset" href="{{ $billingSortUrl('amount') }}">Amount <i class="bi {{ $sortIcon('amount', $billingSort, $billingDirection) }} small"></i></a></th>
                         <th><a class="text-decoration-none text-reset" href="{{ $billingSortUrl('method') }}">Payment Method <i class="bi {{ $sortIcon('method', $billingSort, $billingDirection) }} small"></i></a></th>
                         <th><a class="text-decoration-none text-reset" href="{{ $billingSortUrl('reference_number') }}">Reference <i class="bi {{ $sortIcon('reference_number', $billingSort, $billingDirection) }} small"></i></a></th>
                         <th><a class="text-decoration-none text-reset" href="{{ $billingSortUrl('status') }}">Status <i class="bi {{ $sortIcon('status', $billingSort, $billingDirection) }} small"></i></a></th>
-                        <th><a class="text-decoration-none text-reset" href="{{ $billingSortUrl('recorded_by') }}">Recorded By <i class="bi {{ $sortIcon('recorded_by', $billingSort, $billingDirection) }} small"></i></a></th>
+                        <th><a class="text-decoration-none text-reset" href="{{ $billingSortUrl('recorded_by') }}">Recorded By <i class="bi {{ $sortIcon('recorded_by', $billingSort, $billingDirection) }} small"></i></a></th><th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($billingHistory as $payment)
                         <tr>
                             <td class="text-nowrap"><x-date-time :value="$payment->paid_at" /></td>
-                            <td>{{ $payment->subscription?->billing_cycle ?? '—' }}</td>
+                            <td>{{ $payment->plan?->name ?? $payment->subscription?->plan?->name ?? '—' }}</td><td>{{ $payment->billing_cycle ?? $payment->subscription?->billing_cycle ?? '—' }}</td>
                             <td class="text-nowrap">Rs {{ number_format($payment->amount, 2) }}</td>
                             <td>{{ $payment->method ?: '—' }}</td>
                             <td>{{ $payment->reference_number ?: '—' }}</td>
                             <td><span class="tf-badge {{ $statusBadge($payment->status) }}">{{ $payment->status }}</span></td>
-                            <td>{{ $payment->recordedBy?->name ?? 'System' }}</td>
+                            <td>{{ $payment->recordedBy?->name ?? 'System' }}</td><td class="text-nowrap">@if($payment->status === 'Received')<a class="btn btn-sm btn-outline-success" href="{{ route('business.subscription.payments.receipt', $payment) }}">Receipt</a>@else <span class="tf-muted small">Verification pending</span>@endif</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-center tf-muted py-5">No billing payments match the selected filters.</td></tr>
+                        <tr><td colspan="9" class="text-center tf-muted py-5">No billing payments match the selected filters.</td></tr>
                     @endforelse
                 </tbody>
             </x-table>

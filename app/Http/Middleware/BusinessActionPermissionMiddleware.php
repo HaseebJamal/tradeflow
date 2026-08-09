@@ -21,6 +21,18 @@ class BusinessActionPermissionMiddleware
         $user = $request->user();
         $companyPermissions = app(CompanyPermissionService::class);
         foreach (array_unique([$permission, ...$this->requiredPermissionsFor($route)]) as $requiredPermission) {
+            // Assigning a queued delivery is intentionally available to users
+            // with the dedicated delivery-assignment permission. They do not
+            // need broad delivery-edit access just to select a driver and
+            // complete the delivery details for that assignment.
+            $canAssignQueuedDelivery = $route === 'business.deliveries.update'
+                && $requiredPermission === 'deliveries.edit'
+                && $companyPermissions->allows($user, 'deliveries.assign')
+                && $companyPermissions->allowsUser($user, 'deliveries.assign');
+
+            if ($canAssignQueuedDelivery) {
+                continue;
+            }
             if (!$user || !$companyPermissions->allows($user, $requiredPermission)) {
                 return $this->deny($request, 'This feature is not enabled for your company.');
             }

@@ -34,6 +34,7 @@ use App\Services\AccountingService;
 use App\Services\BusinessWorkspaceAccessService;
 use App\Services\BusinessDocumentFooterService;
 use App\Services\CompanyOnboardingAccessService;
+use App\Services\PermanentlyDeleteBusinessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -99,6 +100,10 @@ class CompanyController extends Controller
             default => $query->latest(),
         };
 
+        $summary = Business::query()
+            ->selectRaw("COUNT(*) as total, SUM(CASE WHEN LOWER(status) = 'approved' THEN 1 ELSE 0 END) as approved, SUM(CASE WHEN LOWER(status) = 'pending' THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN LOWER(status) = 'suspended' THEN 1 ELSE 0 END) as suspended, SUM(CASE WHEN LOWER(status) = 'rejected' THEN 1 ELSE 0 END) as rejected")
+            ->first();
+
         return view('super-admin.companies.index', [
             'companies' => $query->paginate(10)->withQueryString(),
             'statusFilter' => $status,
@@ -107,6 +112,7 @@ class CompanyController extends Controller
                 ->unique()->sort()->values(),
             'plans' => \App\Models\SubscriptionPlan::orderBy('name')->get(['id', 'name']),
             'filters' => $filters,
+            'summary' => $summary,
         ]);
     }
 
@@ -199,8 +205,15 @@ class CompanyController extends Controller
                 if ($request->hasFile('company_logo')) {
                     $company->update(['logo' => $request->file('company_logo')->store('business-logos', 'public')]);
                 }
-                if ($request->hasFile('business_document')) {
-                    BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public'), 'status' => 'Pending Verification']);
+                foreach (['cnic_image', 'business_document', 'shop_image'] as $documentType) {
+                    if ($request->hasFile($documentType)) {
+                        BusinessDocument::create([
+                            'business_id' => $company->id,
+                            'document_type' => $documentType,
+                            'file_path' => $request->file($documentType)->store('business-documents', 'public'),
+                            'status' => 'Pending Verification',
+                        ]);
+                    }
                 }
 
                 app(AccountingService::class)->ensureDefaultAccounts($company->id);
@@ -362,10 +375,24 @@ class CompanyController extends Controller
         $this->audit($request, 'company viewed', $company, null, null);
 
         return view('super-admin.companies.show', [
-            'company' => $company->load(['owner', 'users.staffProfile', 'documents', 'documentFooter', 'selectedPlan', 'subscription.plan', 'approvalLogs.changedBy', 'companyPermissions']),
+            'company' => $company->load([
+                'owner',
+                'users.staffProfile',
+                'documents',
+                'documentFooter',
+                'selectedPlan',
+                'subscription.plan',
+                'approvalLogs' => fn ($query) => $query->latest('changed_at')->take(5),
+                'approvalLogs.changedBy',
+                'companyPermissions',
+            ]),
             'adminPlans' => SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->orderBy('sort_order')->orderBy('name')->get(),
-            'activity' => ActivityLog::with('actor')->where('business_id', $company->id)->latest('occurred_at')->take(20)->get(),
-            'loginHistory' => ActivityLog::with('actor')->where('business_id', $company->id)->latest('occurred_at')->take(10)->get(),
+            'activity' => ActivityLog::with('actor')->where('business_id', $company->id)->latest('occurred_at')->take(8)->get(),
+            'loginHistory' => ActivityLog::with('actor')->where('business_id', $company->id)->latest('occurred_at')->take(8)->get(),
+            'pendingDetailRequestCount' => BusinessDetailChangeRequest::query()
+                ->where('business_id', $company->id)
+                ->where('status', 'Pending')
+                ->count(),
         ]);
     }
 
@@ -424,7 +451,7 @@ class CompanyController extends Controller
             $footer->fill([
                 'footer_title' => $data['footer_title'] ?: $lockedCompany->business_name,
                 'footer_message' => $data['footer_message'] ?: null,
-                'powered_by_text' => $data['powered_by_text'] ?: 'Powered by TradeFlow',
+                'powered_by_text' => $data['powered_by_text'] ?: app(BusinessDocumentFooterService::class)->platformPoweredByText(),
                 'show_company_name' => $request->boolean('show_company_name'),
                 'show_footer_title' => $request->boolean('show_footer_title'),
                 'show_footer_message' => $request->boolean('show_footer_message'),
@@ -525,6 +552,7 @@ class CompanyController extends Controller
     public function update(UpdateCompanyRequest $request, Business $company)
     {
         $data = $request->validated();
+        $this->ensureVerificationDocumentsAreNew($request, $company);
         $old = $company->only(['business_name', 'business_type', 'business_description', 'phone', 'address', 'city', 'registration_number', 'tax_number', 'logo']);
 
         $oldOwnerImage = $company->owner?->profile_image;
@@ -532,8 +560,9 @@ class CompanyController extends Controller
             ? $request->file('owner_profile_image')->store('profile_images', 'public')
             : null;
 
+        $replacedDocumentPaths = [];
         try {
-        DB::transaction(function () use ($request, $company, $data, $newOwnerImage) {
+        DB::transaction(function () use ($request, $company, $data, $newOwnerImage, &$replacedDocumentPaths) {
             $company->update(collect($data)->only(['business_name', 'business_type', 'business_description', 'phone', 'address', 'city', 'registration_number', 'tax_number'])->all());
             $company->owner?->update([
                 'name' => $data['owner_name'],
@@ -554,9 +583,7 @@ class CompanyController extends Controller
                 if ($company->logo) Storage::disk('public')->delete($company->logo);
                 $company->update(['logo' => $request->file('company_logo')->store('business-logos', 'public')]);
             }
-            if ($request->hasFile('business_document')) {
-                BusinessDocument::create(['business_id' => $company->id, 'document_type' => 'business_document', 'file_path' => $request->file('business_document')->store('business-documents', 'public'), 'status' => 'Pending Verification']);
-            }
+            $replacedDocumentPaths = $this->saveUploadedVerificationDocuments($request, $company);
         });
         } catch (Throwable $exception) {
             if ($newOwnerImage) {
@@ -569,12 +596,137 @@ class CompanyController extends Controller
         if (($newOwnerImage || $request->boolean('remove_owner_profile_image')) && $oldOwnerImage) {
             Storage::disk('public')->delete($oldOwnerImage);
         }
+        if ($replacedDocumentPaths) {
+            Storage::disk('public')->delete($replacedDocumentPaths);
+        }
 
         $company->refresh()->load('owner');
         $company->owner?->notify(new BusinessDetailsUpdatedNotification($company, $request->user()));
         $this->audit($request, 'company updated', $company, $old, $company->only(array_keys($old)));
 
         return redirect()->route('admin.companies.show', $company)->with('success', 'Company details updated.');
+    }
+
+    /** Add only missing registration documents for a company. */
+    public function uploadVerificationDocuments(Request $request, Business $company)
+    {
+        $request->validate([
+            'cnic_image' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'business_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'shop_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+        ]);
+
+        $types = ['cnic_image', 'business_document', 'shop_image'];
+        if (! collect($types)->contains(fn (string $type) => $request->hasFile($type))) {
+            throw ValidationException::withMessages([
+                'documents' => 'Choose at least one verification document to upload.',
+            ]);
+        }
+
+        $this->ensureVerificationDocumentsAreNew($request, $company);
+
+        $replacedPaths = DB::transaction(fn () => $this->saveUploadedVerificationDocuments($request, $company));
+        if ($replacedPaths) {
+            Storage::disk('public')->delete($replacedPaths);
+        }
+
+        $this->audit($request, 'verification documents uploaded', $company, null, [
+            'document_types' => collect($types)->filter(fn (string $type) => $request->hasFile($type))->values()->all(),
+        ]);
+
+        return back()->with('success', 'Missing verification documents uploaded and queued for review.');
+    }
+
+    /**
+     * This method is called inside a database transaction by the company
+     * update and document-upload flows.
+     *
+     * @return array<int, string>
+     */
+    private function saveUploadedVerificationDocuments(Request $request, Business $company): array
+    {
+        $replacedPaths = [];
+
+        foreach (['cnic_image', 'business_document', 'shop_image'] as $documentType) {
+            if (! $request->hasFile($documentType)) {
+                continue;
+            }
+
+            $document = BusinessDocument::query()
+                ->where('business_id', $company->id)
+                ->where('document_type', $documentType)
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
+
+            if (filled($document?->file_path)) {
+                throw ValidationException::withMessages([
+                    $documentType => $this->verificationDocumentLabel($documentType).' has already been uploaded and cannot be replaced.',
+                ]);
+            }
+
+            $newPath = $request->file($documentType)->store('business-documents', 'public');
+
+            $attributes = [
+                'file_path' => $newPath,
+                'status' => 'Pending Verification',
+                'verified_by' => null,
+                'verified_at' => null,
+                'rejected_by' => null,
+                'rejected_at' => null,
+                'rejection_reason' => null,
+                'reupload_requested_by' => null,
+                'reupload_requested_at' => null,
+                'reupload_reason' => null,
+            ];
+
+            if ($document) {
+                $document->update($attributes);
+                continue;
+            }
+
+            BusinessDocument::create($attributes + [
+                'business_id' => $company->id,
+                'document_type' => $documentType,
+            ]);
+        }
+
+        return array_values(array_unique($replacedPaths));
+    }
+
+    /** Prevent both UI and direct requests from overwriting registration evidence. */
+    private function ensureVerificationDocumentsAreNew(Request $request, Business $company): void
+    {
+        $requestedTypes = collect(['cnic_image', 'business_document', 'shop_image'])
+            ->filter(fn (string $type) => $request->hasFile($type));
+
+        if ($requestedTypes->isEmpty()) {
+            return;
+        }
+
+        $existingTypes = $company->documents()
+            ->whereIn('document_type', $requestedTypes->all())
+            ->whereNotNull('file_path')
+            ->pluck('document_type');
+
+        if ($existingTypes->isEmpty()) {
+            return;
+        }
+
+        throw ValidationException::withMessages(
+            $existingTypes->mapWithKeys(fn (string $type) => [
+                $type => $this->verificationDocumentLabel($type).' has already been uploaded and cannot be replaced.',
+            ])->all()
+        );
+    }
+
+    private function verificationDocumentLabel(string $type): string
+    {
+        return [
+            'cnic_image' => 'CNIC',
+            'business_document' => 'Business document',
+            'shop_image' => 'Shop image',
+        ][$type] ?? 'Verification document';
     }
 
     public function detailChangeRequests(Request $request)
@@ -1035,52 +1187,11 @@ class CompanyController extends Controller
         return back()->with('success', 'Company restored.');
     }
 
-    public function destroy(Request $request, Business $company)
+    public function destroy(Request $request, Business $company, PermanentlyDeleteBusinessService $deletionService)
     {
-        $data = $request->validate([
-            'admin_password' => ['required', 'string'],
-        ]);
+        $deletionService->delete($company, $request);
 
-        if (!Hash::check($data['admin_password'], (string) auth()->user()->password)) {
-            return back()->withErrors(['admin_password' => 'The Super Admin password is incorrect. The company was not deleted.']);
-        }
-
-        $counts = $this->companyDeletionCounts($company);
-        $totalRecords = array_sum($counts);
-        $companyName = $company->business_name;
-
-        DB::transaction(function () use ($request, $company): void {
-            // Related operational records are protected by database foreign-key
-            // cascades. Users are deliberately removed afterwards because their
-            // business_id is nullable to support platform accounts.
-            $this->audit($request, 'company permanently deleted', $company, $company->only(['business_name', 'status']), null);
-            $company->delete();
-
-            User::withTrashed()
-                ->where('business_id', $company->id)
-                ->get()
-                ->each
-                ->forceDelete();
-        });
-
-        return redirect()->route('admin.companies.index')->with(
-            'success',
-            $companyName.' and '.$totalRecords.' related record'.($totalRecords === 1 ? '' : 's').' were permanently deleted after Super Admin password verification.'
-        );
-    }
-
-    private function companyDeletionCounts(Business $company): array
-    {
-        return [
-            'staff_accounts' => User::withTrashed()->where('business_id', $company->id)->count(),
-            'customers' => Customer::withTrashed()->where('business_id', $company->id)->count(),
-            'products' => Product::withTrashed()->where('business_id', $company->id)->count(),
-            'orders' => Order::withTrashed()->where('business_id', $company->id)->count(),
-            'payments' => Payment::where('business_id', $company->id)->count(),
-            'deliveries' => Delivery::where('business_id', $company->id)->count(),
-            'invoices' => Invoice::where('business_id', $company->id)->count(),
-            'suppliers' => Supplier::withTrashed()->where('business_id', $company->id)->count(),
-        ];
+        return redirect()->route('admin.companies.index')->with('success', 'Company permanently deleted.');
     }
 
     private function audit(Request $request, string $action, Business $company, ?array $old, ?array $new): void

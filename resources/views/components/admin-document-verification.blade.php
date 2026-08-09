@@ -15,11 +15,10 @@
             'Re-upload Requested' => 'tf-badge-warning',
             default => 'tf-badge-warning',
         };
-        $url = asset('storage/'.$document->file_path);
+        $url = \Illuminate\Support\Facades\Storage::disk('public')->url($document->file_path);
         $isPdf = str_ends_with(strtolower($document->file_path), '.pdf');
         $availableActions = match ($status) {
-            'Pending Verification' => ['approve', 'reject', 'request_reupload'],
-            'Rejected' => ['request_reupload'],
+            'Pending Verification' => ['approve', 'reject'],
             default => [],
         };
     @endphp
@@ -31,9 +30,6 @@
         @endif
         @if(in_array('reject', $availableActions, true))
             <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#document-reject-{{ $document->id }}">Reject</button>
-        @endif
-        @if(in_array('request_reupload', $availableActions, true))
-            <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#document-reupload-{{ $document->id }}">Request Re-upload</button>
         @endif
     </div>
 
@@ -51,7 +47,7 @@
         </div></div>
     </div>
 
-    @foreach(['reject' => ['Reject '.$label, 'reject', 'btn-danger', 'Reason for rejection'], 'reupload' => ['Request '.$label.' Re-upload', 'request_reupload', 'btn-warning', 'Reason for re-upload request']] as $key => [$title, $decision, $buttonClass, $reasonLabel])
+    @foreach(['reject' => ['Reject '.$label, 'reject', 'btn-danger', 'Reason for rejection']] as $key => [$title, $decision, $buttonClass, $reasonLabel])
         @if(in_array($decision, $availableActions, true))
         <div class="modal fade" id="document-{{ $key }}-{{ $document->id }}" tabindex="-1" aria-hidden="true" data-tf-document-modal>
             <div class="modal-dialog"><div class="modal-content"><form method="POST" action="{{ route('admin.companies.documents.verify', [$company, $document]) }}">

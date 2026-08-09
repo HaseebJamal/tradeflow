@@ -4,10 +4,20 @@
     $notificationContextBusiness = $notificationUser?->role === 'super_admin' && session('super_admin_business_context_id')
         ? \App\Models\Business::find(session('super_admin_business_context_id'))
         : null;
-    // Notifications are personal records. Every authenticated dashboard user
-    // may read only their own notification relation, regardless of optional
-    // operational module permissions.
-    $canUseNotifications = (bool) $notificationUser;
+    $notificationBusiness = $notificationContextBusiness
+        ?? ($notificationUser?->role === 'business_owner'
+            ? ($notificationUser?->ownedBusiness ?? $notificationUser?->business)
+            : $notificationUser?->business);
+
+    // The bell is a notification-module entry point, so it must follow the
+    // same company permission gate as the notification routes. Platform-level
+    // Super Admin notifications remain available outside a company context.
+    $canUseNotifications = (bool) $notificationUser
+        && ($isAdminArea && ! $notificationContextBusiness
+            ? $notificationUser->role === 'super_admin'
+            : ($notificationBusiness
+                && app(\App\Services\CompanyPermissionService::class)
+                    ->allowsUser($notificationUser, 'notifications.view', $notificationBusiness)));
     $notificationIndexRoute = $isAdminArea
         ? route('admin.notifications.index')
         : ($notificationContextBusiness ? route('business.context.notifications') : route('notifications.index'));

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Business;
+use App\Models\PlatformPayment;
 use App\Models\SubscriptionChangeRequest;
 use App\Models\BusinessFooterChangeRequest;
 use Illuminate\Http\Request;
@@ -72,13 +73,17 @@ class AdminNotificationController extends Controller
 
         $data = $item->data ?? [];
         $category = data_get($data, 'category', 'general');
+        $payment = $this->paymentFor($data);
+        $subscriptionRequest = $payment ? null : $this->subscriptionRequestFor($data);
         $action = match ($category) {
             'company_registration' => ['label' => 'Review Company Registration', 'url' => route('admin.notifications.review', $item->id)],
             'business_detail_change_request' => ['label' => 'Review Request', 'url' => route('admin.notifications.review', $item->id)],
             'footer_change_request' => ['label' => 'Review Footer Change', 'url' => route('admin.notifications.review', $item->id)],
-            'subscription' => $this->subscriptionRequestFor($data)
+            'subscription' => $subscriptionRequest
                 ? ['label' => 'Review Subscription Request', 'url' => route('admin.notifications.review', $item->id)]
-                : null,
+                : ($payment
+                    ? ['label' => 'Review Payment', 'url' => route('admin.notifications.review', $item->id)]
+                    : null),
             default => null,
         };
 
@@ -149,20 +154,24 @@ class AdminNotificationController extends Controller
         }
 
         if ($category === 'subscription') {
-            $changeRequest = $this->subscriptionRequestFor($item->data ?? []);
-            if (! $changeRequest) {
-                return redirect()->route('admin.notifications.index')
-                    ->with('warning', 'The related subscription request is no longer available.');
-            }
-
+            $data = $item->data ?? [];
+            $payment = $this->paymentFor($data);
+            $changeRequest = $payment ? null : $this->subscriptionRequestFor($data);
             if (! $item->read_at) {
                 $item->markAsRead();
             }
 
-            return redirect()->route('admin.business-requests.index', [
-                'source' => 'subscription',
-                'request_id' => $changeRequest->id,
-            ]);
+            if ($changeRequest) {
+                return redirect()->route('admin.business-requests.index')
+                    ->with('warning', 'Subscription-change requests are no longer available.');
+            }
+
+            if ($payment) {
+                return redirect()->route('admin.payments', ['payment_id' => $payment->id]);
+            }
+
+            return redirect()->route('admin.notifications.index')
+                ->with('warning', 'The related subscription record is no longer available.');
         }
 
         abort_unless($category === 'company_registration', 404);
@@ -198,6 +207,22 @@ class AdminNotificationController extends Controller
 
         return $businessId === null || (int) $changeRequest->business_id === (int) $businessId
             ? $changeRequest
+            : null;
+    }
+
+    private function paymentFor(array $data): ?PlatformPayment
+    {
+        $isLegacyPayment = str_contains(strtolower((string) data_get($data, 'title')), 'payment')
+            || str_contains(strtolower((string) data_get($data, 'message')), 'subscription payment');
+        if (data_get($data, 'related_type') !== PlatformPayment::class && ! $isLegacyPayment) {
+            return null;
+        }
+
+        $paymentId = data_get($data, 'payment_id') ?: data_get($data, 'related_id');
+        $payment = $paymentId ? PlatformPayment::query()->find($paymentId) : null;
+
+        return $payment && ((int) $payment->business_id === (int) data_get($data, 'business_id'))
+            ? $payment
             : null;
     }
 }

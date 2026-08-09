@@ -167,6 +167,23 @@ class CompanyPermissionService
         Cache::forget('tradeflow.company-permissions.'.$companyId);
     }
 
+    /**
+     * Automatic trials are full-workspace trials. This intentionally grants
+     * every currently active, canonical permission while leaving platform and
+     * staff-role permissions untouched.
+     */
+    public function grantFullAccess(Business $business): void
+    {
+        $this->activeDefinitions()->each(function (PermissionDefinition $definition) use ($business): void {
+            CompanyPermission::updateOrCreate(
+                ['company_id' => $business->id, 'permission_key' => $definition->permission_key],
+                ['allowed' => true, 'assigned_by' => null],
+            );
+        });
+
+        $this->clear($business->id);
+    }
+
     private function definitionKeys(): array
     {
         return Cache::remember('tradeflow.permission-definition-keys', now()->addMinutes(30), function (): array {

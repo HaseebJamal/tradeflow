@@ -7,6 +7,27 @@ use App\Models\BusinessDocumentFooter;
 
 class BusinessDocumentFooterService
 {
+    public function platformPoweredByText(): string
+    {
+        $platformName = trim((string) app(PlatformSettingsService::class)->current()->company_name);
+
+        return 'Powered by '.($platformName !== '' ? $platformName : config('app.name', 'Profit Point'));
+    }
+
+    public function displayedPoweredByText(?BusinessDocumentFooter $footer): string
+    {
+        $configuredText = trim((string) ($footer?->powered_by_text ?? ''));
+
+        // The platform-owned value must follow a platform rename. This also
+        // upgrades legacy “Powered by TradeFlow” records without changing
+        // each business footer in the database.
+        if ($configuredText === '' || str_starts_with($configuredText, 'Powered by ')) {
+            return $this->platformPoweredByText();
+        }
+
+        return $configuredText;
+    }
+
     /** Return the one authoritative footer record, creating safe defaults for legacy companies. */
     public function for(Business $business): BusinessDocumentFooter
     {
@@ -39,7 +60,7 @@ class BusinessDocumentFooterService
             'show_website' => true,
             'show_tax_number' => true,
             'show_powered_by' => true,
-            'powered_by_text' => 'Powered by TradeFlow',
+            'powered_by_text' => $this->platformPoweredByText(),
         ];
     }
 

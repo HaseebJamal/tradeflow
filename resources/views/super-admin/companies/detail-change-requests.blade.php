@@ -31,7 +31,7 @@
                         <div class="small tf-muted">A protected login email update was requested. The value is not displayed to Super Admins.</div>
                     @else
                         <div class="small tf-muted">Current: {{ $field === 'logo' ? (data_get($changeRequest->old_values, $field) ? 'Logo uploaded' : 'No logo') : (data_get($changeRequest->old_values, $field) ?: '—') }}</div>
-                        @if($field === 'logo')<div class="mt-1">@if($requested)<img src="{{ asset('storage/'.$requested) }}" class="navbar-avatar" alt="Requested logo">@else No logo change @endif</div>@else<strong>Requested: {{ $requested ?: '—' }}</strong>@endif
+                        @if($field === 'logo')<div class="mt-1">@if($requested)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($requested) }}" class="navbar-avatar" alt="Requested logo">@else No logo change @endif</div>@else<strong>Requested: {{ $requested ?: '—' }}</strong>@endif
                     @endif
                 </div></div>
             @endforeach

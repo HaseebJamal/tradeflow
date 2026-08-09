@@ -9,7 +9,7 @@
         <div class="tf-card p-4">
             <div class="d-flex align-items-center gap-3 mb-4">
                 @if($hasLogo)
-                    <img src="{{ asset('storage/'.$business->logo) }}?v={{ $business->updated_at?->timestamp }}" class="profile-avatar" alt="{{ $business->business_name }} logo">
+                    <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($business->logo) }}?v={{ $business->updated_at?->timestamp }}" class="profile-avatar" alt="{{ $business->business_name }} logo">
                 @else
                     <span class="profile-avatar tf-avatar-empty"><i class="bi bi-building"></i></span>
                 @endif

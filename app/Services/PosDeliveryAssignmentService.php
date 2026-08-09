@@ -57,19 +57,39 @@ class PosDeliveryAssignmentService
             if ($invoice->order->status === 'Returned') {
                 throw ValidationException::withMessages(['invoice' => 'This invoice has been fully returned and cannot be assigned for delivery.']);
             }
-            if (Delivery::where('business_id', $actor->business_id)
+            if (! $invoice->order->delivery_required) {
+                throw ValidationException::withMessages(['invoice' => 'This POS sale was not marked as requiring delivery at checkout.']);
+            }
+
+            $existingDelivery = Delivery::where('business_id', $actor->business_id)
                 ->where(function ($delivery) use ($invoice) {
                     $delivery->where('invoice_id', $invoice->id)
                         ->orWhere('order_id', $invoice->order_id);
                 })
                 ->lockForUpdate()
-                ->exists()) {
-                throw ValidationException::withMessages(['invoice' => 'Delivery has already been assigned for this invoice.']);
-            }
+                ->first();
 
             $staff = $this->eligibleStaff($actor)->firstWhere('id', (int) $data['delivery_staff_id']);
             if (! $staff) {
                 throw ValidationException::withMessages(['delivery_staff_id' => 'Select an active delivery staff member from this business.']);
+            }
+
+            // Delivery-required POS sales already have one Pending queue
+            // record. Assign that record instead of creating a duplicate.
+            if ($existingDelivery) {
+                if ($existingDelivery->delivery_staff_id || $existingDelivery->status !== 'Pending') {
+                    throw ValidationException::withMessages(['invoice' => 'Delivery has already been assigned for this invoice.']);
+                }
+
+                $existingDelivery->update([
+                    'delivery_staff_id' => $staff->id,
+                    'address' => $data['address'],
+                    'note' => $data['note'] ?? $existingDelivery->note,
+                    'status' => 'Assigned',
+                    'assigned_at' => now(),
+                ]);
+
+                return $existingDelivery;
             }
 
             $delivery = Delivery::create([

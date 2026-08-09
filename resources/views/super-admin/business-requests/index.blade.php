@@ -1,33 +1,42 @@
 @extends('layouts.dashboard')
 
 @section('page-title', 'Business Requests')
-@section('page-subtitle', 'Review subscription, footer, and business change requests')
+@section('page-subtitle', 'Review new company registrations and verification details')
 
 @section('content')
     @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
     @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
-    <div class="tf-card p-3 mb-3">
-        <form method="GET" class="row g-2 align-items-end">
+    <header class="tf-module-header"><div><span class="tf-dashboard-eyebrow">Business onboarding</span><h2>Business requests</h2><p>Review incoming business requests and verification details.</p></div></header>
+
+    <section class="tf-module-summary tf-request-summary-cards" aria-label="Business request summary">
+        @foreach([['Pending', $summary['pending'] ?? 0, 'bi-hourglass-split', 'amber'], ['Approved', $summary['approved'] ?? 0, 'bi-check2-circle', 'green'], ['Rejected', $summary['rejected'] ?? 0, 'bi-x-circle', 'red'], ['Changes requested', $summary['changes_requested'] ?? 0, 'bi-arrow-repeat', 'violet']] as [$label, $count, $icon, $tone])
+            <div class="tf-module-summary-card"><span class="tf-module-summary-icon is-{{ $tone }}"><i class="bi {{ $icon }}"></i></span><span><small>{{ $label }}</small><strong>{{ number_format($count) }}</strong></span></div>
+        @endforeach
+    </section>
+
+    <div class="tf-card tf-module-filter-card mb-3">
+        <div class="tf-module-filter-heading"><div><strong>Review queue</strong><small>Search and filter real business requests.</small></div></div>
+        <form method="GET" class="row g-3 align-items-end">
             <div class="col-xl-3 col-md-4"><label class="form-label">Search</label><input name="search" class="form-control" value="{{ $filters['search'] ?? '' }}" placeholder="Request ID, business, or owner"></div>
             <div class="col-xl-2 col-md-4"><label class="form-label">Request Type</label><select name="type" class="form-select"><option value="">Select Type</option>@foreach($types as $type)<option value="{{ $type }}" @selected(($filters['type'] ?? '') === $type)>{{ $type }}</option>@endforeach</select></div>
             <div class="col-xl-2 col-md-4"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All statuses</option>@foreach(['Pending', 'Approved', 'Rejected', 'Cancelled', 'Changes Requested', 'Scheduled', 'Completed', 'Active', 'Applied'] as $status)<option value="{{ $status }}" @selected(($filters['status'] ?? '') === $status)>{{ $status }}</option>@endforeach</select></div>
             <div class="col-xl-2 col-md-3"><label class="form-label">Date From</label><input type="date" name="date_from" class="form-control" value="{{ $filters['date_from'] ?? '' }}"></div>
             <div class="col-xl-2 col-md-3"><label class="form-label">Date To</label><input type="date" name="date_to" class="form-control" value="{{ $filters['date_to'] ?? '' }}"></div>
-            <div class="col-xl-auto col-md-3 d-flex gap-1"><button class="btn btn-outline-primary">Filter</button><a href="{{ route('admin.business-requests.index', ['clear' => 1]) }}" class="btn btn-outline-secondary">Clear</a></div>
+            <div class="col-xl-auto col-md-3 d-flex gap-2"><button class="btn btn-tf-primary">Apply filters</button><a href="{{ route('admin.business-requests.index', ['clear' => 1]) }}" class="btn btn-outline-secondary">Clear</a></div>
         </form>
     </div>
 
-    <x-table class="tf-business-request-table">
-        <thead><tr><th>Request ID</th><th>Business</th><th>Owner</th><th>Request Type</th><th>Change Summary</th><th>Status</th><th>Requested</th><th>Reviewed By</th><th>Reviewed At</th><th class="text-end">Actions</th></tr></thead>
+    <section class="tf-module-table-card"><div class="tf-module-table-heading"><div><h3>Business request queue</h3><p>Review requests and their current processing status.</p></div><span class="tf-table-result-count">{{ $requests->total() }} results</span></div>
+    <x-table class="tf-business-request-table tf-module-table">
+        <thead><tr><th>Request</th><th>Business</th><th>Owner</th><th>Request type</th><th>Request status</th><th>Submitted</th><th class="text-end">Actions</th></tr></thead>
         <tbody>
             @forelse($requests as $requestItem)
                 <tr>
-                    <td class="text-nowrap">#{{ $requestItem->source }}-{{ $requestItem->id }}</td>
-                    <td>{{ $requestItem->business_name }}</td>
-                    <td>{{ $requestItem->owner_name ?? 'Owner not assigned' }}</td>
-                    <td>{{ $requestItem->request_type }}</td>
-                    <td class="tf-request-summary" title="{{ $requestItem->change_summary }}">{{ $requestItem->change_summary }}</td>
+                    <td><span class="tf-request-id">#{{ $requestItem->source }}-{{ $requestItem->id }}</span><small class="tf-request-summary" title="{{ $requestItem->change_summary }}">{{ $requestItem->change_summary }}</small></td>
+                    <td><div class="tf-company-cell"><span>{{ str($requestItem->business_name)->substr(0, 1)->upper() }}</span><div><strong>{{ $requestItem->business_name }}</strong><small>Business request</small></div></div></td>
+                    <td><div class="tf-table-person"><strong>{{ $requestItem->owner_name ?? 'Owner not assigned' }}</strong><small>{{ $requestItem->reviewer_name ? 'Reviewed by '.$requestItem->reviewer_name : 'Awaiting review' }}</small></div></td>
+                    <td><span class="tf-plan-badge">{{ $requestItem->request_type }}</span></td>
                     <td><span class="tf-badge {{ in_array($requestItem->status, ['Approved', 'Active', 'Applied', 'Completed'], true) ? 'tf-badge-success' : (in_array($requestItem->status, ['Rejected', 'Cancelled'], true) ? 'tf-badge-danger' : 'tf-badge-warning') }}">{{ $requestItem->status }}</span></td>
                     <td>{{ \Illuminate\Support\Carbon::parse($requestItem->requested_at)->format('d M, Y h:i A') }}</td>
                     <td>{{ $requestItem->reviewer_name ?? 'Not reviewed' }}</td>
@@ -38,29 +47,30 @@
                                 && in_array($requestItem->status, ['Pending', 'Changes Requested'], true);
                             $requestUrl = route('admin.business-requests.show', ['source' => $requestItem->source, 'requestId' => $requestItem->id]);
                         @endphp
-                        <div class="dropdown">
-                            <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" data-bs-boundary="viewport">Actions</button>
+                        <div class="d-inline-flex align-items-center gap-2">@if($canReview)<button type="button" class="btn btn-sm btn-tf-primary tf-table-review-action" data-tf-business-request-full data-url="{{ $requestUrl }}">Review</button>@else<button type="button" class="btn btn-sm btn-outline-primary tf-table-view-action" data-tf-business-request-quick data-url="{{ $requestUrl }}">View</button>@endif<div class="dropdown">
+                            <button type="button" class="btn btn-sm btn-outline-secondary tf-table-more-action" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-label="More actions for request {{ $requestItem->id }}"><i class="bi bi-three-dots"></i></button>
                             <div class="dropdown-menu dropdown-menu-end shadow">
-                                <button class="dropdown-item" data-tf-business-request-details data-url="{{ $requestUrl }}"><i class="bi bi-eye me-2"></i>View Details</button>
-                                <button class="dropdown-item" data-tf-business-request-details data-url="{{ $requestUrl }}" data-history-only="1"><i class="bi bi-clock-history me-2"></i>View History</button>
+                                <button class="dropdown-item" data-tf-business-request-full data-url="{{ $requestUrl }}"><i class="bi bi-file-earmark-text me-2"></i>View Details</button>
+                                <button class="dropdown-item" data-tf-business-request-history data-url="{{ $requestUrl }}"><i class="bi bi-clock-history me-2"></i>View History</button>
                                 @if($canReview)
                                     <div class="dropdown-divider"></div>
-                                    <button class="dropdown-item text-success" data-tf-business-request-details data-url="{{ $requestUrl }}" data-decision="Approved">Approve</button>
-                                    <button class="dropdown-item text-warning" data-tf-business-request-details data-url="{{ $requestUrl }}" data-decision="Changes Requested">Request Changes</button>
-                                    <button class="dropdown-item text-danger" data-tf-business-request-details data-url="{{ $requestUrl }}" data-decision="Rejected">Reject</button>
+                                    <button class="dropdown-item text-success" data-tf-business-request-full data-url="{{ $requestUrl }}" data-decision="Approved">Approve</button>
+                                    <button class="dropdown-item text-warning" data-tf-business-request-full data-url="{{ $requestUrl }}" data-decision="Changes Requested">Request Changes</button>
+                                    <button class="dropdown-item text-danger" data-tf-business-request-full data-url="{{ $requestUrl }}" data-decision="Rejected">Reject</button>
                                 @endif
                             </div>
-                        </div>
+                        </div></div>
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="9" class="text-center tf-muted py-4">No business requests found.</td></tr>
+                <tr><td colspan="7" class="text-center tf-muted py-5"><i class="bi bi-inboxes d-block fs-4 mb-2 text-blue"></i>No business requests found.</td></tr>
             @endforelse
         </tbody>
     </x-table>
+    </section>
     <div class="mt-3">{{ $requests->links() }}</div>
 
-    <div class="modal fade" id="businessRequestDetailsModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5">Business Request Details</h2><p class="tf-muted mb-0" data-tf-request-subtitle></p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
+    <div class="modal fade" id="businessRequestFullModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5">Request Details</h2><p class="tf-muted mb-0" data-tf-request-subtitle></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body">
         <section class="mb-4"><h3 class="h6">Request Overview</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-request-overview></tbody></table></div></section>
         <section class="mb-4"><h3 class="h6">Current Information</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-request-current></tbody></table></div></section>
         <section class="mb-4"><h3 class="h6">Requested Changes</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-request-requested></tbody></table></div></section>
@@ -69,12 +79,16 @@
         <section><h3 class="h6">Status History</h3><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Status</th><th>Performed By</th><th>Date &amp; Time</th><th>Reason / Admin Note</th></tr></thead><tbody data-tf-request-history></tbody></table></div></section>
         <form class="border-top pt-3 mt-3 d-none" data-tf-request-review method="POST"><input type="hidden" name="_token" value="{{ csrf_token() }}"><input type="hidden" name="_method" value="PATCH"><div class="row g-3"><div class="col-md-4"><label class="form-label">Decision</label><select name="decision" class="form-select" data-native-select data-tf-request-decision></select></div><div class="col-md-8"><label class="form-label" data-tf-request-note-label>Admin message</label><textarea class="form-control" rows="2" maxlength="2000" data-tf-request-note></textarea></div></div><button class="btn btn-tf-primary mt-3">Save Decision</button></form>
     </div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div></div></div></div>
+
+    <div class="modal fade" id="businessRequestQuickModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5">Business Request Details</h2><p class="tf-muted mb-0" data-tf-quick-subtitle></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><section class="mb-4"><h3 class="h6">Request Overview</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-quick-overview></tbody></table></div></section><section class="mb-4"><h3 class="h6">Current Information</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-quick-current></tbody></table></div></section><section><h3 class="h6">Requested Change</h3><div class="table-responsive"><table class="table table-sm mb-0"><tbody data-tf-quick-requested></tbody></table></div></section></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div></div></div></div>
+
+    <div class="modal fade" id="businessRequestHistoryModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5">Request History</h2><p class="tf-muted mb-0" data-tf-history-subtitle></p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><div class="tf-request-timeline" data-tf-request-timeline></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div></div></div></div>
 @endsection
 
 @push('scripts')
 <script>
 (() => {
-    const modal = document.getElementById('businessRequestDetailsModal');
+    const modal = document.getElementById('businessRequestFullModal');
     const instance = modal ? bootstrap.Modal.getOrCreateInstance(modal) : null;
     const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[char]));
     document.addEventListener('click', async event => {
@@ -102,14 +116,14 @@
 </script>
 <script>
 (() => {
-    const modal = document.getElementById('businessRequestDetailsModal');
+    const modal = document.getElementById('businessRequestFullModal');
     if (!modal) return;
     const instance = bootstrap.Modal.getOrCreateInstance(modal);
     const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
     const rows = values => Object.entries(values || {}).map(([label, value]) => `<tr><th class="fw-medium text-nowrap">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join('') || '<tr><td class="tf-muted">No details available.</td></tr>';
 
     document.addEventListener('click', async event => {
-        const trigger = event.target.closest('[data-tf-business-request-details]');
+        const trigger = event.target.closest('[data-tf-business-request-full]');
         if (!trigger) return;
 
         try {
@@ -206,6 +220,50 @@
         } catch (error) {
             window.Swal ? Swal.fire('Unavailable', 'The related request is no longer available.', 'warning') : alert('The related request is no longer available.');
         }
+    });
+})();
+</script>
+<script>
+(() => {
+    const quickModal = document.getElementById('businessRequestQuickModal');
+    const historyModal = document.getElementById('businessRequestHistoryModal');
+    if (!quickModal || !historyModal) return;
+
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+    const rows = values => Object.entries(values || {}).map(([label, value]) => `<tr><th class="fw-medium text-nowrap">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join('') || '<tr><td class="tf-muted">No details available.</td></tr>';
+    const loadRequest = async (trigger, onLoaded) => {
+        try {
+            const response = await fetch(trigger.dataset.url, {headers: {'Accept': 'application/json'}});
+            if (!response.ok) throw new Error('Request unavailable');
+            onLoaded(await response.json());
+        } catch (error) {
+            window.Swal ? Swal.fire('Unavailable', 'The related request is no longer available.', 'warning') : alert('The related request is no longer available.');
+        }
+    };
+
+    document.addEventListener('click', event => {
+        const quickTrigger = event.target.closest('[data-tf-business-request-quick]');
+        if (quickTrigger) {
+            loadRequest(quickTrigger, request => {
+                quickModal.querySelector('[data-tf-quick-subtitle]').textContent = `${request.type} · ${request.status}`;
+                quickModal.querySelector('[data-tf-quick-overview]').innerHTML = rows({'Request ID': `#${request.source}-${request.id}`, 'Request type': request.type, 'Current status': request.status, 'Business name': request.business, 'Owner name': request.owner, 'Requested by': request.requested_by, 'Requested at': request.requested_at, 'Request reason': request.reason || 'Not provided'});
+                quickModal.querySelector('[data-tf-quick-current]').innerHTML = rows(request.current_details);
+                quickModal.querySelector('[data-tf-quick-requested]').innerHTML = rows(request.requested_details);
+                bootstrap.Modal.getOrCreateInstance(quickModal).show();
+            });
+            return;
+        }
+
+        const historyTrigger = event.target.closest('[data-tf-business-request-history]');
+        if (!historyTrigger) return;
+        loadRequest(historyTrigger, request => {
+            historyModal.querySelector('[data-tf-history-subtitle]').textContent = `${request.type} · ${request.business}`;
+            const history = request.history || [];
+            historyModal.querySelector('[data-tf-request-timeline]').innerHTML = history.length
+                ? history.map(item => `<article class="tf-request-timeline-item"><span><i class="bi bi-check2"></i></span><div><strong>${escapeHtml(item.status)}</strong><p>${escapeHtml(item.message || 'No additional detail provided.')}</p><small>${escapeHtml(item.at)} · ${escapeHtml(item.performed_by)}</small></div></article>`).join('')
+                : '<div class="tf-dashboard-empty"><i class="bi bi-clock-history"></i><span>No additional history is available for this request.</span></div>';
+            bootstrap.Modal.getOrCreateInstance(historyModal).show();
+        });
     });
 })();
 </script>

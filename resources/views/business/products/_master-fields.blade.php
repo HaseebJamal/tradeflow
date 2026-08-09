@@ -23,12 +23,12 @@
 @endphp
 
 <div class="row g-3" data-product-master-fields>
-    <div class="col-md-6">
+    <div class="col-lg-5 col-md-12">
         <label class="form-label" for="{{ $fieldId('product_name') }}">Product Name <span class="text-danger">*</span></label>
         <input id="{{ $fieldId('product_name') }}" name="{{ $nested ? $fieldName('product_name') : $productNameField }}" data-product-field="product_name" class="form-control @error($productNameError) is-invalid @enderror" value="{{ $productName }}" required>
         @error($productNameError)<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
-    <div class="col-md-3">
+    <div class="col-lg-4 col-md-6">
         <label class="form-label" for="{{ $fieldId('category_id') }}">Category <span class="text-danger">*</span></label>
         <div class="d-flex gap-2" data-product-select-control>
             <select id="{{ $fieldId('category_id') }}" name="{{ $fieldName('category_id') }}" data-product-field="category_id" class="form-select @error($errorKey('category_id')) is-invalid @enderror" required @disabled(($categories ?? collect())->isEmpty())>
@@ -37,12 +37,12 @@
                     <option value="{{ $category->id }}" @selected((string) $fieldValue('category_id') === (string) $category->id)>{{ $category->name }}</option>
                 @endforeach
             </select>
-            @companyCan('categories.create')<button type="button" class="btn btn-sm btn-outline-primary px-2 py-1 lh-sm text-nowrap" data-inline-catalog-open="category" aria-label="Create new category">+ New</button>@endcompanyCan
+            @companyCan('categories.create')<button type="button" class="btn btn-outline-primary tf-product-catalog-add" data-inline-catalog-open="category" aria-label="Create new category">+ New</button>@endcompanyCan
         </div>
         @error($errorKey('category_id'))<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
         @if(($categories ?? collect())->isEmpty())<div class="form-text text-danger" data-product-catalog-empty="category">Please create a category first.</div>@endif
     </div>
-    <div class="col-md-3">
+    <div class="col-lg-3 col-md-6">
         <label class="form-label" for="{{ $fieldId('unit_id') }}">Unit <span class="text-danger">*</span></label>
         <div class="d-flex gap-2" data-product-select-control>
             <select id="{{ $fieldId('unit_id') }}" name="{{ $fieldName('unit_id') }}" data-product-field="unit_id" class="form-select @error($errorKey('unit_id')) is-invalid @enderror" required @disabled(($units ?? collect())->isEmpty())>
@@ -51,7 +51,7 @@
                     <option value="{{ $unit->id }}" @selected((string) $fieldValue('unit_id') === (string) $unit->id)>{{ $unit->unit_name }}</option>
                 @endforeach
             </select>
-            @companyCan('units.create')<button type="button" class="btn btn-sm btn-outline-primary px-2 py-1 lh-sm text-nowrap" data-inline-catalog-open="unit" aria-label="Create new unit">+ New</button>@endcompanyCan
+            @companyCan('units.create')<button type="button" class="btn btn-outline-primary tf-product-catalog-add" data-inline-catalog-open="unit" aria-label="Create new unit">+ New</button>@endcompanyCan
         </div>
         @error($errorKey('unit_id'))<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
         @if(($units ?? collect())->isEmpty())<div class="form-text text-danger" data-product-catalog-empty="unit">Please create a unit first.</div>@endif

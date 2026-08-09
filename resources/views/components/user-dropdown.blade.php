@@ -21,6 +21,7 @@
         && ($isBusinessContext || $user?->role === 'business_owner' || $canBusinessSettings);
     $displayName = $user?->name ?: 'User';
     $navbarDisplayName = $displayName;
+    $avatarInitials = str($displayName)->trim()->explode(' ')->filter()->take(2)->map(fn ($part) => str($part)->substr(0, 1)->upper())->implode('');
     $displayRole = str($user?->role ?: 'user')->replace('_', ' ')->title();
     $displayImage = $user?->profile_image;
     $displayUpdatedAt = $user?->updated_at;
@@ -31,11 +32,8 @@
     $displayImagePath = preg_replace('#^(?:public/|storage/)#', '', $displayImagePath);
     $settingsRoute = route('profile.edit');
     $hasProfileImage = filled($displayImagePath) && \Illuminate\Support\Facades\Storage::disk('public')->exists($displayImagePath);
-    // The application may run from a subdirectory (for example
-    // /tradeflow/public). asset() keeps that base path, unlike a disk URL
-    // beginning with /storage which would point at the web-server root.
     $displayImageUrl = $hasProfileImage
-        ? asset('storage/'.$displayImagePath).'?v='.($displayUpdatedAt?->timestamp ?? '')
+        ? \Illuminate\Support\Facades\Storage::disk('public')->url($displayImagePath).'?v='.($displayUpdatedAt?->timestamp ?? '')
         : null;
     $hidePasswordOption = in_array($user?->role, ['super_admin', 'business_owner'], true);
     $showAccountSettings = false;
@@ -51,16 +49,17 @@
         @if($hasProfileImage)
             <img src="{{ $displayImageUrl }}" class="navbar-avatar" alt="{{ $navbarDisplayName }}">
         @else
-            <span class="navbar-avatar tf-avatar-empty"><i class="bi bi-person"></i></span>
+            <span class="navbar-avatar tf-avatar-empty" aria-hidden="true">{{ $avatarInitials ?: 'U' }}</span>
         @endif
         <span class="d-none d-md-inline">{{ $navbarDisplayName }}</span>
+        <i class="bi bi-chevron-down small text-muted d-none d-md-inline" aria-hidden="true"></i>
     </button>
     <div class="dropdown-menu dropdown-menu-end shadow-sm tf-user-menu">
         <div class="px-3 py-3 text-center border-bottom">
             @if($hasProfileImage)
                 <img src="{{ $displayImageUrl }}" class="tf-avatar tf-avatar-lg mb-2" alt="{{ $displayName }}">
             @else
-                <span class="tf-avatar tf-avatar-lg tf-avatar-empty mb-2"><i class="bi bi-person"></i></span>
+                <span class="tf-avatar tf-avatar-lg tf-avatar-empty mb-2">{{ $avatarInitials ?: 'U' }}</span>
             @endif
             <div class="fw-bold">{{ $displayName }}</div>
             <small class="tf-muted">{{ $displayRole }}</small>

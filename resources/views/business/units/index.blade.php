@@ -23,7 +23,7 @@
                 <td><strong>{{ $unit->unit_name }}</strong>@if($unit->description)<div class="small tf-muted text-truncate" style="max-width:280px">{{ $unit->description }}</div>@endif</td>
                 <td><code>{{ $unit->short_code }}</code></td>
                 <td>{{ $unit->unit_type }}</td>
-                <td><span class="tf-badge {{ $unit->trashed() ? 'tf-badge-warning' : ($unit->status === 'Active' ? 'tf-badge-success' : 'tf-badge-secondary') }}">{{ $unit->trashed() ? 'Archived' : $unit->status }}</span></td>
+                <td>@if($unit->trashed())<span class="tf-badge tf-badge-warning">Archived</span>@else @companyCan('units.status')<x-inline-status-switch :status="$unit->status" :action="route('business.units.status', $unit)" entity="unit {{ $unit->unit_name }}" />@else<span class="tf-badge {{ $unit->status === 'Active' ? 'tf-badge-success' : 'tf-badge-secondary' }}">{{ $unit->status }}</span>@endcompanyCan @endif</td>
                 <td><x-date-time :value="$unit->created_at" /></td>
                 <td class="text-end text-nowrap">
                     <div class="dropdown">
@@ -32,7 +32,6 @@
                             <a class="dropdown-item" href="{{ route('business.units.show', $unit->id) }}"><i class="bi bi-eye me-2"></i>View</a>
                             @if(!$unit->trashed())
                                 @companyCan('units.edit')<a class="dropdown-item" href="{{ route('business.units.edit', $unit) }}"><i class="bi bi-pencil me-2"></i>Edit</a>@endcompanyCan
-                                @companyCan('units.status')<form method="POST" action="{{ route('business.units.status', $unit) }}">@csrf @method('PATCH')<button class="dropdown-item" type="submit"><i class="bi bi-toggle-{{ $unit->status === 'Active' ? 'on' : 'off' }} me-2"></i>{{ $unit->status === 'Active' ? 'Deactivate' : 'Activate' }}</button></form>@endcompanyCan
                                 @companyCan('units.archive')<form method="POST" action="{{ route('business.units.archive', $unit) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning" type="submit"><i class="bi bi-archive me-2"></i>Archive</button></form>@endcompanyCan
                                 @companyCan('units.delete')<form method="POST" action="{{ route('business.units.destroy', $unit) }}" onsubmit="return confirm('Delete this unused unit permanently?')">@csrf @method('DELETE')<button class="dropdown-item text-danger" type="submit"><i class="bi bi-trash me-2"></i>Delete</button></form>@endcompanyCan
                             @else

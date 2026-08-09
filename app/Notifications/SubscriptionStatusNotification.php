@@ -15,13 +15,14 @@ class SubscriptionStatusNotification extends Notification
         private readonly string $message,
         private readonly ?int $businessId = null,
         private readonly ?int $subscriptionRequestId = null,
+        private readonly array $metadata = [],
     ) {}
 
     public function via(object $notifiable): array { return ['database']; }
 
     public function toArray(object $notifiable): array
     {
-        return [
+        return array_merge([
             'category' => 'subscription',
             'title' => $this->title,
             'message' => $this->message,
@@ -31,6 +32,6 @@ class SubscriptionStatusNotification extends Notification
             'subscription_request_id' => $this->subscriptionRequestId,
             'related_type' => $this->subscriptionRequestId ? SubscriptionChangeRequest::class : null,
             'related_id' => $this->subscriptionRequestId,
-        ];
+        ], $this->metadata);
     }
 }

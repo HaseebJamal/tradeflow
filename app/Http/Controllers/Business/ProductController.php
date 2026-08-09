@@ -226,6 +226,33 @@ class ProductController extends Controller
         return redirect()->route('business.products.index')->with('success', 'Product updated successfully.');
     }
 
+    /** Update the existing binary catalogue availability without requiring a full product edit. */
+    public function updateStatus(Request $request, Product $product)
+    {
+        $this->authorizeBusiness($product->business_id);
+        $data = $request->validate(['status' => ['required', 'in:Active,Inactive']]);
+        $oldStatus = $product->status;
+        $product->update(['status' => $data['status']]);
+
+        AuditLog::create([
+            'business_id' => $product->business_id,
+            'module' => 'Products',
+            'action' => 'product_'.strtolower($data['status']),
+            'description' => ucfirst($data['status']).' product '.$product->name,
+            'record_type' => Product::class,
+            'record_id' => $product->id,
+            'old_values' => ['status' => $oldStatus],
+            'new_values' => ['status' => $data['status']],
+        ]);
+
+        $message = 'Product '.($data['status'] === 'Active' ? 'activated' : 'deactivated').' successfully.';
+        if ($request->expectsJson()) {
+            return response()->json(['message' => $message, 'status' => $product->status]);
+        }
+
+        return back()->with('success', $message);
+    }
+
     public function destroy(int $product)
     {
         $product = Product::withTrashed()

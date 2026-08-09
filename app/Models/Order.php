@@ -9,13 +9,14 @@ class Order extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['order_number', 'business_id', 'customer_id', 'retailer_id', 'created_by', 'order_date', 'subtotal', 'discount', 'discount_percentage', 'discount_amount', 'tax_rate', 'tax_amount', 'total', 'grand_total', 'paid_amount', 'cash_received', 'change_amount', 'balance', 'payment_type', 'payment_status', 'sale_channel', 'status', 'stock_restored_at', 'cancelled_at', 'voided_at', 'void_reason'];
+    protected $fillable = ['order_number', 'business_id', 'customer_id', 'retailer_id', 'created_by', 'order_date', 'subtotal', 'discount', 'discount_percentage', 'discount_amount', 'tax_rate', 'tax_amount', 'total', 'grand_total', 'paid_amount', 'cash_received', 'change_amount', 'balance', 'payment_type', 'payment_status', 'sale_channel', 'delivery_required', 'delivery_address', 'status', 'stock_restored_at', 'cancelled_at', 'voided_at', 'void_reason'];
 
     protected $casts = [
         'order_date' => 'datetime',
         'stock_restored_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'voided_at' => 'datetime',
+        'delivery_required' => 'boolean',
     ];
 
     public function business() { return $this->belongsTo(Business::class); }

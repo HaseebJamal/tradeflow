@@ -23,18 +23,6 @@
     ];
 @endphp
 
-@if(($canManageSubscription ?? false) && $subscription?->plan)
-    @php($expiry = $subscription->status === 'Trial' ? $subscription->trial_end_at : $subscription->ends_at)
-    <section class="tf-card p-3 mb-4" aria-label="Subscription summary">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <div><div class="tf-muted small">Current Plan</div><strong>{{ $subscription->plan->name }}</strong> <span class="tf-badge {{ in_array($subscription->status, ['Trial', 'Active'], true) ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $subscription->status }}</span></div>
-            <div><div class="tf-muted small">{{ $subscription->status === 'Trial' ? 'Trial ends' : 'Subscription expiry' }}</div><strong>{{ $expiry?->format('d M, Y') ?? 'Not scheduled' }}</strong></div>
-            <div><div class="tf-muted small">Plan usage</div><strong>{{ $productsCount ?? 0 }} / {{ number_format($subscription->plan->product_limit) }} Products</strong></div>
-            <a class="btn btn-outline-primary" href="{{ route('business.subscription.index') }}">Upgrade Plan</a>
-        </div>
-    </section>
-@endif
-
 @if(!$hasOperationalAccess)
     <div class="tf-card p-5 text-center">
         <i class="bi bi-shield-lock fs-2 text-warning"></i>

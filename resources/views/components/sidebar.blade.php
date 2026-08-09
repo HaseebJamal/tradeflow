@@ -46,26 +46,21 @@
                 ['Customers', 'bi-people', route('business.customers.index'), 'customers'],
                 ['POS', 'bi-calculator', route('business.pos.index'), 'pos'],
                 ['Deliveries', 'bi-truck', route('business.deliveries'), 'deliveries'],
-                ['Accounting / Ledger', 'bi-journal-text', route('business.khata'), 'accounting'],
+                ['Ledger', 'bi-journal-text', route('business.khata'), 'accounting'],
                 ['Expenses', 'bi-receipt-cutoff', route('business.expenses.index'), 'expenses'],
                 ['Reports', 'bi-graph-up', route('business.reports'), 'reports'],
-                ['Subscription', 'bi-credit-card', route('business.subscription.index'), 'subscriptions'],
                 ['Roles & Users', 'bi-person-badge', route('business.staff'), 'staff'],
                 ['Audit Logs', 'bi-activity', route('business.audit-logs.index'), 'audit_logs'],
             ]);
 
     if ($area === 'business') {
         $companyPermissions = app(\App\Services\CompanyPermissionService::class);
-        $subscriptionAccess = app(\App\Services\SubscriptionManagementAccessService::class);
-        $items = array_values(array_filter($items, function ($item) use ($companyPermissions, $subscriptionAccess) {
+        $items = array_values(array_filter($items, function ($item) use ($companyPermissions) {
             $module = $item[3] ?? null;
             if ($module === 'purchase_returns' && !$companyPermissions->allowsUser(auth()->user(), 'purchases.view')) {
                 return false;
             }
             if ($module === 'sales_returns' && !$companyPermissions->allowsUser(auth()->user(), 'sales.view')) {
-                return false;
-            }
-            if ($module === 'subscriptions' && !$subscriptionAccess->canManage(auth()->user())) {
                 return false;
             }
             $visibilityPermissions = $module === 'staff'
@@ -121,7 +116,7 @@
         [
             'key' => 'accounting',
             'parent' => $businessItemsByModule->get('accounting'),
-            'label' => 'Accounting / Ledger',
+            'label' => 'Ledger',
             'icon' => 'bi-journal-text',
             'routes' => ['business.khata', 'business.expenses.*'],
             'items' => array_values(array_filter([
@@ -136,7 +131,6 @@
         'deliveries' => ['business.deliveries*'],
         'suppliers' => ['business.suppliers.*'],
         'reports' => ['business.reports*'],
-        'subscriptions' => ['business.subscription.*'],
         'staff' => ['business.staff', 'business.staff.*'],
         'audit_logs' => ['business.audit-logs.*'],
         'units' => ['business.units.*'],
@@ -163,7 +157,6 @@
         ['type' => 'item', 'value' => $businessItemsByModule->get('suppliers')],
         ['type' => 'group', 'value' => $businessGroupsByKey->get('accounting')],
         ['type' => 'item', 'value' => $businessItemsByModule->get('reports')],
-        ['type' => 'item', 'value' => $businessItemsByModule->get('subscriptions')],
         ['type' => 'item', 'value' => $businessItemsByModule->get('staff')],
         ['type' => 'item', 'value' => $businessItemsByModule->get('audit_logs')],
     ];
@@ -177,11 +170,11 @@
         <a class="tf-brand text-white d-flex align-items-center mb-0" href="{{ route('public.home') }}">
             <span class="tf-brand-mark bg-blue tf-sidebar-company-mark">
                 @if($hasSidebarBusinessLogo)
-                    <img src="{{ asset('storage/'.$sidebarLogoPath) }}" alt="{{ $sidebarBrandName }} logo">
+                    <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($sidebarLogoPath) }}?v={{ $sidebarBusiness?->updated_at?->timestamp }}" alt="{{ $sidebarBrandName }} logo">
                 @elseif($hasSidebarPlatformLogo)
-                    <img src="{{ asset('storage/'.$sidebarPlatformLogoPath) }}" alt="{{ $platformSettings->company_name }} logo" class="tf-brand-logo">
+                    <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($sidebarPlatformLogoPath) }}?v={{ $platformSettings->updated_at?->timestamp }}" alt="{{ $platformSettings->company_name }} logo" class="tf-brand-logo">
                 @else
-                    <i class="bi bi-box-seam"></i>
+                    <i class="bi bi-boxes"></i>
                 @endif
             </span>
             <span class="tf-sidebar-text tf-sidebar-company-name" title="{{ $sidebarBrandName }}">{{ $sidebarBrandName }}</span>

@@ -19,8 +19,8 @@ class BusinessFooterChangeService
             'business_email' => 'Business Email',
             'website' => 'Website',
             'tax_number' => 'NTN / Tax Number',
-            'powered_by_text' => 'Powered by TradeFlow Text',
-            'show_powered_by' => 'Powered by TradeFlow Visibility',
+            'powered_by_text' => app(BusinessDocumentFooterService::class)->platformPoweredByText().' Text',
+            'show_powered_by' => app(BusinessDocumentFooterService::class)->platformPoweredByText().' Visibility',
         ];
     }
 
@@ -28,7 +28,7 @@ class BusinessFooterChangeService
     {
         return match ($field) {
             'business_email' => $business->owner?->email,
-            'powered_by_text' => $footer->powered_by_text ?: 'Powered by TradeFlow',
+            'powered_by_text' => app(BusinessDocumentFooterService::class)->displayedPoweredByText($footer),
             'show_powered_by' => $footer->show_powered_by ? '1' : '0',
             default => $business->{$field},
         };
@@ -40,7 +40,7 @@ class BusinessFooterChangeService
 
         if ($field === 'show_powered_by') {
             if (! in_array((string) $value, ['0', '1'], true)) {
-                throw ValidationException::withMessages(['requested_value' => 'Choose whether Powered by TradeFlow should be visible.']);
+                throw ValidationException::withMessages(['requested_value' => 'Choose whether '.app(BusinessDocumentFooterService::class)->platformPoweredByText().' should be visible.']);
             }
 
             return (string) $value;

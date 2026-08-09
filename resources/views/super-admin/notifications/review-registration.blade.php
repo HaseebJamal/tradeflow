@@ -26,7 +26,7 @@
     <div class="col-lg-8">
         <div class="tf-card p-4 mb-4">
             <div class="d-flex flex-wrap gap-3 align-items-center mb-4">
-                @if($business->logo)<img src="{{ asset('storage/'.$business->logo) }}" alt="{{ $business->business_name }} logo" class="rounded border" style="width:64px;height:64px;object-fit:cover">@else<span class="tf-icon-tile bg-blue text-white" style="width:64px;height:64px"><i class="bi bi-buildings fs-4"></i></span>@endif
+                @if($business->logo)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($business->logo) }}" alt="{{ $business->business_name }} logo" class="rounded border" style="width:64px;height:64px;object-fit:cover">@else<span class="tf-icon-tile bg-blue text-white" style="width:64px;height:64px"><i class="bi bi-buildings fs-4"></i></span>@endif
                 <div><h2 class="h4 mb-1">{{ $business->business_name }}</h2><p class="tf-muted mb-0">Submitted <x-date-time :value="$item->created_at" /></p></div>
                 @php($statusClass = match(strtolower($business->status)) { 'approved' => 'success', 'rejected', 'suspended' => 'danger', default => 'warning' })
                 <span class="tf-badge tf-badge-{{ $statusClass }} ms-lg-auto">{{ ucfirst($business->status) }}</span>
@@ -64,7 +64,7 @@
             @endif
         </div>
 
-        <div class="tf-card p-4"><h2 class="h5 mb-3">Verification documents</h2><div class="row g-2">@forelse($business->documents as $document)<div class="col-md-6"><a href="{{ asset('storage/'.$document->file_path) }}" target="_blank" class="d-flex align-items-center gap-2 border rounded p-3 text-decoration-none"><i class="bi bi-file-earmark-text fs-4 text-primary"></i><span>{{ Str::headline($document->document_type) }}<small class="d-block tf-muted">Open document</small></span></a></div>@empty<div class="col-12"><p class="tf-muted mb-0">No verification documents were submitted.</p></div>@endforelse</div></div>
+        <div class="tf-card p-4"><h2 class="h5 mb-3">Verification documents</h2><div class="row g-2">@forelse($business->documents as $document)<div class="col-md-6"><a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($document->file_path) }}" target="_blank" class="d-flex align-items-center gap-2 border rounded p-3 text-decoration-none"><i class="bi bi-file-earmark-text fs-4 text-primary"></i><span>{{ Str::headline($document->document_type) }}<small class="d-block tf-muted">Open document</small></span></a></div>@empty<div class="col-12"><p class="tf-muted mb-0">No verification documents were submitted.</p></div>@endforelse</div></div>
     </div>
 
     <div class="col-lg-4">

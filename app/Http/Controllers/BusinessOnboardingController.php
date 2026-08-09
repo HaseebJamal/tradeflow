@@ -4,52 +4,65 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Auth\RegisterBusinessRequest;
 use App\Models\Business;
-use App\Models\BusinessDocument;
-use App\Models\CompanyApprovalLog;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
+use App\Models\PlatformSetting;
 use App\Notifications\CompanyRegistrationNotification;
+use App\Notifications\SubscriptionStatusNotification;
+use App\Services\CompanyPermissionService;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class BusinessOnboardingController extends Controller
 {
     public function create(Request $request)
     {
-        $plans = SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get();
-        $pricingSelection = null;
+        // Registration is deliberately plan-free.  The configured platform
+        // trial is assigned server-side when the business is created.
+        $request->session()->forget('registration_pricing_selection');
 
-        if ($request->query('source') === 'pricing') {
-            $billingCycle = $request->query('billing_cycle', 'Monthly');
-            $selectedPlanId = $request->integer('plan');
-            abort_unless(in_array($billingCycle, ['Monthly', 'Yearly'], true) && $selectedPlanId > 0 && $plans->contains('id', $selectedPlanId), 404);
-
-            $pricingSelection = ['plan_id' => $selectedPlanId, 'billing_cycle' => $billingCycle];
-            $request->session()->put('registration_pricing_selection', $pricingSelection);
-        } else {
-            $request->session()->forget('registration_pricing_selection');
+        $trialDays = (int) PlatformSetting::current()->trial_days;
+        if ($trialDays < 1 || $trialDays > 365) {
+            throw ValidationException::withMessages([
+                'trial' => 'Free trial registration is temporarily unavailable. Please contact support.',
+            ]);
         }
 
-        return view('onboarding.register-business', [
-            'plans' => $plans,
-            'selectedPlanId' => $pricingSelection['plan_id'] ?? null,
-            'selectedBillingCycle' => $pricingSelection['billing_cycle'] ?? 'Monthly',
-            'pricingSelection' => $pricingSelection,
-        ]);
+        return view('onboarding.register-business', compact('trialDays'));
     }
 
     public function store(RegisterBusinessRequest $request)
     {
         $data = $request->validated();
-        $billingCycle = $data['billing_cycle'];
-        $pricingSelection = $request->session()->get('registration_pricing_selection');
-        $planSelectionSource = is_array($pricingSelection) ? 'pricing' : 'direct';
+        $settings = PlatformSetting::current();
+        $trialDays = (int) $settings->trial_days;
+        if ($trialDays < 1 || $trialDays > 365) {
+            throw ValidationException::withMessages([
+                'trial' => 'Free trial registration is temporarily unavailable. Please contact support.',
+            ]);
+        }
 
-        DB::transaction(function () use ($request, $data, $billingCycle, $planSelectionSource, &$user, &$business, &$plan) {
+        // A plan relation is retained only for legacy data compatibility. It
+        // is never selected by a registering business and has no trial limits.
+        $plan = SubscriptionPlan::query()
+            ->whereKey($settings->default_plan_id)
+            ->whereNull('archived_at')
+            ->first()
+            ?? SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->orderBy('sort_order')->firstOrFail();
+        $trialStart = now(config('app.timezone'));
+        $trialEnd = $trialStart->copy()->addDays($trialDays);
+
+        $logoPath = $request->hasFile('logo') ? $request->file('logo')->store('business-logos', 'public') : null;
+
+        try {
+        DB::transaction(function () use ($data, $trialDays, $trialStart, $trialEnd, $plan, $logoPath, &$user, &$business, &$subscription) {
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -61,64 +74,50 @@ class BusinessOnboardingController extends Controller
 
             $business = Business::create([
                 'owner_id' => $user->id,
-                'selected_plan_id' => $data['selected_plan_id'],
-                'selected_billing_cycle' => $data['billing_cycle'],
-                'plan_selection_source' => $planSelectionSource,
+                'selected_plan_id' => $plan->id,
+                'selected_billing_cycle' => 'Custom',
+                'plan_selection_source' => 'automatic_trial',
                 'selected_plan_price' => 0,
                 'trial_eligible' => true,
-                'requested_trial_days' => 0,
-                'subscription_request_status' => 'Pending Review',
+                'requested_trial_days' => $trialDays,
+                'subscription_request_status' => 'Trial Active',
                 'plan_selected_at' => now(),
                 'business_name' => $data['business_name'],
-                'business_type' => $data['business_type'],
-                'business_description' => $data['other_business_type'] ?? null,
-                'category' => $data['category'] ?? null,
+                // The database retains this legacy required column, but public
+                // registration no longer asks a business-type question.
+                'business_type' => 'General Business',
                 'phone' => $data['phone'],
                 'address' => $data['address'] ?? null,
-                'city' => $data['city'],
-                'registration_number' => $data['registration_number'] ?? null,
-                'tax_number' => $data['tax_number'] ?? null,
-                'status' => 'Pending',
+                'city' => $data['city'] ?? null,
+                'logo' => $logoPath,
+                // New businesses are immediately usable. Verification files
+                // remain available to Super Admin as records, not an access gate.
+                'status' => 'Approved',
             ]);
 
             $user->update(['business_id' => $business->id]);
-            $plan = SubscriptionPlan::publicActive()->findOrFail($data['selected_plan_id']);
-            $amount = $plan->priceFor($billingCycle);
+            app(CompanyPermissionService::class)->grantFullAccess($business);
             $business->update([
-                'selected_plan_price' => $amount,
-                'trial_eligible' => (int) $plan->trial_days > 0,
-                'requested_trial_days' => (int) $plan->trial_days,
-                'selected_plan_snapshot' => $this->planSnapshot($plan, $billingCycle, $amount),
+                'selected_plan_snapshot' => ['access_model' => 'automatic_trial', 'trial_days' => $trialDays],
             ]);
-            Subscription::create([
+            $subscription = Subscription::create([
                 'business_id' => $business->id,
                 'subscription_plan_id' => $plan->id,
-                'billing_cycle' => $billingCycle,
-                'amount' => $amount,
-                'status' => 'Pending',
+                'billing_cycle' => 'Custom',
+                'amount' => 0,
+                'starts_at' => $trialStart->toDateString(),
+                'ends_at' => $trialEnd->toDateString(),
+                'trial_start_at' => $trialStart->toDateString(),
+                'trial_end_at' => $trialEnd->toDateString(),
+                'status' => 'Trial',
                 'payment_status' => 'Pending',
             ]);
 
-            CompanyApprovalLog::create([
-                'company_id' => $business->id,
-                'old_status' => null,
-                'new_status' => 'Pending',
-                'note' => 'Company registered from public onboarding',
-                'changed_by' => null,
-                'changed_at' => now(),
-            ]);
-
-            foreach (['cnic_image', 'business_document', 'shop_image'] as $field) {
-                if ($request->hasFile($field)) {
-                    BusinessDocument::create([
-                        'business_id' => $business->id,
-                        'document_type' => $field,
-                        'file_path' => $request->file($field)->store('business-documents', 'public'),
-                        'status' => 'Pending Verification',
-                    ]);
-                }
-            }
         });
+        } catch (Throwable $exception) {
+            if ($logoPath) Storage::disk('public')->delete($logoPath);
+            throw $exception;
+        }
 
         User::where('role', 'super_admin')->where('status', 'active')->get()
             ->each(fn (User $admin) => $admin->notify(new CompanyRegistrationNotification($business)));
@@ -128,11 +127,11 @@ class BusinessOnboardingController extends Controller
             'actor_role' => 'business_owner',
             'business_id' => $business->id,
             'module' => 'Subscriptions',
-            'action' => 'registration plan selected',
-            'description' => $plan->name.' '.$billingCycle.' plan selected during business registration.',
+            'action' => 'business registered and trial started automatically',
+            'description' => 'Business registered and trial started automatically.',
             'record_type' => 'Subscription',
-            'record_id' => $business->subscription?->id,
-            'new_values' => ['plan_id' => $plan->id, 'billing_cycle' => $billingCycle, 'amount' => $business->selected_plan_price],
+            'record_id' => $subscription->id,
+            'new_values' => ['trial_start' => $trialStart->toDateString(), 'trial_end' => $trialEnd->toDateString()],
         ]);
         AuditLog::create([
             'user_id' => $user->id,
@@ -146,11 +145,14 @@ class BusinessOnboardingController extends Controller
             'record_id' => $business->documentFooter?->id,
             'new_values' => ['changed_fields' => ['default_footer']],
         ]);
-        $business->owner?->notify(new \App\Notifications\SubscriptionStatusNotification('Plan Selection Received', 'Your '.$plan->name.' '.$billingCycle.' plan selection was received and is pending review.', $business->id));
+        $business->owner?->notify(new SubscriptionStatusNotification('Free trial started', 'Your workspace is ready. Your free trial ends on '.$trialEnd->format('d M, Y').'.', $business->id));
 
         $request->session()->forget(['registration_step', 'registration_draft', 'registration_pricing_selection']);
 
-        return redirect()->route('public.home')->with('registration_completed', true);
+        Auth::login($user);
+        $request->session()->regenerate();
+
+        return redirect()->route('business.dashboard')->with('success', 'Welcome to Profit Point. Your free trial is active.');
     }
 
     private function planSnapshot(SubscriptionPlan $plan, string $cycle, int $amount): array

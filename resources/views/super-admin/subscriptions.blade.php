@@ -1,271 +1,379 @@
 @extends('layouts.dashboard')
-@section('page-title', 'Subscriptions')
-@section('page-subtitle', 'Manage plans, billing, assignments and renewals')
+
+@section('title', 'Trial & Access')
+@section('page-title', 'Trial & Access')
+@section('page-subtitle', 'Manage trial periods, business access, and paid access renewals')
+
 @section('content')
-@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-@if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-@php($activeSubscriptionTab = request('tab', $lockedBusiness ? 'assign-subscription' : 'subscription-plans'))
-
 <div class="tf-subscriptions-page">
-    <nav class="tf-subscription-tabs-wrap" aria-label="Subscription navigation">
-        <ul class="nav nav-tabs tf-subscription-tabs" role="tablist">
-            <li class="nav-item"><button class="nav-link {{ $activeSubscriptionTab === 'subscription-plans' ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#subscription-plans" type="button">Subscription Plans</button></li>
-            <li class="nav-item"><button class="nav-link {{ $activeSubscriptionTab === 'assign-subscription' ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#assign-subscription" type="button">Assign Subscription</button></li>
-            <li class="nav-item"><button class="nav-link {{ $activeSubscriptionTab === 'business-subscriptions' ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#business-subscriptions" type="button">Business Subscriptions</button></li>
-            <li class="nav-item"><button class="nav-link {{ $activeSubscriptionTab === 'billing-history' ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#billing-history" type="button">Billing History</button></li>
-        </ul>
-    </nav>
+    @if(session('success'))
+        <div class="alert alert-success">{{ session('success') }}</div>
+    @endif
 
-    <section class="tf-subscription-summary" aria-label="Subscription overview">
-        <div class="tf-subscription-kpis">
-    @foreach([
-        ['Active Subscriptions', $stats['active'], 'bi-check2-circle', 'bg-green'],
-        ['Active Trials', $stats['trial'], 'bi-hourglass-split', 'bg-blue'],
-        ['Expiring Soon', $stats['expiring'], 'bi-calendar-event', 'bg-amber'],
-        ['Expired Subscriptions', $stats['expired'], 'bi-calendar-x', 'bg-red'],
-        ['Revenue This Month', 'Rs '.number_format($stats['monthly_revenue']), 'bi-cash-stack', 'bg-navy'],
-    ] as [$label, $value, $icon, $color])
-        <article class="tf-card tf-stat-card tf-subscription-kpi"><div class="d-flex justify-content-between align-items-start gap-2"><div><div class="tf-muted small">{{ $label }}</div><div class="h3 mb-0">{{ $value }}</div></div><span class="tf-brand-mark {{ $color }}"><i class="bi {{ $icon }}"></i></span></div></article>
-    @endforeach
+    @if($errors->any())
+        <div class="alert alert-danger">
+            {{ $errors->first() }}
         </div>
-        <div class="tf-subscription-as-of">Current date: {{ now()->format('n/j/Y') }}</div>
-    </section>
+    @endif
 
-<div class="tab-content tf-subscription-content">
-    <section class="tab-pane fade {{ $activeSubscriptionTab === 'subscription-plans' ? 'show active' : '' }}" id="subscription-plans">
-        <div class="tf-subscription-section-toolbar">
-            <div><h2 class="h5 mb-1">Subscription Plans</h2><p class="tf-muted small mb-0">Create, review, and maintain your subscription plans.</p></div>
-            <button class="btn btn-tf-primary" type="button" data-bs-toggle="modal" data-bs-target="#createSubscriptionPlanModal"><i class="bi bi-plus-lg me-1"></i>Create Plan</button>
-        </div>
-        <div class="tf-pricing-cycle mb-3" data-subscription-pricing>
-            <button type="button" class="active" data-cycle="Monthly">Monthly</button>
-            <button type="button" data-cycle="Yearly">Yearly</button>
-        </div>
-        <div class="tf-card tf-subscription-filter-card p-3 mb-3">
-            <div class="row g-2 align-items-end">
-                <div class="col-md-4"><label class="form-label">Search Plans</label><input class="form-control" data-plan-search placeholder="Plan name"></div>
-                <div class="col-md-2"><label class="form-label">Status</label><select class="form-select" data-plan-status><option value="">All statuses</option><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
-                <div class="col-md-3"><label class="form-label">Visibility</label><select class="form-select" data-plan-visibility><option value="">All visibility</option><option value="Public">Public</option><option value="Private">Private</option></select></div>
-                <div class="col-md-3"><label class="form-label">Billing</label><select class="form-select" data-plan-billing><option value="">All plans</option><option value="yes">Yearly available</option><option value="no">Monthly only</option></select></div>
+    <div class="card mb-4">
+        <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <h5 class="mb-1">Default trial period</h5>
+                <p class="text-muted mb-0">New businesses receive this trial period automatically.</p>
             </div>
-        </div>
-        <div class="row g-4 mb-4" data-plan-grid>
-            @forelse($plans as $plan)
-                <div class="col-md-6 col-xl-4" data-plan-item>
-                    <x-subscription-plan-card :plan="$plan" context="admin">
-                        <x-slot:actions>
-                            <x-subscription-plan-actions :plan="$plan" />
-                        </x-slot:actions>
-                    </x-subscription-plan-card>
-                </div>
-            @empty
-                <div class="col-12"><div class="tf-card p-5 text-center text-muted">No subscription plans created yet.</div></div>
-            @endforelse
-        </div>
-        <div class="tf-card p-0">
-            <x-table><thead><tr><th>Plan</th><th>Monthly</th><th>Yearly</th><th>Trial</th><th>Product Limit</th><th>Staff Limit</th><th>Order Limit</th><th>Businesses</th><th>Visibility</th><th>Status</th><th class="text-end">Actions</th></tr></thead><tbody data-plan-table>
-            @forelse($plans as $plan)
-                <tr data-plan-row data-plan-name="{{ strtolower($plan->name) }}" data-plan-status="{{ $plan->status }}" data-plan-visibility="{{ $plan->is_public ? 'Public' : 'Private' }}" data-plan-yearly="{{ (int) $plan->yearly_price > 0 ? 'yes' : 'no' }}">
-                    <td><strong>{{ $plan->name }}</strong><small class="d-block tf-muted">{{ $plan->short_description }}</small></td><td>Rs {{ number_format($plan->priceFor('Monthly')) }}</td><td>Rs {{ number_format($plan->priceFor('Yearly')) }}</td><td>{{ $plan->trial_days }} days</td><td>{{ number_format($plan->product_limit) }}</td><td>{{ number_format($plan->staff_limit) }}</td><td>{{ number_format($plan->order_limit) }}</td><td>{{ $plan->subscriptions_count }}</td><td>{{ $plan->is_public ? 'Public' : 'Private' }}{{ $plan->is_recommended ? ' · Recommended' : '' }}</td><td><span class="tf-badge {{ $plan->status === 'Active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $plan->status }}</span></td>
-                    <td class="text-end text-nowrap"><x-subscription-plan-actions :plan="$plan" /></td>
-                </tr>
-            @empty<tr><td colspan="11" class="text-center tf-muted py-4">No subscription plans created yet.</td></tr>@endforelse
-            </tbody></x-table>
-        </div>
-    </section>
-
-    <section class="tab-pane fade {{ $activeSubscriptionTab === 'assign-subscription' ? 'show active' : '' }}" id="assign-subscription">
-        <div class="tf-card p-4">
-            <div class="mb-3"><h2 class="h5 mb-1">Assign Subscription</h2>@if($lockedBusiness)<small class="tf-muted">This subscription is locked to the company selected from the Companies actions menu.</small>@endif</div>
-            <form method="POST" action="{{ route('admin.subscriptions.activate') }}" class="row g-3" data-subscription-assignment-form>@csrf
-                @if($lockedBusiness)
-                    <div class="col-md-4"><label class="form-label">Business</label><input class="form-control" value="{{ $lockedBusiness->business_name }}" readonly><input type="hidden" name="business_id" value="{{ $lockedBusiness->id }}"><input type="hidden" name="subscription_context_business_id" value="{{ $lockedBusiness->id }}"></div>
-                @else
-                    <div class="col-md-4"><label class="form-label">Business</label><select name="business_id" class="form-select" required><option value="">Select business</option>@foreach($businesses as $business)<option value="{{ $business->id }}" @selected((string) old('business_id') === (string) $business->id)>{{ $business->business_name }}</option>@endforeach</select></div>
-                @endif
-                <div class="col-md-2"><label class="form-label">Plan</label><select name="subscription_plan_id" class="form-select" required data-subscription-plan><option value="">Select plan</option>@foreach($plans->where('status', 'Active') as $plan)<option value="{{ $plan->id }}" data-monthly-price="{{ $plan->priceFor('Monthly') }}" data-yearly-price="{{ $plan->priceFor('Yearly') }}" @selected(old('subscription_plan_id') == $plan->id)>{{ $plan->name }}</option>@endforeach</select></div>
-                <div class="col-md-2"><label class="form-label">Billing Cycle</label><select name="billing_cycle" class="form-select" data-subscription-cycle><option value="Monthly">Monthly</option><option value="Yearly">Yearly</option></select></div>
-                <div class="col-md-2"><label class="form-label">Amount</label><input name="amount" type="number" min="0" step="1" class="form-control" value="{{ old('amount') }}" placeholder="Plan price" data-subscription-amount></div>
-                <div class="col-md-3"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select">@foreach(['Cash','Bank Transfer','Jazz Cash','Easypaisa'] as $method)<option value="{{ $method }}" @selected(old('payment_method', 'Cash') === $method)>{{ $method }}</option>@endforeach</select></div>
-                <div class="col-md-3"><label class="form-label">Start Date</label><input name="starts_at" type="date" class="form-control" value="{{ old('starts_at', now()->toDateString()) }}" data-subscription-start required></div>
-                <div class="col-md-3"><label class="form-label">End Date</label><input name="ends_at" type="date" class="form-control" value="{{ old('ends_at', now()->addMonth()->toDateString()) }}" data-subscription-end required></div>
-                <div class="col-md-3"><label class="form-label">Status</label><select name="status" class="form-select"><option value="Pending">Pending</option><option value="Trial">Trial</option><option value="Active">Active</option><option value="Suspended">Suspended</option></select></div>
-                <div class="col-md-3 d-flex align-items-end"><button class="btn btn-tf-primary w-100">Save Subscription</button></div>
-            </form>
-        </div>
-    </section>
-
-    <section class="tab-pane fade {{ $activeSubscriptionTab === 'business-subscriptions' ? 'show active' : '' }}" id="business-subscriptions">
-        @if($changeRequests->isNotEmpty())
-            <div class="tf-card p-3 mb-3"><h2 class="h6 mb-3">Subscription Requests</h2><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Business</th><th>Request</th><th>Current</th><th>Requested</th><th>Cycle</th><th>Amount</th><th class="text-end">Actions</th></tr></thead><tbody>@foreach($changeRequests as $change)<tr><td>{{ $change->business?->business_name }}</td><td>{{ $change->type }}</td><td>{{ $change->currentPlan?->name ?? 'No plan' }}</td><td>{{ $change->requestedPlan?->name }}</td><td>{{ $change->billing_cycle }}</td><td>Rs {{ number_format($change->expected_amount) }}</td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ route('admin.subscription-change-requests.show', $change) }}">Review</a></td></tr>@endforeach</tbody></table></div><div class="pt-3">{{ $changeRequests->links('pagination::bootstrap-5') }}</div></div>
-        @endif
-        <div class="tf-card p-3 mb-3"><form method="GET" class="row g-2 align-items-end">
-            <input type="hidden" name="tab" value="business-subscriptions">
-            <div class="col-md-3"><label class="form-label">Business</label><select name="business_id" class="form-select"><option value="">All businesses</option>@foreach($businesses as $business)<option value="{{ $business->id }}" @selected(request('business_id') == $business->id)>{{ $business->business_name }}</option>@endforeach</select></div>
-            <div class="col-md-2"><label class="form-label">Plan</label><select name="subscription_plan_id" class="form-select"><option value="">All plans</option>@foreach($plans as $plan)<option value="{{ $plan->id }}" @selected(request('subscription_plan_id') == $plan->id)>{{ $plan->name }}</option>@endforeach</select></div><div class="col-md-2"><label class="form-label">Billing</label><select name="billing_cycle" class="form-select"><option value="">All cycles</option>@foreach(['Monthly','Yearly'] as $cycle)<option value="{{ $cycle }}" @selected(request('billing_cycle') === $cycle)>{{ $cycle }}</option>@endforeach</select></div>
-            <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All statuses</option>@foreach(['Active','Expired','Cancelled'] as $status)<option value="{{ $status }}" @selected(request('status') === $status)>{{ $status }}</option>@endforeach</select></div>
-            <div class="col-md-2"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select"><option value="">All methods</option>@foreach(['Cash','Bank Transfer','Jazz Cash','Easypaisa'] as $method)<option value="{{ $method }}" @selected(request('payment_method') === $method)>{{ $method }}</option>@endforeach</select></div>
-            <div class="col-md-1"><label class="form-label">From</label><input name="date_from" type="date" value="{{ request('date_from', now()->toDateString()) }}" class="form-control"></div><div class="col-md-1"><label class="form-label">To</label><input name="date_to" type="date" value="{{ request('date_to', now()->toDateString()) }}" class="form-control"></div><div class="col-md-1 d-grid"><button class="btn btn-outline-primary">Filter</button></div><div class="col-md-1 d-grid"><a href="{{ route('admin.subscriptions') }}" class="btn btn-outline-secondary">Clear</a></div>
-        </form></div>
-        <div class="tf-card p-0"><x-table><thead><tr><th>Business</th><th>Plan</th><th>Amount</th><th>Method</th><th>Status</th><th>Starts</th><th>Ends</th><th>Updated</th><th class="text-end">Actions</th></tr></thead><tbody>
-        @forelse($subscriptions as $subscription)
-            @php($statusClass = $subscription->status === 'Active' ? 'tf-badge-success' : ($subscription->status === 'Expired' ? 'tf-badge-warning' : 'tf-badge-danger'))
-            <tr><td><strong>{{ $subscription->business?->business_name ?? 'Deleted business' }}</strong></td><td>{{ $subscription->plan?->name ?? 'Deleted plan' }}</td><td>Rs {{ number_format($subscription->amount) }}</td><td>{{ $subscription->payment_method ?: '—' }}</td><td><span class="tf-badge {{ $statusClass }}">{{ $subscription->status }}</span></td><td>{{ $subscription->starts_at?->format('d M, Y') ?? '—' }}</td><td>{{ $subscription->ends_at?->format('d M, Y') ?? '—' }}</td><td><x-date-time :value="$subscription->updated_at" /></td><td class="text-end text-nowrap">
-                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#subscription-{{ $subscription->id }}">View / Manage</button>
-                @if(in_array($subscription->status, ['Trial', 'Expired'], true))
-                    <form method="POST" action="{{ route('admin.subscriptions.extend-trial', $subscription) }}" class="d-inline">@csrf @method('PATCH')<input type="hidden" name="days" value="14"><button class="btn btn-sm btn-outline-info">Extend Trial</button></form>
-                @endif
-                @if(in_array($subscription->status, ['Expired', 'Suspended', 'Expiring'], true))
-                    <form method="POST" action="{{ route('admin.subscriptions.transition', $subscription) }}" class="d-inline">@csrf @method('PATCH')<input type="hidden" name="status" value="Active"><button class="btn btn-sm btn-outline-success">Activate / Renew</button></form>
-                @endif
-                @if(in_array($subscription->status, ['Active', 'Expiring'], true))
-                    <form method="POST" action="{{ route('admin.subscriptions.transition', $subscription) }}" class="d-inline">@csrf @method('PATCH')<input type="hidden" name="status" value="Suspended"><button class="btn btn-sm btn-outline-warning">Suspend</button></form>
-                @endif
-                @if($subscription->status === 'Active')
-                    <form method="POST" action="{{ route('admin.subscriptions.cancel', $subscription) }}" class="d-inline" onsubmit="return confirm('Cancel this subscription?')">
-                        @csrf
-                        @method('PATCH')
-                        <button class="btn btn-sm btn-outline-warning">Cancel</button>
-                    </form>
-                @endif
-                @if(in_array($subscription->status, ['Expired', 'Cancelled'], true))
-                    <form method="POST" action="{{ route('admin.subscriptions.destroy', $subscription) }}" class="d-inline" onsubmit="return confirm('Delete this inactive subscription record?')">
-                        @csrf
-                        @method('DELETE')
-                        <button class="btn btn-sm btn-outline-danger">Delete</button>
-                    </form>
-                @endif
-            </td></tr>
-            <tr class="collapse" id="subscription-{{ $subscription->id }}"><td colspan="9" class="bg-light"><form method="POST" action="{{ route('admin.subscriptions.update', $subscription) }}" class="row g-2 align-items-end">@csrf @method('PATCH')<div class="col-md-2"><label class="form-label">Plan</label><select name="subscription_plan_id" class="form-select" required>@foreach($plans as $plan)<option value="{{ $plan->id }}" @selected($plan->id === $subscription->subscription_plan_id)>{{ $plan->name }}</option>@endforeach</select></div><div class="col-md-2"><label class="form-label">Amount</label><input name="amount" type="number" min="0" step="1" value="{{ (int) $subscription->amount }}" class="form-control"></div><div class="col-md-2"><label class="form-label">Payment Method</label><select name="payment_method" class="form-select">@foreach(['Cash','Bank Transfer','Jazz Cash','Easypaisa'] as $method)<option value="{{ $method }}" @selected($subscription->payment_method === $method)>{{ $method }}</option>@endforeach</select></div><div class="col-md-2"><label class="form-label">Starts</label><input name="starts_at" type="date" value="{{ $subscription->starts_at?->toDateString() ?? now()->toDateString() }}" class="form-control" required></div><div class="col-md-2"><label class="form-label">Ends</label><input name="ends_at" type="date" value="{{ $subscription->ends_at?->toDateString() ?? now()->addMonth()->toDateString() }}" class="form-control" required></div><div class="col-md-1"><label class="form-label">Status</label><select name="status" class="form-select">@foreach(['Active','Expired','Cancelled'] as $status)<option value="{{ $status }}" @selected($subscription->status === $status)>{{ $status }}</option>@endforeach</select></div><div class="col-md-1 d-grid"><button class="btn btn-tf-primary">Save</button></div></form></td></tr>
-        @empty<tr><td colspan="9" class="text-center tf-muted py-4">No subscriptions match the selected filters.</td></tr>@endforelse
-        </tbody></x-table><div class="p-3">{{ $subscriptions->links('pagination::bootstrap-5') }}</div></div>
-    </section>
-
-    <section class="tab-pane fade {{ $activeSubscriptionTab === 'billing-history' ? 'show active' : '' }}" id="billing-history">
-        <div class="tf-card p-0"><x-table><thead><tr><th>Business</th><th>Plan</th><th>Amount</th><th>Method</th><th>Payment Date</th><th>Status</th><th>Reference</th><th>Recorded By</th></tr></thead><tbody>
-        @forelse($billingHistory as $payment)<tr><td>{{ $payment->business?->business_name ?: '—' }}</td><td>{{ $payment->subscription?->plan?->name ?: '—' }}</td><td>Rs {{ number_format($payment->amount) }}</td><td>{{ $payment->method }}</td><td><x-date-time :value="$payment->paid_at" /></td><td>{{ $payment->status }}</td><td>{{ $payment->reference_number ?: '—' }}</td><td>{{ $payment->recordedBy?->name ?: 'System' }}</td></tr>@empty<tr><td colspan="8" class="text-center tf-muted py-4">No billing history has been recorded.</td></tr>@endforelse
-        </tbody></x-table><div class="p-3">{{ $billingHistory->links('pagination::bootstrap-5') }}</div></div>
-    </section>
-</div>
-
-<div class="modal fade" id="createSubscriptionPlanModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog tf-plan-modal-dialog">
-        <div class="modal-content">
-            <form method="POST" action="{{ route('admin.subscription-plans.store') }}">
+            <form method="POST" action="{{ route('admin.subscriptions.trial-settings.update') }}" class="d-flex align-items-end gap-2">
                 @csrf
-                <div class="modal-header">
-                    <h2 class="modal-title h5">Create Plan</h2>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                @method('PUT')
+                <div>
+                    <label class="form-label mb-1" for="default-trial-days">Trial days</label>
+                    <input id="default-trial-days" class="form-control" type="number" name="trial_days" min="1" max="365" value="{{ old('trial_days', $settings->trial_days) }}" required>
                 </div>
-                @include('super-admin.subscriptions._plan-fields', ['plan' => null])
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button class="btn btn-tf-primary">Create Plan</button>
-                </div>
+                <button class="btn btn-primary" type="submit">Save</button>
             </form>
         </div>
     </div>
-</div>
 
-@foreach($plans as $plan)
-<div class="modal fade" id="editPlanModal-{{ $plan->id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><form method="POST" action="{{ route('admin.subscription-plans.update', $plan) }}">@csrf @method('PATCH')<div class="modal-header"><h2 class="modal-title h5">Edit {{ $plan->name }}</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body row g-3"><div class="col-md-7"><label class="form-label">Plan Name</label><input name="name" class="form-control" value="{{ $plan->name }}" maxlength="100" required></div><div class="col-md-5"><label class="form-label">Status</label><select name="status" class="form-select"><option value="Active" @selected($plan->status === 'Active')>Active</option><option value="Inactive" @selected($plan->status === 'Inactive')>Inactive</option></select></div><div class="col-12"><label class="form-label">Short Description</label><input name="short_description" class="form-control" value="{{ $plan->short_description }}" maxlength="255"></div><div class="col-md-3"><label class="form-label">Monthly Price</label><input name="monthly_price" type="number" min="0" step="1" value="{{ $plan->priceFor('Monthly') }}" class="form-control" required></div><div class="col-md-3"><label class="form-label">Yearly Price</label><input name="yearly_price" type="number" min="0" step="1" value="{{ $plan->priceFor('Yearly') }}" class="form-control" required></div><div class="col-md-3"><label class="form-label">Trial Days</label><input name="trial_days" type="number" min="0" step="1" value="{{ $plan->trial_days }}" class="form-control" required></div><div class="col-md-3"><label class="form-label">Sort Order</label><input name="sort_order" type="number" min="0" step="1" value="{{ $plan->sort_order }}" class="form-control"></div><div class="col-md-4"><label class="form-label">Product Limit</label><input name="product_limit" type="number" min="0" step="1" value="{{ $plan->product_limit }}" class="form-control" required></div><div class="col-md-4"><label class="form-label">Staff Limit</label><input name="staff_limit" type="number" min="0" step="1" value="{{ $plan->staff_limit }}" class="form-control" required></div><div class="col-md-4"><label class="form-label">Order Limit</label><input name="order_limit" type="number" min="0" step="1" value="{{ $plan->order_limit }}" class="form-control" required></div><div class="col-12"><label class="form-label">Included Modules</label><textarea name="included_modules" rows="2" class="form-control">{{ implode("\n", $plan->included_modules ?? []) }}</textarea></div><div class="col-12"><label class="form-label">Key Features</label><textarea name="features" rows="2" class="form-control">{{ implode("\n", $plan->features ?? []) }}</textarea></div><div class="col-12 d-flex gap-4"><label class="form-check"><input class="form-check-input" type="checkbox" name="is_public" value="1" @checked($plan->is_public)> <span class="form-check-label">Show on public pricing</span></label><label class="form-check"><input class="form-check-input" type="checkbox" name="is_recommended" value="1" @checked($plan->is_recommended)> <span class="form-check-label">Recommended plan</span></label></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-tf-primary">Save Changes</button></div></form></div></div></div>
-@endforeach
+    <div class="row g-3 mb-4">
+        @foreach([
+            ['label' => 'Active trials', 'value' => $stats['trial'], 'icon' => 'bi-hourglass-split', 'tone' => 'primary'],
+            ['label' => 'Expiring soon', 'value' => $stats['expiring'], 'icon' => 'bi-calendar-event', 'tone' => 'warning'],
+            ['label' => 'Expired', 'value' => $stats['expired'], 'icon' => 'bi-x-circle', 'tone' => 'danger'],
+            ['label' => 'Paid access', 'value' => $stats['paid'], 'icon' => 'bi-credit-card', 'tone' => 'success'],
+            ['label' => 'Restricted', 'value' => $stats['restricted'], 'icon' => 'bi-shield-lock', 'tone' => 'secondary'],
+        ] as $stat)
+            <div class="col-12 col-sm-6 col-xl">
+                <div class="card h-100">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="small text-muted">{{ $stat['label'] }}</div>
+                            <div class="fs-3 fw-bold">{{ $stat['value'] }}</div>
+                        </div>
+                        <i class="bi {{ $stat['icon'] }} text-{{ $stat['tone'] }} fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        @endforeach
+    </div>
+
+    <div class="card tf-access-table-card">
+        <div class="card-body border-bottom">
+            <form method="GET" class="row g-2 align-items-end">
+                <div class="col-sm-6 col-lg-4">
+                    <label class="form-label" for="access-search">Search</label>
+                    <input id="access-search" class="form-control" type="search" name="search" value="{{ $filters['search'] }}" placeholder="Business or owner">
+                </div>
+                <div class="col-sm-3 col-lg-2">
+                    <label class="form-label" for="access-status">Status</label>
+                    <select id="access-status" class="form-select" name="status">
+                        <option value="">All statuses</option>
+                        @foreach(['trial_active' => 'Trial active', 'trial_expiring' => 'Trial expiring', 'paid_active' => 'Paid active', 'paid_expiring' => 'Paid expiring', 'restricted' => 'Restricted'] as $value => $label)
+                            <option value="{{ $value }}" @selected($filters['access_status'] === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-sm-3 col-lg-2">
+                    <button class="btn btn-outline-primary w-100" type="submit">Filter</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="tf-dropdown-safe-scroll">
+            <table class="table table-hover align-middle mb-0 tf-access-table">
+                <thead>
+                    <tr>
+                        <th>Business</th>
+                        <th>Owner</th>
+                        <th>Access status</th>
+                        <th>Starts</th>
+                        <th>Ends</th>
+                        <th>Remaining</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($businesses as $business)
+                        @php
+                            $access = $accessStates[$business->id] ?? [];
+                            $subscription = $access['subscription'] ?? null;
+                            $tone = in_array($access['kind'] ?? '', ['trial_active', 'paid_active'], true) ? 'success' : (in_array($access['kind'] ?? '', ['trial_expiring', 'paid_expiring'], true) ? 'warning' : 'danger');
+                        @endphp
+                        <tr data-access-business="{{ $business->id }}" tabindex="-1">
+                            <td>
+                                <div class="fw-semibold">{{ $business->business_name }}</div>
+                                <small class="text-muted">{{ $business->business_type ?: 'Business' }}</small>
+                            </td>
+                            <td>
+                                <div>{{ $business->owner?->name ?: '—' }}</div>
+                                <small class="text-muted">{{ $business->owner?->email ?: '' }}</small>
+                            </td>
+                            <td><span class="badge text-bg-{{ $tone }}">{{ $access['label'] ?? 'Restricted' }}</span></td>
+                            <td>{{ !empty($access['start_date']) ? $access['start_date']->format('n/j/Y') : '—' }}</td>
+                            <td>{{ !empty($access['end_date']) ? $access['end_date']->format('n/j/Y') : '—' }}</td>
+                            <td>{{ $access['remaining_label'] ?? '—' }}</td>
+                            <td class="text-end">
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#manage-access-{{ $business->id }}">Manage</button>
+                                    <button class="btn btn-sm btn-outline-primary dropdown-toggle tf-access-more-button" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-label="More access actions"><i class="bi bi-three-dots"></i></button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#access-details-{{ $business->id }}">View access details</button></li>
+                                        <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#access-details-{{ $business->id }}">Trial / access history</button></li>
+                                        @if(!empty($access['can_end_trial']))
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><button class="dropdown-item text-danger" type="button" data-trial-end-trigger="{{ $business->id }}">End Trial Now</button></li>
+                                        @elseif(!empty($access['can_end_paid']))
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><button class="dropdown-item text-danger" type="button" data-bs-toggle="modal" data-bs-target="#end-paid-access-{{ $business->id }}">End Paid Access</button></li>
+                                        @endif
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="7" class="text-center text-muted py-4">No businesses match the selected filters.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        <div class="card-body border-top">{{ $businesses->links() }}</div>
+    </div>
+
+    @foreach($businesses as $business)
+        @php
+            $access = $accessStates[$business->id] ?? [];
+            $subscription = $access['subscription'] ?? null;
+        @endphp
+        <div class="modal fade tf-access-modal" id="access-details-{{ $business->id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">{{ $business->business_name }} access</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Current status</dt><dd class="col-sm-7">{{ $access['label'] ?? 'Restricted' }}</dd>
+                        <dt class="col-sm-5">Start date</dt><dd class="col-sm-7">{{ !empty($access['start_date']) ? $access['start_date']->format('n/j/Y') : '—' }}</dd>
+                        <dt class="col-sm-5">End date</dt><dd class="col-sm-7">{{ !empty($access['end_date']) ? $access['end_date']->format('n/j/Y') : '—' }}</dd>
+                        <dt class="col-sm-5">Remaining</dt><dd class="col-sm-7">{{ $access['remaining_label'] ?? '—' }}</dd>
+                    </dl>
+                    @if($subscription)
+                        <hr>
+                        <h6>Access history</h6>
+                        <p class="text-muted mb-0">Created {{ optional($subscription->created_at)->format('n/j/Y, g:i A') }} · Last updated {{ optional($subscription->updated_at)->format('n/j/Y, g:i A') }}</p>
+                    @endif
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Close</button></div>
+            </div></div>
+        </div>
+
+        <div class="modal fade tf-access-modal" id="manage-access-{{ $business->id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">Manage Trial &amp; Access</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <h6 class="mb-1">{{ $business->business_name }}</h6>
+                    <p class="text-muted small mb-3">{{ $business->owner?->name ?: 'No owner assigned' }} · {{ $access['label'] ?? 'Access Restricted' }}</p>
+                    <dl class="row small mb-4">
+                        <dt class="col-6">Trial start</dt><dd class="col-6">{{ !empty($access['trial_start']) ? $access['trial_start']->format('n/j/Y') : '—' }}</dd>
+                        <dt class="col-6">Trial end</dt><dd class="col-6">{{ !empty($access['trial_end']) ? $access['trial_end']->format('n/j/Y') : '—' }}</dd>
+                        <dt class="col-6">Paid access end</dt><dd class="col-6">{{ !empty($access['paid_until']) ? $access['paid_until']->format('n/j/Y') : '—' }}</dd>
+                        <dt class="col-6">Days remaining</dt><dd class="col-6">{{ $access['remaining_label'] ?? '—' }}</dd>
+                    </dl>
+
+                    @if($subscription && !empty($access['can_manage_trial']))
+                        <h6>{{ ($access['kind'] ?? '') === 'trial_expired' ? 'Restart / extend trial' : 'Trial controls' }}</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" data-access-trial-confirm data-access-confirm="Extend this trial?" data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="extend"><label class="form-label small">Extend by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-primary" type="submit">Extend</button></div></form></div>
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" data-access-trial-confirm data-access-confirm="Reduce this trial?" data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="reduce"><label class="form-label small">Reduce by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-outline-warning" type="submit">Reduce</button></div></form></div>
+                            <div class="col-12"><form method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" data-access-trial-confirm data-access-confirm="Set this exact trial end date?" data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="set_end"><label class="form-label small">Set exact trial end date</label><div class="input-group"><input class="form-control" type="date" name="trial_end_at" value="{{ optional($access['trial_end'])->format('Y-m-d') }}" required><button class="btn btn-outline-primary" type="submit">Save</button></div></form></div>
+                        </div>
+                    @elseif($subscription && !empty($access['can_manage_paid']))
+                        <h6>Paid access controls</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Extend this paid access period?">@csrf @method('PATCH')<input type="hidden" name="action" value="extend"><label class="form-label small">Extend by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-primary" type="submit">Extend</button></div></form></div>
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Reduce this paid access period? It may restrict access immediately.">@csrf @method('PATCH')<input type="hidden" name="action" value="reduce"><label class="form-label small">Reduce by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-outline-warning" type="submit">Reduce</button></div></form></div>
+                            <div class="col-12"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Set this exact paid access end date?">@csrf @method('PATCH')<input type="hidden" name="action" value="set_end"><label class="form-label small">Set exact paid access end date</label><div class="input-group"><input class="form-control" type="date" name="ends_at" value="{{ optional($access['paid_until'])->format('Y-m-d') }}" required><button class="btn btn-outline-primary" type="submit">Save</button></div></form></div>
+                        </div>
+                    @else
+                        <p class="text-muted mb-0">There is no access record available to manage for this business.</p>
+                    @endif
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Close</button></div>
+            </div></div>
+        </div>
+
+        @if(!empty($access['can_end_trial']) && $subscription)
+            <form id="end-trial-form-{{ $business->id }}" method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" class="d-none" data-access-trial-confirm data-access-confirm="End this trial now? This will restrict workspace access immediately." data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}">
+                @csrf
+                @method('PATCH')
+                <input type="hidden" name="action" value="end_now">
+                <button type="submit">End trial now</button>
+            </form>
+        @endif
+
+        @if(!empty($access['can_end_paid']) && $subscription)
+            <div class="modal fade tf-access-modal" id="end-paid-access-{{ $business->id }}" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog"><form method="POST" class="modal-content" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}">
+                    @csrf
+                    @method('PATCH')
+                    <input type="hidden" name="action" value="end_now">
+                    <div class="modal-header"><h5 class="modal-title text-danger">End paid access?</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">End paid access for {{ $business->business_name }} now? Operational access will be restricted immediately. Business data will not be deleted.</div>
+                    <div class="modal-footer"><button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" type="submit">End Access</button></div>
+                </form></div>
+            </div>
+        @endif
+    @endforeach
 </div>
 @endsection
 
 @push('scripts')
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[id^="editPlanModal-"]').forEach((modal) => {
-        const dialog = modal.querySelector('.modal-dialog');
-        const body = modal.querySelector('.modal-body');
-        dialog?.classList.remove('modal-lg', 'modal-dialog-scrollable');
-        dialog?.classList.add('tf-plan-modal-dialog');
-        body?.classList.add('tf-plan-modal-body');
-
-        ['short_description', 'included_modules', 'features'].forEach((name) => {
-            modal.querySelector(`[name="${name}"]`)?.closest('.col-12')?.remove();
-        });
-
-        ['name', 'status', 'monthly_price', 'yearly_price', 'trial_days', 'sort_order', 'product_limit', 'staff_limit', 'order_limit'].forEach((name) => {
-            const field = modal.querySelector(`[name="${name}"]`);
-            const fieldColumn = field?.parentElement;
-            if ([...(fieldColumn?.classList || [])].some((className) => className.startsWith('col-'))) {
-                fieldColumn.className = 'col-lg-3 col-md-6';
-            }
-        });
-    });
-
-    const pricingRoot = document.querySelector('[data-subscription-pricing]');
-    if (pricingRoot && !pricingRoot.dataset.ready) {
-        pricingRoot.dataset.ready = '1';
-        pricingRoot.addEventListener('click', (event) => {
-            const button = event.target.closest('[data-cycle]');
-            if (!button) return;
-            const yearly = button.dataset.cycle === 'Yearly';
-            pricingRoot.querySelectorAll('[data-cycle]').forEach((item) => item.classList.toggle('active', item === button));
-            document.querySelectorAll('[data-plan-monthly-price], [data-plan-monthly-label]').forEach((item) => item.classList.toggle('d-none', yearly));
-            document.querySelectorAll('[data-plan-yearly-price], [data-plan-yearly-label]').forEach((item) => item.classList.toggle('d-none', !yearly));
-        });
+document.addEventListener('DOMContentLoaded', function () {
+    var completedMessage = window.sessionStorage.getItem('tf-trial-access-success');
+    if (completedMessage) {
+        window.sessionStorage.removeItem('tf-trial-access-success');
+        window.Swal?.fire({ toast: true, position: 'top-end', icon: 'success', title: completedMessage, showConfirmButton: false, timer: 3000, timerProgressBar: true });
     }
 
-    const search = document.querySelector('[data-plan-search]');
-    const status = document.querySelector('[data-plan-status]');
-    const visibility = document.querySelector('[data-plan-visibility]');
-    const billing = document.querySelector('[data-plan-billing]');
-    const filterPlans = () => document.querySelectorAll('[data-plan-card], [data-plan-row]').forEach((plan) => {
-        const nameMatches = !search?.value || plan.dataset.planName.includes(search.value.trim().toLowerCase());
-        const statusMatches = !status?.value || plan.dataset.planStatus === status.value;
-        const visibilityMatches = !visibility?.value || plan.dataset.planVisibility === visibility.value;
-        const billingMatches = !billing?.value || plan.dataset.planYearly === billing.value;
-        const target = plan.closest('[data-plan-item]') || plan;
-        target.classList.toggle('d-none', !(nameMatches && statusMatches && visibilityMatches && billingMatches));
+    var businessId = @json($filters['manage'] && $filters['business_id'] ? (int) $filters['business_id'] : null);
+    if (businessId) {
+        var row = document.querySelector('[data-access-business="' + businessId + '"]');
+        var modalElement = document.getElementById('manage-access-' + businessId);
+        if (row && modalElement && window.bootstrap?.Modal) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            row.focus({ preventScroll: true });
+            window.setTimeout(function () {
+                window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
+            }, 250);
+        }
+    }
+
+    document.querySelectorAll('[data-trial-end-trigger]').forEach(function (trigger) {
+        trigger.addEventListener('click', function () {
+            var form = document.getElementById('end-trial-form-' + trigger.dataset.trialEndTrigger);
+            form?.requestSubmit();
+        });
     });
-    search?.addEventListener('input', filterPlans);
-    status?.addEventListener('change', filterPlans);
-    visibility?.addEventListener('change', filterPlans);
-    billing?.addEventListener('change', filterPlans);
+});
+document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form) {
+    if (form.dataset.accessTrialConfirmationReady === '1') return;
+    form.dataset.accessTrialConfirmationReady = '1';
 
-    const form = document.querySelector('[data-subscription-assignment-form]');
-    const plan = form?.querySelector('[data-subscription-plan]');
-    const cycle = form?.querySelector('[data-subscription-cycle]');
-    const amount = form?.querySelector('[data-subscription-amount]');
-    const startDate = form?.querySelector('[data-subscription-start]');
-    const endDate = form?.querySelector('[data-subscription-end]');
-    const syncPlanAmount = () => {
-        if (!plan || !amount) return;
-        const selected = plan.selectedOptions[0];
-        const key = cycle?.value === 'Yearly' ? 'yearlyPrice' : 'monthlyPrice';
-        if (selected?.dataset[key]) amount.value = selected.dataset[key];
-    };
-    const syncSubscriptionEndDate = () => {
-        if (!startDate?.value || !endDate) return;
-        const [year, month, day] = startDate.value.split('-').map(Number);
-        if (!year || !month || !day) return;
-        const targetMonthIndex = month - 1 + (cycle?.value === 'Yearly' ? 12 : 1);
-        const targetYear = year + Math.floor(targetMonthIndex / 12);
-        const targetMonth = (targetMonthIndex % 12) + 1;
-        const targetDay = Math.min(day, new Date(targetYear, targetMonth, 0).getDate());
-        endDate.value = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
-    };
-    plan?.addEventListener('change', syncPlanAmount);
-    cycle?.addEventListener('change', () => { syncPlanAmount(); syncSubscriptionEndDate(); });
-    startDate?.addEventListener('change', syncSubscriptionEndDate);
-    syncPlanAmount();
+    form.addEventListener('submit', function (event) {
+        if (form.dataset.accessProcessing === '1' || form.dataset.accessConfirming === '1') {
+            event.preventDefault();
+            return;
+        }
 
-    document.querySelectorAll('#createSubscriptionPlanModal form, [id^="editPlanModal-"] form').forEach((planForm) => {
-        planForm.addEventListener('submit', (event) => {
-            if (planForm.dataset.submitting === '1') {
-                event.preventDefault();
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!form.checkValidity()) { form.reportValidity(); return; }
+        if (!window.Swal) {
+            HTMLFormElement.prototype.submit.call(form);
+            return;
+        }
+        form.dataset.accessConfirming = '1';
+
+        // SweetAlert is portaled above the Bootstrap Manage modal. Suspend
+        // the background modal's focus trap while the foreground confirmation
+        // is visible; otherwise it pulls keyboard focus back to its controls.
+        var manageModalElement = form.closest('.modal');
+        var manageModal = manageModalElement && window.bootstrap?.Modal
+            ? window.bootstrap.Modal.getInstance(manageModalElement)
+            : null;
+        var manageFocusTrap = manageModal?._focustrap;
+
+        var action = form.querySelector('[name="action"]')?.value;
+        var days = Number(form.querySelector('[name="days"]')?.value || 0);
+        var currentValue = form.dataset.accessCurrentEnd;
+        var exactValue = form.querySelector('[name="trial_end_at"]')?.value;
+        var serverTodayValue = @json(now(config('app.timezone'))->toDateString());
+        var parseDate = function (value) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return null;
+            var parts = value.split('-').map(Number);
+            return new Date(parts[0], parts[1] - 1, parts[2]);
+        };
+        var formatDate = function (date) { return (date.getMonth() + 1) + '/' + date.getDate() + '/' + date.getFullYear(); };
+        var currentEnd = parseDate(currentValue);
+        var newEnd = currentEnd && new Date(currentEnd.getTime());
+        if (newEnd && action === 'extend') newEnd.setDate(newEnd.getDate() + days);
+        if (newEnd && action === 'reduce') newEnd.setDate(newEnd.getDate() - days);
+        if (action === 'set_end') newEnd = parseDate(exactValue);
+        var preview = currentEnd && newEnd
+            ? '<div class="text-start small"><div><strong>Current End:</strong> ' + formatDate(currentEnd) + '</div>'
+                + (action === 'reduce' ? '<div><strong>Days Removed:</strong> ' + days + '</div>' : '')
+                + (action === 'extend' ? '<div><strong>Days Added:</strong> ' + days + '</div>' : '')
+                + '<div><strong>New End:</strong> ' + formatDate(newEnd) + '</div></div>'
+            : '';
+        var today = parseDate(serverTodayValue) || new Date(); today.setHours(0, 0, 0, 0);
+        if (action === 'end_now' || (['reduce', 'set_end'].includes(action) && newEnd && newEnd <= today)) {
+            preview += '<p class="text-danger small mb-0 mt-2">This change will expire the trial immediately and restrict workspace access.</p>';
+        }
+
+        var submitTrialChange = async function () {
+            form.dataset.accessProcessing = '1';
+            try {
+                // Forms carry a hidden field named "action", which shadows
+                // the DOM form.action property. Read the HTML attribute so
+                // the request always targets the Laravel trial route.
+                var endpoint = form.getAttribute('action');
+                var response = await window.fetch(endpoint, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': form.querySelector('input[name="_token"]')?.value || '',
+                    },
+                    credentials: 'same-origin',
+                });
+                var payload = await response.json().catch(function () { return {}; });
+                if (!response.ok) {
+                    window.Swal.showValidationMessage(payload.message || 'The trial change could not be saved. Please review the values and try again.');
+                    return false;
+                }
+                return payload;
+            } catch (_) {
+                window.Swal.showValidationMessage('The trial change could not be saved. Check your connection and try again.');
+                return false;
+            } finally {
+                form.dataset.accessProcessing = '0';
+            }
+        };
+
+        Swal.fire({
+            icon: 'warning',
+            title: 'Confirm access change',
+            html: preview + '<p class="mb-0 mt-3">' + form.dataset.accessConfirm + '</p>',
+            showCancelButton: true,
+            confirmButtonText: 'Confirm',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#2563eb',
+            reverseButtons: true,
+            allowEnterKey: true,
+            allowEscapeKey: true,
+            allowOutsideClick: function () { return !Swal.isLoading(); },
+            stopKeydownPropagation: true,
+            focusConfirm: true,
+            returnFocus: false,
+            showLoaderOnConfirm: true,
+            preConfirm: submitTrialChange,
+            willOpen: function () {
+                manageFocusTrap?.deactivate();
+            },
+            didOpen: function () {
+                // Use the foreground action as the sole Enter-key target.
+                window.setTimeout(function () {
+                    Swal.getConfirmButton()?.focus({ preventScroll: true });
+                }, 0);
+            },
+            didClose: function () {
+                manageFocusTrap?.activate();
+            },
+        }).then(function (result) {
+            if (!result.isConfirmed) {
+                form.dataset.accessConfirming = '0';
                 return;
             }
-
-            planForm.dataset.submitting = '1';
-            const submitButton = planForm.querySelector('button[type="submit"], .modal-footer .btn-tf-primary');
-            if (submitButton) {
-                submitButton.disabled = true;
-                submitButton.setAttribute('aria-disabled', 'true');
-            }
+            window.sessionStorage.setItem('tf-trial-access-success', result.value?.message || 'Trial access updated successfully.');
+            window.location.reload();
         });
     });
 });

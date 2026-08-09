@@ -19,7 +19,7 @@
 @endphp
 <x-thermal-document
     :business="$order->business"
-    title="Sales Invoice"
+    :title="null"
     :number="$invoice->invoice_number"
     :date="($invoice->invoice_date ?: $invoice->created_at)?->format('d M Y g:i A')"
     :cashier="$order->creator?->name"

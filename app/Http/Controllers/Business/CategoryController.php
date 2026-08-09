@@ -71,11 +71,18 @@ class CategoryController extends Controller
         return redirect()->route('business.categories.index')->with('success', 'Category updated successfully.');
     }
 
-    public function toggleStatus(Category $category)
+    public function toggleStatus(Request $request, Category $category)
     {
         $this->ensureBusiness($category);
         $category->update(['status' => $category->status === 'Active' ? 'Inactive' : 'Active']);
         $this->audit($category->status === 'Active' ? 'Category Activated' : 'Category Deactivated', $category);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Category '.($category->status === 'Active' ? 'activated' : 'deactivated').' successfully.',
+                'status' => $category->status,
+            ]);
+        }
 
         return back()->with('success', 'Category status updated.');
     }

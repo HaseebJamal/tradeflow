@@ -53,7 +53,9 @@ class UpdateCompanyRequest extends FormRequest
             'remove_company_logo' => ['nullable', 'boolean'],
             'owner_profile_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_owner_profile_image' => ['nullable', 'boolean'],
+            'cnic_image' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'business_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'shop_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
         ];
     }
 }

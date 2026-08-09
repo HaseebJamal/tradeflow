@@ -40,7 +40,7 @@
         @php($hasImage = $member->profile_image && \Illuminate\Support\Facades\Storage::disk('public')->exists($member->profile_image))
         @php($isCurrentStaffUser = auth()->id() === $member->id)
         <tr>
-            <td><div class="d-flex align-items-center gap-2">@if($hasImage)<img src="{{ asset('storage/'.$member->profile_image) }}" class="navbar-avatar" alt="{{ $member->name }}">@else<span class="navbar-avatar tf-avatar-empty"><i class="bi bi-person"></i></span>@endif <strong>{{ $member->name }}</strong></div></td>
+            <td><div class="d-flex align-items-center gap-2">@if($hasImage)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($member->profile_image) }}" class="navbar-avatar" alt="{{ $member->name }}">@else<span class="navbar-avatar tf-avatar-empty"><i class="bi bi-person"></i></span>@endif <strong>{{ $member->name }}</strong></div></td>
             <td><span class="badge text-bg-primary">{{ $member->role === 'custom_staff' ? ($member->staffProfile?->custom_role_name ?: 'Custom Staff') : ($roles[$member->role] ?? $member->role) }}</span></td>
             <td>{{ $member->phone }}</td>
             <td>{{ $member->email }}</td>

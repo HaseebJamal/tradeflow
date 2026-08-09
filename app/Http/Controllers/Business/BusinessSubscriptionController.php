@@ -14,6 +14,8 @@ use App\Notifications\SubscriptionStatusNotification;
 use App\Services\CompanyPermissionService;
 use App\Services\BusinessActivityService;
 use App\Services\SubscriptionManagementAccessService;
+use App\Services\SubscriptionLifecycleService;
+use App\Services\SubscriptionPaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -28,24 +30,46 @@ class BusinessSubscriptionController extends Controller
     {
         $business = $this->businessFor($request);
         $this->assertSubscriptionManager($request, $business);
-        $plans = SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get();
-
-        // A business may still be subscribed to a plan that was later hidden,
-        // archived, or made inactive for new subscriptions. Keep that plan in
-        // the UI as a read-only Current Plan card; it must not disappear just
-        // because it is no longer offered to new businesses.
-        if ($currentPlan = $business->subscription?->plan) {
-            if (! $plans->contains('id', $currentPlan->id)) {
-                $plans->prepend($currentPlan);
-            }
-        }
-
+        $subscriptionState = app(SubscriptionLifecycleService::class)->forBusiness($business, true);
+        $subscription = $subscriptionState['subscription'];
         return view('business.subscription.index', [
             'business' => $business,
-            'subscription' => $business->subscription,
-            'plans' => $plans,
-            'subscriptionUsage' => $this->subscriptionUsage($business),
+            'subscription' => $subscription,
+            'subscriptionState' => $subscriptionState,
         ]);
+    }
+
+    public function expired(Request $request)
+    {
+        $business = $this->businessFor($request);
+        $subscriptionState = app(SubscriptionLifecycleService::class)->forBusiness($business);
+
+        if ($subscriptionState['can_access_business']) {
+            return redirect()->route('business.dashboard');
+        }
+
+        return view('business.subscription.expired', [
+            'business' => $business,
+            'subscription' => $subscriptionState['subscription'],
+            'subscriptionState' => $subscriptionState,
+        ]);
+    }
+
+    public function checkout(Request $request)
+    {
+        abort(410, 'Online plan selection is no longer available. Please contact Profit Point sales.');
+    }
+
+    public function submitPayment(Request $request)
+    {
+        abort(410, 'Online subscription payments are managed directly by Profit Point. Please contact sales.');
+    }
+
+    public function receipt(Request $request, PlatformPayment $payment)
+    {
+        $business = $this->businessFor($request);
+        abort_unless($payment->business_id === $business->id && $payment->status === 'Received', 404);
+        return view('business.subscription.receipt', ['business' => $business, 'payment' => $payment->load(['plan', 'subscription.plan'])]);
     }
 
     public function history(Request $request)
@@ -59,7 +83,7 @@ class BusinessSubscriptionController extends Controller
             : 'paid_at';
         $billingDirection = $request->query('billing_direction') === 'asc' ? 'asc' : 'desc';
 
-        $billingQuery = PlatformPayment::with(['recordedBy', 'subscription.plan'])
+        $billingQuery = PlatformPayment::with(['recordedBy', 'subscription.plan', 'plan'])
             ->where('business_id', $business->id)
             ->when($request->filled('billing_cycle'), fn ($query) => $query->whereHas(
                 'subscription',
@@ -100,8 +124,11 @@ class BusinessSubscriptionController extends Controller
 
     public function storeRequest(Request $request)
     {
+        abort(410, 'Subscription plan-change requests are no longer available. Please contact Profit Point sales.');
+        /* Legacy request implementation is intentionally retained below for
+         * historical maintenance, but is unreachable in the B2B manual-billing flow.
+         */
         $business = $this->businessFor($request);
-        $this->assertSubscriptionManager($request, $business);
         $data = $request->validate([
             'request_type' => ['nullable', 'in:New Subscription,Upgrade,Downgrade,Billing Cycle Change,Payment Method Change,Renewal,Cancellation,Resume Cancellation'],
             'requested_plan_id' => ['nullable', 'integer', 'exists:subscription_plans,id'],
@@ -109,7 +136,7 @@ class BusinessSubscriptionController extends Controller
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,Jazz Cash,Easypaisa'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
-        $subscription = $business->subscription;
+        $subscription = app(SubscriptionLifecycleService::class)->forBusiness($business)['subscription'];
         [$type, $plan] = $this->resolveRequest($data, $subscription);
         $this->assertPermissionForType($request, $type, $business);
 
@@ -271,6 +298,17 @@ class BusinessSubscriptionController extends Controller
         };
 
         $this->assertPermission($request, $permission, $business);
+    }
+
+    private function assertCheckoutAccess(Request $request, Business $business, SubscriptionPlan $plan): void
+    {
+        $type = $this->requestType($business->subscription, $plan);
+        $type = match ($type) {
+            'Subscription' => 'New Subscription',
+            'Current', 'Renew' => 'Renewal',
+            default => $type,
+        };
+        $this->assertPermissionForType($request, $type, $business);
     }
 
     public function cancelRequest(Request $request, SubscriptionChangeRequest $changeRequest)

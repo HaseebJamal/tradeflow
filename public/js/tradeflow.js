@@ -95,22 +95,35 @@ function positionTradeFlowTomSelectDropdown(control) {
     if (!control?.isOpen) return;
 
     const rect = control.control.getBoundingClientRect();
-    const menuHeight = Math.min(control.dropdown.offsetHeight || 280, Math.max(0, window.innerHeight - 24));
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const opensUp = spaceBelow < Math.min(menuHeight, 260) && spaceAbove > spaceBelow;
+    // A menu that flips upward covers headings, summary cards, and other
+    // controls. Keep every standard select anchored below its field instead,
+    // then make its option area scroll within the remaining viewport space.
+    const maxMenuHeight = Math.max(96, window.innerHeight - rect.bottom - 12);
     const modalParent = control.input?.closest('.modal .modal-content');
+    const dropdownContent = control.dropdown.querySelector('.ts-dropdown-content');
+    const dropdownSearch = control.dropdown.querySelector('.dropdown-input-wrap');
+    // Keep long lists compact: four option rows are visible, while the
+    // remaining choices stay searchable and scrollable inside the menu.
+    const optionListHeight = Math.min(128, Math.max(48, maxMenuHeight - (dropdownSearch?.offsetHeight || 0)));
+
+    Object.assign(control.dropdown.style, {
+        maxHeight: `${maxMenuHeight}px`,
+    });
+    if (dropdownContent) {
+        Object.assign(dropdownContent.style, {
+            maxHeight: `${optionListHeight}px`,
+            overflowY: 'auto',
+        });
+    }
 
     if (modalParent && control.settings.dropdownParent === modalParent) {
         // Tom Select only positions body-portaled menus itself. This menu is
         // deliberately mounted in the modal to stay above its backdrop, so
         // translate viewport coordinates into the positioned modal content.
         const parentRect = modalParent.getBoundingClientRect();
-        const top = opensUp
-            ? Math.max(8, rect.top - parentRect.top - menuHeight)
-            : rect.bottom - parentRect.top;
+        const top = rect.bottom - parentRect.top;
 
-        control.wrapper.classList.toggle('tf-tom-select-up', opensUp);
+        control.wrapper.classList.remove('tf-tom-select-up');
         Object.assign(control.dropdown.style, {
             left: `${Math.max(0, rect.left - parentRect.left)}px`,
             top: `${top}px`,
@@ -124,11 +137,9 @@ function positionTradeFlowTomSelectDropdown(control) {
     const viewportWidth = window.innerWidth;
     const width = Math.min(rect.width, Math.max(0, viewportWidth - 24));
     const left = Math.max(12, Math.min(rect.left + window.scrollX, window.scrollX + viewportWidth - width - 12));
-    const top = opensUp
-        ? window.scrollY + Math.max(12, rect.top - menuHeight)
-        : window.scrollY + rect.bottom;
+    const top = window.scrollY + rect.bottom;
 
-    control.wrapper.classList.toggle('tf-tom-select-up', opensUp);
+    control.wrapper.classList.remove('tf-tom-select-up');
     Object.assign(control.dropdown.style, {
         left: `${left}px`,
         top: `${top}px`,
@@ -195,11 +206,9 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         const placeholderOption = [...element.options].find((option) => option.value === '');
         const isMultiple = element.multiple;
         const canClear = isMultiple || !element.required;
-        // The Create Order controls live in a compact inline form.  Portaling
-        // their dropdowns (and the dropdown_input search field) to <body>
-        // can leave that generated input between form sections.  Keep these
-        // dropdowns inside their own Tom Select wrapper instead.  This is
-        // intentionally route-scoped; other selects retain body portal logic.
+        // The Create Order controls live in a compact inline form. Portaling
+        // their menus to <body> can leave them detached from the form, so keep
+        // those menus inside their own Tom Select wrapper instead.
         const useInlineOrderDropdown = Boolean(element.closest('[data-order-form]'));
         // Keep every modal select inside its Bootstrap focus stack. A menu
         // portaled to body can otherwise sit behind the dialog/backdrop.
@@ -220,12 +229,11 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
             hideSelected: element.dataset.hideSelected === 'true',
             searchField: ['text'],
             placeholder: element.dataset.placeholder || element.getAttribute('placeholder') || placeholderOption?.textContent?.trim() || 'Select an option',
+            // Keep search inside the open menu, separate from the selected
+            // value shown in the control. This gives every dropdown one clear,
+            // labelled place to filter long option lists.
             plugins: {
-                // This plugin is the only source that creates a standalone
-                // search <input>.  On Create Order it previously became an
-                // orphaned field between the customer and item sections.
-                // Native Tom Select search remains available in its control.
-                ...(!useInlineOrderDropdown ? { dropdown_input: {} } : {}),
+                dropdown_input: {},
                 ...(canClear ? { clear_button: { title: 'Clear selection' } } : {}),
             },
             dropdownParent,
@@ -235,6 +243,12 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
                 option: (data, escape) => `<div class="tf-tom-select-option"><span class="tf-tom-select-option-label">${escape(data.text)}</span></div>`,
             },
         });
+
+        const dropdownSearchInput = control.dropdown.querySelector('.dropdown-input');
+        if (dropdownSearchInput) {
+            dropdownSearchInput.placeholder = 'Search options…';
+            dropdownSearchInput.setAttribute('aria-label', 'Search options');
+        }
 
         // When the menu is portaled to body, lock its width to the originating
         // control so it never inherits the page or sidebar width.
@@ -405,7 +419,10 @@ function isTradeFlowActionDropdown(toggle) {
 }
 
 function getTradeFlowActionMenu(toggle) {
-    return toggle?.closest('.dropdown')?.querySelector(':scope > .dropdown-menu') || null;
+    // Bootstrap button groups are valid dropdown hosts too. Super Admin
+    // tables use a View/Manage button beside a three-dot trigger, so both
+    // structures must resolve to the same direct action menu.
+    return toggle?.closest('.dropdown, .btn-group')?.querySelector(':scope > .dropdown-menu') || null;
 }
 
 function positionTradeFlowActionMenu(toggle) {
@@ -416,24 +433,43 @@ function positionTradeFlowActionMenu(toggle) {
     const gap = 6;
     const rect = toggle.getBoundingClientRect();
 
-    // A hidden, block-level menu can be measured without being visible while
-    // its first fixed position is calculated.
+    // Super Admin action menus stay as one compact list. They open below by
+    // default and flip only when that is required to keep every item visible.
     menu.style.setProperty('left', '0px', 'important');
     menu.style.setProperty('top', '0px', 'important');
-    menu.style.setProperty('max-height', `${Math.max(0, window.innerHeight - (padding * 2))}px`, 'important');
+    menu.style.setProperty('max-height', 'none', 'important');
     menu.style.setProperty('visibility', 'hidden', 'important');
 
     const menuRect = menu.getBoundingClientRect();
     const menuWidth = Math.min(menuRect.width || 220, Math.max(0, window.innerWidth - (padding * 2)));
-    const menuHeight = Math.min(menu.scrollHeight || menuRect.height, Math.max(0, window.innerHeight - (padding * 2)));
     const left = Math.max(padding, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - padding));
     const below = rect.bottom + gap;
-    const top = below + menuHeight <= window.innerHeight - padding
-        ? below
-        : Math.max(padding, rect.top - menuHeight - gap);
+    const availableBelow = Math.max(72, window.innerHeight - below - padding);
+    const actualBelow = Math.max(0, window.innerHeight - below - padding);
+    const actualAbove = Math.max(0, rect.top - gap - padding);
+    const isSuperAdminMenu = menu.classList.contains('tf-super-admin-action-menu');
+    // Keep Super Admin menus opening downward. If the table is near the
+    // viewport edge, move the page just enough to reveal the whole compact
+    // menu; a last-resort upward flip is used only at the document bottom.
+    if (isSuperAdminMenu && actualBelow < menuRect.height) {
+        const documentBottom = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        const remainingPageScroll = Math.max(0, documentBottom - (window.scrollY + window.innerHeight));
+        const requiredScroll = Math.ceil(menuRect.height - actualBelow + padding);
+        if (remainingPageScroll > 0) {
+            window.scrollBy({ top: Math.min(requiredScroll, remainingPageScroll), behavior: 'auto' });
+            return;
+        }
+    }
+    const shouldFlipUp = isSuperAdminMenu
+        && actualBelow < menuRect.height
+        && actualAbove >= menuRect.height;
+    const maxHeight = isSuperAdminMenu ? 'none' : `${availableBelow}px`;
+    const top = shouldFlipUp ? rect.top - gap - menuRect.height : below;
 
     menu.style.setProperty('left', `${Math.round(left)}px`, 'important');
     menu.style.setProperty('top', `${Math.round(top)}px`, 'important');
+    menu.style.setProperty('max-height', maxHeight, 'important');
+    menu.style.setProperty('overflow-y', isSuperAdminMenu ? 'visible' : 'auto', 'important');
     menu.style.setProperty('visibility', 'visible', 'important');
 }
 
@@ -450,6 +486,9 @@ function portalTradeFlowActionMenu(toggle) {
     toggle.__tradeFlowActionMenuStyle = menu.getAttribute('style');
     menu.__tradeFlowActionToggle = toggle;
     menu.classList.add('tf-action-dropdown-portal');
+    if (window.location.pathname.includes('/admin/')) {
+        menu.classList.add('tf-super-admin-action-menu');
+    }
     document.body.appendChild(menu);
 
     menu.style.setProperty('display', 'block', 'important');
@@ -470,6 +509,7 @@ function restoreTradeFlowActionMenu(toggle) {
     placeholder.parentNode.insertBefore(menu, placeholder);
     placeholder.remove();
     menu.classList.remove('tf-action-dropdown-portal');
+    menu.classList.remove('tf-super-admin-action-menu');
     if (toggle.__tradeFlowActionMenuStyle === null) menu.removeAttribute('style');
     else menu.setAttribute('style', toggle.__tradeFlowActionMenuStyle);
     delete menu.__tradeFlowActionToggle;
@@ -1002,6 +1042,76 @@ document.addEventListener('submit', (event) => {
     }).then((result) => { if (result.isConfirmed) proceed(); });
 }, true);
 
+// A save confirmation is required whenever an existing record is being
+// updated. Keep this delegated so it also protects forms rendered in modals
+// or injected after the initial page load. Purpose-built confirmations (for
+// example archive/delete/status actions) retain their more specific copy.
+function tradeFlowEffectiveFormMethod(form) {
+    const spoofedMethod = form.querySelector('input[name="_method"]')?.value;
+    return (spoofedMethod || form.method || 'GET').toUpperCase();
+}
+
+function tradeFlowSaveSubmitter(form, submitter) {
+    if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) return submitter;
+    return form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+}
+
+function requiresTradeFlowSaveConfirmation(form, submitter) {
+    if (!form || form.dataset.tfSaveConfirmApproved === '1') return false;
+
+    // These controls either do not save record details or already use a
+    // tailored confirmation flow. Never layer a generic prompt on top.
+    if (form.matches('[data-tf-confirm-message], [data-tf-company-delete], [data-tf-status-switch-form], [data-access-trial-confirm], [data-footer-newsletter], [data-footer-newsletter-legacy]')) return false;
+
+    const method = tradeFlowEffectiveFormMethod(form);
+    if (!['PUT', 'PATCH'].includes(method)) return false;
+
+    const button = tradeFlowSaveSubmitter(form, submitter);
+    const label = (button?.textContent || button?.value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const nonSaveAction = /\b(activate|deactivate|suspend|archive|restore|delete|remove|destroy|approve|reject|cancel|void|issue|reissue|reopen|start|deliver|fail|read|unread|mark|extend|renew)\b/;
+
+    return !nonSaveAction.test(label);
+}
+
+document.addEventListener('submit', (event) => {
+    const form = event.target.closest?.('form');
+    if (!requiresTradeFlowSaveConfirmation(form, event.submitter)) return;
+
+    event.preventDefault();
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    const submitter = tradeFlowSaveSubmitter(form, event.submitter);
+    const submitLabel = (submitter?.textContent || submitter?.value || 'Save Changes').replace(/\s+/g, ' ').trim();
+    const proceed = () => {
+        form.dataset.tfSaveConfirmApproved = '1';
+        if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
+            submitter.disabled = true;
+            submitter.dataset.tfOriginalLabel = submitter.textContent || submitter.value || submitLabel;
+            if (submitter instanceof HTMLInputElement) submitter.value = 'Saving...';
+            else submitter.textContent = 'Saving...';
+        }
+        form.requestSubmit(submitter || undefined);
+    };
+
+    // Every dashboard layout loads SweetAlert. If a custom/minimal layout
+    // intentionally omits it, allow the server-side update rather than
+    // leaving the form blocked with no available dialog.
+    if (!window.Swal) {
+        proceed();
+        return;
+    }
+
+    askTradeFlowConfirmation({
+        title: 'Save changes?',
+        text: 'Please confirm that you want to save these changes.',
+        confirmButtonText: submitLabel,
+        confirmButtonColor: '#2563eb',
+    }, proceed);
+}, true);
+
 scanTradeFlowAlerts();
 initSweetAlertConfirmations();
 initManualConfirmationFields();
@@ -1222,6 +1332,10 @@ function initTradeFlowPasswordControls(root = document) {
         if (!input.name || !/(^|_)password(?:_confirmation)?$/.test(input.name)) return;
         input.dataset.tfPasswordField = '1';
         if (!input.id) input.id = `tf-password-field-${++tradeFlowPasswordFieldId}`;
+
+        // Some premium surfaces provide their own in-boundary control. Bind
+        // that button below, but never wrap the field or generate a duplicate.
+        if (input.dataset.tfPasswordControl === 'manual') return;
 
         let group = input.closest('.input-group');
         if (!group) {
@@ -1610,21 +1724,18 @@ function initTradeFlowImageUploads(root = document) {
 }
 
 function initTradeFlowProfileImageMenu(root = document) {
-    const menus = root.matches?.('.tf-profile-image-dropdown')
+    const menus = root.matches?.('[data-tf-profile-image-controls]')
         ? [root]
-        : [...(root.querySelectorAll?.('.tf-profile-image-dropdown') || [])];
+        : [...(root.querySelectorAll?.('[data-tf-profile-image-controls]') || [])];
 
     menus.forEach((menu) => {
         if (menu.dataset.tfProfileImageMenuReady === '1') return;
         menu.dataset.tfProfileImageMenuReady = '1';
         const form = menu.closest('form');
-        const replace = menu.querySelector('[data-tf-profile-replace]');
         const removeAction = menu.querySelector('[data-tf-profile-remove-action]');
         const input = form?.querySelector('[data-tf-profile-input]');
         const remove = form?.querySelector('[data-tf-profile-remove]');
-        const toggle = menu.querySelector('[data-bs-toggle="dropdown"]');
 
-        replace?.addEventListener('click', () => input?.click());
         removeAction?.addEventListener('click', () => {
             if (!remove || !form) return;
             askTradeFlowConfirmation({
@@ -1634,7 +1745,6 @@ function initTradeFlowProfileImageMenu(root = document) {
             }, () => {
                 remove.checked = true;
                 input && (input.value = '');
-                window.bootstrap?.Dropdown.getInstance(toggle)?.hide();
                 form.requestSubmit();
             });
         });
@@ -2190,6 +2300,83 @@ document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreat
     document.addEventListener('input', (event) => {
         const input = event.target.closest?.(selector);
         if (input && isEditable(input)) normalize(input);
+    });
+})();
+
+// Inline binary status switches reuse the existing PATCH endpoints. The UI is
+// only updated after the server confirms the change, keeping it accurate when
+// permissions or business rules reject a request.
+(() => {
+    const toast = (icon, title) => {
+        if (window.Swal) {
+            window.Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2400, timerProgressBar: true });
+            return;
+        }
+        window.alert(title);
+    };
+
+    const applyStatus = (form, status) => {
+        const active = status === 'Active';
+        const button = form.querySelector('.tf-inline-status-switch');
+        const input = form.elements.status;
+        if (!button || !input) return;
+
+        button.classList.toggle('is-active', active);
+        button.classList.toggle('is-inactive', !active);
+        button.setAttribute('aria-checked', active ? 'true' : 'false');
+        button.setAttribute('aria-label', `${active ? 'Deactivate' : 'Activate'} ${form.dataset.tfStatusEntity || 'record'}`);
+        button.querySelector('.tf-inline-status-text').textContent = active ? 'Active' : 'Inactive';
+        input.value = active ? 'Inactive' : 'Active';
+    };
+
+    document.addEventListener('submit', (event) => {
+        const form = event.target.closest?.('[data-tf-status-switch-form]');
+        if (!form) return;
+
+        event.preventDefault();
+        const button = form.querySelector('.tf-inline-status-switch');
+        if (!button || button.disabled) return;
+
+        const nextStatus = form.elements.status?.value;
+        const isActivation = nextStatus === 'Active';
+        const entity = form.dataset.tfStatusEntity || 'this record';
+        const action = isActivation ? 'Activate' : 'Deactivate';
+        const sendUpdate = async () => {
+            button.disabled = true;
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new FormData(form),
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(payload.message || 'Unable to update status.');
+                const updatedStatus = payload.status || payload.subscriber?.status;
+                if (!updatedStatus) throw new Error(payload.message || 'The updated status was not returned.');
+
+                applyStatus(form, updatedStatus);
+                const planRow = form.closest('[data-plan-row]');
+                if (planRow) planRow.dataset.planStatus = updatedStatus;
+                form.dispatchEvent(new CustomEvent('tf:status-updated', { bubbles: true, detail: payload }));
+                toast('success', payload.message || 'Status updated successfully.');
+            } catch (error) {
+                // The control is not changed until a successful response, so a
+                // rejected request always retains the real previous state.
+                toast('error', error.message || 'Unable to update status.');
+            } finally {
+                button.disabled = false;
+            }
+        };
+
+        window.askTradeFlowConfirmation?.({
+            title: `${action} ${entity}?`,
+            text: isActivation
+                ? `${entity} will be available again.`
+                : `${entity} will become inactive until it is reactivated.`,
+            confirmButtonText: `Confirm ${action}`,
+            confirmButtonColor: isActivation ? '#2563eb' : '#f59e0b',
+        }, sendUpdate);
     });
 })();
 

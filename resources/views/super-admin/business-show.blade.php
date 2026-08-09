@@ -18,7 +18,7 @@
         <div class="tf-card p-4">
             <h2 class="h5">Business Information</h2>
             <div class="row g-3">
-                @foreach(['Business Name'=>$business->business_name,'Owner Name'=>$business->owner?->name,'Owner Login Email'=>$business->owner?->email ?: 'Not provided','Phone'=>$business->phone,'Address'=>$business->address,'City'=>$business->city,'Business Type'=>$business->display_business_type,'Registration Date'=>$business->created_at->format('M d, Y'),'Current Plan'=>$business->subscription?->plan?->name ?? '-'] as $k=>$v)
+                @foreach(['Business Name'=>$business->business_name,'Owner Name'=>$business->owner?->name,'Owner Login Email'=>$business->owner?->email ?: 'Not provided','Phone'=>$business->phone,'Address'=>$business->address,'City'=>$business->city,'Business Type'=>$business->display_business_type,'Registration Date'=>$business->created_at->format('M d, Y')] as $k=>$v)
                 <div class="col-md-6"><div class="border rounded p-3"><small class="tf-muted">{{ $k }}</small><strong class="d-block">{{ $v }}</strong></div></div>
                 @endforeach
             </div>
@@ -49,7 +49,7 @@
         <div class="tf-card p-4 mt-4">
             <h2 class="h5">Uploaded Documents</h2>
             @forelse($business->documents as $doc)
-                <a href="{{ asset('storage/'.$doc->file_path) }}" target="_blank" class="d-block border rounded p-2 mb-2">{{ $doc->document_type }}</a>
+                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($doc->file_path) }}" target="_blank" class="d-block border rounded p-2 mb-2">{{ $doc->document_type }}</a>
             @empty
                 <p class="tf-muted">No documents uploaded.</p>
             @endforelse

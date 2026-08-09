@@ -2,6 +2,10 @@
 
 namespace App\Services;
 
+use libphonenumber\NumberParseException;
+use libphonenumber\PhoneNumberFormat;
+use libphonenumber\PhoneNumberUtil;
+
 class PhoneNumberService
 {
     private const COUNTRY_CALLING_CODES = [
@@ -47,6 +51,52 @@ class PhoneNumberService
             return false;
         }
 
+        $utility = $this->phoneNumberUtility();
+        if (! $utility) {
+            return $this->hasKnownCountryCallingCode($value);
+        }
+
+        try {
+            $number = $utility->parse($value, null);
+
+            // A business system can validate an actual country calling code
+            // and national number length/structure, but must not reject a
+            // customer's number merely because an allocation database cannot
+            // confirm that it is currently assigned to a carrier.
+            return $utility->isPossibleNumber($number)
+                && $utility->format($number, PhoneNumberFormat::E164) === $value;
+        } catch (NumberParseException) {
+            return false;
+        }
+    }
+
+    private function phoneNumberUtility(): ?PhoneNumberUtil
+    {
+        if (! class_exists(PhoneNumberUtil::class)) {
+            $sourceDirectory = base_path('vendor/giggsey/libphonenumber-for-php/src');
+            if (is_dir($sourceDirectory)) {
+                // This package is a declared Composer dependency. Register a
+                // local fallback only when an in-place Composer autoload cache
+                // is stale, so web requests continue to validate safely.
+                spl_autoload_register(static function (string $class) use ($sourceDirectory): void {
+                    $prefix = 'libphonenumber\\';
+                    if (! str_starts_with($class, $prefix)) {
+                        return;
+                    }
+
+                    $path = $sourceDirectory.DIRECTORY_SEPARATOR.str_replace('\\', DIRECTORY_SEPARATOR, substr($class, strlen($prefix))).'.php';
+                    if (is_file($path)) {
+                        require_once $path;
+                    }
+                });
+            }
+        }
+
+        return class_exists(PhoneNumberUtil::class) ? PhoneNumberUtil::getInstance() : null;
+    }
+
+    private function hasKnownCountryCallingCode(string $value): bool
+    {
         $digits = substr($value, 1);
         foreach ([3, 2, 1] as $length) {
             $callingCode = (int) substr($digits, 0, $length);

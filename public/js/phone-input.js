@@ -1,5 +1,4 @@
 (() => {
-    const invalidMessage = 'Please enter a valid phone number for the selected country.';
     const incompleteMessage = 'Please complete the phone number for the selected country.';
     const e164Pattern = /^\+[1-9]\d{7,14}$/;
     const initialisers = new WeakMap();
@@ -19,8 +18,15 @@
         let utilitiesReady = false;
         const instance = window.intlTelInput(visible, {
             initialCountry: visible.dataset.defaultCountry || 'pk',
+            // Mount the menu at document level. Keeping it within the form
+            // lets following controls paint over the country results.
+            dropdownContainer: document.body,
             separateDialCode: true,
             nationalMode: true,
+            // Enforce the selected country's numbering plan while typing.
+            // The field contains the national portion; the picker supplies
+            // the country calling code separately.
+            strictMode: true,
             formatOnDisplay: true,
             autoPlaceholder: 'polite',
             loadUtils: () => import(utilitiesUrl),
@@ -51,6 +57,18 @@
             // before a US national number), remove that duplicate instead of
             // treating the dial code as an extra national digit.
             if (dialCode && exactLimit && digits.startsWith(dialCode) && digits.length > exactLimit) {
+                digits = digits.slice(dialCode.length);
+            }
+
+            // Values saved before `separateDialCode` was enabled can contain
+            // the country code inside the visible national-number field. In
+            // particular, Pakistan could render as `+92 923…`: the first 92
+            // belongs to the picker and must not be submitted a second time.
+            // Do this independently of the async metadata placeholder, which
+            // may not be available when a form is first painted.
+            const hasInternationalPrefix = /^\s*(?:\+|00)/.test(visible.value);
+            const duplicatedPakistanCode = dialCode === '92' && /^92(?:3\d{9}|03\d{9})$/.test(digits);
+            if (dialCode && digits.startsWith(dialCode) && (hasInternationalPrefix || duplicatedPakistanCode)) {
                 digits = digits.slice(dialCode.length);
             }
 
@@ -139,17 +157,26 @@
             }
 
             const number = normalisedNumber();
-            // isValidNumber is intentionally invoked for the plugin's normal
-            // country-aware validation. Numbering-plan metadata can reject a
-            // correctly sized test/new range before it is assigned, so accept
-            // a possible number with the exact selected-country length too.
-            const validByCountry = typeof instance.isValidNumber === 'function' && instance.isValidNumber();
-            const validBySelectedCountryLength = !isIncomplete()
-                && instance.getValidationError?.() !== window.intlTelInputUtils?.validationError?.TOO_LONG;
+            // Never rely on length once the metadata is available. A correctly
+            // sized number can still be impossible for the selected country.
+            // Before the metadata bundle finishes loading, accept only a
+            // well-formed E.164 value and let the shared server validator make
+            // the final country-plan decision. This avoids trapping a valid
+            // profile update behind a slow or failed utility import.
+            const validationError = instance.getValidationError?.();
+            const possibleNumber = window.intlTelInputUtils?.validationError?.IS_POSSIBLE;
+            const validByCountry = typeof possibleNumber === 'number'
+                ? validationError === possibleNumber
+                : (typeof instance.isValidNumber === 'function' && instance.isValidNumber());
             const valid = !hasSelectedCountryMismatch()
                 && Boolean(number)
-                && (utilitiesReady ? (validByCountry || validBySelectedCountryLength) : !isIncomplete());
-            const validationMessage = valid ? '' : (isIncomplete() ? incompleteMessage : invalidMessage);
+                && (utilitiesReady ? validByCountry : e164Pattern.test(number));
+            const countryName = instance.getSelectedCountryData?.()?.name || 'the selected country';
+            const validationMessage = valid
+                ? ''
+                : (isIncomplete()
+                    ? incompleteMessage
+                    : `Enter a valid phone number for ${countryName}.`);
 
             if (hidden) hidden.value = valid ? number : '';
             normalizedNumbers.set(field, valid ? number : '');

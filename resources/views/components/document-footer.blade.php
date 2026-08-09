@@ -32,6 +32,7 @@
     $showFooterTitle = ($footer->show_footer_title ?? true) && filled($footerTitle)
         && (! $showCompanyName || strcasecmp($footerTitle, (string) $businessName) !== 0);
     $showFooterMessage = ($footer->show_footer_message ?? true) && filled($footer->footer_message);
+    $poweredByText = app(\App\Services\BusinessDocumentFooterService::class)->displayedPoweredByText($footer);
 @endphp
 <footer class="tf-document-footer {{ $thermal ? 'tf-document-footer--thermal' : '' }}" style="margin-top: 1rem; text-align: center; color: #4b5563; font-size: {{ $thermal ? '9px' : '.875rem' }}; line-height: 1.45;">
     @if($showCompanyName)<div class="tf-document-footer__title" style="font-weight: 700; color: #111827;">{{ $businessName }}</div>@endif
@@ -46,5 +47,5 @@
         @if(filled($line))<div>{{ $line }}</div>@endif
     @endforeach
     @if($showCompanyName)<div>&copy; {{ now()->year }} {{ $businessName }}</div>@endif
-    @if($footer->show_powered_by)<div>{{ $footer->powered_by_text ?: 'Powered by TradeFlow' }}</div>@endif
+    @if($footer->show_powered_by)<div>{{ $poweredByText }}</div>@endif
 </footer>

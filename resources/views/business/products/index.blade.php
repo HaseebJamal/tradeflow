@@ -77,7 +77,7 @@
     <tbody>
         @forelse($products ?? [] as $product)
         <tr>
-            <td>@if($product->image)<img src="{{ asset('storage/' . $product->image) }}" alt="{{ $product->name }}"
+            <td>@if($product->image)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($product->image) }}" alt="{{ $product->name }}"
             class="rounded border" style="height:38px;width:38px;object-fit:cover">@else<span
                         class="tf-icon-tile bg-light text-primary" style="height:38px;width:38px"><i
                     class="bi bi-box-seam"></i></span>@endif</td>
@@ -95,9 +95,7 @@
             <td>Rs {{ number_format($product->wholesale_price, 2) }}</td>
             <td><x-quantity :value="$product->stock_quantity" /></td>
             <td>{{ $product->barcode ?: '-' }}</td>
-            <td><span
-                    class="tf-badge {{ $product->status === 'Active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $product->deleted_at ? 'Archived' : $product->status }}</span>
-            </td>
+            <td>@if($product->trashed())<span class="tf-badge tf-badge-warning">Archived</span>@else @companyCan('products.edit')<x-inline-status-switch :status="$product->status" :action="route('business.products.status', $product)" entity="product {{ $product->name }}" />@else<span class="tf-badge {{ $product->status === 'Active' ? 'tf-badge-success' : 'tf-badge-secondary' }}">{{ $product->status }}</span>@endcompanyCan @endif</td>
             <td>{{ $product->created_at?->format('M d, Y') }}
                 <div class="small tf-muted">{{ $product->creator?->name }}</div>
             </td>

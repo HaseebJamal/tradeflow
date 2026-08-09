@@ -3,7 +3,7 @@
 @section('content')
 <section class="tf-auth-shell">
     <div class="container"><div class="row justify-content-center"><div class="col-md-8 col-lg-5"><div class="tf-card tf-auth-card p-4 p-lg-5">
-        <a href="{{ route('public.home') }}" class="tf-brand d-flex align-items-center mb-4" aria-label="{{ $platformSettings->company_name }} home">@if($platformSettings->logo)<img src="{{ asset('storage/'.$platformSettings->logo) }}" class="tf-brand-logo" alt="">@else<span class="tf-brand-mark"><i class="bi bi-box-seam"></i></span>@endif<span>{{ $platformSettings->company_name }}</span></a>
+        <a href="{{ route('public.home') }}" class="tf-brand d-flex align-items-center mb-4" aria-label="{{ $platformSettings->company_name }} home">@if($platformSettings->logo)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($platformSettings->logo) }}" class="tf-brand-logo" alt="">@else<span class="tf-brand-mark"><i class="bi bi-box-seam"></i></span>@endif<span>{{ $platformSettings->company_name }}</span></a>
         <h1 class="h3 fw-bold">Reset Password</h1>
         <p class="tf-muted">Choose a new secure password for your account.</p>
         <form method="POST" action="{{ route('password.update') }}" class="d-grid gap-3" data-password-reset-update-form data-tf-tab-order>

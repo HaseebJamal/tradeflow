@@ -33,6 +33,9 @@
     const quickCustomerPhone = $('[data-pos-customer-phone]');
     const quickCustomerCity = $('[data-pos-customer-city]');
     const quickCustomerAddress = $('[data-pos-customer-address]');
+    const deliveryRequired = $('[data-pos-delivery-required]');
+    const deliveryDetails = $('[data-pos-delivery-details]');
+    const deliveryAddress = $('[data-pos-delivery-address]');
     const discount = $('[data-pos-discount]');
     const tax = $('[data-pos-tax]');
     const paymentType = $('[data-pos-payment-type]');
@@ -43,6 +46,7 @@
     const changeReturn = $('[data-pos-change]');
     const reference = $('[data-pos-reference]');
     const completeButton = $('[data-pos-complete]');
+    const checkoutPanel = $('.tf-pos-checkout-panel');
     const registerStatus = $('[data-pos-register-status]');
     const registerLabel = $('[data-pos-register-label]');
     const openingCash = $('[data-pos-opening-cash]');
@@ -330,15 +334,16 @@
         const numericField = (field, value, min = 0, max = '') => `<input class="form-control form-control-sm" type="number" min="${min}"${max !== '' ? ` max="${max}"` : ''} step="1" inputmode="numeric" value="${value}" data-cart-field="${field}">`;
         const quantity = isEditing ? numericField('quantity', line.quantity, 1, line.stock) : line.quantity;
         const price = isEditing && config.canUseCustomPrice ? numericField('price', line.price, 0) : `Rs ${numberWithCommas(line.price)}`;
-        const lineDiscount = isEditing ? numericField('discount', line.discount, 0, 100) : `${line.discount}%`;
-        const lineTax = isEditing ? numericField('tax', line.tax, 0, 100) : `${line.tax}%`;
+        const adjustments = isEditing
+            ? `<div class="tf-pos-cart-adjustment-inputs">${numericField('discount', line.discount, 0, 100)}${numericField('tax', line.tax, 0, 100)}</div>`
+            : `<span class="tf-pos-cart-adjustment-values">${line.discount}%<small>Tax ${line.tax}%</small></span>`;
         const actions = isEditing
             ? '<button type="button" class="btn btn-sm btn-outline-success" data-cart-action="save">Save</button><button type="button" class="btn btn-sm btn-outline-secondary" data-cart-action="cancel">Cancel</button>'
             : '<button type="button" class="btn btn-sm btn-outline-primary" data-cart-action="edit">Edit</button><button type="button" class="btn btn-sm btn-outline-danger" data-cart-action="remove">Delete</button>';
         return `<tr data-cart-id="${line.id}" tabindex="0" class="${selectedCartId === line.id ? 'is-selected' : ''}">
             <td>${index + 1}</td><td class="tf-pos-product-cell"><strong>${escapeHtml(line.name)}</strong><small class="d-block text-muted">${escapeHtml(line.barcode || '')} | Stock ${line.stock}</small></td>
-            <td>${quantity}</td><td>${price}</td><td>${lineDiscount}</td><td>${lineTax}</td>
-            <td class="tf-pos-line-total"><strong data-cart-line-total>${currency(line.lineTotal)}</strong></td><td><div class="d-flex gap-1">${actions}</div>${isEditing ? '<small class="d-block text-danger mt-1" data-cart-error aria-live="polite"></small>' : ''}</td>
+            <td>${quantity}</td><td>${price}</td><td>${adjustments}</td>
+            <td class="tf-pos-line-total"><strong data-cart-line-total>${currency(line.lineTotal)}</strong></td><td class="tf-pos-cart-actions-cell"><div class="tf-pos-cart-actions">${actions}</div>${isEditing ? '<small class="d-block text-danger mt-1" data-cart-error aria-live="polite"></small>' : ''}</td>
         </tr>`;
     };
     const numberWithCommas = (value) => whole(value).toLocaleString();
@@ -349,7 +354,7 @@
         if (selectedCartId === null && cart.size) selectedCartId = [...cart.keys()][0];
         cartBody.innerHTML = cart.size
             ? [...cart.values()].map(cartRow).join('')
-            : '<tr data-pos-empty><td colspan="8" class="text-center text-muted py-5">Scan or select a product to start a sale.</td></tr>';
+            : '<tr data-pos-empty><td colspan="7" class="text-center text-muted py-5">Scan or select a product to start a sale.</td></tr>';
         window.initTradeFlowMoneyInputs?.(cartBody);
         return updateTotals();
     };
@@ -455,6 +460,9 @@
         }
         quickCustomerCity && (quickCustomerCity.value = '');
         quickCustomerAddress && (quickCustomerAddress.value = '');
+        if (deliveryRequired) deliveryRequired.value = '0';
+        if (deliveryAddress) deliveryAddress.value = '';
+        deliveryDetails?.classList.add('d-none');
         discount.value = 0;
         tax.value = 0;
         paymentType.value = 'Cash';
@@ -475,6 +483,8 @@
             city: quickCustomerCity?.value.trim() || '',
             address: quickCustomerAddress?.value.trim() || '',
         } : null,
+        delivery_required: deliveryRequired?.value === '1',
+        delivery_address: deliveryAddress?.value.trim() || (isQuickCustomer() ? quickCustomerAddress?.value.trim() || null : null),
         discount: whole(discount.value),
         tax_rate: whole(tax.value),
         payment_type: paymentType.value,
@@ -499,6 +509,16 @@
         if (['Credit', 'Split'].includes(paymentType.value) && !customer.value) {
             flash('warning', 'Customer required', 'Select a registered customer for this payment type.');
             focusElement(customer);
+            return;
+        }
+        if (deliveryRequired?.value === '1' && !customer.value) {
+            flash('warning', 'Customer required', 'Select or create a customer before requesting delivery.');
+            focusElement(customer);
+            return;
+        }
+        if (deliveryRequired?.value === '1' && !(deliveryAddress?.value.trim() || (isQuickCustomer() && quickCustomerAddress?.value.trim()))) {
+            flash('warning', 'Delivery address required', 'Enter a delivery address before completing this sale.');
+            focusElement(deliveryAddress || quickCustomerAddress);
             return;
         }
         if (isQuickCustomer() && !quickCustomerIsValid()) {
@@ -562,6 +582,9 @@
             paymentMethod.value = checkout.payment_method || 'Cash';
             cash.value = checkout.cash_received || '';
             reference.value = checkout.reference || '';
+            if (deliveryRequired) deliveryRequired.value = checkout.delivery_required ? '1' : '0';
+            if (deliveryAddress) deliveryAddress.value = checkout.delivery_address || '';
+            deliveryDetails?.classList.toggle('d-none', deliveryRequired?.value !== '1');
             if (checkout.quick_customer) {
                 quickCustomerName && (quickCustomerName.value = checkout.quick_customer.name || '');
                 if (quickCustomerPhone) {
@@ -739,6 +762,8 @@
     const checkoutFields = () => [
         customer,
         ...(isQuickCustomer() ? [quickCustomerName, quickCustomerPhone, quickCustomerCity, quickCustomerAddress].filter(Boolean) : []),
+        deliveryRequired,
+        ...(deliveryRequired?.value === '1' ? [deliveryAddress].filter(Boolean) : []),
         discount,
         tax,
         cash,
@@ -746,6 +771,16 @@
         reference,
         completeButton,
     ];
+    const visibleCheckoutFields = () => checkoutFields().filter((field) => field
+        && !field.disabled
+        && field.type !== 'hidden'
+        && !field.closest('.d-none, [hidden], [aria-hidden="true"]')
+        && field.getClientRects().length);
+    const focusNextCheckoutField = (field) => {
+        const fields = visibleCheckoutFields();
+        const next = fields[fields.indexOf(field) + 1];
+        if (next) focusElement(next, next.matches('input, textarea'));
+    };
     const focusPreviousIfEmpty = (event, fields) => {
         const field = event.target;
         const currentIndex = fields.indexOf(field);
@@ -762,6 +797,40 @@
             requestAnimationFrame(() => quickCustomerName?.focus());
         }
     };
+
+    let nativeCheckoutSelectField = null;
+    let nativeCheckoutSelectOpen = false;
+    let nativeCheckoutSelectAdvanceTimer = null;
+    const syncDeliveryMode = () => {
+        const required = deliveryRequired?.value === '1';
+        deliveryDetails?.classList.toggle('d-none', !required);
+        if (!required && deliveryAddress) deliveryAddress.value = '';
+    };
+    const advanceFromNativeCheckoutSelect = (field) => {
+        requestAnimationFrame(() => {
+            if (field === deliveryRequired && deliveryRequired.value === '1') {
+                focusElement(deliveryAddress);
+            } else if (field === customer && isQuickCustomer()) {
+                focusElement(quickCustomerName);
+            } else {
+                focusNextCheckoutField(field);
+            }
+        });
+    };
+    checkoutPanel?.addEventListener('change', (event) => {
+        const field = event.target;
+        if (!(field instanceof HTMLSelectElement) || !checkoutPanel.contains(field)) return;
+        if (field === deliveryRequired) syncDeliveryMode();
+
+        const advanceAfterSelection = nativeCheckoutSelectField === field;
+        nativeCheckoutSelectField = null;
+        nativeCheckoutSelectOpen = false;
+        if (nativeCheckoutSelectAdvanceTimer) {
+            window.clearTimeout(nativeCheckoutSelectAdvanceTimer);
+            nativeCheckoutSelectAdvanceTimer = null;
+        }
+        if (advanceAfterSelection) advanceFromNativeCheckoutSelect(field);
+    });
 
     grid.addEventListener('click', (event) => {
         const card = event.target.closest('[data-product]');
@@ -926,33 +995,56 @@
         const button = event.target.closest('[data-held-id]');
         if (button) resume(button.dataset.heldId);
     });
-    [customer, quickCustomerName, quickCustomerPhone, quickCustomerCity, quickCustomerAddress, discount, tax, cash, paymentMethod, reference, completeButton]
-        .filter(Boolean)
-        .forEach((field) => field.addEventListener('keydown', (event) => {
-            const fields = checkoutFields();
-            if (focusPreviousIfEmpty(event, fields)) return;
-            if (event.key !== 'Enter') return;
+    checkoutPanel?.addEventListener('keydown', (event) => {
+        const field = event.target.closest('input, select, textarea, button');
+        if (!field || !checkoutPanel.contains(field)) return;
+        const fields = visibleCheckoutFields();
+        if (focusPreviousIfEmpty(event, fields)) return;
+        if (event.key !== 'Enter') return;
 
-            event.preventDefault();
-            if (field === completeButton) {
-                complete();
+        // Keep browser-native select accessibility intact: Enter opens a
+        // closed select, arrows navigate its option list, and Enter confirms.
+        // No synthetic click or focus change is made while that list is open.
+        if (field.matches('select')) {
+            const isConfirmingSelection = nativeCheckoutSelectOpen && nativeCheckoutSelectField === field;
+            nativeCheckoutSelectField = field;
+            if (isConfirmingSelection) {
+                // A same-value selection does not emit change, so only then
+                // advance after the browser has closed the native menu.
+                nativeCheckoutSelectAdvanceTimer = window.setTimeout(() => {
+                    if (!nativeCheckoutSelectOpen || nativeCheckoutSelectField !== field) return;
+                    nativeCheckoutSelectOpen = false;
+                    nativeCheckoutSelectField = null;
+                    if (field === deliveryRequired) syncDeliveryMode();
+                    advanceFromNativeCheckoutSelect(field);
+                }, 0);
+            } else {
+                nativeCheckoutSelectOpen = true;
+            }
+            return;
+        }
+
+        // Buttons keep their native Enter/click behaviour. This avoids an
+        // accidental double Complete Sale call.
+        if (field.matches('button')) return;
+
+        // A delivery address is intentionally multiline only with Shift+Enter.
+        if (field === deliveryAddress && event.shiftKey) return;
+
+        event.preventDefault();
+        if (field === customer) syncCustomerMode(false);
+        if (field === discount || field === tax) updateTotals();
+        if (field === cash) {
+            const values = totals();
+            if (!cashIsValid() || (paymentType.value === 'Cash' && roundCash(cash.value) < values.grand)) {
+                flash('warning', 'Insufficient cash received', `Required amount is ${currency(values.grand)}.`);
+                focusElement(cash, true);
                 return;
             }
-            if (field === customer) syncCustomerMode(false);
-            if (field === discount || field === tax) updateTotals();
-            if (field === cash) {
-                const values = totals();
-                if (!cashIsValid() || (paymentType.value === 'Cash' && roundCash(cash.value) < values.grand)) {
-                    flash('warning', 'Insufficient cash received', `Required amount is ${currency(values.grand)}.`);
-                    focusElement(cash, true);
-                    return;
-                }
-            }
+        }
 
-            const nextFields = checkoutFields();
-            const currentIndex = nextFields.indexOf(field);
-            focusElement(nextFields[currentIndex + 1], true);
-        }));
+        focusNextCheckoutField(field);
+    });
     root.addEventListener('wheel', (event) => { if (event.target === cash) event.preventDefault(); }, { passive: false });
 
     if (config.quotation?.items?.length) {

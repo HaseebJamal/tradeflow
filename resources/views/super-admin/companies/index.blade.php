@@ -1,7 +1,7 @@
 @extends('layouts.dashboard')
 
 @section('page-title', 'Companies')
-@section('page-subtitle', 'Manage company approvals, access, and operations')
+@section('page-subtitle', 'Manage registered businesses and account status across Profit Point')
 
 @section('content')
     @if(session('success'))
@@ -11,102 +11,85 @@
         <div class="alert alert-danger">{{ $errors->first() }}</div>
     @endif
 
-    <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-        <div class="btn-group flex-wrap">
-            @foreach(['all' => 'All', 'pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected', 'suspended' => 'Suspended', 'archived' => 'Archived'] as $status => $label)
-                <a class="btn btn-sm {{ ($statusFilter ?: 'all') === $status ? 'btn-tf-primary' : 'btn-outline-secondary' }}" href="{{ $status === 'all' ? route('admin.companies.index') : route('admin.companies.'.$status) }}">{{ $label }}</a>
-            @endforeach
-        </div>
-        <div class="d-flex gap-2">
-            <a href="{{ route('admin.approvals.history') }}" class="btn btn-outline-secondary"><i class="bi bi-clock-history me-1"></i>Approval History</a>
-            <a href="{{ route('admin.companies.create') }}" class="btn btn-tf-primary"><i class="bi bi-plus-lg me-1"></i>Create Company</a>
-        </div>
-    </div>
+    <header class="tf-module-header"><div><span class="tf-dashboard-eyebrow">Platform businesses</span><h2>Companies</h2><p>Manage registered businesses and account status across Profit Point.</p></div><div class="d-flex flex-wrap gap-2"><a href="{{ route('admin.approvals.history') }}" class="btn btn-outline-secondary tf-module-secondary-action"><i class="bi bi-clock-history"></i><span>Approval history</span></a><a href="{{ route('admin.companies.create') }}" class="btn btn-tf-primary tf-dashboard-primary-action"><i class="bi bi-plus-lg"></i>Create company</a></div></header>
 
-    <div class="tf-card p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-2"><strong>Filter Companies</strong><small class="tf-muted">Current time: <time data-current-time></time></small></div>
-        <form method="GET" action="{{ route('admin.companies.index') }}" class="row g-2 align-items-end">
+    <section class="tf-module-summary" aria-label="Company summary">
+        @foreach([['Total businesses', $summary->total ?? 0, 'bi-buildings', 'blue'], ['Approved', $summary->approved ?? 0, 'bi-check2-circle', 'green'], ['Pending', $summary->pending ?? 0, 'bi-hourglass-split', 'amber'], ['Suspended', $summary->suspended ?? 0, 'bi-pause-circle', 'red'], ['Rejected', $summary->rejected ?? 0, 'bi-x-circle', 'slate']] as [$label, $count, $icon, $tone])
+            <div class="tf-module-summary-card"><span class="tf-module-summary-icon is-{{ $tone }}"><i class="bi {{ $icon }}"></i></span><span><small>{{ $label }}</small><strong>{{ number_format($count) }}</strong></span></div>
+        @endforeach
+    </section>
+
+    <div class="tf-card tf-module-filter-card mb-3">
+        <div class="tf-module-filter-heading"><div><strong>Search and filter</strong><small>Refine the registered business list.</small></div><small class="tf-muted d-none d-lg-block">Current time: <time data-current-time></time></small></div>
+        <form method="GET" action="{{ route('admin.companies.index') }}" class="row g-3 align-items-end">
             <input type="hidden" name="filters_applied" value="1">
             <div class="col-md-3"><label class="form-label">Search</label><input name="search" class="form-control" value="{{ $filters['search'] ?? '' }}" placeholder="Company, owner, email, phone, or registration no."></div>
             <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All statuses</option>@foreach(['pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected', 'suspended' => 'Suspended', 'archived' => 'Archived'] as $value => $label)<option value="{{ $value }}" @selected(($statusFilter ?? '') === $value)>{{ $label }}</option>@endforeach</select></div>
             <div class="col-md-2"><label class="form-label">Business Type</label><select name="business_type" class="form-select"><option value="">All types</option>@foreach($businessTypes as $type)<option value="{{ $type }}" @selected(($filters['business_type'] ?? '') === $type)>{{ $type }}</option>@endforeach</select></div>
             <div class="col-md-2"><label class="form-label">City</label><input name="city" class="form-control" value="{{ $filters['city'] ?? '' }}" placeholder="Any city"></div>
-            <div class="col-md-2"><label class="form-label">Plan</label><select name="plan_id" class="form-select"><option value="">All plans</option>@foreach($plans as $plan)<option value="{{ $plan->id }}" @selected((int)($filters['plan_id'] ?? 0) === $plan->id)>{{ $plan->name }}</option>@endforeach</select></div>
             <div class="col-md-2"><label class="form-label">Sort</label><select name="sort" class="form-select"><option value="newest" @selected(($filters['sort'] ?? 'newest') === 'newest')>Newest first</option><option value="oldest" @selected(($filters['sort'] ?? '') === 'oldest')>Oldest first</option><option value="name_asc" @selected(($filters['sort'] ?? '') === 'name_asc')>Name A-Z</option><option value="name_desc" @selected(($filters['sort'] ?? '') === 'name_desc')>Name Z-A</option></select></div>
             <div class="col-md-2"><label class="form-label">Created From</label><input type="date" name="date_from" max="{{ now()->toDateString() }}" class="form-control" value="{{ $filters['date_from'] ?? now()->toDateString() }}"></div>
             <div class="col-md-2"><label class="form-label">Created To</label><input type="date" name="date_to" max="{{ now()->toDateString() }}" class="form-control" value="{{ $filters['date_to'] ?? now()->toDateString() }}"></div>
-            <div class="col-md-1"><button class="btn btn-outline-primary w-100">Filter</button></div>
+            <div class="col-md-1"><button class="btn btn-tf-primary w-100">Apply</button></div>
             <div class="col-md-1"><a href="{{ route('admin.companies.index') }}" class="btn btn-outline-secondary w-100">Clear</a></div>
         </form>
     </div>
 
-    <x-table class="admin-company-table">
-        <thead><tr><th>Company</th><th>Owner Name</th><th>Plan</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+    <section class="tf-module-table-card"><div class="tf-module-table-heading"><div><h3>Registered businesses</h3><p>Businesses currently registered on Profit Point.</p></div><span class="tf-table-result-count">{{ $companies->total() }} results</span></div>
+    <x-table class="admin-company-table tf-module-table">
+        <thead><tr><th>Business</th><th>Owner</th><th>Contact</th><th>Business status</th><th>Registered</th><th class="text-end">Actions</th></tr></thead>
         <tbody>
             @forelse($companies as $company)
                 @php
                     $companyStatus = strtolower((string) $company->status);
+                    $companyDisplayStatus = $companyStatus === 'approved' && strtolower((string) $company->subscription?->status) === 'trial'
+                        ? 'Trial Active'
+                        : $company->status;
+                    $companyLogoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim((string) $company->logo, '/'));
+                    $hasCompanyLogo = filled($companyLogoPath) && \Illuminate\Support\Facades\Storage::disk('public')->exists($companyLogoPath);
+                    $companyInitials = str($company->business_name)->trim()->explode(' ')->filter()->take(2)->map(fn ($part) => str($part)->substr(0, 1)->upper())->implode('');
                 @endphp
                 <tr>
-                    <td><strong>{{ $company->business_name }}</strong></td>
-                    <td>{{ $company->owner?->name ?: 'Owner not assigned' }}</td>
-                    <td>{{ $company->subscription?->plan?->name ?? 'No plan' }}</td>
-                    <td><span class="tf-badge {{ $companyStatus === 'approved' ? 'tf-badge-success' : ($companyStatus === 'pending' ? 'tf-badge-warning' : 'tf-badge-danger') }}">{{ $company->status }}</span></td>
+                    <td><div class="tf-company-cell">@if($hasCompanyLogo)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($companyLogoPath) }}" alt="{{ $company->business_name }} logo">@else<span>{{ $companyInitials ?: 'B' }}</span>@endif<div><strong>{{ $company->business_name }}</strong><small>{{ $company->display_business_type ?: 'Business' }}</small></div></div></td>
+                    <td><div class="tf-table-person"><strong>{{ $company->owner?->name ?: 'Owner not assigned' }}</strong><small>{{ $company->owner?->email ?: 'No email provided' }}</small></div></td>
+                    <td><span class="tf-table-contact">{{ $company->phone ?: 'Not provided' }}</span></td>
+                    <td><span class="tf-badge {{ $companyDisplayStatus === 'Trial Active' ? 'tf-badge-info' : ($companyStatus === 'approved' ? 'tf-badge-success' : ($companyStatus === 'pending' ? 'tf-badge-warning' : ($companyStatus === 'archived' ? 'tf-badge-info' : 'tf-badge-danger'))) }}">{{ $companyDisplayStatus }}</span></td>
+                    <td><span class="tf-table-date"><x-date-time :value="$company->created_at" /></span></td>
                     <td class="text-end">
-                        <div class="dropdown">
-                            <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">Actions</button>
-                            <div class="dropdown-menu dropdown-menu-end shadow">
-                                <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#company-details-{{ $company->id }}"><i class="bi bi-eye me-2"></i>View</button>
-                                <a class="dropdown-item" href="{{ route('admin.companies.show', $company) }}"><i class="bi bi-box-arrow-up-right me-2"></i>Open Full Company Page</a>
-                                <a class="dropdown-item" href="{{ route('admin.companies.document-footer.edit', $company) }}"><i class="bi bi-receipt me-2"></i>Receipt Footer</a>
-
-                                @if($companyStatus === 'pending')
-                                    <a class="dropdown-item" href="{{ route('admin.companies.edit', $company) }}"><i class="bi bi-pencil me-2"></i>Edit Company</a>
-                                    <a class="dropdown-item" href="{{ route('admin.permissions.index', ['manage_company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-2"></i>Manage Permissions</a>
-                                    <div class="dropdown-divider"></div>
-                                    <form method="POST" action="{{ route('admin.companies.status', $company) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="approved"><button type="submit" class="dropdown-item text-success">Approve</button></form>
-                                    <form method="POST" action="{{ route('admin.companies.status', $company) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="rejected"><button type="submit" class="dropdown-item text-danger">Reject</button></form>
-                                    <div class="dropdown-divider"></div>
-                                    <form method="POST" action="{{ route('admin.companies.archive', $company) }}" onsubmit="return confirm('Archive this company? Its data will remain intact.')">@csrf @method('PATCH')<button type="submit" class="dropdown-item text-warning">Archive</button></form>
-                                    <form method="POST" action="{{ route('admin.companies.destroy', $company) }}" data-tf-company-delete data-company-name="{{ $company->business_name }}">@csrf @method('DELETE')<button type="submit" class="dropdown-item text-danger">Permanently Delete Company</button></form>
-                                @elseif($companyStatus === 'approved')
-                                    <a class="dropdown-item" href="{{ route('admin.companies.edit', $company) }}"><i class="bi bi-pencil me-2"></i>Edit Company</a>
-                                    <a class="dropdown-item" href="{{ route('admin.permissions.index', ['manage_company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-2"></i>Manage Permissions</a>
-                                    <a class="dropdown-item" href="{{ route('admin.subscriptions', ['manage_business_id' => $company->id]) }}#assign-subscription"><i class="bi bi-credit-card me-2"></i>Manage Subscription</a>
-                                    <form method="POST" action="{{ route('admin.companies.open-dashboard', $company) }}">@csrf<button type="submit" class="dropdown-item"><i class="bi bi-person-workspace me-2"></i>Open Business Dashboard</button></form>
-                                    <div class="dropdown-divider"></div>
-                                    <form method="POST" action="{{ route('admin.companies.status', $company) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="suspended"><button type="submit" class="dropdown-item text-warning">Suspend</button></form>
-                                    <form method="POST" action="{{ route('admin.companies.archive', $company) }}" onsubmit="return confirm('Archive this company? Its data will remain intact.')">@csrf @method('PATCH')<button type="submit" class="dropdown-item text-warning">Archive</button></form>
-                                @elseif($companyStatus === 'suspended')
-                                    <a class="dropdown-item" href="{{ route('admin.permissions.index', ['manage_company_id' => $company->id]) }}"><i class="bi bi-shield-lock me-2"></i>Manage Permissions</a>
-                                    <a class="dropdown-item" href="{{ route('admin.subscriptions', ['manage_business_id' => $company->id]) }}#assign-subscription"><i class="bi bi-credit-card me-2"></i>Manage Subscription</a>
-                                    <div class="dropdown-divider"></div>
-                                    <form method="POST" action="{{ route('admin.companies.status', $company) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="approved"><button type="submit" class="dropdown-item text-success">Activate</button></form>
-                                    <form method="POST" action="{{ route('admin.companies.archive', $company) }}" onsubmit="return confirm('Archive this company? Its data will remain intact.')">@csrf @method('PATCH')<button type="submit" class="dropdown-item text-warning">Archive</button></form>
-                                @elseif($companyStatus === 'rejected')
-                                    <a class="dropdown-item" href="{{ route('admin.companies.edit', $company) }}"><i class="bi bi-pencil me-2"></i>Edit Company</a>
-                                    <div class="dropdown-divider"></div>
-                                    <form method="POST" action="{{ route('admin.companies.status', $company) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="pending"><button type="submit" class="dropdown-item">Move to Pending</button></form>
-                                    <form method="POST" action="{{ route('admin.companies.archive', $company) }}" onsubmit="return confirm('Archive this company? Its data will remain intact.')">@csrf @method('PATCH')<button type="submit" class="dropdown-item text-warning">Archive</button></form>
-                                    <form method="POST" action="{{ route('admin.companies.destroy', $company) }}" data-tf-company-delete data-company-name="{{ $company->business_name }}">@csrf @method('DELETE')<button type="submit" class="dropdown-item text-danger">Permanently Delete Company</button></form>
-                                @elseif($companyStatus === 'archived')
-                                    <div class="dropdown-divider"></div>
-                                    <form method="POST" action="{{ route('admin.companies.restore', $company) }}">@csrf @method('PATCH')<button type="submit" class="dropdown-item text-success">Restore</button></form>
-                                    <form method="POST" action="{{ route('admin.companies.destroy', $company) }}" data-tf-company-delete data-company-name="{{ $company->business_name }}">@csrf @method('DELETE')<button type="submit" class="dropdown-item text-danger">Permanently Delete Company</button></form>
+                        <div class="d-inline-flex align-items-center gap-2 tf-company-actions"><a href="{{ route('admin.companies.show', $company) }}" class="btn btn-sm btn-outline-primary tf-table-view-action">Review</a><div class="dropdown">
+                            <button type="button" class="btn btn-sm btn-outline-secondary tf-table-more-action" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false" aria-label="More actions for {{ $company->business_name }}"><i class="bi bi-three-dots"></i></button>
+                            <div class="dropdown-menu dropdown-menu-end shadow tf-company-actions-menu">
+                                <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#company-details-{{ $company->id }}"><i class="bi bi-eye me-2"></i>Quick View</button>
+                                @if($companyStatus !== 'archived')
+                                    <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#company-manage-{{ $company->id }}"><i class="bi bi-gear me-2"></i>Manage Company</button>
                                 @endif
+                                @if($companyStatus === 'approved')
+                                    <form method="POST" action="{{ route('admin.companies.open-dashboard', $company) }}">@csrf<button type="submit" class="dropdown-item"><i class="bi bi-building me-2"></i>Open Business Dashboard</button></form>
+                                @endif
+                                @if($companyStatus === 'approved' || $companyStatus === 'pending' || $companyStatus === 'rejected' || $companyStatus === 'suspended')
+                                    <div class="dropdown-divider"></div>
+                                    @if($companyStatus === 'approved')
+                                        <form method="POST" action="{{ route('admin.companies.status', $company) }}" data-tf-confirm-message="Suspend {{ $company->business_name }}? Its workspace will no longer be active. This does not archive the company or remove its data." data-tf-confirm-title="Suspend {{ $company->business_name }}?" data-tf-confirm-button="Suspend Business" data-tf-confirm-color="#f59e0b">@csrf @method('PATCH')<input type="hidden" name="status" value="suspended"><button type="submit" class="dropdown-item text-warning"><i class="bi bi-pause-circle me-2"></i>Suspend</button></form>
+                                    @endif
+                                    <form method="POST" action="{{ route('admin.companies.archive', $company) }}" data-tf-confirm-message="Archive {{ $company->business_name }}? Its data will remain intact, but it will be removed from the active company list." data-tf-confirm-title="Archive {{ $company->business_name }}?" data-tf-confirm-button="Archive Company" data-tf-confirm-color="#f59e0b">@csrf @method('PATCH')<button type="submit" class="dropdown-item text-warning"><i class="bi bi-box-seam me-2"></i>Archive</button></form>
+                                @endif
+                                <div class="dropdown-divider"></div>
+                                <form method="POST" action="{{ route('admin.companies.destroy', $company) }}" data-tf-company-delete data-company-name="{{ $company->business_name }}">@csrf @method('DELETE')<button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash3 me-2"></i>Permanently Delete</button></form>
                             </div>
-                        </div>
+                        </div></div>
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="text-center tf-muted py-4">No companies found.</td></tr>
+                <tr><td colspan="6" class="text-center tf-muted py-5"><i class="bi bi-buildings d-block fs-4 mb-2 text-blue"></i>No businesses match your filters.</td></tr>
             @endforelse
         </tbody>
     </x-table>
+    </section>
     <div class="mt-3">{{ $companies->links() }}</div>
 
     @foreach($companies as $company)
         @php
+            $companyStatus = strtolower((string) $company->status);
             $staffCount = $company->users->where('role', '!=', 'business_owner')->count();
             $rolesCount = $company->users->pluck('role')->filter()->unique()->count();
             $verificationDocuments = $company->documents->keyBy('document_type');
@@ -123,7 +106,7 @@
                         <section class="mb-4">
                             <h3 class="h6 mb-3">Company Information</h3>
                             <div class="row g-3">
-                                @foreach(['Company Name' => $company->business_name, 'Business Type' => $company->business_type, 'Registration Number' => $company->registration_number, 'Plan' => $company->subscription?->plan?->name ?? 'No plan', 'Status' => $company->status] as $label => $value)
+                                @foreach(['Company Name' => $company->business_name, 'Business Type' => $company->business_type, 'Registration Number' => $company->registration_number, 'Status' => $company->status] as $label => $value)
                                     <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">{{ $label }}</small><strong>{{ $value ?: '—' }}</strong></div></div>
                                 @endforeach
                                 <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Registration Date</small><strong><x-date-time :value="$company->created_at" /></strong></div></div>
@@ -167,6 +150,29 @@
                 </div>
             </div>
         </div>
+        @if($companyStatus !== 'archived')
+            <div class="modal fade tf-company-manage-modal" id="company-manage-{{ $company->id }}" tabindex="-1" aria-labelledby="company-manage-title-{{ $company->id }}" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header"><div><span class="tf-dashboard-eyebrow">Company management</span><h2 class="modal-title" id="company-manage-title-{{ $company->id }}">{{ $company->business_name }}</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                        <div class="modal-body">
+                            <p class="tf-muted small mb-3">Choose the area you want to manage. Each option opens the existing secure management screen.</p>
+                            <ul class="nav nav-pills tf-company-manage-tabs" id="company-manage-tabs-{{ $company->id }}" role="tablist">
+                                <li class="nav-item" role="presentation"><button class="nav-link active" id="company-details-tab-{{ $company->id }}" data-bs-toggle="tab" data-bs-target="#company-details-pane-{{ $company->id }}" type="button" role="tab" aria-controls="company-details-pane-{{ $company->id }}" aria-selected="true">Company Details</button></li>
+                                <li class="nav-item" role="presentation"><button class="nav-link" id="company-permissions-tab-{{ $company->id }}" data-bs-toggle="tab" data-bs-target="#company-permissions-pane-{{ $company->id }}" type="button" role="tab" aria-controls="company-permissions-pane-{{ $company->id }}" aria-selected="false">Permissions</button></li>
+                                <li class="nav-item" role="presentation"><button class="nav-link" id="company-receipt-tab-{{ $company->id }}" data-bs-toggle="tab" data-bs-target="#company-receipt-pane-{{ $company->id }}" type="button" role="tab" aria-controls="company-receipt-pane-{{ $company->id }}" aria-selected="false">Receipt Settings</button></li>
+                            </ul>
+                            <div class="tab-content tf-company-manage-tab-content">
+                                <section class="tab-pane fade show active" id="company-details-pane-{{ $company->id }}" role="tabpanel" aria-labelledby="company-details-tab-{{ $company->id }}"><i class="bi bi-building-gear" aria-hidden="true"></i><div><strong>Company Details</strong><p>Update the company profile, owner details, logo, and registration information.</p><a class="btn btn-sm btn-outline-primary" href="{{ route('admin.companies.edit', $company) }}">Open Company Details<i class="bi bi-arrow-up-right ms-1"></i></a></div></section>
+                                <section class="tab-pane fade" id="company-permissions-pane-{{ $company->id }}" role="tabpanel" aria-labelledby="company-permissions-tab-{{ $company->id }}"><i class="bi bi-shield-lock" aria-hidden="true"></i><div><strong>Permissions</strong><p>Review roles, module access, and the company’s workspace permissions.</p><a class="btn btn-sm btn-outline-primary" href="{{ route('admin.permissions.index', ['manage_company_id' => $company->id]) }}">Open Permissions<i class="bi bi-arrow-up-right ms-1"></i></a></div></section>
+                                <section class="tab-pane fade" id="company-receipt-pane-{{ $company->id }}" role="tabpanel" aria-labelledby="company-receipt-tab-{{ $company->id }}"><i class="bi bi-receipt" aria-hidden="true"></i><div><strong>Receipt Settings</strong><p>Configure the information printed on this company’s invoices and receipts.</p><a class="btn btn-sm btn-outline-primary" href="{{ route('admin.companies.document-footer.edit', $company) }}">Open Receipt Settings<i class="bi bi-arrow-up-right ms-1"></i></a></div></section>
+                            </div>
+                        </div>
+                        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div>
+                    </div>
+                </div>
+            </div>
+        @endif
     @endforeach
 @endsection
 

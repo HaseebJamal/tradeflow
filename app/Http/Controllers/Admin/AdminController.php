@@ -13,11 +13,15 @@ use App\Models\Customer;
 use App\Models\Delivery;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\NewsletterSubscriber;
 use App\Models\OrderItem;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PlatformPayment;
 use App\Services\PlatformSettingsService;
+use App\Services\PhoneNumberService;
+use App\Services\SubscriptionLifecycleService;
+use App\Services\SubscriptionPaymentService;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Subscription;
@@ -31,13 +35,14 @@ use App\Services\AuditIpResolver;
 use App\Notifications\SubscriptionStatusNotification;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -67,6 +72,20 @@ class AdminController extends Controller
             : Subscription::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)
                 ->join('subscription_plans', 'subscriptions.subscription_plan_id', '=', 'subscription_plans.id')->sum('subscription_plans.price');
 
+        $growthStart = now()->subMonths(5)->startOfMonth();
+        $registrationsByMonth = Business::query()
+            ->where('created_at', '>=', $growthStart)
+            ->get(['created_at'])
+            ->countBy(fn (Business $business) => $business->created_at?->format('Y-m'));
+        $registrationTrend = collect(range(5, 0))->map(function (int $offset) use ($registrationsByMonth) {
+            $month = now()->subMonths($offset);
+
+            return [
+                'label' => $month->format('M'),
+                'count' => (int) ($registrationsByMonth->get($month->format('Y-m')) ?? 0),
+            ];
+        });
+
         return [
             'totalBusinesses' => (int) ($businessSummary->total_businesses ?? 0),
             'pendingApprovals' => (int) ($businessSummary->pending_businesses ?? 0),
@@ -79,6 +98,7 @@ class AdminController extends Controller
             'monthlyRevenue' => $monthlyRevenue,
             'ticketsCount' => SupportTicket::where('status', 'Open')->count(),
             'securityAlerts' => ActivityLog::where('module', 'Security')->whereDate('occurred_at', '>=', today()->subDays(7))->count(),
+            'registrationTrend' => $registrationTrend,
         ];
     }
 
@@ -367,84 +387,93 @@ class AdminController extends Controller
         $this->expireDueSubscriptions($request);
 
         $filters = $request->validate([
-            'business_id' => ['nullable', 'integer', 'exists:businesses,id'],
-            'manage_business_id' => ['nullable', 'integer', 'exists:businesses,id'],
-            'subscription_plan_id' => ['nullable', 'integer', 'exists:subscription_plans,id'],
-            'status' => ['nullable', 'in:Pending,Trial,Active,Expiring,Expired,Suspended,Cancelled'],
-            'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
-            'payment_method' => ['nullable', 'in:Cash,Bank Transfer,Jazz Cash,Easypaisa'],
+            'search' => ['nullable', 'string', 'max:255'],
+            'access_status' => ['nullable', Rule::in(['trial_active', 'trial_expiring', 'trial_expired', 'paid_active', 'paid_expiring', 'restricted'])],
+            'trial_status' => ['nullable', Rule::in(['active', 'expiring', 'expired'])],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'business_id' => ['nullable', 'integer', 'exists:businesses,id'],
+            'manage' => ['nullable', 'boolean'],
+            'payment_id' => ['nullable', 'integer', 'exists:platform_payments,id'],
         ]);
-
-        $subscriptions = Subscription::with(['business', 'plan'])
-            ->when($filters['business_id'] ?? null, fn ($query, $value) => $query->where('business_id', $value))
-            ->when($filters['subscription_plan_id'] ?? null, fn ($query, $value) => $query->where('subscription_plan_id', $value))
-            ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
-            ->when($filters['billing_cycle'] ?? null, fn ($query, $value) => $query->where('billing_cycle', $value))
-            ->when($filters['payment_method'] ?? null, fn ($query, $value) => $query->where('payment_method', $value))
-            ->when($filters['date_from'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '>=', $value))
-            ->when($filters['date_to'] ?? null, fn ($query, $value) => $query->whereDate('created_at', '<=', $value))
-            ->latest('updated_at')
-            ->paginate(12, ['*'], 'subscriptions_page')
-            ->withQueryString();
-
-        $lockedBusinessId = null;
-        if (! empty($filters['manage_business_id'])) {
-            $lockedBusinessId = (int) $filters['manage_business_id'];
-            $request->session()->put('admin.subscription.locked_business_id', $lockedBusinessId);
-        } else {
-            // A direct visit to the subscriptions module restores the normal,
-            // selectable assignment workflow.
-            $request->session()->forget('admin.subscription.locked_business_id');
+        $filters = array_replace([
+            'search' => null,
+            'access_status' => null,
+            'trial_status' => null,
+            'date_from' => null,
+            'date_to' => null,
+            'business_id' => null,
+            'manage' => false,
+            'payment_id' => null,
+        ], $filters);
+        // A payment deep link must never be hidden by a prior search or
+        // status filter. Access remains controlled here, not on Payments.
+        if ($filters['manage'] && $filters['business_id']) {
+            $filters['search'] = null;
+            $filters['access_status'] = null;
+            $filters['trial_status'] = null;
+            $filters['date_from'] = null;
+            $filters['date_to'] = null;
         }
 
-        $lockedBusiness = $lockedBusinessId
-            ? Business::query()->findOrFail($lockedBusinessId)
-            : null;
-        $assignableBusinesses = Business::query()
-            ->where(function ($query) use ($lockedBusinessId) {
-                $query->whereIn('status', ['Approved', 'approved']);
-
-                // A Super Admin may open subscription management from any
-                // company row. Keep that target available even if its current
-                // approval state is not Approved.
-                if ($lockedBusinessId) {
-                    $query->orWhere('id', $lockedBusinessId);
-                }
+        $today = now(config('app.timezone'))->startOfDay();
+        $expiringDate = $today->copy()->addDays(SubscriptionLifecycleService::EXPIRING_SOON_DAYS);
+        $businesses = Business::query()->with(['owner:id,name,email', 'subscription'])
+            ->when($filters['business_id'] ?? null, fn ($query, $businessId) => $query->whereKey($businessId))
+            ->when($filters['search'] ?? null, function ($query, $search) {
+                $query->where(function ($inner) use ($search) {
+                    $inner->where('business_name', 'like', "%{$search}%")
+                        ->orWhereHas('owner', fn ($owner) => $owner->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"));
+                });
+            })
+            ->when($filters['date_from'] ?? null, fn ($query, $date) => $query->whereHas('subscription', fn ($subscription) => $subscription->whereDate('trial_end_at', '>=', $date)))
+            ->when($filters['date_to'] ?? null, fn ($query, $date) => $query->whereHas('subscription', fn ($subscription) => $subscription->whereDate('trial_end_at', '<=', $date)))
+            ->when($filters['trial_status'] ?? null, function ($query, $status) use ($today, $expiringDate) {
+                $query->whereHas('subscription', function ($subscription) use ($status, $today, $expiringDate) {
+                    $subscription->where('payment_status', '!=', 'Received');
+                    match ($status) {
+                        'active' => $subscription->where('status', 'Trial')->whereDate('trial_end_at', '>', $expiringDate),
+                        'expiring' => $subscription->where('status', 'Trial')->whereBetween('trial_end_at', [$today, $expiringDate]),
+                        'expired' => $subscription->where('status', 'Expired'),
+                    };
+                });
+            })
+            ->when($filters['access_status'] ?? null, function ($query, $status) use ($today, $expiringDate) {
+                match ($status) {
+                    'trial_active' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('status', 'Trial')->whereDate('trial_end_at', '>', $expiringDate)),
+                    'trial_expiring' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('status', 'Trial')->whereBetween('trial_end_at', [$today, $expiringDate])),
+                    'trial_expired' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('status', 'Expired')->where('payment_status', '!=', 'Received')),
+                    'paid_active' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('payment_status', 'Received')->where('status', 'Active')->whereDate('ends_at', '>', $expiringDate)),
+                    'paid_expiring' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('payment_status', 'Received')->whereIn('status', ['Active', 'Expiring'])->whereBetween('ends_at', [$today, $expiringDate])),
+                    'restricted' => $query->where(function ($inner) {
+                        $inner->doesntHave('subscription')->orWhereHas('subscription', fn ($subscription) => $subscription->whereIn('status', ['Pending', 'Expired', 'Suspended', 'Cancelled']));
+                    }),
+                };
             })
             ->orderBy('business_name')
-            ->get();
+            ->paginate(10)
+            ->withQueryString();
+
+        $lifecycle = app(SubscriptionLifecycleService::class);
+        $accessStates = $businesses->getCollection()->mapWithKeys(function (Business $business) use ($lifecycle) {
+            return [$business->id => $this->accessPresentation($business, $lifecycle->forBusiness($business))];
+        })->all();
+
+        $summary = Business::with('subscription')->get()->map(function (Business $business) use ($lifecycle) {
+            return $this->accessPresentation($business, $lifecycle->forBusiness($business));
+        });
 
         return view('super-admin.subscriptions', [
-            'plans' => SubscriptionPlan::withCount([
-                'subscriptions',
-                'subscriptions as active_subscriptions_count' => fn ($query) => $query->whereIn('status', ['Trial', 'Active', 'Expiring']),
-            ])->orderBy('sort_order')->orderBy('price')->get(),
-            'businesses' => $assignableBusinesses,
-            'subscriptions' => $subscriptions,
-            'billingHistory' => PlatformPayment::query()
-                ->select(['id', 'business_id', 'subscription_id', 'amount', 'method', 'reference_number', 'status', 'paid_at', 'recorded_by'])
-                ->with(['business:id,business_name', 'subscription.plan:id,name', 'recordedBy:id,name'])
-                ->latest('paid_at')
-                ->paginate(12, ['*'], 'billing_page')
-                ->withQueryString(),
-            'changeRequests' => SubscriptionChangeRequest::with(['business:id,business_name', 'currentPlan:id,name', 'requestedPlan:id,name', 'requester:id,name'])
-                ->whereIn('status', ['Pending', 'Changes Requested'])
-                ->latest()
-                ->paginate(12, ['*'], 'requests_page')
-                ->withQueryString(),
-            'lockedBusiness' => $lockedBusiness,
+            'settings' => app(PlatformSettingsService::class)->current(),
+            'businesses' => $businesses,
+            'accessStates' => $accessStates,
+            'filters' => $filters,
             'stats' => [
-                'active' => Subscription::where('status', 'Active')->count(),
-                'trial' => Subscription::where('status', 'Trial')->count(),
-                'expiring' => Subscription::whereIn('status', ['Trial', 'Active', 'Expiring'])->where(function ($query) {
-                    $query->whereBetween('trial_end_at', [now()->toDateString(), now()->addDays(7)->toDateString()])
-                        ->orWhereBetween('ends_at', [now()->toDateString(), now()->addDays(7)->toDateString()]);
-                })->count(),
-                'expired' => Subscription::where('status', 'Expired')->count(),
-                'cancelled' => Subscription::where('status', 'Cancelled')->count(),
-                'monthly_revenue' => Subscription::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('amount'),
+                'trial' => $summary->where('kind', 'trial_active')->count(),
+                'expiring' => $summary->where('kind', 'trial_expiring')->count(),
+                'expired' => $summary->where('kind', 'trial_expired')->count(),
+                'paid' => $summary->whereIn('kind', ['paid_active', 'paid_expiring'])->count(),
+                'restricted' => $summary->whereIn('kind', ['trial_expired', 'restricted'])->count(),
             ],
         ]);
     }
@@ -514,6 +543,12 @@ class AdminController extends Controller
             'is_recommended' => $data['status'] === 'Active' ? $plan->is_recommended : false,
         ]);
         $this->audit('Subscription plan '.strtolower($data['status']), $request, 'Subscriptions', $plan->id, ['status' => $old], ['status' => $data['status']]);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Plan '.($data['status'] === 'Active' ? 'activated' : 'deactivated').' successfully.',
+                'status' => $data['status'],
+            ]);
+        }
         return back()->with('success', 'Plan '.strtolower($data['status']).' successfully.');
     }
 
@@ -564,13 +599,14 @@ class AdminController extends Controller
             'business_id' => ['required', 'exists:businesses,id'],
             'subscription_context_business_id' => ['nullable', 'integer'],
             'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
-            'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
+            'billing_cycle' => ['nullable', 'in:Monthly,Yearly,Custom'],
             'amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,Jazz Cash,Easypaisa'],
             'payment_reference' => ['nullable', 'string', 'max:120'],
             'payment_status' => ['nullable', 'in:Pending,Received,Failed'],
             'trial_start_at' => ['nullable', 'date'],
             'trial_end_at' => ['nullable', 'date', 'after_or_equal:trial_start_at'],
+            'end_trial_now' => ['nullable', 'boolean'],
             'auto_renew' => ['nullable', 'boolean'],
             'note' => ['nullable', 'string', 'max:2000'],
             'starts_at' => ['nullable', 'date'],
@@ -589,9 +625,9 @@ class AdminController extends Controller
             ]);
         }
 
-        $data['billing_cycle'] = $data['billing_cycle'] ?? 'Monthly';
+        $data['billing_cycle'] = $data['billing_cycle'] ?? 'Custom';
         $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
-        $data['amount'] = $plan->priceFor($data['billing_cycle']);
+        $data['amount'] = $data['amount'] ?? $plan->priceFor($data['billing_cycle'] === 'Custom' ? 'Monthly' : $data['billing_cycle']);
         $data['starts_at'] = $data['starts_at'] ?? now()->toDateString();
         $startDate = Carbon::parse($data['starts_at']);
         $data['ends_at'] = $data['ends_at'] ?? ($data['billing_cycle'] === 'Yearly'
@@ -605,6 +641,8 @@ class AdminController extends Controller
             throw ValidationException::withMessages(['business_id' => 'This business already has an active subscription. Use Manage, Renew, Upgrade, or Downgrade instead.']);
         }
         $subscription = Subscription::updateOrCreate(['business_id' => $data['business_id']], $data);
+        $this->recordManualSubscriptionPayment($subscription, $request, null);
+        app(SubscriptionLifecycleService::class)->synchronize($subscription->fresh());
         $this->audit('Subscription created or assigned for business #'.$data['business_id'], $request, 'Subscriptions', $subscription->id, null, $subscription->only(['subscription_plan_id', 'amount', 'payment_method', 'starts_at', 'ends_at', 'status']));
         $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Subscription Assigned', 'Your '.$plan->name.' subscription was assigned successfully.', $subscription->business_id));
 
@@ -615,13 +653,14 @@ class AdminController extends Controller
     {
         $data = $request->validate([
             'subscription_plan_id' => ['required', 'exists:subscription_plans,id'],
-            'billing_cycle' => ['nullable', 'in:Monthly,Yearly'],
+            'billing_cycle' => ['nullable', 'in:Monthly,Yearly,Custom'],
             'amount' => ['nullable', 'integer', 'min:0'],
             'payment_method' => ['nullable', 'in:Cash,Bank Transfer,Jazz Cash,Easypaisa'],
             'payment_reference' => ['nullable', 'string', 'max:120'],
             'payment_status' => ['nullable', 'in:Pending,Received,Failed'],
             'trial_start_at' => ['nullable', 'date'],
             'trial_end_at' => ['nullable', 'date', 'after_or_equal:trial_start_at'],
+            'end_trial_now' => ['nullable', 'boolean'],
             'auto_renew' => ['nullable', 'boolean'],
             'note' => ['nullable', 'string', 'max:2000'],
             'starts_at' => ['nullable', 'date'],
@@ -629,18 +668,29 @@ class AdminController extends Controller
             'status' => ['required', 'in:Pending,Trial,Active,Expiring,Expired,Suspended,Cancelled'],
         ]);
 
-        $data['billing_cycle'] = $data['billing_cycle'] ?? $subscription->billing_cycle ?? 'Monthly';
+        $data['billing_cycle'] = $data['billing_cycle'] ?? $subscription->billing_cycle ?? 'Custom';
         $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
-        $data['amount'] = $plan->priceFor($data['billing_cycle']);
+        $data['amount'] = $data['amount'] ?? $subscription->amount ?? $plan->priceFor($data['billing_cycle'] === 'Custom' ? 'Monthly' : $data['billing_cycle']);
         $data['starts_at'] = $data['starts_at'] ?? $subscription->starts_at?->toDateString() ?? now()->toDateString();
         $startDate = Carbon::parse($data['starts_at']);
         $data['ends_at'] = $data['ends_at'] ?? ($subscription->ends_at?->toDateString() ?? ($data['billing_cycle'] === 'Yearly'
             ? $startDate->copy()->addYear()->toDateString()
             : $startDate->copy()->addMonth()->toDateString()));
+        if ($request->boolean('end_trial_now')) {
+            abort_unless(in_array($subscription->status, ['Trial', 'Expired'], true), 422, 'Only a trial can be ended now.');
+            $data['status'] = 'Expired';
+            $data['trial_end_at'] = now(config('app.timezone'))->subDay()->toDateString();
+            $data['ends_at'] = $data['trial_end_at'];
+        } elseif ($data['status'] === 'Trial' && filled($data['trial_end_at'] ?? null)) {
+            $data['trial_start_at'] = $data['trial_start_at'] ?? $data['starts_at'];
+            $data['ends_at'] = $data['trial_end_at'];
+        }
         $data['status'] = $this->resolvedSubscriptionStatus($data['status'], $data['ends_at']);
         $this->assertSubscriptionTransition($subscription->status, $data['status']);
-        $old = $subscription->only(['subscription_plan_id', 'amount', 'payment_method', 'starts_at', 'ends_at', 'status']);
+        $old = $subscription->only(['subscription_plan_id', 'amount', 'payment_method', 'payment_status', 'starts_at', 'ends_at', 'status']);
         $subscription->update($data);
+        $this->recordManualSubscriptionPayment($subscription->fresh(), $request, $old['payment_status'] ?? null);
+        app(SubscriptionLifecycleService::class)->synchronize($subscription->fresh());
         $this->audit('Subscription updated for business #'.$subscription->business_id, $request, 'Subscriptions', $subscription->id, $old, $subscription->fresh()->only(array_keys($old)));
 
         return back()->with('success', 'Subscription updated.');
@@ -695,6 +745,282 @@ class AdminController extends Controller
         $this->audit('Trial extended', $request, 'Subscriptions', $subscription->id, null, ['trial_end_at' => $end->toDateString()]);
         $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Trial Extended', 'Your '.app(PlatformSettingsService::class)->name().' trial was extended until '.$end->format('d M, Y').'.', $subscription->business_id));
         return back()->with('success', 'Trial extended successfully.');
+    }
+
+    public function updateDefaultTrialDays(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['trial_days' => ['required', 'integer', 'min:1', 'max:365']]);
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $previous = (int) $settings->trial_days;
+        $settings->update(['trial_days' => $data['trial_days']]);
+        $settingsService->forget();
+        $this->audit('Default trial days updated', $request, 'Trial & Access', $settings->id, ['trial_days' => $previous], ['trial_days' => $data['trial_days']]);
+
+        return back()->with('success', 'Default trial duration updated. Existing trials keep their stored end date.');
+    }
+
+    public function adjustTrial(Request $request, Subscription $subscription): RedirectResponse|JsonResponse
+    {
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['extend', 'reduce', 'set_end', 'end_now'])],
+            'days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'trial_end_at' => ['nullable', 'date'],
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        if (in_array($data['action'], ['extend', 'reduce'], true) && empty($data['days'])) {
+            throw ValidationException::withMessages(['days' => 'Enter the number of days to adjust.']);
+        }
+        if ($data['action'] === 'set_end' && empty($data['trial_end_at'])) {
+            throw ValidationException::withMessages(['trial_end_at' => 'Select the new trial end date.']);
+        }
+
+        $change = DB::transaction(function () use ($request, $subscription, $data): array {
+            $locked = Subscription::query()->with('business.owner')->lockForUpdate()->findOrFail($subscription->id);
+            abort_if($locked->payment_status === 'Received' && in_array($locked->status, ['Active', 'Expiring'], true), 422, 'Paid access dates are managed from Payments & Billing.');
+
+            $now = now(config('app.timezone'));
+            $today = $now->copy()->startOfDay();
+            $currentEnd = ($locked->trial_end_at ?? $locked->ends_at ?? $today)->copy()->startOfDay();
+            $adjustmentBase = $currentEnd->lt($today) ? $today : $currentEnd;
+            $newEnd = match ($data['action']) {
+                'extend' => $adjustmentBase->copy()->addDays((int) $data['days']),
+                'reduce' => $currentEnd->copy()->subDays((int) $data['days']),
+                'set_end' => Carbon::parse($data['trial_end_at'], config('app.timezone'))->startOfDay(),
+                'end_now' => $today->copy()->subDay(),
+            };
+            $old = [
+                'status' => $locked->status,
+                'trial_start_at' => $locked->trial_start_at?->toDateString(),
+                'trial_end_at' => $locked->trial_end_at?->toDateString(),
+            ];
+            // Trial dates are stored as calendar dates. Existing trials keep
+            // access through their recorded end day, but a Super Admin action
+            // that moves an end date to today (or earlier) is an explicit
+            // immediate restriction. This makes reducing the full remaining
+            // trial take effect in one confirmed operation.
+            $expiresImmediately = in_array($data['action'], ['reduce', 'set_end', 'end_now'], true)
+                && $newEnd->lte($today);
+            $hasExpired = $expiresImmediately || $now->gt($newEnd->copy()->endOfDay());
+            $locked->update([
+                'status' => $hasExpired ? 'Expired' : 'Trial',
+                'trial_start_at' => $locked->trial_start_at ?? $today,
+                'trial_end_at' => $newEnd,
+                'ends_at' => $newEnd,
+                'payment_status' => 'Pending',
+                'note' => $data['note'] ?? $locked->note,
+            ]);
+            $updated = app(SubscriptionLifecycleService::class)->synchronize($locked->fresh()->load('business.owner'));
+            $actionLabel = match ($data['action']) {
+                'extend' => 'Trial extended by '.(int) $data['days'].' days',
+                'reduce' => 'Trial reduced by '.(int) $data['days'].' days',
+                'set_end' => 'Trial end date changed',
+                'end_now' => 'Trial ended manually',
+            };
+            $daysChanged = match ($data['action']) {
+                'extend' => (int) $data['days'],
+                'reduce' => -((int) $data['days']),
+                default => $currentEnd->diffInDays($newEnd, false),
+            };
+            $new = [
+                'status' => $updated->status,
+                'previous_trial_end' => $currentEnd->toDateString(),
+                'trial_end_at' => $updated->trial_end_at?->toDateString(),
+                'days_changed' => $daysChanged,
+                'note' => $data['note'] ?? null,
+            ];
+            $this->auditBusinessAccess($request, $updated->business, $actionLabel, $updated, $old, $new);
+
+            return compact('updated', 'actionLabel', 'newEnd', 'expiresImmediately');
+        });
+
+        $updated = $change['updated'];
+        $actionLabel = $change['actionLabel'];
+        $newEnd = $change['newEnd'];
+        $expiresImmediately = $change['expiresImmediately'];
+        $updated->business?->owner?->notify(new SubscriptionStatusNotification(
+            $expiresImmediately ? 'Your free trial has ended' : $actionLabel,
+            $expiresImmediately
+                ? 'Your business data is safe. Contact '.app(PlatformSettingsService::class)->name().' to continue using your workspace.'
+                : 'Your trial now ends on '.$newEnd->format('n/j/Y').'.',
+            $updated->business_id,
+        ));
+
+        $message = $actionLabel.'.'.($expiresImmediately ? ' Workspace access is now restricted.' : '');
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'status' => $updated->status,
+                'trial_end_at' => $updated->trial_end_at?->toDateString(),
+                'restricted' => $expiresImmediately,
+            ]);
+        }
+
+        return back()->with('success', $message);
+    }
+
+    public function adjustPaidAccess(Request $request, Subscription $subscription): RedirectResponse
+    {
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['extend', 'reduce', 'set_end', 'end_now'])],
+            'days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'ends_at' => ['nullable', 'date'],
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+        abort_unless($subscription->payment_status === 'Received', 422, 'Only a paid access period can be changed here.');
+        if (in_array($data['action'], ['extend', 'reduce'], true) && empty($data['days'])) {
+            throw ValidationException::withMessages(['days' => 'Enter the number of days to adjust.']);
+        }
+        if ($data['action'] === 'set_end' && empty($data['ends_at'])) {
+            throw ValidationException::withMessages(['ends_at' => 'Select the new paid access end date.']);
+        }
+
+        $today = now(config('app.timezone'))->startOfDay();
+        $currentEnd = ($subscription->ends_at ?? $today)->copy()->startOfDay();
+        $newEnd = match ($data['action']) {
+            'extend' => $currentEnd->copy()->addDays((int) $data['days']),
+            'reduce' => $currentEnd->copy()->subDays((int) $data['days']),
+            'set_end' => Carbon::parse($data['ends_at'])->startOfDay(),
+            'end_now' => $today->copy()->subDay(),
+        };
+        $old = $subscription->only(['status', 'starts_at', 'ends_at', 'payment_status']);
+        $subscription->update(['ends_at' => $newEnd, 'status' => $newEnd->lt($today) ? 'Expired' : 'Active', 'note' => $data['note'] ?? $subscription->note]);
+        $subscription = app(SubscriptionLifecycleService::class)->synchronize($subscription->fresh());
+        $actionLabel = match ($data['action']) {
+            'extend' => 'Paid access extended by '.(int) $data['days'].' days',
+            'reduce' => 'Paid access reduced by '.(int) $data['days'].' days',
+            'set_end' => 'Paid access end date changed',
+            'end_now' => 'Paid access ended manually',
+        };
+        $this->auditBusinessAccess($request, $subscription->business, $actionLabel, $subscription, $old, $subscription->fresh()->only(['status', 'starts_at', 'ends_at', 'payment_status']));
+        $subscription->business?->owner?->notify(new SubscriptionStatusNotification(
+            $data['action'] === 'end_now' ? 'Your access period has ended' : $actionLabel,
+            $data['action'] === 'end_now' ? 'Your business data is safe. Contact '.app(PlatformSettingsService::class)->name().' to continue using your workspace.' : 'Your paid access now ends on '.$newEnd->format('d M, Y').'.',
+            $subscription->business_id,
+        ));
+
+        return back()->with('success', $actionLabel.'.');
+    }
+
+    /** @param array<string, mixed> $state */
+    private function accessPresentation(Business $business, array $state): array
+    {
+        $subscription = $state['subscription'];
+        $kind = 'restricted';
+        $label = 'Access Restricted';
+        if ($state['is_trial']) {
+            $kind = $state['is_expired'] ? 'trial_expired' : ($state['is_expiring_soon'] ? 'trial_expiring' : 'trial_active');
+            $label = match ($kind) {
+                'trial_active' => 'Trial Active',
+                'trial_expiring' => 'Trial Expiring',
+                default => 'Trial Expired',
+            };
+        } elseif ($subscription && $subscription->payment_status === 'Received' && ! $state['is_expired'] && $state['is_active_period']) {
+            $kind = $state['is_expiring_soon'] ? 'paid_expiring' : 'paid_active';
+            $label = $kind === 'paid_expiring' ? 'Paid Expiring' : 'Paid Active';
+        } elseif ($subscription && $subscription->payment_status === 'Received') {
+            $label = 'Paid Expired / Restricted';
+        }
+
+        $days = $state['days_remaining'];
+        $daysLabel = $days === null ? '—' : ($state['is_expired'] ? 'Expired' : ($days === 0 ? 'Ends today' : $days.' day'.($days === 1 ? '' : 's')));
+
+        return [
+            'business' => $business,
+            'subscription' => $subscription,
+            'kind' => $kind,
+            'label' => $label,
+            'trial_start' => $state['trial_start'],
+            'trial_end' => $state['trial_end'],
+            'paid_until' => $subscription && $subscription->payment_status === 'Received' ? $state['subscription_end'] : null,
+            'days_label' => $daysLabel,
+            // Keep the table and modals on one effective set of dates. These
+            // are trial dates for trials and paid-period dates for paid access.
+            'start_date' => $state['start_date'],
+            'end_date' => $state['end_date'],
+            'remaining_label' => $daysLabel,
+            'can_manage_trial' => (bool) $subscription && $subscription->payment_status !== 'Received',
+            'can_manage_paid' => (bool) $subscription && $subscription->payment_status === 'Received',
+            // Date management remains available for a historical/expired
+            // trial so an administrator can restart it, but an already
+            // expired trial has nothing left to end. Keep destructive end
+            // actions limited to the currently active entitlement type.
+            'can_end_trial' => in_array($kind, ['trial_active', 'trial_expiring'], true),
+            'can_end_paid' => in_array($kind, ['paid_active', 'paid_expiring'], true),
+        ];
+    }
+
+    /** @param array<string, mixed> $old @param array<string, mixed> $new */
+    private function auditBusinessAccess(Request $request, ?Business $business, string $action, Subscription $subscription, array $old, array $new): void
+    {
+        AuditLog::create([
+            'user_id' => $request->user()?->id,
+            'actor_id' => $request->user()?->id,
+            'actor_role' => $request->user()?->role,
+            'business_id' => $business?->id,
+            'module' => 'Trial & Access',
+            'action' => $action,
+            'description' => $action,
+            'record_type' => Subscription::class,
+            'record_id' => $subscription->id,
+            'old_values' => $old,
+            'new_values' => $new,
+            'ip_address' => app(AuditIpResolver::class)->capture($request),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+        ]);
+    }
+
+    private function canDeletePlatformPayment(PlatformPayment $payment): bool
+    {
+        if ($payment->status !== 'Received' || ! $payment->subscription || ! $payment->business) {
+            return true;
+        }
+
+        $subscription = $payment->subscription;
+        $state = app(SubscriptionLifecycleService::class)->forBusiness($payment->business);
+        // Be deliberately conservative: while this business has active paid
+        // access, none of its received payment history can be removed from
+        // this screen. It prevents an ambiguous or legacy record from being
+        // mistaken for a safe historical payment.
+        $isCurrentPeriod = $subscription->payment_status === 'Received'
+            && $state['is_active_period'];
+
+        return ! $isCurrentPeriod;
+    }
+
+    private function recordManualSubscriptionPayment(Subscription $subscription, Request $request, ?string $previousPaymentStatus): void
+    {
+        if ($subscription->payment_status !== 'Received' || $previousPaymentStatus === 'Received') {
+            return;
+        }
+
+        $reference = $subscription->payment_reference ?: 'MANUAL-'.$subscription->id.'-'.now()->format('YmdHis');
+        PlatformPayment::create([
+            'business_id' => $subscription->business_id,
+            'subscription_id' => $subscription->id,
+            'subscription_plan_id' => $subscription->subscription_plan_id,
+            'billing_cycle' => $subscription->billing_cycle,
+            'amount' => $subscription->amount,
+            'method' => $subscription->payment_method ?: 'Manual',
+            'reference_number' => $reference,
+            'transaction_reference' => $subscription->payment_reference,
+            'status' => 'Received',
+            'paid_at' => now(),
+            'submitted_at' => now(),
+            'verified_at' => now(),
+            'verified_by' => $request->user()?->id,
+            'period_starts_at' => $subscription->starts_at,
+            'period_ends_at' => $subscription->ends_at,
+            'notes' => $subscription->note,
+            'recorded_by' => $request->user()?->id,
+        ]);
+        $subscription->business?->owner?->notify(new SubscriptionStatusNotification(
+            'Payment recorded',
+            'Your payment has been recorded and your workspace access has been updated.',
+            $subscription->business_id,
+        ));
     }
 
     public function subscriptionChangeRequestReview(SubscriptionChangeRequest $changeRequest)
@@ -824,28 +1150,9 @@ class AdminController extends Controller
 
     private function expireDueSubscriptions(Request $request): void
     {
-        Subscription::whereIn('status', ['Trial', 'Active', 'Expiring'])
-            ->where(function ($query) {
-                $query->where(function ($trial) {
-                    $trial->where('status', 'Trial')->whereNotNull('trial_end_at')->whereDate('trial_end_at', '<', now()->toDateString());
-                })->orWhere(function ($active) {
-                    $active->whereIn('status', ['Active', 'Expiring'])->whereNotNull('ends_at')->whereDate('ends_at', '<', now()->toDateString());
-                });
-            })
-            ->each(function (Subscription $subscription) use ($request): void {
-                $old = ['status' => $subscription->status, 'ends_at' => $subscription->ends_at?->toDateString()];
-                $scheduledCancellation = $subscription->cancellation_scheduled_at
-                    && $subscription->cancellation_scheduled_at->lte(now()->endOfDay());
-                $status = $scheduledCancellation ? 'Cancelled' : 'Expired';
-                $subscription->update(['status' => $status, 'cancelled_at' => $scheduledCancellation ? now() : $subscription->cancelled_at]);
-                $this->audit('Subscription '.strtolower($status).' for business #'.$subscription->business_id, $request, 'Subscriptions', $subscription->id, $old, ['status' => $status, 'ends_at' => $old['ends_at']]);
-                $subscription->business?->owner?->notify(new SubscriptionStatusNotification('Subscription '.ucfirst($status), $scheduledCancellation ? 'Your scheduled subscription cancellation is now complete.' : 'Your '.app(PlatformSettingsService::class)->name().' subscription has expired. Renew a plan to restore full access.', $subscription->business_id));
-            });
-
-        Subscription::where('status', 'Active')
-            ->whereNotNull('ends_at')
-            ->whereBetween('ends_at', [now()->toDateString(), now()->addDays(7)->toDateString()])
-            ->update(['status' => 'Expiring']);
+        // The scheduled lifecycle command owns notifications. Screen visits
+        // only synchronize access state and must not generate alerts.
+        app(SubscriptionLifecycleService::class)->synchronizeAll(false);
     }
 
     private function resolvedSubscriptionStatus(string $requestedStatus, ?string $endsAt): string
@@ -954,6 +1261,9 @@ class AdminController extends Controller
                 $query->where(function ($inner) use ($value) {
                     $inner->where('ticket_number', 'like', "%{$value}%")
                         ->orWhere('subject', 'like', "%{$value}%")
+                        ->orWhere('contact_name', 'like', "%{$value}%")
+                        ->orWhere('contact_email', 'like', "%{$value}%")
+                        ->orWhere('contact_phone', 'like', "%{$value}%")
                         ->orWhereHas('business', fn ($business) => $business->where('business_name', 'like', "%{$value}%"));
                 });
             })
@@ -970,19 +1280,42 @@ class AdminController extends Controller
             'tickets' => $tickets,
             'filters' => $filters,
             'ticketTypes' => SupportTicket::query()->whereNotNull('type')->distinct()->orderBy('type')->pluck('type'),
+            'supportHandlers' => User::query()
+                ->whereIn('role', ['super_admin', 'platform_admin', 'platform_sub_admin'])
+                ->where('status', 'active')
+                ->orderBy('name')
+                ->get(['id', 'name', 'role']),
         ]);
     }
 
     public function updateTicket(Request $request, SupportTicket $ticket)
     {
         $data = $request->validate([
-            'message' => ['nullable', 'string'],
+            'action' => ['nullable', Rule::in(['save', 'reply'])],
+            'message' => ['nullable', 'string', 'max:2000'],
             'admin_reply' => ['nullable'],
             'status' => ['required', 'in:Open,Assigned,In Progress,Waiting for User,Escalated,Resolved,Closed,Reopened,Pending'],
             'priority' => ['nullable', 'in:Low,Medium,High,Urgent'],
+            'assigned_admin_id' => ['nullable', 'integer', 'exists:users,id'],
             'resolution' => ['nullable', 'string'],
             'internal_note' => ['nullable', 'boolean'],
         ]);
+
+        if (($data['action'] ?? 'save') === 'reply' && blank($data['message'] ?? null)) {
+            throw ValidationException::withMessages(['message' => 'Enter a reply or internal note before sending.']);
+        }
+
+        $assignedHandler = null;
+        if (filled($data['assigned_admin_id'] ?? null)) {
+            $assignedHandler = User::query()
+                ->whereIn('role', ['super_admin', 'platform_admin', 'platform_sub_admin'])
+                ->where('status', 'active')
+                ->find($data['assigned_admin_id']);
+
+            if (! $assignedHandler) {
+                throw ValidationException::withMessages(['assigned_admin_id' => 'Choose an active platform support handler.']);
+            }
+        }
 
         if (!$ticket->ticket_number) {
             $ticket->ticket_number = 'TF-TKT-'.now()->format('Ymd').'-'.str_pad((string) $ticket->id, 4, '0', STR_PAD_LEFT);
@@ -993,7 +1326,7 @@ class AdminController extends Controller
             'admin_reply' => $data['admin_reply'] ?? $ticket->admin_reply,
             'status' => $data['status'],
             'priority' => $data['priority'] ?? $ticket->priority,
-            'assigned_admin_id' => $ticket->assigned_admin_id ?? auth()->id(),
+            'assigned_admin_id' => $assignedHandler?->id,
             'assigned_sub_admin_id' => null,
             'resolution' => $data['resolution'] ?? $ticket->resolution,
         ]);
@@ -1014,11 +1347,98 @@ class AdminController extends Controller
         return back()->with('success', 'Ticket updated.');
     }
 
+    public function newsletterSubscribers(Request $request)
+    {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'status' => ['nullable', Rule::in(['Active', 'Inactive'])],
+        ]);
+
+        $subscribers = NewsletterSubscriber::query()
+            ->when($filters['search'] ?? null, fn ($query, $value) => $query->where('email', 'like', "%{$value}%"))
+            ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
+            ->orderByDesc('subscribed_at')
+            ->paginate(20)
+            ->withQueryString();
+
+        $summary = $this->newsletterSubscriberSummary();
+
+        return view('super-admin.newsletter-subscribers', compact('subscribers', 'filters', 'summary'));
+    }
+
+    public function updateNewsletterSubscriber(Request $request, NewsletterSubscriber $subscriber): JsonResponse|RedirectResponse
+    {
+        $data = $request->validate([
+            'status' => ['required', Rule::in(['Active', 'Inactive'])],
+        ]);
+
+        $subscriber->update($data);
+
+        $message = $subscriber->status === 'Active'
+            ? 'Subscriber activated.'
+            : 'Subscriber deactivated.';
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'subscriber' => [
+                    'id' => $subscriber->id,
+                    'status' => $subscriber->status,
+                    'subscribed_at' => $subscriber->subscribed_at?->toIso8601String(),
+                    'updated_at' => $subscriber->updated_at?->toIso8601String(),
+                ],
+                'summary' => $this->newsletterSubscriberSummary(),
+            ]);
+        }
+
+        return back()->with('success', $message);
+    }
+
+    public function destroyNewsletterSubscriber(Request $request, NewsletterSubscriber $subscriber): RedirectResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $data = $request->validate(['confirmation' => ['required', 'string']]);
+
+        if (! hash_equals($subscriber->email, $data['confirmation'])) {
+            throw ValidationException::withMessages(['confirmation' => 'Type the exact subscriber email to confirm permanent deletion.']);
+        }
+
+        $email = $subscriber->email;
+        $id = $subscriber->id;
+        $subscriber->delete();
+        $this->audit('Newsletter subscriber permanently deleted', $request, 'Newsletter Subscribers', $id, null, ['subscriber_id' => $id, 'email' => $email]);
+
+        return redirect()->route('admin.newsletter-subscribers.index')->with('success', 'Newsletter subscriber permanently deleted.');
+    }
+
+    /**
+     * Keep the audience overview tied to the same persisted subscriber data as
+     * the table. Inactive records remain part of the audience history.
+     */
+    private function newsletterSubscriberSummary(): array
+    {
+        $summary = NewsletterSubscriber::query()
+            ->selectRaw(
+                'COUNT(*) as total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as active, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as inactive, SUM(CASE WHEN COALESCE(subscribed_at, created_at) >= ? THEN 1 ELSE 0 END) as new_this_month',
+                ['Active', 'Inactive', now()->startOfMonth()]
+            )
+            ->first();
+
+        return [
+            'total' => (int) ($summary->total ?? 0),
+            'active' => (int) ($summary->active ?? 0),
+            'inactive' => (int) ($summary->inactive ?? 0),
+            'new_this_month' => (int) ($summary->new_this_month ?? 0),
+        ];
+    }
+
     public function payments()
     {
         $filters = request()->validate([
+            'payment_id' => ['nullable', 'integer', 'exists:platform_payments,id'],
             'business_id' => ['nullable', 'exists:businesses,id'],
-            'status' => ['nullable', Rule::in(['Received', 'Pending', 'Rejected', 'Refunded'])],
+            'status' => ['nullable', Rule::in(['Received', 'Pending', 'Rejected', 'Failed', 'Refunded'])],
             'method' => ['nullable', Rule::in(['Cash', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque', 'Other'])],
             'search' => ['nullable', 'string', 'max:255'],
             'date_from' => ['nullable', 'date'],
@@ -1026,16 +1446,10 @@ class AdminController extends Controller
             'clear' => ['nullable', 'boolean'],
         ]);
 
-        // Keep the payment register focused on today's activity by default. The
-        // explicit Clear link remains available when the administrator needs the
-        // complete payment history.
         $filters += ['date_from' => null, 'date_to' => null];
-        if (! request()->boolean('clear') && ! $filters['date_from'] && ! $filters['date_to']) {
-            $filters['date_from'] = now()->toDateString();
-            $filters['date_to'] = now()->toDateString();
-        }
 
-        $payments = PlatformPayment::with(['business.owner', 'subscription.plan', 'recordedBy'])
+        $payments = PlatformPayment::with(['business.owner', 'subscription.plan', 'plan', 'recordedBy', 'verifiedBy'])
+            ->when($filters['payment_id'] ?? null, fn ($query, $value) => $query->whereKey($value))
             ->when($filters['business_id'] ?? null, fn ($query, $value) => $query->where('business_id', $value))
             ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
             ->when($filters['method'] ?? null, fn ($query, $value) => $query->where('method', $value))
@@ -1050,6 +1464,7 @@ class AdminController extends Controller
             ->latest('paid_at')
             ->paginate(10)
             ->withQueryString();
+        $payments->getCollection()->each(fn (PlatformPayment $payment) => $payment->setAttribute('can_delete', $this->canDeletePlatformPayment($payment)));
 
         return view('super-admin.payments', [
             'payments' => $payments,
@@ -1066,17 +1481,102 @@ class AdminController extends Controller
             'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque', 'Other'])],
             'status' => ['required', Rule::in(['Received', 'Pending', 'Rejected', 'Refunded'])],
             'paid_at' => ['required', 'date'],
+            'transaction_reference' => ['nullable', 'string', 'max:120'],
+            'period_starts_at' => ['nullable', 'date'],
+            'period_ends_at' => ['nullable', 'date', 'after_or_equal:period_starts_at'],
+            'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $business = Business::with('subscription')->findOrFail($data['business_id']);
-        $payment = PlatformPayment::create($data + [
-            'subscription_id' => $business->subscription?->id,
-            'recorded_by' => $request->user()->id,
-        ]);
+        if ($data['status'] === 'Received' && (empty($data['period_starts_at']) || empty($data['period_ends_at']))) {
+            throw ValidationException::withMessages(['period_starts_at' => 'Paid access start and end dates are required for a received payment.']);
+        }
 
-        $this->audit('Recorded platform payment from '.$business->business_name, $request, 'Platform Payments', $payment->id, null, $payment->only(['amount', 'method', 'status', 'paid_at']));
+        $payment = DB::transaction(function () use ($data, $request, &$business) {
+            $business = Business::with('subscription')->lockForUpdate()->findOrFail($data['business_id']);
+            $subscription = $business->subscription;
+            if (! $subscription) {
+                $legacyPlanId = app(PlatformSettingsService::class)->current()->default_plan_id
+                    ?? SubscriptionPlan::query()->orderBy('id')->value('id');
+                abort_unless($legacyPlanId, 422, 'A legacy access record is required before paid access can be activated.');
+                $subscription = Subscription::create(['business_id' => $business->id, 'subscription_plan_id' => $legacyPlanId, 'billing_cycle' => 'Custom', 'amount' => 0, 'starts_at' => now()->toDateString(), 'ends_at' => now()->subDay()->toDateString(), 'status' => 'Expired', 'payment_status' => 'Pending']);
+            }
 
-        return back()->with('success', 'Platform payment recorded for '.$business->business_name.'.');
+            $payment = PlatformPayment::create($data + ['subscription_id' => $subscription->id, 'subscription_plan_id' => $subscription->subscription_plan_id, 'billing_cycle' => 'Custom', 'submitted_at' => now(), 'recorded_by' => $request->user()->id]);
+            $payment->update(['reference_number' => 'PP-'.now()->format('Ymd').'-'.str_pad((string) $payment->id, 6, '0', STR_PAD_LEFT)]);
+
+            if ($data['status'] === 'Received') {
+                $old = $subscription->only(['status', 'amount', 'starts_at', 'ends_at', 'payment_status']);
+                $subscription->update(['billing_cycle' => 'Custom', 'amount' => $data['amount'], 'payment_method' => $data['method'], 'payment_status' => 'Received', 'payment_reference' => $data['transaction_reference'] ?? $payment->reference_number, 'starts_at' => $data['period_starts_at'], 'ends_at' => $data['period_ends_at'], 'note' => $data['notes'] ?? null, 'status' => 'Active', 'renewed_at' => now()]);
+                $payment->update(['verified_at' => now(), 'verified_by' => $request->user()->id]);
+                $this->auditBusinessAccess($request, $business, 'Paid access activated', $subscription->fresh(), $old, $subscription->fresh()->only(['status', 'amount', 'starts_at', 'ends_at', 'payment_status']));
+                $business->owner?->notify(new SubscriptionStatusNotification('Paid access activated', 'Your workspace access is active until '.Carbon::parse($data['period_ends_at'])->format('d M, Y').'.', $business->id, $payment->id));
+            }
+
+            return $payment;
+        });
+
+        $this->audit('Recorded custom payment from '.$business->business_name, $request, 'Platform Payments', $payment->id, null, $payment->only(['amount', 'method', 'status', 'paid_at', 'period_starts_at', 'period_ends_at']));
+
+        return back()->with('success', $data['status'] === 'Received' ? 'Custom payment recorded and paid access activated for '.$business->business_name.'.' : 'Custom payment recorded for '.$business->business_name.'.');
+    }
+
+    public function approvePlatformPayment(Request $request, PlatformPayment $payment)
+    {
+        $approved = app(SubscriptionPaymentService::class)->approve($payment, $request->user());
+        $this->audit('Verified subscription payment '.$approved->reference_number, $request, 'Platform Payments', $approved->id, ['status' => 'Pending'], ['status' => 'Received', 'subscription_id' => $approved->subscription_id]);
+
+        return back()->with('success', 'Payment verified and subscription activated successfully.');
+    }
+
+    public function rejectPlatformPayment(Request $request, PlatformPayment $payment)
+    {
+        $data = $request->validate(['rejection_reason' => ['required', 'string', 'max:1000']]);
+        $rejected = app(SubscriptionPaymentService::class)->reject($payment, $request->user(), $data['rejection_reason']);
+        $this->audit('Rejected subscription payment '.$rejected->reference_number, $request, 'Platform Payments', $rejected->id, ['status' => 'Pending'], ['status' => 'Rejected']);
+
+        return back()->with('success', 'Payment rejected. The business can submit another payment.');
+    }
+
+    public function destroyPlatformPayment(Request $request, PlatformPayment $payment): RedirectResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $payment = DB::transaction(function () use ($payment, $request) {
+            $payment = PlatformPayment::with(['business', 'subscription'])->lockForUpdate()->findOrFail($payment->id);
+            if (! $this->canDeletePlatformPayment($payment)) {
+                throw ValidationException::withMessages(['payment' => 'This payment is the current active paid-access record. End or replace that access period before deleting the payment record.']);
+            }
+
+            $details = $payment->only(['id', 'business_id', 'reference_number', 'amount', 'method', 'status', 'period_starts_at', 'period_ends_at']);
+            $businessName = $payment->business?->business_name ?? 'Unknown business';
+            $payment->delete();
+            $this->audit('Payment record deleted: '.$details['reference_number'].' for '.$businessName, $request, 'Platform Payments', $details['id'], $details, ['deleted' => true]);
+
+            return $payment;
+        });
+
+        return back()->with('success', 'Payment record '.$payment->reference_number.' was deleted. The business and its access record were not changed.');
+    }
+
+    public function platformPaymentProof(PlatformPayment $payment)
+    {
+        abort_unless($payment->payment_proof && Storage::disk('local')->exists($payment->payment_proof), 404);
+        return Storage::disk('local')->download($payment->payment_proof, 'subscription-payment-'.$payment->reference_number.'.'.pathinfo($payment->payment_proof, PATHINFO_EXTENSION));
+    }
+
+    public function platformPaymentReceipt(PlatformPayment $payment)
+    {
+        abort_unless($payment->status === 'Received', 404);
+        $payment->load(['business', 'plan', 'subscription.plan', 'recordedBy', 'verifiedBy']);
+
+        return Pdf::loadView('super-admin.payments.receipt-pdf', [
+            'business' => $payment->business,
+            'payment' => $payment,
+            'platformName' => app(PlatformSettingsService::class)->name(),
+        ])->setPaper('a4')
+            // stream() sends an inline PDF response. The dropdown link opens
+            // it in a separate tab, rather than forcing a file download.
+            ->stream('payment-receipt-'.($payment->reference_number ?: $payment->id).'.pdf');
     }
 
     public function notifications()
@@ -1163,23 +1663,42 @@ class AdminController extends Controller
 
     public function settings()
     {
-        return view('super-admin.settings', ['settings' => app(PlatformSettingsService::class)->current()]);
+        $settings = app(PlatformSettingsService::class)->current();
+        $storedPhone = trim((string) $settings->support_phone);
+        $phoneDigits = preg_replace('/\D+/', '', $storedPhone) ?: '';
+        $candidatePhone = $phoneDigits !== '' ? '+'.$phoneDigits : '';
+        $supportPhone = $candidatePhone !== '' && app(PhoneNumberService::class)->isValidE164($candidatePhone)
+            ? $candidatePhone
+            : $storedPhone;
+
+        return view('super-admin.settings', compact('settings', 'supportPhone'));
     }
 
     public function updateSettings(Request $request)
     {
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
         $data = $request->validate([
             'company_name' => ['required', 'string', 'max:255'],
             'support_email' => ['nullable', 'email'],
             'support_phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
+            'trial_days' => ['required', 'integer', 'min:1', 'max:365'],
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ], [
             'logo.mimes' => 'Please upload a JPG, JPEG, PNG, or WebP image.',
             'logo.max' => 'Platform logo must not exceed 2MB.',
         ]);
 
-        $settingsService = app(PlatformSettingsService::class);
-        $settings = $settingsService->current();
+        // The phone component submits one normalized E.164 value. When that
+        // value represents the existing support number, retain the stored
+        // canonical value exactly as-is instead of reformatting/re-saving it
+        // while an unrelated setting (name, email, or logo) is updated.
+        $submittedPhoneDigits = preg_replace('/\D+/', '', (string) ($data['support_phone'] ?? '')) ?: '';
+        $storedPhoneDigits = preg_replace('/\D+/', '', (string) ($settings->support_phone ?? '')) ?: '';
+        if ($submittedPhoneDigits !== '' && $submittedPhoneDigits === $storedPhoneDigits) {
+            $data['support_phone'] = $settings->support_phone;
+        }
+
         $oldLogo = $settings->logo;
         $newLogo = null;
 
@@ -1208,6 +1727,208 @@ class AdminController extends Controller
         $settingsService->forget();
         $this->audit('Settings updated', $request);
         return back()->with('success', 'Settings updated.');
+    }
+
+    /**
+     * Save the optional public landing-page demo. The public page never renders
+     * this video unless an administrator has supplied a valid source and enabled it.
+     */
+    public function updateDemoVideoSettings(Request $request): RedirectResponse
+    {
+        // Do this before Laravel's MIME validator. Some MIME sniffers load the
+        // full media stream, which turned an oversized video into a PHP memory
+        // exhaustion instead of a normal validation response.
+        $videoFile = $request->file('demo_video_file');
+        if ($videoFile) {
+            // Keep this below the active PHP post/upload limits (40MB).
+            $maximumVideoBytes = 40 * 1024 * 1024;
+            if (($videoFile->getSize() ?? 0) > $maximumVideoBytes) {
+                throw ValidationException::withMessages([
+                    'demo_video_file' => 'Demo video must not exceed 40MB.',
+                ]);
+            }
+
+            $extension = strtolower($videoFile->getClientOriginalExtension());
+            if (! in_array($extension, ['mp4', 'webm', 'ogv'], true)) {
+                throw ValidationException::withMessages([
+                    'demo_video_file' => 'Upload an MP4, WebM, or OGV video file.',
+                ]);
+            }
+        }
+
+        $data = $request->validate([
+            'demo_title' => ['nullable', 'string', 'max:120'],
+            'demo_subtitle' => ['nullable', 'string', 'max:500'],
+            'demo_video_type' => ['required', Rule::in(['external', 'upload'])],
+            'demo_video_url' => ['nullable', 'string', 'max:2048'],
+            // Size and extension are checked above, before any content probing.
+            'demo_video_file' => ['nullable', 'file'],
+            'demo_poster_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'remove_demo_poster' => ['nullable', 'boolean'],
+            'demo_is_active' => ['nullable', 'boolean'],
+        ], [
+            'demo_poster_file.mimes' => 'Poster image must be a JPG, JPEG, PNG, or WebP image.',
+        ]);
+
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $oldVideo = $settings->demo_video_url;
+        $oldVideoType = $settings->demo_video_type;
+        $oldPoster = $settings->demo_poster;
+        $newVideo = null;
+        $newPoster = null;
+        $removePoster = $request->boolean('remove_demo_poster');
+
+        try {
+            if ($data['demo_video_type'] === 'external') {
+                $videoUrl = $this->validatedDemoVideoUrl($data['demo_video_url'] ?? null);
+            } elseif ($request->hasFile('demo_video_file')) {
+                $newVideo = $request->file('demo_video_file')->store('platform/demo-videos', 'public');
+                $videoUrl = $newVideo;
+            } elseif ($oldVideoType === 'upload' && filled($oldVideo)) {
+                $videoUrl = $oldVideo;
+            } else {
+                throw ValidationException::withMessages(['demo_video_file' => 'Upload a demo video before using the uploaded video option.']);
+            }
+
+            if ($request->hasFile('demo_poster_file')) {
+                $newPoster = $request->file('demo_poster_file')->store('platform/demo-posters', 'public');
+            }
+
+            if ($request->boolean('demo_is_active') && ! filled($videoUrl)) {
+                throw ValidationException::withMessages(['demo_video_url' => 'Provide a valid demo video before enabling it.']);
+            }
+
+            DB::transaction(function () use ($settings, $data, $videoUrl, $newPoster, $removePoster, $request): void {
+                $settings->update([
+                    'demo_title' => filled($data['demo_title'] ?? null) ? trim($data['demo_title']) : 'See Profit Point in action',
+                    'demo_subtitle' => filled($data['demo_subtitle'] ?? null) ? trim($data['demo_subtitle']) : null,
+                    'demo_video_type' => $data['demo_video_type'],
+                    'demo_video_url' => $videoUrl,
+                    'demo_poster' => $newPoster ?: ($removePoster ? null : $settings->demo_poster),
+                    'demo_is_active' => $request->boolean('demo_is_active'),
+                ]);
+            });
+        } catch (\Throwable $exception) {
+            if ($newVideo) {
+                Storage::disk('public')->delete($newVideo);
+            }
+            if ($newPoster) {
+                Storage::disk('public')->delete($newPoster);
+            }
+
+            throw $exception;
+        }
+
+        if ($newVideo && $oldVideoType === 'upload' && $oldVideo && $oldVideo !== $newVideo) {
+            Storage::disk('public')->delete($this->platformSettingStoragePath($oldVideo));
+        }
+        if (($newPoster || $removePoster) && $oldPoster && $oldPoster !== $newPoster) {
+            Storage::disk('public')->delete($this->platformSettingStoragePath($oldPoster));
+        }
+
+        $settingsService->forget();
+        $this->audit('Public demo video settings updated', $request, 'Settings', $settings->id);
+
+        return back()->with('success', 'Demo video settings updated.');
+    }
+
+    public function updateWhatsAppContact(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'whatsapp_number' => ['nullable', 'string', 'max:25'],
+            'whatsapp_message' => ['nullable', 'string', 'max:500'],
+            'whatsapp_tooltip' => ['nullable', 'string', 'max:100'],
+            'whatsapp_is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $digits = null;
+        if (filled($data['whatsapp_number'] ?? null)) {
+            $digits = app(PhoneNumberService::class)->whatsappDigits($data['whatsapp_number']);
+            if (! $digits) {
+                throw ValidationException::withMessages(['whatsapp_number' => 'Enter a valid phone number with a country code.']);
+            }
+        }
+        if ($request->boolean('whatsapp_is_active') && ! $digits) {
+            throw ValidationException::withMessages(['whatsapp_number' => 'Enter a valid WhatsApp number before enabling it.']);
+        }
+
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $settings->update([
+            'whatsapp_number' => $digits,
+            'whatsapp_message' => filled($data['whatsapp_message'] ?? null) ? trim($data['whatsapp_message']) : null,
+            'whatsapp_tooltip' => filled($data['whatsapp_tooltip'] ?? null) ? trim($data['whatsapp_tooltip']) : null,
+            'whatsapp_is_active' => $request->boolean('whatsapp_is_active'),
+        ]);
+        $settingsService->forget();
+        $this->audit('Public WhatsApp contact updated', $request, 'Settings', $settings->id);
+
+        return back()->with('success', 'WhatsApp contact settings updated.');
+    }
+
+    public function removeDemoVideo(Request $request): RedirectResponse
+    {
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $video = $settings->demo_video_url;
+        $videoType = $settings->demo_video_type;
+        $poster = $settings->demo_poster;
+
+        $settings->update([
+            'demo_title' => null, 'demo_subtitle' => null, 'demo_video_type' => null,
+            'demo_video_url' => null, 'demo_poster' => null, 'demo_is_active' => false,
+        ]);
+
+        if ($videoType === 'upload' && $video) {
+            Storage::disk('public')->delete($this->platformSettingStoragePath($video));
+        }
+        if ($poster) {
+            Storage::disk('public')->delete($this->platformSettingStoragePath($poster));
+        }
+
+        $settingsService->forget();
+        $this->audit('Public demo video removed', $request, 'Settings', $settings->id);
+
+        return back()->with('success', 'Demo video removed from the landing page.');
+    }
+
+    public function removeWhatsAppContact(Request $request): RedirectResponse
+    {
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $settings->update([
+            'whatsapp_number' => null, 'whatsapp_message' => null,
+            'whatsapp_tooltip' => null, 'whatsapp_is_active' => false,
+        ]);
+
+        $settingsService->forget();
+        $this->audit('Public WhatsApp contact removed', $request, 'Settings', $settings->id);
+
+        return back()->with('success', 'WhatsApp contact removed from the landing page.');
+    }
+
+    private function validatedDemoVideoUrl(?string $url): string
+    {
+        $url = trim((string) $url);
+        $parts = parse_url($url) ?: [];
+        $extension = strtolower(pathinfo((string) ($parts['path'] ?? ''), PATHINFO_EXTENSION));
+
+        if (! filter_var($url, FILTER_VALIDATE_URL)
+            || ($parts['scheme'] ?? null) !== 'https'
+            || empty($parts['host'])
+            || ! in_array($extension, ['mp4', 'webm', 'ogv'], true)) {
+            throw ValidationException::withMessages([
+                'demo_video_url' => 'Use a direct HTTPS video URL ending in .mp4, .webm, or .ogv.',
+            ]);
+        }
+
+        return $url;
+    }
+
+    private function platformSettingStoragePath(string $path): string
+    {
+        return preg_replace('#^(?:public/|storage/)#', '', ltrim($path, '/'));
     }
 
     public function restoreDefaultLogo(Request $request)
@@ -1258,6 +1979,12 @@ class AdminController extends Controller
         if ($oldValues['logo'] && $oldValues['logo'] !== $defaults['logo']) {
             $oldLogoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim($oldValues['logo'], '/'));
             Storage::disk('public')->delete($oldLogoPath);
+        }
+        if (($oldValues['demo_video_type'] ?? null) === 'upload' && ! empty($oldValues['demo_video_url'])) {
+            Storage::disk('public')->delete($this->platformSettingStoragePath($oldValues['demo_video_url']));
+        }
+        if (! empty($oldValues['demo_poster'])) {
+            Storage::disk('public')->delete($this->platformSettingStoragePath($oldValues['demo_poster']));
         }
 
         $settingsService->forget();

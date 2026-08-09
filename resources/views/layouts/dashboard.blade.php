@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     @php($dashboardTitle = str(trim($__env->yieldContent('title', $platformSettings->company_name.' Dashboard')))->replace('TradeFlow', $platformSettings->company_name))
     <title>{{ $dashboardTitle }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
@@ -44,6 +45,12 @@
             </div>
         @endif
         <main class="dashboard-page flex-grow-1">
+            @if($welcomeBackName = session('welcome_back_name'))
+                <div class="tf-welcome-back" role="status" aria-live="polite">
+                    <span class="tf-welcome-back-icon"><i class="bi bi-stars" aria-hidden="true"></i></span>
+                    <div><strong>Welcome back, {{ $welcomeBackName }}.</strong><span>Your workspace is ready for you.</span></div>
+                </div>
+            @endif
             @if($returnAlert = session('tradeflow_return_alert'))
                 <div class="alert alert-success visually-hidden" data-tf-alert-title="{{ data_get($returnAlert, 'title', 'Completed') }}">
                     {{ data_get($returnAlert, 'message') }}
@@ -76,6 +83,11 @@ setInterval(() => {
     fetch('{{ route('activity.heartbeat') }}', {
         method: 'POST',
         headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json'}
+    }).then(async (response) => {
+        if (response.status !== 401) return;
+        const payload = await response.json().catch(() => ({}));
+        window.Swal?.fire({ icon: 'info', title: 'Trial access ended', text: payload.message || 'Your workspace access has ended.', allowOutsideClick: false, confirmButtonText: 'Sign in' })
+            .then(() => window.location.assign(payload.redirect || '{{ route('login') }}'));
     }).catch(() => {});
 }, 60000);
 </script>

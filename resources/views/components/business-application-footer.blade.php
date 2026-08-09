@@ -6,7 +6,7 @@
         ? app(\App\Services\BusinessDocumentFooterService::class)->for($business)
         : null;
     $showPoweredBy = $documentFooter?->show_powered_by ?? true;
-    $poweredByText = $documentFooter?->powered_by_text ?: 'Powered by TradeFlow';
+    $poweredByText = app(\App\Services\BusinessDocumentFooterService::class)->displayedPoweredByText($documentFooter);
 @endphp
 
 @if(filled($businessName))

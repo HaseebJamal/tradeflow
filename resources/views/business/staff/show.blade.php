@@ -8,7 +8,7 @@
         <div class="tf-card p-4 text-center">
             @php($hasImage = $staff->profile_image && \Illuminate\Support\Facades\Storage::disk('public')->exists($staff->profile_image))
             @if($hasImage)
-                <img src="{{ asset('storage/'.$staff->profile_image) }}" class="profile-avatar mb-3" alt="{{ $staff->name }}">
+                <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($staff->profile_image) }}" class="profile-avatar mb-3" alt="{{ $staff->name }}">
             @else
                 <span class="profile-avatar tf-avatar-empty mb-3"><i class="bi bi-person"></i></span>
             @endif
@@ -64,7 +64,7 @@
             <p class="tf-muted small">Set a new password without displaying the existing password.</p>
             <form method="POST" action="{{ route('business.staff.reset-password', $staff) }}" class="row g-3" data-staff-password-form>
                 @csrf @method('PATCH')
-                <div class="col-md-5"><label for="reset-password" class="form-label">New Password</label><div class="input-group"><input id="reset-password" name="password" type="password" autocomplete="new-password" minlength="8" class="form-control" required data-staff-password><button type="button" class="btn btn-outline-secondary tf-password-toggle" aria-label="Show new password" data-tf-password-toggle="#reset-password" data-tf-password-icon="#reset-password-icon"><i id="reset-password-icon" class="bi bi-eye"></i></button></div></div>
+                <div class="col-md-5"><label for="reset-password-input" class="form-label">New Password</label><div class="input-group"><input id="reset-password-input" name="password" type="password" autocomplete="new-password" minlength="8" class="form-control" required data-staff-password><button type="button" class="btn btn-outline-secondary tf-password-toggle" aria-label="Show new password" data-tf-password-toggle="#reset-password-input" data-tf-password-icon="#reset-password-icon"><i id="reset-password-icon" class="bi bi-eye"></i></button></div></div>
                 <div class="col-md-5"><label for="reset-password-confirmation" class="form-label">Confirm New Password</label><div class="input-group"><input id="reset-password-confirmation" name="password_confirmation" type="password" autocomplete="new-password" minlength="8" class="form-control" required data-staff-password-confirmation><button type="button" class="btn btn-outline-secondary tf-password-toggle" aria-label="Show confirm password" data-tf-password-toggle="#reset-password-confirmation" data-tf-password-icon="#reset-password-confirmation-icon"><i id="reset-password-confirmation-icon" class="bi bi-eye"></i></button></div><div class="invalid-feedback" data-staff-password-match-error>Password and confirm password do not match.</div></div>
                 <div class="col-md-2 d-flex align-items-end"><button class="btn btn-outline-primary w-100">Reset</button></div>
             </form>

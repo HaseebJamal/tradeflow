@@ -30,33 +30,51 @@ use App\Http\Controllers\Business\SupplierController;
 use App\Http\Controllers\Business\UnitController;
 use App\Http\Controllers\BusinessOnboardingController;
 use App\Http\Controllers\ContactController;
+use App\Http\Controllers\NewsletterSubscriptionController;
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Retailer\RetailerController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use App\Models\SubscriptionPlan;
 use App\Models\Subscription;
 
+// Some Windows/XAMPP installations leave public/storage as a plain directory
+// instead of Laravel's symbolic link. Serve public-disk files through a
+// separate application path, avoiding Laravel's reserved /storage route.
+Route::get('/media/{path}', function (string $path) {
+    $path = ltrim($path, '/');
+    abort_if(
+        $path === '' || collect(explode('/', $path))->contains(fn (string $segment) => $segment === '.' || $segment === '..'),
+        404,
+    );
+
+    $disk = Storage::disk('public');
+    abort_unless($disk->exists($path), 404);
+
+    return $disk->response($path, null, [
+        'Cache-Control' => 'public, max-age=86400',
+    ]);
+})->where('path', '.*')->name('media.public');
+
 Route::get('/', fn() => view('public.home', [
-    'pricingPlans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->take(3)->get(),
     'currentSubscription' => auth()->user()?->business_id
         ? Subscription::with('plan')->where('business_id', auth()->user()->business_id)->first()
         : null,
 ]))->name('public.home');
 Route::view('/features', 'public.features')->name('public.features');
-Route::get('/pricing', fn() => view('public.pricing', [
-    'plans' => SubscriptionPlan::publicActive()->orderBy('sort_order')->orderBy('monthly_price')->get(),
-    'currentSubscription' => auth()->user()?->business_id
-        ? Subscription::with('plan')->where('business_id', auth()->user()->business_id)->first()
-        : null,
-]))->name('public.pricing');
+Route::redirect('/pricing', '/register-business')->name('public.pricing');
 Route::view('/contact', 'public.contact')->name('public.contact');
 Route::view('/privacy-security', 'public.privacy-security')->name('privacy.security');
 Route::get('/subscribe/{plan}', function (string $plan) {
-    abort_unless(in_array($plan, ['basic', 'standard', 'premium'], true), 404);
-    return view('public.subscribe', ['plan' => $plan]);
+    return redirect()->route('register.business');
 })->name('subscribe.plan');
-Route::post('/contact', [ContactController::class, 'store'])->name('contact.store');
+Route::post('/contact', [ContactController::class, 'store'])->middleware('throttle:5,1')->name('contact.store');
+// POST is the normal footer flow. GET is retained as a validation-protected
+// fallback for already-open pages rendered before the newsletter form gained
+// its explicit method attribute; it prevents a stale client from receiving a
+// 405 response.
+Route::match(['get', 'post'], '/newsletter-subscriptions', [NewsletterSubscriptionController::class, 'store'])->middleware('throttle:5,1')->name('newsletter-subscriptions.store');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'loginForm'])->name('login');
@@ -86,7 +104,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile/user-detail-change-requests/{changeRequest}/approve', [ProfileController::class, 'approveUserDetailChangeRequest'])->name('profile.user-detail-change-requests.approve');
     Route::patch('/profile/user-detail-change-requests/{changeRequest}/apply', [ProfileController::class, 'applyUserDetailChangeRequest'])->name('profile.user-detail-change-requests.apply');
     Route::patch('/profile/user-detail-change-requests/{changeRequest}/reject', [ProfileController::class, 'rejectUserDetailChangeRequest'])->name('profile.user-detail-change-requests.reject');
-    Route::post('/activity/heartbeat', [AdminController::class, 'heartbeat'])->name('activity.heartbeat');
+    Route::post('/activity/heartbeat', [AdminController::class, 'heartbeat'])->middleware('business.subscription.access')->name('activity.heartbeat');
     Route::get('/notifications', function (\Illuminate\Http\Request $request) {
         if ($request->user()?->role === 'super_admin' && $request->session()->has('super_admin_business_context_id')) {
             return redirect()->route('business.context.notifications');
@@ -133,6 +151,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::patch('/companies/{company}/document-footer/reset', [CompanyController::class, 'resetDocumentFooter'])->name('companies.document-footer.reset');
     Route::get('/companies/{company}/edit', [CompanyController::class, 'edit'])->name('companies.edit');
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->name('companies.update');
+    Route::post('/companies/{company}/documents', [CompanyController::class, 'uploadVerificationDocuments'])->name('companies.documents.store');
     Route::patch('/companies/{company}/status', [CompanyController::class, 'updateStatus'])->name('companies.status');
     Route::patch('/companies/{company}/documents/{document}/verification', [CompanyController::class, 'verifyDocument'])->name('companies.documents.verify');
     Route::patch('/companies/{company}/registration-plan', [CompanyController::class, 'updateRegistrationPlan'])->name('companies.registration-plan.update');
@@ -184,6 +203,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::patch('/users/{user}/status', [AdminController::class, 'updateUserStatus'])->name('users.status');
     Route::patch('/users/{user}/reset-password', [AdminController::class, 'resetUserPassword'])->name('users.reset-password');
     Route::get('/subscriptions', [AdminController::class, 'subscriptions'])->name('subscriptions');
+    Route::put('/subscriptions/trial-settings', [AdminController::class, 'updateDefaultTrialDays'])->name('subscriptions.trial-settings.update');
     Route::post('/subscription-plans', [AdminController::class, 'storePlan'])->name('subscription-plans.store');
     Route::patch('/subscription-plans/{plan}', [AdminController::class, 'updatePlan'])->name('subscription-plans.update');
     Route::delete('/subscription-plans/{plan}', [AdminController::class, 'destroyPlan'])->name('subscription-plans.destroy');
@@ -198,13 +218,27 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::delete('/subscriptions/{subscription}', [AdminController::class, 'destroySubscription'])->name('subscriptions.destroy');
     Route::patch('/subscriptions/{subscription}/transition', [AdminController::class, 'transitionSubscription'])->name('subscriptions.transition');
     Route::patch('/subscriptions/{subscription}/extend-trial', [AdminController::class, 'extendTrial'])->name('subscriptions.extend-trial');
+    // Accept PUT as well as PATCH during the transition from the prior
+    // management forms. Both methods execute the same validated, audited
+    // partial update and this prevents a stale cached form from producing a
+    // 405 while users refresh to the current PATCH markup.
+    Route::match(['put', 'patch'], '/subscriptions/{subscription}/trial', [AdminController::class, 'adjustTrial'])->name('subscriptions.trial.adjust');
+    Route::match(['put', 'patch'], '/subscriptions/{subscription}/paid-access', [AdminController::class, 'adjustPaidAccess'])->name('subscriptions.paid-access.adjust');
     Route::get('/subscription-change-requests/{changeRequest}/review', [AdminController::class, 'subscriptionChangeRequestReview'])->name('subscription-change-requests.show');
     Route::patch('/subscription-change-requests/{changeRequest}/review-details', [AdminController::class, 'updateSubscriptionChangeRequestReview'])->name('subscription-change-requests.review-details');
     Route::patch('/subscription-change-requests/{changeRequest}', [AdminController::class, 'reviewSubscriptionChangeRequest'])->name('subscription-change-requests.review');
     Route::get('/support-tickets', [AdminController::class, 'supportTickets'])->name('support-tickets');
     Route::patch('/support-tickets/{ticket}', [AdminController::class, 'updateTicket'])->name('support-tickets.update');
+    Route::get('/newsletter-subscribers', [AdminController::class, 'newsletterSubscribers'])->name('newsletter-subscribers.index');
+    Route::patch('/newsletter-subscribers/{subscriber}', [AdminController::class, 'updateNewsletterSubscriber'])->name('newsletter-subscribers.update');
+    Route::delete('/newsletter-subscribers/{subscriber}', [AdminController::class, 'destroyNewsletterSubscriber'])->name('newsletter-subscribers.destroy');
     Route::get('/payments', [AdminController::class, 'payments'])->name('payments');
     Route::post('/payments', [AdminController::class, 'storePlatformPayment'])->name('payments.store');
+    Route::patch('/payments/{payment}/approve', [AdminController::class, 'approvePlatformPayment'])->name('payments.approve');
+    Route::patch('/payments/{payment}/reject', [AdminController::class, 'rejectPlatformPayment'])->name('payments.reject');
+    Route::delete('/payments/{payment}', [AdminController::class, 'destroyPlatformPayment'])->name('payments.destroy');
+    Route::get('/payments/{payment}/proof', [AdminController::class, 'platformPaymentProof'])->name('payments.proof');
+    Route::get('/payments/{payment}/receipt', [AdminController::class, 'platformPaymentReceipt'])->name('payments.receipt');
     Route::get('/notifications', [AdminController::class, 'notifications'])->name('notifications');
     Route::post('/notifications', [AdminController::class, 'storeAnnouncement'])->name('notifications.store');
     Route::get('/audit-logs', [AdminController::class, 'auditLogs'])->name('audit-logs');
@@ -213,6 +247,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::get('/audit-logs/export/pdf', [AdminController::class, 'exportAuditLogsPdf'])->name('audit-logs.export.pdf');
     Route::get('/settings', [AdminController::class, 'settings'])->name('settings');
     Route::put('/settings', [AdminController::class, 'updateSettings'])->name('settings.update');
+    Route::put('/settings/demo-video', [AdminController::class, 'updateDemoVideoSettings'])->name('settings.demo-video.update');
+    Route::put('/settings/whatsapp-contact', [AdminController::class, 'updateWhatsAppContact'])->name('settings.whatsapp.update');
+    Route::delete('/settings/demo-video', [AdminController::class, 'removeDemoVideo'])->name('settings.demo-video.destroy');
+    Route::delete('/settings/whatsapp-contact', [AdminController::class, 'removeWhatsAppContact'])->name('settings.whatsapp.destroy');
     Route::put('/settings/restore-default-logo', [AdminController::class, 'restoreDefaultLogo'])->name('settings.restore-default-logo');
     Route::put('/settings/reset-defaults', [AdminController::class, 'resetSettingsDefaults'])->name('settings.reset-defaults');
     Route::get('/business-reports', [AdminController::class, 'businessReports'])->name('business-reports');
@@ -227,7 +265,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::get('/business-reports/{report}/pdf', [AdminController::class, 'reportPdf'])->name('business-reports.pdf');
 });
 
-Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.context', 'record.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'business.action', 'track.activity'])->group(function () {
+Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.context', 'record.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'business.subscription.access', 'business.action', 'track.activity'])->group(function () {
     Route::get('/access-denied', function (\App\Services\BusinessWorkspaceAccessService $workspaceAccess) {
         // Re-check current permissions so a stale denial page does not survive
         // a Super Admin permission update in the same authenticated session.
@@ -244,6 +282,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/context-profile', [BusinessContextController::class, 'profile'])->name('context.profile');
     Route::get('/context-notifications', [BusinessContextController::class, 'notifications'])->name('context.notifications');
     Route::patch('/products/{product}/low-stock-alert', [ProductController::class, 'updateLowStockAlert'])->name('products.low-stock-alert')->middleware('business.permission:Products');
+    Route::patch('/products/{product}/status', [ProductController::class, 'updateStatus'])->name('products.status')->middleware('business.permission:Products');
     Route::get('/products-bulk', [ProductController::class, 'bulk'])->name('products.bulk')->middleware('business.permission:Products');
     Route::post('/products-bulk', [ProductController::class, 'bulkStore'])->name('products.bulk.store')->middleware('business.permission:Products');
     Route::get('/products-template.csv', [ProductController::class, 'csvTemplate'])->name('products.template')->middleware('business.permission:Products');

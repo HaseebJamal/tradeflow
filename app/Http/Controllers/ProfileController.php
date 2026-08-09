@@ -69,7 +69,9 @@ class ProfileController extends Controller
         if (! $this->requiresOwnerApproval($user)) {
             $rules['email'] = ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)];
         }
-        $data = $request->validate($rules);
+        $data = $request->validate($rules, [
+            'phone.regex' => 'Enter a valid international phone number including its country code.',
+        ]);
 
         if ($this->requiresOwnerApproval($user)) {
             $oldValues = $user->only(['name', 'email', 'phone']);
@@ -156,12 +158,16 @@ class ProfileController extends Controller
             $user->profile_image = null;
         }
 
-        $user->name = $data['name'];
-        $user->email = $data['email'];
-        $user->phone = $data['phone'] ?? null;
-        $user->save();
+        // This path is only for the authenticated user. Explicitly fill the
+        // three editable identity fields so no role, permission, password, or
+        // account-scoping data can be changed by a profile submission.
+        $user->forceFill([
+            'name' => trim($data['name']),
+            'email' => strtolower(trim($data['email'])),
+            'phone' => filled($data['phone'] ?? null) ? $data['phone'] : null,
+        ])->save();
 
-        return back()->with('success', 'Profile updated.');
+        return redirect()->route('profile.edit')->with('success', 'Profile updated successfully.');
     }
 
     public function requestEmailChange(Request $request)
@@ -503,6 +509,9 @@ class ProfileController extends Controller
         $data = $request->validate([
             'current_password' => ['required', 'current_password'],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
+        ], [
+            'current_password.current_password' => 'Current password is incorrect.',
+            'password.confirmed' => 'Passwords do not match.',
         ]);
         $user = $request->user();
 

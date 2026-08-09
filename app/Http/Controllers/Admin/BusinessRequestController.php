@@ -31,6 +31,7 @@ class BusinessRequestController extends Controller
             'requests' => $requests->paginate($filters),
             'filters' => $filters,
             'types' => $requests->requestTypes(),
+            'summary' => $requests->statusCounts(),
         ]);
     }
 

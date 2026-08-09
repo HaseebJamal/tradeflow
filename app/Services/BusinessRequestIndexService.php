@@ -19,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 
 class BusinessRequestIndexService
 {
-    public const SOURCES = ['subscription', 'footer', 'business_detail', 'email', 'profile'];
+    public const SOURCES = ['footer', 'business_detail', 'email', 'profile'];
 
     private const ACTIONABLE_SUBSCRIPTION_TYPES = [
         'New Subscription',
@@ -44,7 +44,8 @@ class BusinessRequestIndexService
                 'businesses.business_name',
                 'owners.name as owner_name',
                 'reviewers.name as reviewer_name',
-            ]);
+            ])
+            ->where('business_requests.source', '!=', 'subscription');
 
         if ($filters['search'] ?? null) {
             $search = $filters['search'];
@@ -81,22 +82,31 @@ class BusinessRequestIndexService
     public function pendingCount(): int
     {
         return DB::query()->fromSub($this->union(), 'business_requests')
-            // "Changes Requested" has already been reviewed and is waiting
-            // on the business owner. Legacy generic "Subscription" rows are
-            // historical registration records, not current request-queue work.
             ->where('status', 'Pending')
-            ->where(function (Builder $query): void {
-                $query->where('source', '!=', 'subscription')
-                    ->orWhereIn('request_type', self::ACTIONABLE_SUBSCRIPTION_TYPES);
-            })
+            ->where('source', '!=', 'subscription')
             ->count();
+    }
+
+    /** @return array{pending:int,approved:int,rejected:int,changes_requested:int} */
+    public function statusCounts(): array
+    {
+        $counts = DB::query()->fromSub($this->union(), 'business_requests')
+            ->where('source', '!=', 'subscription')
+            ->selectRaw("SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status IN ('Approved', 'Active', 'Applied', 'Completed') THEN 1 ELSE 0 END) as approved, SUM(CASE WHEN status IN ('Rejected', 'Cancelled') THEN 1 ELSE 0 END) as rejected, SUM(CASE WHEN status = 'Changes Requested' THEN 1 ELSE 0 END) as changes_requested")
+            ->first();
+
+        return [
+            'pending' => (int) ($counts->pending ?? 0),
+            'approved' => (int) ($counts->approved ?? 0),
+            'rejected' => (int) ($counts->rejected ?? 0),
+            'changes_requested' => (int) ($counts->changes_requested ?? 0),
+        ];
     }
 
     public function requestTypes(): array
     {
         return [
-            'New Subscription', 'Upgrade', 'Downgrade', 'Billing Cycle Change', 'Payment Method Change',
-            'Renewal', 'Cancellation', 'Resume Cancellation', 'Footer Detail Change',
+            'Footer Detail Change',
             'Business Information Change', 'Email Change', 'Profile Detail Change',
         ];
     }

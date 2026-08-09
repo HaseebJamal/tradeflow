@@ -20,6 +20,16 @@ class PlatformSettingsService
             'logo' => config('tradeflow.platform.logo'),
             'support_email' => config('tradeflow.platform.support_email'),
             'support_phone' => config('tradeflow.platform.support_phone'),
+            'demo_title' => null,
+            'demo_subtitle' => null,
+            'demo_video_type' => null,
+            'demo_video_url' => null,
+            'demo_poster' => null,
+            'demo_is_active' => false,
+            'whatsapp_number' => null,
+            'whatsapp_message' => null,
+            'whatsapp_tooltip' => null,
+            'whatsapp_is_active' => false,
         ];
     }
 

@@ -11,7 +11,7 @@
         @foreach(['Business Name' => $business?->business_name, 'Phone' => $business?->phone, 'Address' => $business?->address, 'City' => $business?->city, 'Category' => $business?->category] as $label => $value)
             <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">{{ $label }}</small><strong>{{ $value ?: '—' }}</strong></div></div>
         @endforeach
-        <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Logo</small>@if($business?->logo)<img src="{{ asset('storage/'.$business->logo) }}" class="navbar-avatar mt-1" alt="{{ $business->business_name }} logo">@else<strong>Not uploaded</strong>@endif</div></div>
+        <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Logo</small>@if($business?->logo)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($business->logo) }}" class="navbar-avatar mt-1" alt="{{ $business->business_name }} logo">@else<strong>Not uploaded</strong>@endif</div></div>
     </div>
 </div>
 
@@ -19,7 +19,7 @@
 <div class="tf-card p-4 mb-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div><h2 class="h5 mb-1">Company Logo</h2><p class="tf-muted mb-0">Upload, replace, or remove your business logo.</p></div>
-        @if($business?->logo)<img src="{{ asset('storage/'.$business->logo) }}" class="profile-avatar" alt="{{ $business->business_name }} logo">@endif
+        @if($business?->logo)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($business->logo) }}" class="profile-avatar" alt="{{ $business->business_name }} logo">@endif
     </div>
     <form method="POST" action="{{ route('business.settings.logo') }}" enctype="multipart/form-data" class="row g-3" data-tf-confirm-message="These changes will update your business settings." data-tf-confirm-title="Save changes?" data-tf-confirm-button="Save Changes" data-tf-confirm-icon="question" data-tf-confirm-color="#2563eb" data-tf-confirm-saving-text="Saving...">@csrf @method('PATCH')
         <div class="col-md-8"><label class="form-label">Logo</label><input name="logo" type="file" accept="image/jpeg,image/png,image/webp" class="form-control @error('logo') is-invalid @enderror" data-tf-image-upload><small class="tf-muted">JPG, JPEG, PNG, or WebP. Maximum 2 MB.</small><div class="invalid-feedback" data-tf-image-error></div><small class="tf-muted d-block mt-1" data-tf-image-file-status></small>@error('logo')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>

@@ -39,6 +39,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'company.permission' => \App\Http\Middleware\CompanyPermissionMiddleware::class,
             'business.action' => \App\Http\Middleware\BusinessActionPermissionMiddleware::class,
             'business.approved' => \App\Http\Middleware\ApprovedBusinessMiddleware::class,
+            'business.subscription.access' => \App\Http\Middleware\SubscriptionAccessMiddleware::class,
             'super_admin.context' => \App\Http\Middleware\SuperAdminBusinessContextMiddleware::class,
             'record.context' => \App\Http\Middleware\EnsureRouteRecordContext::class,
             'track.activity' => \App\Http\Middleware\TrackActivity::class,

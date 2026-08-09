@@ -8,6 +8,7 @@
 @php($invoice = $delivery->sourceInvoice())
 @php($customer = $delivery->customer ?? $order?->customer)
 @php($total = $order?->grand_total ?: $order?->total ?: $delivery->amount)
+@php($deliveryReference = $invoice?->invoice_number ?? $order?->order_number ?? ('#DEL-'.$delivery->id))
 @php($paidAmount = $order?->paid_amount ?? $paidAmount ?? 0)
 @php($remaining = $order?->balance ?? max(0, $total - ($paidAmount ?? 0)))
 @php($permissions = app(\App\Services\CompanyPermissionService::class))
@@ -42,20 +43,20 @@
     @endif
 </div>
 
-@if($canEdit && !in_array($delivery->status, ['Delivered', 'Cancelled'], true))
+@if(($canEdit || $canAssign) && !in_array($delivery->status, ['Delivered', 'Cancelled'], true))
 <div class="tf-card p-4 mb-4">
-    <h2 class="h5">Edit Delivery Details</h2>
+    <h2 class="h5">{{ $delivery->status === 'Pending' && ! $delivery->delivery_staff_id ? 'Assign Delivery' : 'Edit Delivery Details' }}</h2>
     <form method="POST" action="{{ route('business.deliveries.update', $delivery) }}" class="row g-3">@csrf @method('PATCH')
-        @if($canAssign)<div class="col-md-4"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select"><option value="">Keep current staff</option>@foreach($deliveryStaff ?? [] as $member)<option value="{{ $member->id }}" @selected($delivery->delivery_staff_id === $member->id)>{{ $member->name }}</option>@endforeach</select></div>@endif
+        @if($canAssign)<div class="col-md-4"><label class="form-label">Delivery Staff</label><select name="delivery_staff_id" class="form-select"><option value="">{{ $delivery->delivery_staff_id ? 'Keep current staff' : 'Select delivery staff' }}</option>@foreach($deliveryStaff ?? [] as $member)<option value="{{ $member->id }}" @selected($delivery->delivery_staff_id === $member->id)>{{ $member->name }}</option>@endforeach</select></div>@endif
         <div @class(['col-md-8' => $canAssign, 'col-12' => !$canAssign])><label class="form-label">Address</label><input name="address" value="{{ $delivery->address }}" class="form-control" required></div>
         <div class="col-12"><label class="form-label">Note</label><textarea name="note" class="form-control">{{ $delivery->note }}</textarea></div>
-        <div class="col-12"><button class="btn btn-outline-primary">Save Delivery Changes</button></div>
+        <div class="col-12"><button class="btn btn-outline-primary">{{ $delivery->status === 'Pending' && ! $delivery->delivery_staff_id ? 'Assign Delivery' : 'Save Delivery Changes' }}</button></div>
     </form>
 </div>
 @endif
 
-@if(in_array($delivery->status, ['Pending', 'Assigned', 'Picked Up'], true) && $canUpdateStatus)
-    <form method="POST" action="{{ route('business.deliveries.start', $delivery) }}" class="mb-4">@csrf @method('PATCH')<button class="btn btn-tf-primary"><i class="bi bi-truck me-1"></i>Start Delivery</button></form>
+@if(in_array($delivery->status, ['Assigned', 'Picked Up'], true) && $canUpdateStatus)
+    <form method="POST" action="{{ route('business.deliveries.start', $delivery) }}" class="mb-4" data-tf-confirm-message="Start delivery for {{ $deliveryReference }}?" data-tf-confirm-title="Start delivery?" data-tf-confirm-button="Start Delivery" data-tf-confirm-color="#2563eb">@csrf @method('PATCH')<button class="btn btn-tf-primary"><i class="bi bi-truck me-1"></i>Start Delivery</button></form>
 @endif
 
 @if($delivery->status === 'Out For Delivery')
@@ -80,8 +81,8 @@
         <div class="tf-card p-4 h-100">
             <h2 class="h5">Delivery Status</h2>
             <p class="tf-muted">Upload proof before completing this delivery.</p>
-            @if($canUploadProof)<form method="POST" action="{{ route('business.deliveries.deliver', $delivery) }}" class="mb-3">@csrf @method('PATCH')<button class="btn btn-tf-primary">Mark Delivered</button></form>@endif
-            <form method="POST" action="{{ route('business.deliveries.fail', $delivery) }}" class="row g-3">@csrf @method('PATCH')
+            @if($canUploadProof)<form method="POST" action="{{ route('business.deliveries.deliver', $delivery) }}" class="mb-3" data-tf-confirm-message="Mark {{ $deliveryReference }} as delivered? This will complete the delivery after its proof is verified." data-tf-confirm-title="Mark delivered?" data-tf-confirm-button="Mark Delivered" data-tf-confirm-color="#2563eb">@csrf @method('PATCH')<button class="btn btn-tf-primary">Mark Delivered</button></form>@endif
+            <form method="POST" action="{{ route('business.deliveries.fail', $delivery) }}" class="row g-3" data-tf-confirm-message="Mark {{ $deliveryReference }} as failed? The delivery can be reassigned later if permitted." data-tf-confirm-title="Mark delivery failed?" data-tf-confirm-button="Mark Failed" data-tf-confirm-color="#dc3545">@csrf @method('PATCH')
                 <div class="col-12"><label class="form-label">Failure Reason</label><textarea name="failure_reason" class="form-control" rows="3" required></textarea></div>
                 <div class="col-12"><label class="form-label">Note Optional</label><textarea name="note" class="form-control" rows="2"></textarea></div>
                 <div class="col-12"><button class="btn btn-outline-danger">Mark Failed</button></div>

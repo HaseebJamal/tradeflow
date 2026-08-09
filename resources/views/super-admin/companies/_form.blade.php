@@ -1,6 +1,9 @@
 @php
     $editing = isset($company);
     $required = '<span class="text-danger" aria-hidden="true">*</span>';
+    $existingVerificationDocuments = $editing
+        ? $company->documents()->whereNotNull('file_path')->latest('id')->get()->keyBy('document_type')
+        : collect();
 @endphp
 
 <form method="POST" action="{{ $editing ? route('admin.companies.update', $company) : route('admin.companies.store') }}" enctype="multipart/form-data" class="row g-3" @if(!$editing) data-company-create-form data-company-permission-form @endif>
@@ -25,8 +28,10 @@
     <div class="col-md-4"><label class="form-label" for="registrationNumber">Registration Number <span class="tf-muted">Optional</span></label><input id="registrationNumber" name="registration_number" class="form-control" value="{{ old('registration_number', $company->registration_number ?? '') }}"></div>
     <div class="col-md-8"><label class="form-label" for="companyAddress">Address {!! $required !!}</label><textarea id="companyAddress" name="address" class="form-control" rows="2" required>{{ old('address', $company->address ?? '') }}</textarea></div>
     <div class="col-md-4"><label class="form-label" for="taxNumber">Tax / NTN Number <span class="tf-muted">Optional</span></label><input id="taxNumber" name="tax_number" class="form-control" value="{{ old('tax_number', $company->tax_number ?? '') }}"></div>
-    <div class="col-md-6"><label class="form-label" for="companyLogo">Company Logo <span class="tf-muted">Used as the business dashboard profile icon</span></label><input id="companyLogo" name="company_logo" type="file" accept="image/jpeg,image/png,image/webp" class="form-control" data-tf-image-upload><div class="invalid-feedback" data-tf-image-error></div><small class="tf-muted d-block mt-1">JPG, JPEG, PNG, or WebP. Max 2MB.</small><small class="tf-muted d-block mt-1" data-tf-image-file-status></small>@if($editing && $company->logo)<div class="d-flex align-items-center gap-2 mt-2"><img src="{{ asset('storage/'.$company->logo) }}" class="navbar-avatar" alt="Current company logo"><label class="form-check mb-0"><input class="form-check-input" name="remove_company_logo" value="1" type="checkbox"> Remove current logo</label></div>@endif</div>
-    <div class="col-md-6"><label class="form-label" for="companyDocument">Business Document <span class="tf-muted">Optional</span></label><input id="companyDocument" name="business_document" type="file" accept=".pdf,image/jpeg,image/png" class="form-control"><small class="tf-muted">Uploading adds a new verification document.</small></div>
+    <div class="col-md-6"><label class="form-label" for="companyLogo">Company Logo <span class="tf-muted">Used as the business dashboard profile icon</span></label><input id="companyLogo" name="company_logo" type="file" accept="image/jpeg,image/png,image/webp" class="form-control" data-tf-image-upload><div class="invalid-feedback" data-tf-image-error></div><small class="tf-muted d-block mt-1">JPG, JPEG, PNG, or WebP. Max 2MB.</small><small class="tf-muted d-block mt-1" data-tf-image-file-status></small>@if($editing && $company->logo)<div class="d-flex align-items-center gap-2 mt-2"><img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($company->logo) }}" class="navbar-avatar" alt="Current company logo"><label class="form-check mb-0"><input class="form-check-input" name="remove_company_logo" value="1" type="checkbox"> Remove current logo</label></div>@endif</div>
+    @foreach(['cnic_image' => ['CNIC', 'cnicImage', '.pdf,image/jpeg,image/png', 'PDF, JPG, or PNG. Max 5MB.'], 'business_document' => ['Business Document', 'companyDocument', '.pdf,image/jpeg,image/png', 'PDF, JPG, or PNG. Max 5MB.'], 'shop_image' => ['Shop Image', 'shopImage', 'image/jpeg,image/png', 'JPG or PNG. Max 5MB.']] as $documentType => [$documentLabel, $fieldId, $accept, $help])
+        <div class="col-md-4"><label class="form-label" for="{{ $fieldId }}">{{ $documentLabel }} <span class="tf-muted">Optional</span></label>@if($existingVerificationDocuments->has($documentType))<div class="form-control bg-light text-muted d-flex align-items-center"><i class="bi bi-lock me-2"></i>Already uploaded</div><small class="tf-muted">Uploaded verification documents cannot be replaced.</small>@else<input id="{{ $fieldId }}" name="{{ $documentType }}" type="file" accept="{{ $accept }}" class="form-control"><small class="tf-muted">{{ $help }}</small>@endif</div>
+    @endforeach
 
     <div class="col-12 mt-3"><h2 class="h5 mb-0">Owner Account</h2></div>
     <div class="col-md-4"><label class="form-label" for="ownerName">Owner Name {!! $required !!}</label><input id="ownerName" name="owner_name" class="form-control" value="{{ old('owner_name', $company->owner?->name ?? '') }}" required data-tf-name-only></div>
@@ -47,7 +52,7 @@
         @enderror
         @if($editing && $company->owner?->profile_image)
             <div class="d-flex align-items-center gap-2 mt-2">
-                <img src="{{ asset('storage/'.$company->owner->profile_image) }}?v={{ $company->owner->updated_at?->timestamp }}" class="navbar-avatar" alt="Current owner profile image">
+                <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($company->owner->profile_image) }}?v={{ $company->owner->updated_at?->timestamp }}" class="navbar-avatar" alt="Current owner profile image">
                 <label class="form-check mb-0"><input class="form-check-input" name="remove_owner_profile_image" value="1" type="checkbox"> Remove and restore default avatar</label>
             </div>
         @endif

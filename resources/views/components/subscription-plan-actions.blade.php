@@ -27,14 +27,6 @@
             </li>
         @else
             <li>
-                <form method="POST" action="{{ route('admin.subscription-plans.status', $plan) }}">
-                    @csrf
-                    @method('PATCH')
-                    <input type="hidden" name="status" value="{{ $plan->status === 'Active' ? 'Inactive' : 'Active' }}">
-                    <button class="dropdown-item">{{ $plan->status === 'Active' ? 'Deactivate' : 'Activate' }}</button>
-                </form>
-            </li>
-            <li>
                 <form method="POST" action="{{ route('admin.subscription-plans.visibility', $plan) }}">
                     @csrf
                     @method('PATCH')
