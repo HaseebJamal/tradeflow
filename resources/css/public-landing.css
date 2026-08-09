@@ -1,0 +1,276 @@
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/plus-jakarta-sans/latin-600.css';
+@import '@fontsource/plus-jakarta-sans/latin-700.css';
+@import '@fontsource/plus-jakarta-sans/latin-800.css';
+
+/*
+ * Profit Point landing-page typography only.  This is deliberately scoped to
+ * .pp-landing-page so login, registration, contact, and application screens
+ * retain their existing visual system during this phase.
+ */
+body.pp-landing-page {
+    --font-heading: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-body);
+    overflow-x: clip;
+}
+
+body.pp-landing-page :is(.pp-nav, .pp-hero, .pp-section, .pp-logo-section, .pp-final-cta, .pp-footer) {
+    font-family: var(--font-body);
+}
+
+body.pp-landing-page :is(
+    .pp-brand-name,
+    .pp-hero h1,
+    .pp-section-heading h2,
+    .pp-why-content h2,
+    .pp-faq h2,
+    .pp-final-card h2,
+    .pp-overview-card h3,
+    .pp-role-card h3,
+    .pp-feature-card h3,
+    .pp-benefit h3,
+    .pp-timeline h3,
+    .pp-dash-stat-grid strong,
+    .pp-float-revenue strong,
+    .pp-logo-row span,
+    .pp-ds-brand,
+    .pp-ds-content h3,
+    .pp-metric-grid strong,
+    .pp-donut strong,
+    .pp-panel-head h4,
+    .pp-why-main strong,
+    .pp-timeline-number
+) {
+    font-family: var(--font-heading) !important;
+}
+
+body.pp-landing-page .pp-brand-name {
+    font-size: clamp(1.125rem, 1.7vw, 1.4rem);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+}
+
+body.pp-landing-page .pp-nav .nav-link,
+body.pp-landing-page .pp-nav-actions .pp-sign-in {
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+body.pp-landing-page .pp-nav .navbar-nav { gap: 0.25rem; }
+
+body.pp-landing-page .pp-nav :is(.pp-nav-cta, .pp-nav-dashboard) {
+    min-height: 46px;
+    padding-inline: 1rem;
+}
+
+body.pp-landing-page .pp-hero h1 {
+    font-size: clamp(2.375rem, 4.55vw, 3.875rem);
+    font-weight: 800;
+    letter-spacing: -0.055em;
+    line-height: 1.01;
+    margin: 0.85rem 0 1rem;
+    max-width: 37.5rem;
+    text-wrap: balance;
+}
+
+body.pp-landing-page .pp-hero-lead,
+body.pp-landing-page .pp-section-heading p,
+body.pp-landing-page .pp-section-intro,
+body.pp-landing-page .pp-why-content > p,
+body.pp-landing-page .pp-faq .col-lg-5 > p,
+body.pp-landing-page .pp-final-card p {
+    font-family: var(--font-body);
+    font-size: clamp(1rem, 1.35vw, 1.125rem);
+    line-height: 1.68;
+}
+
+body.pp-landing-page .pp-hero-lead {
+    margin: 0 0 1.35rem;
+    max-width: 35.5rem;
+}
+
+body.pp-landing-page .pp-hero-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap !important;
+    gap: 0.75rem !important;
+    max-width: 100%;
+}
+
+body.pp-landing-page .pp-hero-actions .btn {
+    align-items: center;
+    border-radius: 11px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    font-weight: 700;
+    gap: 0.5rem;
+    height: 45px;
+    justify-content: center;
+    line-height: 1;
+    min-height: 45px;
+    padding: 0 1.125rem;
+    white-space: nowrap;
+}
+
+body.pp-landing-page .pp-hero-actions .btn i {
+    font-size: 0.95em;
+    line-height: 1;
+}
+
+body.pp-landing-page .pp-section {
+    padding-block: clamp(4.75rem, 8vw, 6.5rem);
+}
+
+body.pp-landing-page .pp-final-cta { padding-bottom: clamp(4.75rem, 8vw, 6.5rem); }
+
+body.pp-landing-page .pp-eyebrow,
+body.pp-landing-page .pp-logo-section p,
+body.pp-landing-page .pp-footer h3 {
+    font-family: var(--font-body);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+}
+
+body.pp-landing-page .pp-section-heading h2,
+body.pp-landing-page .pp-why-content h2,
+body.pp-landing-page .pp-faq h2 {
+    font-size: clamp(2.125rem, 3.25vw, 2.625rem);
+    font-weight: 800;
+    letter-spacing: -0.045em;
+    line-height: 1.1;
+    text-wrap: balance;
+}
+
+body.pp-landing-page .pp-final-card h2 {
+    font-size: clamp(2.125rem, 3.65vw, 2.875rem);
+    font-weight: 800;
+    letter-spacing: -0.045em;
+    line-height: 1.08;
+    text-wrap: balance;
+}
+
+body.pp-landing-page :is(.pp-overview-card h3, .pp-role-card h3, .pp-feature-card h3, .pp-benefit h3, .pp-timeline h3) {
+    font-size: clamp(0.9375rem, 1.2vw, 1.125rem);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.3;
+}
+
+body.pp-landing-page :is(.pp-overview-card p, .pp-role-card > span:not(.pp-role-avatar), .pp-feature-card p, .pp-benefit p, .pp-timeline p) {
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    line-height: 1.65;
+}
+
+body.pp-landing-page :is(.pp-testimonial-card blockquote, .pp-testimonial-person strong, .pp-testimonial-person small) {
+    font-family: var(--font-body);
+}
+
+body.pp-landing-page .pp-testimonial-card blockquote {
+    font-size: clamp(0.9375rem, 1.2vw, 1rem);
+    font-weight: 500;
+    line-height: 1.65;
+}
+
+body.pp-landing-page :is(.pp-btn-primary, .pp-btn-secondary, .pp-btn-white, .pp-btn-ghost, .pp-nav-cta, .pp-nav-dashboard) {
+    border-radius: 12px;
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    min-height: 46px;
+}
+
+body.pp-landing-page .pp-faq-accordion .accordion-button {
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    line-height: 1.45;
+    padding: 18px 20px;
+}
+
+body.pp-landing-page .pp-faq-accordion .accordion-body {
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    line-height: 1.7;
+    padding: 0 20px 20px;
+}
+
+body.pp-landing-page .pp-pricing .pp-section-heading p { max-width: 57ch; }
+
+body.pp-landing-page .pp-pricing .pp-btn-primary {
+    min-height: 48px;
+    padding-inline: 1.3rem;
+}
+
+body.pp-landing-page .pp-footer :is(p, a, input, button, small, .pp-footer-bottom) {
+    font-family: var(--font-body);
+}
+
+body.pp-landing-page .pp-footer-about > p,
+body.pp-landing-page .pp-footer-column a,
+body.pp-landing-page .pp-footer-newsletter p {
+    font-size: 0.875rem;
+    line-height: 1.65;
+}
+
+body.pp-landing-page .pp-footer h3 { font-weight: 700; }
+
+body.pp-landing-page .pp-footer-newsletter form { min-height: 46px; }
+
+body.pp-landing-page .pp-footer-newsletter :is(input, button) {
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+}
+
+body.pp-landing-page .pp-footer-newsletter input { min-height: 46px; }
+
+body.pp-landing-page .pp-footer-newsletter button {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    min-width: 46px;
+}
+
+@media (max-width: 991.98px) {
+    body.pp-landing-page .pp-hero h1 { font-size: clamp(3rem, 6.5vw, 3.25rem); }
+}
+
+@media (min-width: 1200px) {
+    body.pp-landing-page .pp-hero-actions { flex-wrap: nowrap !important; }
+}
+
+@media (min-width: 992px) and (max-width: 1199.98px) {
+    body.pp-landing-page .pp-hero-actions { gap: 0.625rem !important; }
+
+    body.pp-landing-page .pp-hero-actions .btn { padding-inline: 0.875rem; }
+}
+
+@media (max-width: 575.98px) {
+    body.pp-landing-page .pp-hero h1 {
+        font-size: clamp(2.375rem, 10vw, 2.625rem);
+        letter-spacing: -0.05em;
+        max-width: 100%;
+    }
+
+    body.pp-landing-page .pp-section { padding-block: 4.75rem; }
+
+    body.pp-landing-page .pp-section-heading h2,
+    body.pp-landing-page .pp-why-content h2,
+    body.pp-landing-page .pp-faq h2 { font-size: 2rem; }
+
+    body.pp-landing-page .pp-btn-primary,
+    body.pp-landing-page .pp-btn-secondary,
+    body.pp-landing-page .pp-btn-white,
+    body.pp-landing-page .pp-btn-ghost { width: 100%; }
+
+    body.pp-landing-page .pp-hero-actions .btn { width: 100%; }
+}
