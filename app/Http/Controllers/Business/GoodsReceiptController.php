@@ -23,10 +23,14 @@ class GoodsReceiptController extends Controller
     {
         $purchase = $this->scoped($purchase, $request);
         abort_unless(app(CompanyPermissionService::class)->allowsUser($request->user(), 'purchases.receive'), 403);
-        abort_if(in_array($purchase->status, ['Draft', 'Cancelled'], true) || in_array($purchase->receiving_status, ['Returned', 'Fully Received'], true), 422, 'This purchase cannot receive more goods.');
+        $receiptState = $this->receiving->state($purchase);
+        abort_if(! $receiptState['can_receive'], 422, $receiptState['pending_qty'] <= 0
+            ? 'This purchase has already been fully received.'
+            : 'This purchase cannot receive more goods.');
 
         return view('business.purchases.receiving', [
             'purchase' => $purchase->load(['supplier', 'items.product', 'returns.items']),
+            'receiptState' => $receiptState,
             'submissionToken' => (string) Str::uuid(),
         ]);
     }

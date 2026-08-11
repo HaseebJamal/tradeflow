@@ -32,7 +32,7 @@
                 <span class="tf-badge tf-badge-{{ $statusClass }} ms-lg-auto">{{ ucfirst($business->status) }}</span>
             </div>
             <div class="row g-3">
-                <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block mb-1">Business type</small><strong>{{ $business->display_business_type ?: 'Not provided' }}</strong><small class="tf-muted d-block mt-2">Category: {{ $business->category ?: 'Not provided' }}</small></div></div>
+                <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block mb-1">Business type</small><strong>{{ $business->display_business_type ?: 'Not provided' }}</strong></div></div>
                 <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block mb-1">Business contact</small><strong>{{ $business->phone ?: 'Not provided' }}</strong><small class="tf-muted d-block mt-2">{{ $business->city ?: 'City not provided' }}</small></div></div>
                 <div class="col-12"><div class="border rounded p-3"><small class="tf-muted d-block mb-1">Registered address</small>{{ $business->address ?: 'Not provided' }}</div></div>
             </div>

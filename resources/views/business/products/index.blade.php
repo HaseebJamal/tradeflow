@@ -96,7 +96,7 @@
             <td><x-quantity :value="$product->stock_quantity" /></td>
             <td>{{ $product->barcode ?: '-' }}</td>
             <td>@if($product->trashed())<span class="tf-badge tf-badge-warning">Archived</span>@else @companyCan('products.edit')<x-inline-status-switch :status="$product->status" :action="route('business.products.status', $product)" entity="product {{ $product->name }}" />@else<span class="tf-badge {{ $product->status === 'Active' ? 'tf-badge-success' : 'tf-badge-secondary' }}">{{ $product->status }}</span>@endcompanyCan @endif</td>
-            <td>{{ $product->created_at?->format('M d, Y') }}
+            <td>{{ $product->created_at?->format('n/j/Y') }}
                 <div class="small tf-muted">{{ $product->creator?->name }}</div>
             </td>
             <td class="text-end text-nowrap">
@@ -105,8 +105,8 @@
                     <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button"
                         data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">Actions</button>
                     <div class="dropdown-menu dropdown-menu-end shadow-sm">
-                        <a class="dropdown-item" href="{{ route('business.products.show', $product->id) }}"><i
-                                class="bi bi-eye me-2"></i>View Details</a>
+                        <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#product-details-{{ $product->id }}"><i
+                                class="bi bi-eye me-2"></i>View Details</button>
                         @companyCan('products.restore')
                         <form method="POST" action="{{ route('business.products.restore', $product->id) }}">@csrf
                             @method('PATCH')<button class="dropdown-item text-success" type="submit"><i
@@ -123,8 +123,8 @@
                     <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button"
                         data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">Actions</button>
                     <div class="dropdown-menu dropdown-menu-end shadow-sm">
-                        <a class="dropdown-item" href="{{ route('business.products.show', $product) }}"><i
-                                class="bi bi-eye me-2"></i>View Details</a>
+                        <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#product-details-{{ $product->id }}"><i
+                                class="bi bi-eye me-2"></i>View Details</button>
                         @companyCan('products.edit')
                         <a class="dropdown-item" href="{{ route('business.products.edit', $product) }}"><i
                                 class="bi bi-pencil me-2"></i>Edit</a>
@@ -152,6 +152,9 @@
         @endforelse
     </tbody>
 </x-table>
+@foreach($products ?? [] as $product)
+    @include('business.products._quick-view-modal', ['product' => $product])
+@endforeach
 @if(isset($products) && method_exists($products, 'links'))
     <div class="mt-3"><x-table-result-summary :paginator="$products" />{{ $products->links('pagination::bootstrap-5') }}
 </div>@endif

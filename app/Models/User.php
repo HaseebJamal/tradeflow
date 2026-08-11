@@ -29,6 +29,7 @@ class User extends Authenticatable
         'role',
         'status',
         'profile_image',
+        'theme_preference',
         'permissions',
         'business_id',
         'last_login_at',

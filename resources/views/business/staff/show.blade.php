@@ -27,7 +27,7 @@
                 ['Orders Created', $activity['orders_created'], 'bi-bag-check', 'bg-blue'],
                 ['Deliveries Completed', $activity['deliveries_completed'], 'bi-truck', 'bg-green'],
                 ['Payments Collected', 'Rs '.number_format($activity['payments_collected']), 'bi-cash-stack', 'bg-amber'],
-                ['Last Login', $activity['last_login']?->format('d M, Y h:i A') ?? 'Never', 'bi-clock-history', 'bg-navy'],
+                ['Last Login', $activity['last_login']?->format('n/j/Y, g:i A') ?? 'Never', 'bi-clock-history', 'bg-navy'],
             ] as [$label, $value, $icon, $color])
                 <div class="col-md-6">@include('components.card', compact('label','value','icon','color'))</div>
             @endforeach
@@ -48,7 +48,7 @@
         <div class="tf-card p-4 mb-4">
             <h3 class="h5">Job Details</h3>
             <div class="row g-3">
-                <div class="col-md-6"><small class="tf-muted">Joining Date</small><div>{{ $staff->staffProfile?->joining_date?->format('M d, Y') ?? '-' }}</div></div>
+                <div class="col-md-6"><small class="tf-muted">Joining Date</small><div>{{ $staff->staffProfile?->joining_date?->format('n/j/Y') ?? '-' }}</div></div>
                 <div class="col-md-6"><small class="tf-muted">Salary</small><div>{{ $staff->staffProfile?->salary ? 'Rs '.number_format($staff->staffProfile->salary) : '-' }}</div></div>
                 <div class="col-md-6"><small class="tf-muted">Employment Type</small><div>{{ $staff->staffProfile?->employment_type ?? '-' }}</div></div>
                 <div class="col-md-6"><small class="tf-muted">Business</small><div>{{ $staff->business?->business_name ?? '-' }}</div></div>

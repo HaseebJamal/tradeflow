@@ -37,6 +37,7 @@ class SupportController extends Controller
             'user_id' => $user->id,
             'created_by' => $user->id,
             'type' => 'Support',
+            'submitted_at' => now(),
             'subject' => $data['subject'],
             'message' => $data['message'],
             'priority' => $data['priority'],

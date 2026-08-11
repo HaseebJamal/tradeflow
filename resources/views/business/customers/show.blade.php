@@ -25,7 +25,7 @@
                 <div><dt>City / Location</dt><dd>{{ collect([$customer->city, $customer->province])->filter()->implode(', ') ?: '—' }}</dd></div>
                 <div class="tf-customer-info-wide"><dt>Address</dt><dd>{{ $customer->address ?: '—' }}</dd></div>
                 <div><dt>Created by</dt><dd>{{ $customer->creator?->name ?: '—' }}</dd></div>
-                <div><dt>Created at</dt><dd>{{ $customer->created_at?->format('d M Y, h:i A') ?: '—' }}</dd></div>
+                <div><dt>Created at</dt><dd>{{ $customer->created_at?->format('n/j/Y, g:i A') ?: '—' }}</dd></div>
             </dl>
         </section>
 
@@ -39,8 +39,8 @@
                     ['Total Sales', 'Rs '.number_format($totalSales), 'blue'],
                     ['Payments', 'Rs '.number_format($paymentsReceived), 'success'],
                     ['Orders', number_format($customer->orders->count()), 'slate'],
-                    ['Last Order', $lastOrder?->created_at?->format('d M Y') ?? '—', 'slate'],
-                    ['Last Payment', $lastPayment?->payment_date?->format('d M Y') ?? '—', 'slate'],
+                    ['Last Order', $lastOrder?->created_at?->format('n/j/Y') ?? '—', 'slate'],
+                    ['Last Payment', $lastPayment?->payment_date?->format('n/j/Y') ?? '—', 'slate'],
                 ] as [$label, $value, $tone])
                     <div class="col-6 col-xl-3"><article class="tf-customer-kpi is-{{ $tone }}"><small>{{ $label }}</small><strong>{{ $value }}</strong></article></div>
                 @endforeach
@@ -53,10 +53,10 @@
                 <thead><tr><th>Date</th><th>Voucher / Order</th><th>Account</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
                 <tbody>
                 @forelse($journalLines as $line)
-                    <tr><td>{{ $line->journalEntry?->entry_date?->format('d M Y') ?: '—' }}</td><td>{{ $line->journalEntry?->voucher_number ?: '—' }}</td><td>{{ $line->account?->name ?: '—' }}</td><td>{{ $line->description ?: '—' }}</td><td class="text-end text-nowrap">Rs {{ number_format($line->debit) }}</td><td class="text-end text-nowrap">Rs {{ number_format($line->credit) }}</td></tr>
+                    <tr><td>{{ $line->journalEntry?->entry_date?->format('n/j/Y') ?: '—' }}</td><td>{{ $line->journalEntry?->voucher_number ?: '—' }}</td><td>{{ $line->account?->name ?: '—' }}</td><td>{{ $line->description ?: '—' }}</td><td class="text-end text-nowrap">Rs {{ number_format($line->debit) }}</td><td class="text-end text-nowrap">Rs {{ number_format($line->credit) }}</td></tr>
                 @empty
                     @forelse($customer->ledgers as $ledger)
-                        <tr><td>{{ $ledger->created_at?->format('d M Y') ?: '—' }}</td><td>{{ $ledger->order?->order_number ?? '—' }}</td><td>Legacy Khata</td><td>{{ $ledger->description ?: '—' }}</td><td class="text-end text-nowrap">Rs {{ number_format($ledger->amount) }}</td><td class="text-end">—</td></tr>
+                        <tr><td>{{ $ledger->created_at?->format('n/j/Y') ?: '—' }}</td><td>{{ $ledger->order?->order_number ?? '—' }}</td><td>Legacy Khata</td><td>{{ $ledger->description ?: '—' }}</td><td class="text-end text-nowrap">Rs {{ number_format($ledger->amount) }}</td><td class="text-end">—</td></tr>
                     @empty
                         <tr><td colspan="6" class="text-center tf-muted py-5">No ledger entries found.</td></tr>
                     @endforelse

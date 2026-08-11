@@ -78,8 +78,8 @@
                         </form>
                     </td>
                     <td><span class="tf-newsletter-source"><i class="bi bi-globe2" aria-hidden="true"></i>Website footer</span></td>
-                    <td><span class="tf-table-date" data-newsletter-subscribed>{{ $subscriptionDate?->format('d M Y, h:i A') ?: 'Not available' }}</span></td>
-                    <td class="text-end"><div class="dropdown"><button type="button" class="btn btn-sm btn-outline-secondary tf-table-more-action" data-bs-toggle="dropdown" aria-label="More actions for {{ $subscriber->email }}"><i class="bi bi-three-dots"></i></button><div class="dropdown-menu dropdown-menu-end"><button type="button" class="dropdown-item" data-newsletter-details data-email="{{ $subscriber->email }}" data-status="{{ $subscriber->status }}" data-subscribed="{{ $subscriptionDate?->format('d M Y, h:i A') ?: 'Not available' }}" data-updated="{{ $subscriber->updated_at?->format('d M Y, h:i A') ?: 'Not available' }}" data-bs-toggle="modal" data-bs-target="#newsletterDetailsModal"><i class="bi bi-eye me-2"></i>View details</button><div class="dropdown-divider"></div><button type="button" class="dropdown-item text-danger" data-newsletter-delete data-email="{{ $subscriber->email }}" data-action="{{ route('admin.newsletter-subscribers.destroy', $subscriber) }}" data-bs-toggle="modal" data-bs-target="#newsletterDeleteModal"><i class="bi bi-trash3 me-2"></i>Delete Permanently</button></div></div></td>
+                    <td><span class="tf-table-date" data-newsletter-subscribed>{{ $subscriptionDate?->format('n/j/Y, g:i A') ?: 'Not available' }}</span></td>
+                    <td class="text-end"><div class="dropdown"><button type="button" class="btn btn-sm btn-outline-secondary tf-table-more-action" data-bs-toggle="dropdown" aria-label="More actions for {{ $subscriber->email }}"><i class="bi bi-three-dots"></i></button><div class="dropdown-menu dropdown-menu-end"><button type="button" class="dropdown-item" data-newsletter-details data-email="{{ $subscriber->email }}" data-status="{{ $subscriber->status }}" data-subscribed="{{ $subscriptionDate?->format('n/j/Y, g:i A') ?: 'Not available' }}" data-updated="{{ $subscriber->updated_at?->format('n/j/Y, g:i A') ?: 'Not available' }}" data-bs-toggle="modal" data-bs-target="#newsletterDetailsModal"><i class="bi bi-eye me-2"></i>View details</button><div class="dropdown-divider"></div><button type="button" class="dropdown-item text-danger" data-newsletter-delete data-email="{{ $subscriber->email }}" data-action="{{ route('admin.newsletter-subscribers.destroy', $subscriber) }}" data-bs-toggle="modal" data-bs-target="#newsletterDeleteModal"><i class="bi bi-trash3 me-2"></i>Delete Permanently</button></div></div></td>
                 </tr>
             @empty
                 <tr>
@@ -126,7 +126,6 @@
 <script>
 (() => {
     const detailModal = document.getElementById('newsletterDetailsModal');
-    const confirmForm = null; // Status changes now use the shared SweetAlert confirmation.
     const showToast = (icon, title) => {
         if (window.Swal) return window.Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2400, timerProgressBar: true });
         window.alert(title);
@@ -161,7 +160,10 @@
     }));
     deleteInput?.addEventListener('input', () => { deleteSubmit.disabled = deleteInput.value !== deleteForm.dataset.email; });
     deleteForm?.addEventListener('submit', (event) => {
-        if (deleteInput.value !== deleteForm.dataset.email || !window.confirm('Final confirmation: permanently delete this subscriber?')) { event.preventDefault(); return; }
+        // The typed-email modal is the single irreversible-action confirmation.
+        // Do not layer a browser confirm over it; that can double-submit or
+        // steal focus from the foreground dialog.
+        if (deleteInput.value !== deleteForm.dataset.email) { event.preventDefault(); return; }
         deleteSubmit.disabled = true;
         deleteSubmit.textContent = 'Deleting…';
     });
@@ -177,36 +179,6 @@
         details.dataset.status = status;
         if (payload.subscriber.updated_at) details.dataset.updated = new Date(payload.subscriber.updated_at).toLocaleString();
         updateSummary(payload.summary);
-    });
-
-    confirmForm?.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        if (!pendingForm) return;
-        const submit = confirmForm.querySelector('[data-newsletter-confirm-button]');
-        submit.disabled = true;
-        const original = submit.textContent;
-        submit.textContent = 'Saving…';
-        try {
-            const response = await fetch(confirmForm.action, { method: 'POST', headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: new FormData(confirmForm) });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.message || 'Unable to update subscriber status.');
-            const row = pendingForm.closest('[data-newsletter-row]');
-            const status = payload.subscriber.status;
-            row.dataset.newsletterStatus = status;
-            setStatusSwitch(pendingForm, status);
-            const details = row.querySelector('[data-newsletter-details]');
-            details.dataset.status = status;
-            if (payload.subscriber.updated_at) details.dataset.updated = new Date(payload.subscriber.updated_at).toLocaleString();
-            updateSummary(payload.summary);
-            window.bootstrap.Modal.getInstance(statusModal)?.hide();
-            showToast('success', payload.message);
-        } catch (error) {
-            showToast('error', error.message || 'Unable to update subscriber status.');
-        } finally {
-            submit.disabled = false;
-            submit.textContent = original;
-            pendingForm = null;
-        }
     });
 
     @if(session('success'))showToast('success', @json(session('success')));@endif

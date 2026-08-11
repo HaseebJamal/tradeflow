@@ -139,6 +139,7 @@ class BusinessActionPermissionMiddleware
             'business.staff.edit', 'business.staff.update', 'business.staff.status', 'business.staff.archive', 'business.staff.restore', 'business.staff.reset-password', 'business.staff.destroy' => 'staff.edit',
             'business.settings' => 'settings.view',
             'business.settings.business' => 'settings.update',
+            'business.settings.protected-details-request' => 'settings.update',
             'business.settings.logo' => 'settings.update',
             'business.settings.document-footer.edit' => 'footer_settings.view',
             'business.settings.document-footer.update' => 'footer_settings.update',

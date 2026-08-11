@@ -3,13 +3,12 @@
 @section('page-subtitle', 'Business portfolio, approval, plan status, and activity')
 @section('content')
 <x-table>
-<thead><tr><th>Business</th><th>Owner</th><th>Type</th><th>Category</th><th>Plan</th><th>Subscription</th><th>Status</th><th>Staff</th><th>Customers</th><th>Orders</th><th>Revenue</th><th>Last Activity</th><th>Created At</th><th>Actions</th></tr></thead>
+<thead><tr><th>Business</th><th>Owner</th><th>Type</th><th>Plan</th><th>Subscription</th><th>Status</th><th>Staff</th><th>Customers</th><th>Orders</th><th>Revenue</th><th>Last Activity</th><th>Created At</th><th>Actions</th></tr></thead>
 <tbody>@forelse($businesses ?? [] as $business)
 <tr>
 <td>{{ $business->business_name }}</td>
 <td>{{ $business->owner?->name }}</td>
 <td>{{ $business->business_type }}</td>
-<td>{{ $business->category ?: '-' }}</td>
 <td>{{ $business->subscription?->plan?->name ?? '-' }}</td>
 <td>{{ $business->subscription?->status ?? '-' }}</td>
 <td>{{ ucfirst(strtolower($business->status)) }}</td>
@@ -21,7 +20,7 @@
 <td><x-date-time :value="$business->created_at" /></td>
 <td><a href="{{ route('admin.businesses.show',$business) }}" class="btn btn-sm btn-outline-primary">View</a></td>
 </tr>
-@empty<tr><td colspan="14" class="text-center tf-muted py-4">No businesses yet.</td></tr>@endforelse</tbody>
+@empty<tr><td colspan="13" class="text-center tf-muted py-4">No businesses yet.</td></tr>@endforelse</tbody>
 </x-table>
 @if(isset($businesses) && method_exists($businesses, 'links'))<div class="mt-3">{{ $businesses->links() }}</div>@endif
 @endsection

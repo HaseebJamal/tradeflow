@@ -80,7 +80,11 @@ class UnitController extends Controller
     public function update(StoreOrUpdateUnitRequest $request, Unit $unit)
     {
         $this->ensureBusiness($unit);
-        $unit->update($request->validated());
+        $data = $request->validated();
+        // Unit names are stable master-data identities once created.
+        $data['unit_name'] = $unit->unit_name;
+        $data['unit_name_normalized'] = $unit->unit_name_normalized;
+        $unit->update($data);
 
         $this->audit($request, 'Unit Updated', $unit);
 

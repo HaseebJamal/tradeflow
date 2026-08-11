@@ -418,7 +418,6 @@ class CompanyController extends Controller
             'phone' => ['nullable', 'regex:/^\+[1-9]\d{7,14}$/'],
             'business_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($company->owner_id)],
             'website' => ['nullable', 'url', 'max:255'],
-            'tax_number' => ['nullable', 'string', 'max:100'],
             'footer_title' => ['nullable', 'string', 'max:255'],
             'footer_message' => ['nullable', 'string', 'max:500'],
             'powered_by_text' => ['nullable', 'string', 'max:100'],
@@ -429,15 +428,13 @@ class CompanyController extends Controller
             'show_phone' => ['nullable', 'boolean'],
             'show_email' => ['nullable', 'boolean'],
             'show_website' => ['nullable', 'boolean'],
-            'show_tax_number' => ['nullable', 'boolean'],
-            'show_powered_by' => ['nullable', 'boolean'],
         ]);
 
         [$old, $new, $changed] = DB::transaction(function () use ($company, $data, $request): array {
             $lockedCompany = Business::with('owner')->lockForUpdate()->findOrFail($company->id);
             $footer = app(BusinessDocumentFooterService::class)->for($lockedCompany);
-            $businessFields = ['business_name', 'address', 'phone', 'website', 'tax_number'];
-            $footerFields = ['footer_title', 'footer_message', 'powered_by_text', 'show_company_name', 'show_footer_title', 'show_footer_message', 'show_address', 'show_phone', 'show_email', 'show_website', 'show_tax_number', 'show_powered_by'];
+            $businessFields = ['business_name', 'address', 'phone', 'website'];
+            $footerFields = ['footer_title', 'footer_message', 'powered_by_text', 'show_company_name', 'show_footer_title', 'show_footer_message', 'show_address', 'show_phone', 'show_email', 'show_website', 'show_powered_by'];
             $old = [
                 ...$lockedCompany->only($businessFields),
                 'business_email' => $lockedCompany->owner?->email,
@@ -459,8 +456,7 @@ class CompanyController extends Controller
                 'show_phone' => $request->boolean('show_phone'),
                 'show_email' => $request->boolean('show_email'),
                 'show_website' => $request->boolean('show_website'),
-                'show_tax_number' => $request->boolean('show_tax_number'),
-                'show_powered_by' => $request->boolean('show_powered_by'),
+                'show_powered_by' => true,
             ])->save();
             $new = [
                 ...$lockedCompany->fresh()->only($businessFields),

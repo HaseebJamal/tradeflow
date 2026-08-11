@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Business;
 use App\Models\Order;
 use App\Models\PlatformPayment;
+use App\Models\RenewalInvoice;
 use App\Models\Product;
 use App\Models\SubscriptionChangeRequest;
 use App\Models\SubscriptionPlan;
@@ -110,11 +111,19 @@ class BusinessSubscriptionController extends Controller
         $billingHistory->appends(['tab' => 'billing']);
         $subscriptionRequests = $requestsQuery->paginate(10, ['*'], 'request_page')->withQueryString();
         $subscriptionRequests->appends(['tab' => 'requests']);
+        // Renewal invoices are explicitly tenant-scoped. A business user can
+        // see only their own reminders and never the Super Admin actions.
+        $renewalInvoices = RenewalInvoice::where('business_id', $business->id)
+            ->latest()
+            ->paginate(10, ['*'], 'renewal_page')
+            ->withQueryString();
+        $renewalInvoices->appends(['tab' => 'renewals']);
 
         return view('business.subscription.history', compact(
             'business',
             'billingHistory',
             'subscriptionRequests',
+            'renewalInvoices',
             'billingSort',
             'billingDirection',
             'requestSort',

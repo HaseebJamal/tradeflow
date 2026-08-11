@@ -19,7 +19,6 @@
                 <dt class="col-sm-4">Phone</dt><dd class="col-sm-8">{{ $business->phone ?: '—' }}</dd>
                 <dt class="col-sm-4">Address</dt><dd class="col-sm-8">{{ $business->address ?: '—' }}</dd>
                 <dt class="col-sm-4">City</dt><dd class="col-sm-8">{{ $business->city ?: '—' }}</dd>
-                <dt class="col-sm-4">Category</dt><dd class="col-sm-8">{{ $business->category ?: '—' }}</dd>
                 <dt class="col-sm-4">Status</dt><dd class="col-sm-8">{{ $business->status }}</dd>
             </dl>
         </div>

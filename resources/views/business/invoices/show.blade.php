@@ -28,9 +28,13 @@
     </form>
 </div>
 @endif
-@include('business.invoices._thermal-invoice', ['invoice' => $invoice, 'order' => $order, 'paper' => 80])
+<div class="tf-document-viewer tf-invoice-preview">
+    <div class="tf-document-viewer__paper">
+        @include('business.invoices._thermal-invoice', ['invoice' => $invoice, 'order' => $order, 'paper' => 80])
+    </div>
+</div>
 @if($invoice->creditNotes->isNotEmpty())
-<div class="tf-card p-4 mt-4"><h2 class="h5">Credit Notes</h2><x-table><thead><tr><th>No</th><th>Date</th><th>Reason</th><th>Amount</th></tr></thead><tbody>@foreach($invoice->creditNotes as $note)<tr><td>{{ $note->credit_note_number }}</td><td>{{ $note->date?->format('M d, Y') }}</td><td>{{ $note->reason }}</td><td>Rs {{ number_format($note->amount) }}</td></tr>@endforeach</tbody></x-table></div>
+<div class="tf-card p-4 mt-4"><h2 class="h5">Credit Notes</h2><x-table><thead><tr><th>No</th><th>Date</th><th>Reason</th><th>Amount</th></tr></thead><tbody>@foreach($invoice->creditNotes as $note)<tr><td>{{ $note->credit_note_number }}</td><td>{{ $note->date?->format('n/j/Y') }}</td><td>{{ $note->reason }}</td><td>Rs {{ number_format($note->amount) }}</td></tr>@endforeach</tbody></x-table></div>
 @endif
 <div class="modal fade" id="voidInvoiceModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><form method="POST" action="{{ route('business.sales.invoices.void', $invoice) }}">@csrf @method('PATCH')<div class="modal-header"><h2 class="h5 modal-title">Void Invoice</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><label class="form-label">Reason</label><textarea name="void_reason" class="form-control" required></textarea></div><div class="modal-footer"><button class="btn btn-danger">Void Invoice</button></div></form></div></div></div>
 <div class="modal fade" id="creditNoteModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><form method="POST" action="{{ route('business.sales.invoices.credit-notes.store', $invoice) }}">@csrf<div class="modal-header"><h2 class="h5 modal-title">Create Credit Note</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body row g-3"><div class="col-12"><label class="form-label">Amount</label><input name="amount" type="number" step="0.01" min="0.01" max="{{ $invoice->grand_total }}" class="form-control" required></div><div class="col-12"><label class="form-label">Reason</label><textarea name="reason" class="form-control" required></textarea></div></div><div class="modal-footer"><button class="btn btn-warning">Post Credit Note</button></div></form></div></div></div>

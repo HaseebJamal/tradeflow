@@ -14,7 +14,7 @@
 </head>
 <body>
     <h1>TradeFlow Platform Audit Logs</h1>
-    <p>Generated {{ now()->timezone(config('app.timezone'))->format('d M, Y h:i A') }}. This PDF contains up to {{ $pdfRowLimit }} matching records; use CSV for the complete export.</p>
+    <p>Generated {{ now()->timezone(config('app.timezone'))->format('n/j/Y, g:i A') }}. This PDF contains up to {{ $pdfRowLimit }} matching records; use CSV for the complete export.</p>
     <table>
         <thead>
             <tr><th class="when">When</th><th class="company">Company</th><th class="user">User</th><th class="role">Role</th><th class="module">Module</th><th class="action">Action</th><th class="ip">IP</th></tr>
@@ -22,7 +22,7 @@
         <tbody>
         @foreach($logs as $log)
             <tr>
-                <td>{{ ($log->occurred_at ?? $log->created_at) ? \Carbon\Carbon::parse($log->occurred_at ?? $log->created_at)->timezone(config('app.timezone'))->format('d M, Y h:i A') : '-' }}</td>
+                <td>{{ ($log->occurred_at ?? $log->created_at) ? \Carbon\Carbon::parse($log->occurred_at ?? $log->created_at)->timezone(config('app.timezone'))->format('n/j/Y, g:i A') : '-' }}</td>
                 <td>{{ \Illuminate\Support\Str::limit($log->business?->business_name ?: 'Platform', 40) }}</td>
                 <td>{{ \Illuminate\Support\Str::limit($log->user_name ?: $log->user?->name ?: 'System', 35) }}</td>
                 <td>{{ \Illuminate\Support\Str::limit($log->role ?: $log->actor_role, 30) }}</td>

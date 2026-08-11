@@ -34,6 +34,7 @@ use App\Http\Controllers\NewsletterSubscriptionController;
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Retailer\RetailerController;
+use App\Http\Controllers\ThemePreferenceController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use App\Models\SubscriptionPlan;
@@ -92,6 +93,7 @@ Route::get('/register-business', [BusinessOnboardingController::class, 'create']
 Route::post('/register-business', [BusinessOnboardingController::class, 'store'])->name('register.business.store');
 
 Route::middleware('auth')->group(function () {
+    Route::put('/theme-preference', ThemePreferenceController::class)->name('theme.preference.update');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/dashboard', DashboardRedirectController::class)->name('dashboard.redirect');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -234,6 +236,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::delete('/newsletter-subscribers/{subscriber}', [AdminController::class, 'destroyNewsletterSubscriber'])->name('newsletter-subscribers.destroy');
     Route::get('/payments', [AdminController::class, 'payments'])->name('payments');
     Route::post('/payments', [AdminController::class, 'storePlatformPayment'])->name('payments.store');
+    Route::get('/payments/renewals/{invoice}/pdf', [AdminController::class, 'renewalInvoicePdf'])->name('renewal-invoices.pdf');
+    Route::post('/payments/renewals/{invoice}/email', [AdminController::class, 'sendRenewalInvoiceEmail'])->name('renewal-invoices.email');
+    Route::post('/payments/renewals/{invoice}/whatsapp', [AdminController::class, 'openRenewalInvoiceWhatsApp'])->name('renewal-invoices.whatsapp');
+    Route::patch('/payments/renewals/{invoice}/amount', [AdminController::class, 'updateRenewalInvoiceAmount'])->name('renewal-invoices.amount');
+    Route::patch('/payments/renewals/{invoice}/cancel', [AdminController::class, 'cancelRenewalInvoice'])->name('renewal-invoices.cancel');
     Route::patch('/payments/{payment}/approve', [AdminController::class, 'approvePlatformPayment'])->name('payments.approve');
     Route::patch('/payments/{payment}/reject', [AdminController::class, 'rejectPlatformPayment'])->name('payments.reject');
     Route::delete('/payments/{payment}', [AdminController::class, 'destroyPlatformPayment'])->name('payments.destroy');
@@ -447,6 +454,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::delete('/staff/{staff}', [StaffController::class, 'destroy'])->name('staff.destroy');
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::put('/settings/business', [SettingsController::class, 'updateBusiness'])->name('settings.business');
+    Route::post('/settings/business/protected-details-request', [SettingsController::class, 'requestProtectedBusinessDetailsChange'])->name('settings.protected-details-request');
     Route::patch('/settings/logo', [SettingsController::class, 'updateLogo'])->name('settings.logo');
     Route::get('/settings/receipt-footer', [SettingsController::class, 'editDocumentFooter'])->name('settings.document-footer.edit');
     Route::put('/settings/receipt-footer', [SettingsController::class, 'updateDocumentFooter'])->name('settings.document-footer.update');

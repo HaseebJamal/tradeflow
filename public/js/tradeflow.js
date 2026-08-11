@@ -1,19 +1,78 @@
-const sidebarStorageKey = 'tradeflow_sidebar_collapsed';
-const isDesktopSidebar = () => window.matchMedia('(min-width: 992px)').matches;
+// Sidebar preferences belong to the authenticated account, never to the
+// browser as a whole. A missing preference is intentionally expanded.
+const sidebarStorageKey = document.body?.dataset.tfSidebarPreferenceKey || null;
+const desktopSidebarQuery = window.matchMedia('(min-width: 1200px)');
+const tabletSidebarQuery = window.matchMedia('(min-width: 768px) and (max-width: 1199.98px)');
+const mobileSidebarQuery = window.matchMedia('(max-width: 767.98px)');
+const isDesktopSidebar = () => desktopSidebarQuery.matches;
+const isMobileSidebar = () => mobileSidebarQuery.matches;
+
+function savedSidebarIsCollapsed() {
+    if (!sidebarStorageKey) return false;
+
+    try {
+        return window.localStorage.getItem(sidebarStorageKey) === '1';
+    } catch (_) {
+        return false;
+    }
+}
+
+function saveSidebarPreference(isCollapsed) {
+    if (!sidebarStorageKey) return;
+
+    try {
+        // This is called only by the explicit desktop collapse control. Viewport
+        // changes must stay temporary and never replace a user's choice.
+        window.localStorage.setItem(sidebarStorageKey, isCollapsed ? '1' : '0');
+    } catch (_) {
+        // Leave the current visual state intact when storage is unavailable.
+    }
+}
+
+function syncSidebarControls() {
+    const isOpen = document.body.classList.contains('sidebar-open');
+    document.querySelectorAll('[data-tf-sidebar-toggle]').forEach((button) => {
+        button.setAttribute('aria-expanded', isMobileSidebar() ? String(isOpen) : 'false');
+        button.setAttribute('aria-label', isMobileSidebar() && isOpen ? 'Close sidebar' : (isMobileSidebar() ? 'Open sidebar' : 'Toggle sidebar'));
+    });
+}
 
 function openSidebar() {
+    if (!isMobileSidebar()) return;
     document.body.classList.add('sidebar-open');
+    syncSidebarControls();
 }
 
 function closeSidebar() {
     document.body.classList.remove('sidebar-open');
+    syncSidebarControls();
+}
+
+function syncSidebarMode() {
+    closeSidebar();
+
+    if (isDesktopSidebar()) {
+        document.body.classList.toggle('sidebar-collapsed', savedSidebarIsCollapsed());
+    } else if (tabletSidebarQuery.matches) {
+        // Tablet uses the compact icon rail and never reserves the desktop width.
+        document.body.classList.add('sidebar-collapsed');
+    } else {
+        // Mobile uses an off-canvas drawer with no content offset.
+        document.body.classList.remove('sidebar-collapsed');
+    }
+
+    syncSidebarControls();
 }
 
 function toggleSidebar() {
     if (isDesktopSidebar()) {
         document.body.classList.toggle('sidebar-collapsed');
-        localStorage.setItem(sidebarStorageKey, document.body.classList.contains('sidebar-collapsed') ? '1' : '0');
-    } else {
+        saveSidebarPreference(document.body.classList.contains('sidebar-collapsed'));
+        syncSidebarControls();
+        return;
+    }
+
+    if (isMobileSidebar()) {
         document.body.classList.contains('sidebar-open') ? closeSidebar() : openSidebar();
     }
 }
@@ -22,9 +81,7 @@ window.openSidebar = openSidebar;
 window.closeSidebar = closeSidebar;
 window.toggleSidebar = toggleSidebar;
 
-if (localStorage.getItem(sidebarStorageKey) === '1' && isDesktopSidebar()) {
-    document.body.classList.add('sidebar-collapsed');
-}
+syncSidebarMode();
 
 document.querySelectorAll('[data-tf-sidebar-toggle]').forEach((button) => {
     button.addEventListener('click', toggleSidebar);
@@ -34,13 +91,18 @@ document.querySelectorAll('[data-tf-sidebar-close], [data-tf-sidebar-overlay]').
     element.addEventListener('click', closeSidebar);
 });
 
-window.addEventListener('resize', () => {
-    if (isDesktopSidebar()) {
+window.addEventListener('resize', syncSidebarMode);
+
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.body.classList.contains('sidebar-open')) {
         closeSidebar();
-        document.body.classList.toggle('sidebar-collapsed', localStorage.getItem(sidebarStorageKey) === '1');
-    } else {
-        document.body.classList.remove('sidebar-collapsed');
     }
+});
+
+document.querySelectorAll('[data-tf-sidebar] a').forEach((link) => {
+    link.addEventListener('click', () => {
+        if (isMobileSidebar()) closeSidebar();
+    });
 });
 
 document.querySelectorAll('[data-tf-smooth]').forEach((link) => {
@@ -77,6 +139,42 @@ document.querySelectorAll('[data-tf-document-modal]').forEach((modal) => {
     document.body.append(modal);
 });
 
+// A secondary confirmation must not hide and recreate the modal it belongs to.
+// Keep the parent stable, then layer a single non-Bootstrap backdrop beneath the
+// child modal. This prevents focus/backdrop churn when an action is confirmed.
+const tradeFlowNestedModalStates = new WeakMap();
+
+window.clearTradeFlowNestedModal = (modal) => {
+    const state = tradeFlowNestedModalStates.get(modal);
+    state?.backdrop?.remove();
+    if (state?.parentModal?.classList.contains('show')) {
+        state.parentInstance?._focustrap?.activate();
+    }
+    tradeFlowNestedModalStates.delete(modal);
+};
+
+window.openTradeFlowNestedModal = (modal, parentModal = null) => {
+    if (!modal || !window.bootstrap?.Modal) return null;
+
+    window.clearTradeFlowNestedModal(modal);
+
+    if (parentModal && parentModal !== modal) {
+        const backdrop = document.createElement('div');
+        const parentInstance = window.bootstrap.Modal.getInstance(parentModal);
+        backdrop.className = 'tf-nested-modal-backdrop';
+        backdrop.setAttribute('aria-hidden', 'true');
+        document.body.append(backdrop);
+        // Bootstrap focus traps are otherwise both active while the child is
+        // visible, which pulls focus back to the parent confirmation trigger.
+        parentInstance?._focustrap?.deactivate();
+        tradeFlowNestedModalStates.set(modal, { backdrop, parentModal, parentInstance });
+    }
+
+    const instance = window.bootstrap.Modal.getOrCreateInstance(modal);
+    instance.show();
+    return instance;
+};
+
 // Every standard select keeps its original element, name, value, and native
 // form submission while Tom Select adds search, keyboard navigation, and a
 // Bootstrap 5 control. Mark a specialised select with data-native-select to
@@ -95,19 +193,36 @@ function positionTradeFlowTomSelectDropdown(control) {
     if (!control?.isOpen) return;
 
     const rect = control.control.getBoundingClientRect();
-    // A menu that flips upward covers headings, summary cards, and other
-    // controls. Keep every standard select anchored below its field instead,
-    // then make its option area scroll within the remaining viewport space.
-    const maxMenuHeight = Math.max(96, window.innerHeight - rect.bottom - 12);
-    const modalParent = control.input?.closest('.modal .modal-content');
+    const viewportPadding = 12;
+    const maxDropdownHeight = 260;
+    let spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+    let spaceAbove = rect.top - viewportPadding;
+    const containingModal = control.wrapper?.closest('.modal') || control.input?.closest('.modal');
+    if (containingModal) {
+        const modalBody = control.wrapper?.closest('.modal-body') || containingModal.querySelector('.modal-body');
+        const modalFooter = containingModal.querySelector('.modal-footer');
+        const bodyRect = modalBody?.getBoundingClientRect();
+        const footerRect = modalFooter?.getBoundingClientRect();
+        // The menu is mounted beside modal-content, so clamp it to the visible
+        // body range. The footer is a hard boundary: an open menu may never
+        // cover the form actions below it.
+        if (bodyRect) {
+            spaceAbove = Math.min(spaceAbove, Math.max(0, rect.top - bodyRect.top - 8));
+            spaceBelow = Math.min(spaceBelow, Math.max(0, (footerRect?.top ?? bodyRect.bottom) - rect.bottom - 8));
+        }
+    }
     const dropdownContent = control.dropdown.querySelector('.ts-dropdown-content');
     const dropdownSearch = control.dropdown.querySelector('.dropdown-input-wrap');
-    // Keep long lists compact: four option rows are visible, while the
-    // remaining choices stay searchable and scrollable inside the menu.
-    const optionListHeight = Math.min(128, Math.max(48, maxMenuHeight - (dropdownSearch?.offsetHeight || 0)));
+    const searchHeight = dropdownSearch?.offsetHeight || 44;
+    const naturalOptionsHeight = Math.min(220, Math.max(40, dropdownContent?.scrollHeight || 40));
+    const preferredHeight = Math.min(maxDropdownHeight, searchHeight + naturalOptionsHeight);
+    const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
+    const usableSpace = openUpward ? spaceAbove : spaceBelow;
+    const availableHeight = Math.min(maxDropdownHeight, Math.max(0, usableSpace));
+    const optionListHeight = Math.max(0, Math.min(220, availableHeight - searchHeight));
 
     Object.assign(control.dropdown.style, {
-        maxHeight: `${maxMenuHeight}px`,
+        maxHeight: `${availableHeight}px`,
     });
     if (dropdownContent) {
         Object.assign(dropdownContent.style, {
@@ -116,18 +231,16 @@ function positionTradeFlowTomSelectDropdown(control) {
         });
     }
 
-    if (modalParent && control.settings.dropdownParent === modalParent) {
-        // Tom Select only positions body-portaled menus itself. This menu is
-        // deliberately mounted in the modal to stay above its backdrop, so
-        // translate viewport coordinates into the positioned modal content.
-        const parentRect = modalParent.getBoundingClientRect();
-        const top = rect.bottom - parentRect.top;
-
-        control.wrapper.classList.remove('tf-tom-select-up');
+    if (containingModal && control.dropdown.parentElement === control.wrapper) {
+        // Keep modal menus in their own control wrapper. The scrollable modal
+        // body is then the hard visual boundary, so a menu moves with its
+        // field and can never escape over the modal footer or page.
+        control.wrapper.classList.toggle('tf-tom-select-up', openUpward);
         Object.assign(control.dropdown.style, {
-            left: `${Math.max(0, rect.left - parentRect.left)}px`,
-            top: `${top}px`,
-            width: `${rect.width}px`,
+            bottom: openUpward ? 'calc(100% + 4px)' : 'auto',
+            left: '0',
+            top: openUpward ? 'auto' : 'calc(100% + 4px)',
+            width: '100%',
         });
         return;
     }
@@ -135,11 +248,12 @@ function positionTradeFlowTomSelectDropdown(control) {
     if (control.settings.dropdownParent !== 'body') return;
 
     const viewportWidth = window.innerWidth;
-    const width = Math.min(rect.width, Math.max(0, viewportWidth - 24));
-    const left = Math.max(12, Math.min(rect.left + window.scrollX, window.scrollX + viewportWidth - width - 12));
-    const top = window.scrollY + rect.bottom;
+    const width = Math.min(rect.width, Math.max(0, viewportWidth - (viewportPadding * 2)));
+    const left = Math.max(viewportPadding, Math.min(rect.left + window.scrollX, window.scrollX + viewportWidth - width - viewportPadding));
+    const dropdownHeight = Math.min(control.dropdown.offsetHeight || availableHeight, availableHeight);
+    const top = window.scrollY + (openUpward ? rect.top - dropdownHeight : rect.bottom);
 
-    control.wrapper.classList.remove('tf-tom-select-up');
+    control.wrapper.classList.toggle('tf-tom-select-up', openUpward);
     Object.assign(control.dropdown.style, {
         left: `${left}px`,
         top: `${top}px`,
@@ -149,6 +263,16 @@ function positionTradeFlowTomSelectDropdown(control) {
 
 function positionOpenTradeFlowTomSelectDropdowns() {
     document.querySelectorAll('select.tomselected').forEach((element) => positionTradeFlowTomSelectDropdown(element.tomselect));
+}
+
+let tradeFlowTomSelectPositionFrame = null;
+function queueTradeFlowTomSelectPosition() {
+    if (tradeFlowTomSelectPositionFrame !== null) return;
+
+    tradeFlowTomSelectPositionFrame = requestAnimationFrame(() => {
+        tradeFlowTomSelectPositionFrame = null;
+        positionOpenTradeFlowTomSelectDropdowns();
+    });
 }
 
 function closeTradeFlowTomSelectDropdowns(except = null) {
@@ -177,8 +301,8 @@ function syncTradeFlowTomSelectSelectedOption(control) {
     });
 }
 
-window.addEventListener('resize', positionOpenTradeFlowTomSelectDropdowns);
-window.addEventListener('scroll', positionOpenTradeFlowTomSelectDropdowns, { passive: true });
+window.addEventListener('resize', queueTradeFlowTomSelectPosition);
+document.addEventListener('scroll', queueTradeFlowTomSelectPosition, { capture: true, passive: true });
 
 window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document, { force = false } = {}) {
     if (!window.TomSelect) return;
@@ -210,13 +334,10 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         // their menus to <body> can leave them detached from the form, so keep
         // those menus inside their own Tom Select wrapper instead.
         const useInlineOrderDropdown = Boolean(element.closest('[data-order-form]'));
-        // Keep every modal select inside its Bootstrap focus stack. A menu
-        // portaled to body can otherwise sit behind the dialog/backdrop.
-        const useModalDropdownParent = Boolean(containingModal);
-        const modalDropdownParent = useModalDropdownParent
-            ? containingModal.querySelector('.modal-content')
-            : null;
-        const dropdownParent = modalDropdownParent || (useInlineOrderDropdown ? null : 'body');
+        // Modal dropdowns stay in their own Tom Select wrapper. Because the
+        // wrapper lives in modal-body, the native scroll container keeps the
+        // menu attached to its field and clips it inside the modal boundary.
+        const dropdownParent = (containingModal || useInlineOrderDropdown) ? null : 'body';
 
         const control = new window.TomSelect(element, {
             create: false,
@@ -259,10 +380,10 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
             document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach((toggle) => {
                 window.bootstrap?.Dropdown?.getInstance(toggle)?.hide();
             });
-            requestAnimationFrame(() => {
+            requestAnimationFrame(() => requestAnimationFrame(() => {
                 syncTradeFlowTomSelectSelectedOption(control);
                 positionTradeFlowTomSelectDropdown(control);
-            });
+            }));
         });
         control.on('item_add', () => requestAnimationFrame(() => syncTradeFlowTomSelectSelectedOption(control)));
         control.on('item_remove', () => requestAnimationFrame(() => syncTradeFlowTomSelectSelectedOption(control)));
@@ -275,13 +396,19 @@ window.reinitializeTradeFlowTomSelect = (root = document) => window.initTradeFlo
 window.initTradeFlowTomSelect();
 document.addEventListener('shown.bs.modal', (event) => {
     const modal = event.target;
-    const modalContent = modal?.querySelector('.modal-content');
-    // Rebuild only stale body-portaled instances. This retains each native
+    const modalDialog = modal?.querySelector('.modal-dialog');
+    // Rebuild only stale instances. This retains each native
     // select value while ensuring each modal owns its own menu stack.
-    const hasStaleModalSelect = modalContent && [...modal.querySelectorAll('select')]
-        .some((element) => element.tomselect && element.tomselect.dropdown.parentElement !== modalContent);
+    const hasStaleModalSelect = modalDialog && [...modal.querySelectorAll('select')]
+        .some((element) => {
+            const expectedParent = element.tomselect?.wrapper;
+            return element.tomselect && element.tomselect.dropdown.parentElement !== expectedParent;
+        });
 
     window.initTradeFlowTomSelect(modal, { force: Boolean(hasStaleModalSelect) });
+});
+document.addEventListener('hidden.bs.modal', (event) => {
+    event.target?.querySelectorAll('select.tomselected').forEach((element) => element.tomselect?.close());
 });
 document.addEventListener('tradeflow:content-loaded', (event) => window.initTradeFlowTomSelect(event.target || document));
 
@@ -316,6 +443,102 @@ window.initTradeFlowDataTables = function initTradeFlowDataTables(root = documen
 };
 
 window.initTradeFlowDataTables();
+
+// Tables declare their action column in the header. Standardize that final
+// column and its controls without changing the links, forms, or dropdowns
+// rendered by individual modules.
+function initTradeFlowTableActionColumns(root = document) {
+    const tables = new Set();
+    if (root instanceof HTMLTableElement) tables.add(root);
+    root.closest?.('table') && tables.add(root.closest('table'));
+    root.querySelectorAll?.('table').forEach((table) => tables.add(table));
+
+    tables.forEach((table) => {
+        // The POS cart owns a compact, stateful action layout (Edit/Delete or
+        // Save/Cancel), so leave its purpose-built column sizing untouched.
+        if (table.classList.contains('tf-pos-cart-table')) return;
+
+        const headerRow = table.tHead?.rows[table.tHead.rows.length - 1];
+        const header = headerRow?.cells[headerRow.cells.length - 1];
+        if (!header || header.textContent.replace(/\s+/g, ' ').trim().toLowerCase() !== 'actions') return;
+
+        table.classList.add('tf-has-actions-column');
+        header.classList.add('tf-table-action-cell');
+
+        [...table.tBodies].forEach((body) => [...body.rows].forEach((row) => {
+            const cell = row.cells[row.cells.length - 1];
+            if (!cell || cell.colSpan > 1) return;
+            cell.classList.add('tf-table-action-cell');
+            if (cell.querySelector(':scope > .tf-table-action-group')) return;
+
+            const directElements = [...cell.children];
+            const contentNodes = [...cell.childNodes].filter((node) => node.nodeType !== Node.TEXT_NODE || node.textContent.trim());
+            const reusableGroup = directElements.length === 1
+                && contentNodes.length === 1
+                && directElements[0].matches('.btn-group, .dropdown, .d-flex, .d-inline-flex');
+            const group = reusableGroup ? directElements[0] : document.createElement('div');
+
+            ['d-flex', 'd-inline-flex', 'gap-1', 'gap-2', 'gap-3', 'align-items-center', 'justify-content-center', 'justify-content-end'].forEach((className) => cell.classList.remove(className));
+            group.classList.add('tf-table-action-group');
+            if (!reusableGroup) {
+                [...cell.childNodes].forEach((node) => group.appendChild(node));
+                cell.appendChild(group);
+            }
+        }));
+    });
+}
+
+window.initTradeFlowTableActionColumns = initTradeFlowTableActionColumns;
+initTradeFlowTableActionColumns();
+
+function initTradeFlowSemanticActions(root = document) {
+    const menus = new Set();
+    if (root instanceof Element && root.matches('.dropdown-menu')) menus.add(root);
+    root.querySelectorAll?.('.dropdown-menu').forEach((menu) => menus.add(menu));
+
+    menus.forEach((menu) => {
+        if (menu.matches('.iti__country-list, .ts-dropdown')) return;
+
+        const toggle = menu.__tradeFlowActionToggle
+            || menu.closest('.dropdown, .btn-group')?.querySelector('[data-bs-toggle="dropdown"]');
+        const isActionLabel = toggle?.textContent.replace(/\s+/g, ' ').trim().toLowerCase() === 'actions';
+        const isActionMenu = Boolean(toggle && (
+            isActionLabel || toggle.closest('tr, .table-responsive, .dataTables_wrapper, .dataTables_scrollBody, .staff-table-wrap, [data-tf-action-dropdown]')
+        ));
+        if (!isActionMenu) return;
+
+        let hasAction = false;
+        menu.querySelectorAll('.dropdown-item').forEach((item) => {
+            const label = item.textContent.replace(/\s+/g, ' ').trim().toLowerCase();
+            if (!label) return;
+
+            const variant = /permanently\s+delete|\bdelete\b|\bremove\b|\breject\b|end\s+(?:trial|access)|close\s+(?:register|permanently)|\bvoid\b/.test(label)
+                ? 'danger'
+                : /\bsuspend\b|\barchive\b|\bexpire\b|\bretry\b/.test(label)
+                    ? 'warning'
+                    : /\brestore\b|\breactivate\b|\bactivate\b|\bapprove\b|mark\s+delivered|\brenew\b|\bextend\b|\bverify\b/.test(label)
+                        ? 'success'
+                        : /\bmanage\b|\bedit\b|\bconfigure\b|\bassign\b|\baccess\b|\bstart\b/.test(label)
+                            ? 'primary'
+                            : 'neutral';
+
+            item.classList.remove(
+                'tf-action-item--neutral',
+                'tf-action-item--primary',
+                'tf-action-item--success',
+                'tf-action-item--warning',
+                'tf-action-item--danger',
+            );
+            item.classList.add(`tf-action-item--${variant}`);
+            hasAction = true;
+        });
+
+        menu.classList.toggle('tf-semantic-action-menu', hasAction);
+    });
+}
+
+window.initTradeFlowSemanticActions = initTradeFlowSemanticActions;
+initTradeFlowSemanticActions();
 
 function initTradeFlowBootstrapDropdowns(root = document) {
     const toggles = root.matches?.('[data-bs-toggle="dropdown"]')
@@ -404,6 +627,8 @@ new MutationObserver((records) => {
     tradeFlowTomSelectFrame = requestAnimationFrame(() => roots.forEach((root) => {
         window.initTradeFlowTomSelect(root);
         window.initTradeFlowDataTables(root);
+        initTradeFlowTableActionColumns(root);
+        initTradeFlowSemanticActions(root);
         initTradeFlowBootstrapDropdowns(root);
         initTradeFlowNotificationDropdowns(root);
         initNonNegativeNumberGuards(root);
@@ -1061,7 +1286,7 @@ function requiresTradeFlowSaveConfirmation(form, submitter) {
 
     // These controls either do not save record details or already use a
     // tailored confirmation flow. Never layer a generic prompt on top.
-    if (form.matches('[data-tf-confirm-message], [data-tf-company-delete], [data-tf-status-switch-form], [data-access-trial-confirm], [data-footer-newsletter], [data-footer-newsletter-legacy]')) return false;
+    if (form.matches('[data-tf-confirm-message], [data-tf-company-delete], [data-tf-status-switch-form], [data-access-trial-confirm], [data-footer-newsletter], [data-footer-newsletter-legacy], [data-inline-products-form]')) return false;
 
     const method = tradeFlowEffectiveFormMethod(form);
     if (!['PUT', 'PATCH'].includes(method)) return false;
@@ -1754,65 +1979,6 @@ function initTradeFlowProfileImageMenu(root = document) {
 initTradeFlowImageUploads();
 initTradeFlowProfileImageMenu();
 
-const TradeFlowPermissions = {
-    syncGroup(group) {
-        const parent = group?.querySelector('[data-permission-parent]');
-        const children = [...(group?.querySelectorAll('[data-permission-child]') || [])];
-        if (!parent || !children.length) return;
-
-        const selected = children.filter((child) => child.checked).length;
-        parent.checked = selected === children.length;
-        parent.indeterminate = selected > 0 && selected < children.length;
-    },
-    syncForm(form) {
-        if (!form) return;
-
-        form.querySelectorAll('[data-permission-group]').forEach((group) => {
-            this.syncGroup(group);
-        });
-
-        const global = form.querySelector('[data-permission-global]');
-        const children = [...form.querySelectorAll('[data-permission-child]')];
-        if (!global || !children.length) return;
-
-        const selected = children.filter((child) => child.checked).length;
-        global.checked = selected === children.length;
-        global.indeterminate = selected > 0 && selected < children.length;
-    },
-};
-
-window.TradeFlowPermissions = TradeFlowPermissions;
-
-document.addEventListener('change', (event) => {
-    const global = event.target.closest('[data-permission-global]');
-    const parent = event.target.closest('[data-permission-parent]');
-    const child = event.target.closest('[data-permission-child]');
-
-    if (global) {
-        const form = global.closest('[data-staff-form]');
-        form?.querySelectorAll('[data-permission-child]').forEach((input) => {
-            input.checked = global.checked;
-        });
-        TradeFlowPermissions.syncForm(form);
-        return;
-    }
-
-    if (parent) {
-        const group = parent.closest('[data-permission-group]');
-        group?.querySelectorAll('[data-permission-child]').forEach((input) => {
-            input.checked = parent.checked;
-        });
-        TradeFlowPermissions.syncForm(parent.closest('[data-staff-form]'));
-        return;
-    }
-
-    if (child) {
-        TradeFlowPermissions.syncForm(child.closest('[data-staff-form]'));
-    }
-});
-
-document.querySelectorAll('[data-staff-form]').forEach((form) => TradeFlowPermissions.syncForm(form));
-
 // Staff/user drafts are intentionally disabled: credentials and uploads must
 // never be persisted in browser storage.
 
@@ -2095,20 +2261,28 @@ function initPermissionHierarchy(form) {
         const parent = group.querySelector('[data-permission-module]');
         const children = [...group.querySelectorAll('[data-permission-child]')];
         if (!parent || !children.length) return;
-        const selected = children.filter((child) => child.checked).length;
-        parent.checked = selected === children.length;
-        parent.indeterminate = selected > 0 && selected < children.length;
-        group.querySelector('[data-permission-selected-count]')?.replaceChildren(document.createTextNode(String(selected)));
-        group.classList.toggle('has-selected-permissions', selected > 0);
+        const selectableChildren = children.filter((child) => !child.disabled);
+        const stateChildren = selectableChildren.length ? selectableChildren : children;
+        const selected = stateChildren.filter((child) => child.checked).length;
+        const selectedTotal = children.filter((child) => child.checked).length;
+        parent.checked = selected === stateChildren.length;
+        parent.indeterminate = selected > 0 && selected < stateChildren.length;
+        parent.disabled = selectableChildren.length === 0;
+        group.querySelector('[data-permission-selected-count]')?.replaceChildren(document.createTextNode(String(selectedTotal)));
+        group.classList.toggle('has-selected-permissions', selectedTotal > 0);
     };
 
     const syncMaster = () => {
         if (!master) return;
         const children = [...form.querySelectorAll('[data-permission-child]')];
-        const selected = children.filter((child) => child.checked).length;
-        master.checked = children.length > 0 && selected === children.length;
-        master.indeterminate = selected > 0 && selected < children.length;
-        form.querySelector('[data-permission-total-selected]')?.replaceChildren(document.createTextNode(`(${selected} selected)`));
+        const selectableChildren = children.filter((child) => !child.disabled);
+        const stateChildren = selectableChildren.length ? selectableChildren : children;
+        const selected = stateChildren.filter((child) => child.checked).length;
+        const selectedTotal = children.filter((child) => child.checked).length;
+        master.checked = stateChildren.length > 0 && selected === stateChildren.length;
+        master.indeterminate = selected > 0 && selected < stateChildren.length;
+        master.disabled = children.length > 0 && selectableChildren.length === 0;
+        form.querySelector('[data-permission-total-selected]')?.replaceChildren(document.createTextNode(`(${selectedTotal} selected)`));
     };
 
     const syncAll = () => {
@@ -2118,22 +2292,39 @@ function initPermissionHierarchy(form) {
     };
 
     master?.addEventListener('change', () => {
-        form.querySelectorAll('[data-permission-child]').forEach((child) => { child.checked = master.checked; });
+        form.querySelectorAll('[data-permission-child]').forEach((child) => {
+            if (!child.disabled) child.checked = master.checked;
+        });
         syncAll();
     });
 
     groups.forEach((group) => {
         group.querySelector('[data-permission-module]')?.addEventListener('change', (event) => {
-            group.querySelectorAll('[data-permission-child]').forEach((child) => { child.checked = event.target.checked; });
+            group.querySelectorAll('[data-permission-child]').forEach((child) => {
+                if (!child.disabled) child.checked = event.target.checked;
+            });
             syncAll();
         });
-        group.querySelectorAll('[data-permission-child]').forEach((child) => child.addEventListener('change', syncAll));
     });
+
+    form.querySelectorAll('[data-permission-child]').forEach((child) => child.addEventListener('change', syncAll));
 
     syncAll();
 }
 
-document.querySelectorAll('[data-company-permission-form]').forEach(initPermissionHierarchy);
+function initPermissionHierarchies(root = document) {
+    const forms = root.matches?.('[data-company-permission-form]')
+        ? [root]
+        : [...(root.querySelectorAll?.('[data-company-permission-form]') || [])];
+
+    forms.forEach(initPermissionHierarchy);
+}
+
+// One guarded initializer powers both Super Admin and business permission
+// trees. It is safe to call again after a modal is populated with fresh HTML.
+window.TradeFlowPermissions = { init: initPermissionHierarchies };
+initPermissionHierarchies();
+document.addEventListener('shown.bs.modal', (event) => initPermissionHierarchies(event.target));
 
 function initCompanyCreateForm(form) {
     if (!form || form.dataset.companyCreateReady === '1') return;
@@ -2430,4 +2621,33 @@ document.querySelectorAll('[data-company-create-form]').forEach(initCompanyCreat
             if (field) clearServerFeedback(field);
         });
     });
+})();
+
+// Shared visual file-upload controls retain the real native input (and its
+// existing server-side validation) while exposing the selected filename in a
+// consistent, accessible label across dashboard forms.
+(() => {
+    const initialise = (root = document) => {
+        root.querySelectorAll?.('[data-tf-file-upload]').forEach((input) => {
+            if (input.dataset.tfFileUploadReady === '1') return;
+            input.dataset.tfFileUploadReady = '1';
+
+            const container = input.closest('.tf-file-upload');
+            const name = container?.querySelector('[data-tf-file-upload-name]');
+            if (!name) return;
+
+            const defaultText = name.textContent.trim() || 'No file selected';
+            const update = () => {
+                const file = input.files?.[0];
+                name.textContent = file ? file.name : defaultText;
+                name.title = file ? file.name : '';
+            };
+
+            input.addEventListener('change', update);
+            update();
+        });
+    };
+
+    document.addEventListener('DOMContentLoaded', () => initialise());
+    if (document.readyState !== 'loading') initialise();
 })();

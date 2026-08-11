@@ -25,7 +25,7 @@
     <div class="header">
         <div class="receipt-meta">
             <div class="receipt-id">{{ $payment->reference_number ?: '#'.$payment->id }}</div>
-            <div class="subtle">Issued {{ ($payment->verified_at ?? $payment->paid_at ?? $payment->submitted_at)?->format('d M, Y, g:i A') ?? '—' }}</div>
+            <div class="subtle">Issued {{ ($payment->verified_at ?? $payment->paid_at ?? $payment->submitted_at)?->format('n/j/Y, g:i A') ?? '—' }}</div>
         </div>
         <h1 class="brand">{{ $platformName }}</h1>
         <p class="subtle">Verified payment receipt</p>
@@ -39,7 +39,7 @@
         <tr><th>Agreed amount</th><td class="amount">Rs {{ number_format($payment->amount, 2) }}</td></tr>
         <tr><th>Payment method</th><td>{{ $payment->method ?: '—' }}</td></tr>
         <tr><th>Payment reference</th><td>{{ $payment->transaction_reference ?: $payment->reference_number ?: '—' }}</td></tr>
-        <tr><th>Access period</th><td>{{ $payment->period_starts_at?->format('d M, Y') ?? '—' }} – {{ $payment->period_ends_at?->format('d M, Y') ?? '—' }}</td></tr>
+        <tr><th>Access period</th><td>{{ $payment->period_starts_at?->format('n/j/Y') ?? '—' }} – {{ $payment->period_ends_at?->format('n/j/Y') ?? '—' }}</td></tr>
         <tr><th>Recorded by</th><td>{{ $payment->recordedBy?->name ?: '—' }}</td></tr>
         <tr><th>Verified by</th><td>{{ $payment->verifiedBy?->name ?: '—' }}</td></tr>
     </table>

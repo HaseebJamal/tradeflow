@@ -79,16 +79,18 @@
         </div>
 
         <div class="tf-dropdown-safe-scroll">
-            <table class="table table-hover align-middle mb-0 tf-access-table">
+            <table class="table table-hover align-middle mb-0 tf-access-table tf-has-actions-column">
                 <thead>
                     <tr>
                         <th>Business</th>
                         <th>Owner</th>
                         <th>Access status</th>
                         <th>Starts</th>
-                        <th>Ends</th>
-                        <th>Remaining</th>
-                        <th class="text-end">Actions</th>
+                        <th>Paid end</th>
+                        <th class="text-end">Paid remaining</th>
+                        <th class="text-end">Extended days</th>
+                        <th>Effective end</th>
+                        <th class="text-end tf-table-action-cell">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -109,10 +111,12 @@
                             </td>
                             <td><span class="badge text-bg-{{ $tone }}">{{ $access['label'] ?? 'Restricted' }}</span></td>
                             <td>{{ !empty($access['start_date']) ? $access['start_date']->format('n/j/Y') : '—' }}</td>
-                            <td>{{ !empty($access['end_date']) ? $access['end_date']->format('n/j/Y') : '—' }}</td>
-                            <td>{{ $access['remaining_label'] ?? '—' }}</td>
-                            <td class="text-end">
-                                <div class="btn-group">
+                            <td>{{ !empty($access['original_paid_access_end']) ? $access['original_paid_access_end']->format('n/j/Y') : '—' }}</td>
+                            <td class="text-end text-nowrap">{{ $access['paid_remaining_label'] ?? '—' }}</td>
+                            <td class="text-end text-nowrap">@if(($access['extra_access_days'] ?? 0) > 0)<span class="tf-access-extension-badge">{{ $access['extended_days_label'] }}</span>@else—@endif</td>
+                            <td>{{ !empty($access['effective_access_end']) ? $access['effective_access_end']->format('n/j/Y') : (!empty($access['end_date']) ? $access['end_date']->format('n/j/Y') : '—') }}</td>
+                            <td class="text-end tf-table-action-cell">
+                                <div class="btn-group tf-table-action-group">
                                     <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#manage-access-{{ $business->id }}">Manage</button>
                                     <button class="btn btn-sm btn-outline-primary dropdown-toggle tf-access-more-button" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-label="More access actions"><i class="bi bi-three-dots"></i></button>
                                     <ul class="dropdown-menu dropdown-menu-end">
@@ -130,7 +134,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-center text-muted py-4">No businesses match the selected filters.</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted py-4">No businesses match the selected filters.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -149,9 +153,18 @@
                 <div class="modal-body">
                     <dl class="row mb-0">
                         <dt class="col-sm-5">Current status</dt><dd class="col-sm-7">{{ $access['label'] ?? 'Restricted' }}</dd>
-                        <dt class="col-sm-5">Start date</dt><dd class="col-sm-7">{{ !empty($access['start_date']) ? $access['start_date']->format('n/j/Y') : '—' }}</dd>
-                        <dt class="col-sm-5">End date</dt><dd class="col-sm-7">{{ !empty($access['end_date']) ? $access['end_date']->format('n/j/Y') : '—' }}</dd>
-                        <dt class="col-sm-5">Remaining</dt><dd class="col-sm-7">{{ $access['remaining_label'] ?? '—' }}</dd>
+                        @if($subscription?->payment_status === 'Received')
+                            <dt class="col-sm-5">Paid access start</dt><dd class="col-sm-7">{{ !empty($access['paid_access_start']) ? $access['paid_access_start']->format('n/j/Y') : '—' }}</dd>
+                            <dt class="col-sm-5">Original paid access end</dt><dd class="col-sm-7">{{ !empty($access['original_paid_access_end']) ? $access['original_paid_access_end']->format('n/j/Y') : '—' }}</dd>
+                            <dt class="col-sm-5">Paid duration</dt><dd class="col-sm-7">{{ $access['paid_duration_days'] ?? 0 }} days</dd>
+                            <dt class="col-sm-5">Extra access</dt><dd class="col-sm-7">+{{ $access['extra_access_days'] ?? 0 }} days</dd>
+                            <dt class="col-sm-5">Effective access end</dt><dd class="col-sm-7">{{ !empty($access['effective_access_end']) ? $access['effective_access_end']->format('n/j/Y') : '—' }}</dd>
+                            <dt class="col-sm-5">Effective days remaining</dt><dd class="col-sm-7">{{ $access['remaining_label'] ?? '—' }}</dd>
+                        @else
+                            <dt class="col-sm-5">Start date</dt><dd class="col-sm-7">{{ !empty($access['start_date']) ? $access['start_date']->format('n/j/Y') : '—' }}</dd>
+                            <dt class="col-sm-5">End date</dt><dd class="col-sm-7">{{ !empty($access['end_date']) ? $access['end_date']->format('n/j/Y') : '—' }}</dd>
+                            <dt class="col-sm-5">Remaining</dt><dd class="col-sm-7">{{ $access['remaining_label'] ?? '—' }}</dd>
+                        @endif
                     </dl>
                     @if($subscription)
                         <hr>
@@ -170,10 +183,20 @@
                     <h6 class="mb-1">{{ $business->business_name }}</h6>
                     <p class="text-muted small mb-3">{{ $business->owner?->name ?: 'No owner assigned' }} · {{ $access['label'] ?? 'Access Restricted' }}</p>
                     <dl class="row small mb-4">
-                        <dt class="col-6">Trial start</dt><dd class="col-6">{{ !empty($access['trial_start']) ? $access['trial_start']->format('n/j/Y') : '—' }}</dd>
-                        <dt class="col-6">Trial end</dt><dd class="col-6">{{ !empty($access['trial_end']) ? $access['trial_end']->format('n/j/Y') : '—' }}</dd>
-                        <dt class="col-6">Paid access end</dt><dd class="col-6">{{ !empty($access['paid_until']) ? $access['paid_until']->format('n/j/Y') : '—' }}</dd>
-                        <dt class="col-6">Days remaining</dt><dd class="col-6">{{ $access['remaining_label'] ?? '—' }}</dd>
+                        @if($subscription?->payment_status !== 'Received')
+                            <dt class="col-6">Trial start</dt><dd class="col-6">{{ !empty($access['trial_start']) ? $access['trial_start']->format('n/j/Y') : '—' }}</dd>
+                            <dt class="col-6">Trial end</dt><dd class="col-6">{{ !empty($access['trial_end']) ? $access['trial_end']->format('n/j/Y') : '—' }}</dd>
+                        @endif
+                        @if($subscription?->payment_status === 'Received')
+                            <dt class="col-6">Paid access start</dt><dd class="col-6">{{ !empty($access['paid_access_start']) ? $access['paid_access_start']->format('n/j/Y') : '—' }}</dd>
+                            <dt class="col-6">Original paid access end</dt><dd class="col-6">{{ !empty($access['original_paid_access_end']) ? $access['original_paid_access_end']->format('n/j/Y') : '—' }}</dd>
+                            <dt class="col-6">Paid duration</dt><dd class="col-6">{{ $access['paid_duration_days'] ?? 0 }} days</dd>
+                            <dt class="col-6">Extra access</dt><dd class="col-6">+{{ $access['extra_access_days'] ?? 0 }} days</dd>
+                            <dt class="col-6">Effective access end</dt><dd class="col-6">{{ !empty($access['effective_access_end']) ? $access['effective_access_end']->format('n/j/Y') : '—' }}</dd>
+                            <dt class="col-6">Effective days remaining</dt><dd class="col-6">{{ $access['remaining_label'] ?? '—' }}</dd>
+                        @else
+                            <dt class="col-6">Days remaining</dt><dd class="col-6">{{ $access['remaining_label'] ?? '—' }}</dd>
+                        @endif
                     </dl>
 
                     @if($subscription && !empty($access['can_manage_trial']))
@@ -181,14 +204,14 @@
                         <div class="row g-2">
                             <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" data-access-trial-confirm data-access-confirm="Extend this trial?" data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="extend"><label class="form-label small">Extend by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-primary" type="submit">Extend</button></div></form></div>
                             <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" data-access-trial-confirm data-access-confirm="Reduce this trial?" data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="reduce"><label class="form-label small">Reduce by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-outline-warning" type="submit">Reduce</button></div></form></div>
-                            <div class="col-12"><form method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" data-access-trial-confirm data-access-confirm="Set this exact trial end date?" data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="set_end"><label class="form-label small">Set exact trial end date</label><div class="input-group"><input class="form-control" type="date" name="trial_end_at" value="{{ optional($access['trial_end'])->format('Y-m-d') }}" required><button class="btn btn-outline-primary" type="submit">Save</button></div></form></div>
+                            @if(!empty($access['can_end_trial']))<div class="col-12"><button class="btn btn-outline-danger" type="button" data-trial-end-trigger="{{ $business->id }}">End Trial Now</button></div>@endif
                         </div>
                     @elseif($subscription && !empty($access['can_manage_paid']))
                         <h6>Paid access controls</h6>
                         <div class="row g-2">
-                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Extend this paid access period?">@csrf @method('PATCH')<input type="hidden" name="action" value="extend"><label class="form-label small">Extend by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-primary" type="submit">Extend</button></div></form></div>
-                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Reduce this paid access period? It may restrict access immediately.">@csrf @method('PATCH')<input type="hidden" name="action" value="reduce"><label class="form-label small">Reduce by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-outline-warning" type="submit">Reduce</button></div></form></div>
-                            <div class="col-12"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Set this exact paid access end date?">@csrf @method('PATCH')<input type="hidden" name="action" value="set_end"><label class="form-label small">Set exact paid access end date</label><div class="input-group"><input class="form-control" type="date" name="ends_at" value="{{ optional($access['paid_until'])->format('Y-m-d') }}" required><button class="btn btn-outline-primary" type="submit">Save</button></div></form></div>
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Grant complimentary access days? The original paid period will remain unchanged.">@csrf @method('PATCH')<input type="hidden" name="action" value="extend"><label class="form-label small">Extra days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-primary" type="submit">Grant Extra Days</button></div></form></div>
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Reduce only the complimentary extra-access allowance? The original paid period will remain unchanged.">@csrf @method('PATCH')<input type="hidden" name="action" value="reduce"><label class="form-label small">Reduce extra days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-outline-warning" type="submit">Reduce Extra Days</button></div></form></div>
+                            @if(!empty($access['can_end_paid']))<div class="col-12"><button class="btn btn-outline-danger" type="button" data-bs-toggle="modal" data-bs-target="#end-paid-access-{{ $business->id }}">End Access Now</button></div>@endif
                         </div>
                     @else
                         <p class="text-muted mb-0">There is no access record available to manage for this business.</p>
@@ -283,7 +306,6 @@ document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form)
         var action = form.querySelector('[name="action"]')?.value;
         var days = Number(form.querySelector('[name="days"]')?.value || 0);
         var currentValue = form.dataset.accessCurrentEnd;
-        var exactValue = form.querySelector('[name="trial_end_at"]')?.value;
         var serverTodayValue = @json(now(config('app.timezone'))->toDateString());
         var parseDate = function (value) {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return null;
@@ -295,7 +317,6 @@ document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form)
         var newEnd = currentEnd && new Date(currentEnd.getTime());
         if (newEnd && action === 'extend') newEnd.setDate(newEnd.getDate() + days);
         if (newEnd && action === 'reduce') newEnd.setDate(newEnd.getDate() - days);
-        if (action === 'set_end') newEnd = parseDate(exactValue);
         var preview = currentEnd && newEnd
             ? '<div class="text-start small"><div><strong>Current End:</strong> ' + formatDate(currentEnd) + '</div>'
                 + (action === 'reduce' ? '<div><strong>Days Removed:</strong> ' + days + '</div>' : '')
@@ -303,7 +324,7 @@ document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form)
                 + '<div><strong>New End:</strong> ' + formatDate(newEnd) + '</div></div>'
             : '';
         var today = parseDate(serverTodayValue) || new Date(); today.setHours(0, 0, 0, 0);
-        if (action === 'end_now' || (['reduce', 'set_end'].includes(action) && newEnd && newEnd <= today)) {
+        if (action === 'end_now' || (action === 'reduce' && newEnd && newEnd <= today)) {
             preview += '<p class="text-danger small mb-0 mt-2">This change will expire the trial immediately and restrict workspace access.</p>';
         }
 

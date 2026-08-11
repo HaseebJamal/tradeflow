@@ -29,8 +29,8 @@
         </div>
         <div class="row g-3 mb-4">
             <div class="col-sm-6 col-lg-3"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Access type</small><strong>{{ $isTrial ? 'Free Trial' : 'Paid Subscription' }}</strong></div></div>
-            <div class="col-sm-6 col-lg-3"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">{{ $isTrial ? 'Trial Start' : 'Subscription Start' }}</small><strong>{{ $start?->format('d M, Y') ?? '-' }}</strong></div></div>
-            <div class="col-sm-6 col-lg-3"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">{{ $isTrial ? 'Trial End' : 'Subscription End' }}</small><strong>{{ $end?->format('d M, Y') ?? '-' }}</strong></div></div>
+            <div class="col-sm-6 col-lg-3"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">{{ $isTrial ? 'Trial Start' : 'Subscription Start' }}</small><strong>{{ $start?->format('n/j/Y') ?? '-' }}</strong></div></div>
+            <div class="col-sm-6 col-lg-3"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">{{ $isTrial ? 'Trial End' : 'Subscription End' }}</small><strong>{{ $end?->format('n/j/Y') ?? '-' }}</strong></div></div>
             <div class="col-sm-6 col-lg-3"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Days remaining</small><strong>{{ $days === null ? '-' : ($days === 0 ? 'Ends today' : $days.' days') }}</strong></div></div>
         </div>
         <div class="d-flex flex-wrap gap-2">

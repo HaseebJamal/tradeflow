@@ -28,6 +28,7 @@ class Business extends Model
     public function orders() { return $this->hasMany(Order::class); }
     public function expenses() { return $this->hasMany(Expense::class); }
     public function subscription() { return $this->hasOne(Subscription::class); }
+    public function renewalInvoices() { return $this->hasMany(RenewalInvoice::class); }
     public function selectedPlan() { return $this->belongsTo(SubscriptionPlan::class, 'selected_plan_id'); }
     public function reports() { return $this->hasMany(BusinessReport::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }

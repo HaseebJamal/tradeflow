@@ -88,7 +88,7 @@ class SubscriptionPaymentService
             $isExtendingCurrentPeriod = $subscription->exists
                 && $subscription->subscription_plan_id === $plan->id
                 && in_array($subscription->status, ['Active', 'Expiring'], true)
-                && $subscription->ends_at?->gte(now()->startOfDay());
+                && $subscription->effectivePaidAccessEnd()?->gte(now()->startOfDay());
             $starts = $isCustomAccess
                 ? $payment->period_starts_at
                 : ($isExtendingCurrentPeriod
@@ -107,6 +107,7 @@ class SubscriptionPaymentService
                 'payment_reference' => $payment->reference_number,
                 'starts_at' => $starts,
                 'ends_at' => $ends,
+                'access_ended_at' => null,
                 'trial_start_at' => $isCustomAccess ? $subscription->trial_start_at : null,
                 'trial_end_at' => $isCustomAccess ? $subscription->trial_end_at : null,
                 'status' => 'Active',
@@ -141,7 +142,7 @@ class SubscriptionPaymentService
     private function periodFor(?Subscription $subscription, string $cycle): array
     {
         $today = now()->startOfDay();
-        $existingEnd = $subscription?->ends_at?->copy()->startOfDay();
+        $existingEnd = $subscription?->effectivePaidAccessEnd()?->copy()->startOfDay();
         $starts = $existingEnd && in_array($subscription?->status, ['Active', 'Expiring'], true) && $existingEnd->gte($today)
             ? $existingEnd->copy()->addDay()
             : $today;

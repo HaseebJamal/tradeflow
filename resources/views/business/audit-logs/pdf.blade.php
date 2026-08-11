@@ -12,7 +12,7 @@
 </head>
 <body>
     <h1>TradeFlow Business Audit Logs</h1>
-    <p>Generated {{ now()->timezone(config('app.timezone'))->format('d M, Y h:i A') }}</p>
+    <p>Generated {{ now()->timezone(config('app.timezone'))->format('n/j/Y, g:i A') }}</p>
 
     <table>
         <thead>
@@ -21,7 +21,7 @@
         <tbody>
         @foreach($logs as $log)
             <tr>
-                <td>{{ ($log->occurred_at ?? $log->created_at) ? \Carbon\Carbon::parse($log->occurred_at ?? $log->created_at)->timezone(config('app.timezone'))->format('d M, Y h:i A') : '—' }}</td>
+                <td>{{ ($log->occurred_at ?? $log->created_at) ? \Carbon\Carbon::parse($log->occurred_at ?? $log->created_at)->timezone(config('app.timezone'))->format('n/j/Y, g:i A') : '—' }}</td>
                 <td>{{ $log->user_name ?: $log->user?->name ?: 'System' }}</td>
                 <td>{{ $log->role ?: $log->actor_role }}</td>
                 <td><x-activity-label :activity="$log" field="module" /></td>

@@ -7,7 +7,7 @@
     <div class="alert alert-danger" @if($errors->first('supplier_name') === 'A supplier with the same phone or complete identity already exists for this business.') data-tf-alert-title="Supplier already exists" @endif>{{ $errors->first() }}</div>
 @endif
 
-@companyCan('suppliers.create')<div class="tf-card p-4 mb-4">
+@companyCan('suppliers.create')<div class="tf-card tf-suppliers-form-card p-4 mb-4">
     <h2 class="h5 mb-3">Add Supplier</h2>
     <form method="POST" action="{{ route('business.suppliers.store') }}" class="row g-3">
         @csrf
@@ -23,7 +23,7 @@
     </form>
 </div>@endcompanyCan
 
-<div class="tf-card p-4 mb-4">
+<div class="tf-card tf-suppliers-filter-card p-4 mb-4">
     <form method="GET" class="row g-3 align-items-end">
         <div class="col-md-2"><label class="form-label">Name</label><input name="name" value="{{ request('name') }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Company</label><input name="company" value="{{ request('company') }}" class="form-control"></div>
@@ -31,47 +31,45 @@
         <div class="col-md-2"><label class="form-label">City</label><input name="city" value="{{ request('city') }}" class="form-control"></div>
         <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All</option><option @selected(request('status') === 'Active')>Active</option><option @selected(request('status') === 'Inactive')>Inactive</option><option value="Archived" @selected(request('status') === 'Archived')>Archived</option></select></div>
         <div class="col-md-2"><label class="form-label">Created By</label><select name="created_by" class="form-select"><option value="">All</option>@foreach($creators as $creator)<option value="{{ $creator->id }}" @selected(request('created_by') == $creator->id)>{{ $creator->name }}</option>@endforeach</select></div>
-        <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', $dateFrom) }}" class="form-control"></div>
-        <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', $dateTo) }}" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ $dateFrom }}" class="form-control"></div>
+        <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ $dateTo }}" class="form-control"></div>
         <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
         <div class="col-md-2"><a href="{{ route('business.suppliers.index', ['clear' => 1]) }}" class="btn btn-outline-secondary w-100">Clear Filters</a></div>
     </form>
 </div>
 
-<x-table class="tf-business-data-table">
-    <thead><tr><th>Supplier</th><th>Company</th><th>Phone</th><th>Email</th><th>City</th><th>Opening Balance</th><th>Status</th><th>Created By</th><th>Created At</th><th>Updated At</th><th>Actions</th></tr></thead>
+<x-table class="tf-business-data-table tf-suppliers-data-table">
+    <thead><tr><th>Supplier</th><th>Contact</th><th>City</th><th>Balance</th><th>Status</th><th>Created By</th><th>Actions</th></tr></thead>
     <tbody>
         @forelse($suppliers as $supplier)
             <tr>
-                <td>{{ $supplier->supplier_name }}</td>
-                <td>{{ $supplier->company_name ?: '-' }}</td>
-                <td>{{ $supplier->phone ?: '-' }}</td>
-                <td>{{ $supplier->email ?: '-' }}</td>
+                <td><strong>{{ $supplier->supplier_name }}</strong><small class="d-block tf-muted">{{ $supplier->company_name ?: 'Independent supplier' }}</small></td>
+                <td>{{ $supplier->phone ?: '-' }}<small class="d-block tf-muted">{{ $supplier->email ?: 'No email' }}</small></td>
                 <td>{{ $supplier->city ?: '-' }}</td>
                 <td>Rs {{ number_format($supplier->opening_balance) }}</td>
                 <td><span class="badge {{ $supplier->trashed() ? 'bg-warning text-dark' : ($supplier->status === 'Active' ? 'bg-success' : 'bg-secondary') }}">{{ $supplier->trashed() ? 'Archived' : $supplier->status }}</span></td>
                 <td>{{ $supplier->creator?->name ?? '-' }}</td>
-                <td><x-date-time :value="$supplier->created_at" /></td>
-                <td><x-date-time :value="$supplier->updated_at" /></td>
                 <td class="text-end text-nowrap">
+                    <div class="d-flex justify-content-end align-items-center gap-1">
+                    <a href="{{ route('business.suppliers.show', $supplier) }}" class="btn btn-sm btn-outline-primary tf-table-view-action">View</a>
                     <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" data-bs-boundary="viewport">Actions</button>
+                        <button class="btn btn-sm btn-outline-primary tf-table-more-action" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false" aria-label="More actions for {{ $supplier->supplier_name }}"><i class="bi bi-three-dots"></i></button>
                         <div class="dropdown-menu dropdown-menu-end shadow-sm">
-                            <a href="{{ route('business.suppliers.show', $supplier) }}" class="dropdown-item">View</a>
                             @if($supplier->trashed())
                                 @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.restore', $supplier->id) }}">@csrf @method('PATCH')<button class="dropdown-item text-success">Restore</button></form>@endcompanyCan
-                                @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.destroy', $supplier->id) }}" onsubmit="return confirm('Delete this archived supplier permanently?')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Permanently Delete</button></form>@endcompanyCan
+                                @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.destroy', $supplier->id) }}" data-tf-confirm-message="Delete this archived supplier permanently?" data-tf-confirm-title="Delete supplier?" data-tf-confirm-button="Delete supplier" data-tf-confirm-color="#dc3545">@csrf @method('DELETE')<button class="dropdown-item text-danger">Permanently Delete</button></form>@endcompanyCan
                             @else
                                 @companyCan('suppliers.edit')<a href="{{ route('business.suppliers.edit', $supplier) }}" class="dropdown-item">Edit</a>@endcompanyCan
                                 @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.archive', $supplier) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning">Archive</button></form>@endcompanyCan
-                                @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.destroy', $supplier) }}" onsubmit="return confirm('Delete this unused supplier permanently?')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>@endcompanyCan
+                                @companyCan('suppliers.archive')<form method="POST" action="{{ route('business.suppliers.destroy', $supplier) }}" data-tf-confirm-message="Delete this unused supplier permanently?" data-tf-confirm-title="Delete supplier?" data-tf-confirm-button="Delete supplier" data-tf-confirm-color="#dc3545">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>@endcompanyCan
                             @endif
                         </div>
+                    </div>
                     </div>
                 </td>
             </tr>
         @empty
-            <tr><td colspan="11" class="text-center tf-muted py-4">No suppliers found.</td></tr>
+            <tr><td colspan="7" class="text-center tf-muted py-4">No suppliers found.</td></tr>
         @endforelse
     </tbody>
 </x-table>

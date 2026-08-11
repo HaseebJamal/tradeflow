@@ -31,6 +31,15 @@ class BusinessDashboardController extends Controller
         $subscriptionState = $subscriptionLifecycle->forBusiness($business, true);
         abort_if($user->role !== 'super_admin' && ! $subscriptionState['can_access_business'], 403);
         $canManageSubscription = $subscriptionAccess->canManage($user);
+        // The dashboard reminder is a calculated access-state warning, not a
+        // billing-management action. Keep it visible to the owner and to the
+        // same authorised staff who may view subscription/access information,
+        // while ordinary workspace users remain excluded.
+        $canReceiveAccessExpiryAlert = $user->role === 'business_owner'
+            || $companyPermissions->allowsUser($user, 'subscriptions.view', $business);
+        $accessExpiryAlert = $canReceiveAccessExpiryAlert
+            ? $subscriptionLifecycle->dashboardExpiryAlert($subscriptionState)
+            : null;
         // Dashboard access is a core workspace capability. Operational cards
         // are shown only when at least one operational module is enabled.
         $hasOperationalAccess = collect([
@@ -45,6 +54,7 @@ class BusinessDashboardController extends Controller
                 'canManageSubscription' => $canManageSubscription,
                 'subscription' => $canManageSubscription ? $subscriptionState['subscription'] : null,
                 'subscriptionState' => $subscriptionState,
+                'accessExpiryAlert' => $accessExpiryAlert,
             ]);
         }
         $saleBase = Order::where('business_id', $businessId)->whereNotIn('status', ['Cancelled', 'Void', 'Returned']);
@@ -77,6 +87,7 @@ class BusinessDashboardController extends Controller
             'canManageSubscription' => $canManageSubscription,
             'subscription' => $canManageSubscription ? $subscriptionState['subscription'] : null,
             'subscriptionState' => $subscriptionState,
+            'accessExpiryAlert' => $accessExpiryAlert,
             'recentOrders' => Order::with('customer')->where('business_id', $businessId)->latest()->take(5)->get(),
             'lowStockProducts' => Product::where('business_id', $businessId)->whereColumn('stock_quantity', '<=', 'low_stock_alert_qty')->take(5)->get(),
         ]);

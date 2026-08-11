@@ -20,6 +20,7 @@ class PlatformSettingsService
             'logo' => config('tradeflow.platform.logo'),
             'support_email' => config('tradeflow.platform.support_email'),
             'support_phone' => config('tradeflow.platform.support_phone'),
+            'default_paid_access_days' => 30,
             'demo_title' => null,
             'demo_subtitle' => null,
             'demo_video_type' => null,

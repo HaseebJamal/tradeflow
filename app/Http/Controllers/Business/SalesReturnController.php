@@ -36,19 +36,22 @@ class SalesReturnController extends Controller
             'search' => ['nullable', 'string', 'max:120'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'clear' => ['nullable', 'boolean'],
         ]);
-        $filters['date_from'] ??= now(config('app.timezone'))->toDateString();
-        $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
+        if (! $request->boolean('clear')) {
+            $filters['date_from'] ??= now(config('app.timezone'))->toDateString();
+            $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
+        }
         $returns = SalesReturn::with(['order.invoice', 'customer', 'items.orderItem', 'processor'])
             ->where('business_id', $businessId)
             ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($inner) => $inner
                 ->where('return_number', 'like', "%{$value}%")
                 ->orWhereHas('order', fn ($orders) => $orders->where('order_number', 'like', "%{$value}%"))
                 ->orWhereHas('order.invoice', fn ($invoice) => $invoice->where('invoice_number', 'like', "%{$value}%"))))
-            ->whereBetween('returned_at', [
+            ->when(($filters['date_from'] ?? null) && ($filters['date_to'] ?? null), fn ($query) => $query->whereBetween('returned_at', [
                 Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay(),
                 Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay(),
-            ])
+            ]))
             ->latest('returned_at')->paginate(10)->withQueryString();
 
         $references = collect()
@@ -57,7 +60,7 @@ class SalesReturnController extends Controller
             ->merge(SalesReturn::where('business_id', $businessId)->latest('returned_at')->pluck('return_number'))
             ->filter()->unique()->values();
 
-        return view('business.sales-returns.index', compact('returns', 'references'));
+        return view('business.sales-returns.index', compact('returns', 'references', 'filters'));
     }
 
     public function create(Request $request)

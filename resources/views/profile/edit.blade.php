@@ -128,23 +128,26 @@
 @endif
 
 <div class="modal fade" id="profileImageEditorModal" tabindex="-1" aria-labelledby="profileImageEditorTitle" aria-hidden="true" data-tf-profile-image-editor>
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content border-0 shadow-lg">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable tf-profile-image-editor-dialog">
+        <div class="modal-content tf-profile-image-editor-content">
             <div class="modal-header">
                 <div><h2 class="modal-title fs-5" id="profileImageEditorTitle">Adjust profile image</h2><p class="mb-0 small text-muted">Drag to reposition, zoom, or rotate before saving.</p></div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div class="tf-profile-crop-surface mx-auto"><canvas width="512" height="512" data-tf-profile-crop-canvas aria-label="Profile image crop area"></canvas></div>
-                <div class="d-flex align-items-center gap-3 mt-4"><i class="bi bi-zoom-out text-muted"></i><input type="range" class="form-range flex-grow-1" min="1" max="3" value="1" step="0.01" data-tf-profile-crop-zoom aria-label="Zoom image"><i class="bi bi-zoom-in text-muted"></i></div>
+                <div class="tf-profile-crop-workbench">
+                    <div class="tf-profile-crop-surface"><canvas width="512" height="512" tabindex="0" data-tf-profile-crop-canvas aria-label="Circular profile image crop area. Drag to reposition; use arrow keys for fine adjustment."></canvas></div>
+                    <div class="tf-profile-crop-live-preview" aria-label="Final circular avatar preview"><span>Avatar preview</span><canvas width="160" height="160" data-tf-profile-crop-preview aria-hidden="true"></canvas><small>This is how your avatar will appear.</small></div>
+                </div>
+                <div class="d-flex align-items-center gap-3 mt-3"><i class="bi bi-zoom-out text-muted" aria-hidden="true"></i><input type="range" class="form-range flex-grow-1" min="1" max="3" value="1" step="0.01" data-tf-profile-crop-zoom aria-label="Zoom image"><i class="bi bi-zoom-in text-muted" aria-hidden="true"></i></div>
                 <div class="d-flex flex-wrap justify-content-center gap-2 mt-3">
-                    <button type="button" class="btn btn-light border" data-tf-profile-crop-rotate="-90"><i class="bi bi-arrow-counterclockwise me-1"></i>Rotate left</button>
-                    <button type="button" class="btn btn-light border" data-tf-profile-crop-rotate="90">Rotate right<i class="bi bi-arrow-clockwise ms-1"></i></button>
+                    <button type="button" class="btn btn-outline-secondary" data-tf-profile-crop-rotate="-90"><i class="bi bi-arrow-counterclockwise me-1"></i>Rotate left</button>
+                    <button type="button" class="btn btn-outline-secondary" data-tf-profile-crop-rotate="90">Rotate right<i class="bi bi-arrow-clockwise ms-1"></i></button>
                     <button type="button" class="btn btn-link" data-tf-profile-crop-reset>Reset</button>
                 </div>
                 <div class="small text-muted text-center mt-3" data-tf-profile-crop-error role="alert"></div>
             </div>
-            <div class="modal-footer"><button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-tf-primary" data-tf-profile-crop-apply>Apply image</button></div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-tf-primary" data-tf-profile-crop-apply>Apply image</button></div>
         </div>
     </div>
 </div>
@@ -161,6 +164,8 @@
     if (!form || !input || !trigger || !modal || !canvas || !window.bootstrap) return;
 
     const context = canvas.getContext('2d');
+    const previewCanvas = modal.querySelector('[data-tf-profile-crop-preview]');
+    const previewContext = previewCanvas?.getContext('2d');
     const zoomControl = modal.querySelector('[data-tf-profile-crop-zoom]');
     const error = modal.querySelector('[data-tf-profile-crop-error]');
     const preview = form.querySelector('[data-tf-profile-preview]');
@@ -171,6 +176,7 @@
 
     const setError = (message = '') => { error.textContent = message; };
     const normalisedRotation = () => ((state.rotation % 360) + 360) % 360;
+    const cropGuideRadius = () => Math.min(canvas.width, canvas.height) * 0.43;
     const coverScale = () => {
         if (!state.image) return 1;
         const sideways = normalisedRotation() % 180 !== 0;
@@ -178,11 +184,37 @@
         const height = sideways ? state.image.naturalWidth : state.image.naturalHeight;
         return Math.max(canvas.width / width, canvas.height / height);
     };
-    const draw = () => {
+    const drawAvatarPreview = () => {
+        if (!previewCanvas || !previewContext) return;
+        const size = previewCanvas.width;
+        const ratio = (size / 2) / cropGuideRadius();
+        previewContext.clearRect(0, 0, size, size);
+        previewContext.save();
+        previewContext.beginPath();
+        previewContext.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+        previewContext.clip();
+        previewContext.fillStyle = '#e2e8f0';
+        previewContext.fillRect(0, 0, size, size);
+        if (state.image) {
+            const scale = coverScale() * state.zoom * ratio;
+            const width = state.image.naturalWidth * scale;
+            const height = state.image.naturalHeight * scale;
+            previewContext.translate(size / 2 + (state.offsetX * ratio), size / 2 + (state.offsetY * ratio));
+            previewContext.rotate(state.rotation * Math.PI / 180);
+            previewContext.drawImage(state.image, -width / 2, -height / 2, width, height);
+        }
+        previewContext.restore();
+        previewContext.save();
+        previewContext.strokeStyle = 'rgba(255,255,255,.9)';
+        previewContext.lineWidth = 2;
+        previewContext.beginPath();
+        previewContext.arc(size / 2, size / 2, (size / 2) - 1, 0, Math.PI * 2);
+        previewContext.stroke();
+        previewContext.restore();
+    };
+    const draw = (withGuide = true) => {
         context.clearRect(0, 0, canvas.width, canvas.height);
-        context.fillStyle = '#f1f5f9';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        if (!state.image) return;
+        if (!state.image) { drawAvatarPreview(); return; }
         const scale = coverScale() * state.zoom;
         const width = state.image.naturalWidth * scale;
         const height = state.image.naturalHeight * scale;
@@ -191,11 +223,47 @@
         context.rotate(state.rotation * Math.PI / 180);
         context.drawImage(state.image, -width / 2, -height / 2, width, height);
         context.restore();
-        context.save();
-        context.strokeStyle = 'rgba(255,255,255,.92)';
-        context.lineWidth = 4;
-        context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-        context.restore();
+        if (withGuide) {
+            const radius = cropGuideRadius();
+            context.save();
+            context.fillStyle = document.documentElement.dataset.theme === 'dark'
+                ? 'rgba(0, 0, 0, .52)'
+                : 'rgba(0, 0, 0, .46)';
+            context.beginPath();
+            context.rect(0, 0, canvas.width, canvas.height);
+            context.arc(canvas.width / 2, canvas.height / 2, radius, 0, Math.PI * 2);
+            // Fill only the area outside the circle. Unlike destination-out,
+            // the even-odd mask leaves the selected image pixels untouched.
+            context.fill('evenodd');
+            context.restore();
+            context.save();
+            context.strokeStyle = 'rgba(255,255,255,.95)';
+            context.lineWidth = 3;
+            context.beginPath();
+            context.arc(canvas.width / 2, canvas.height / 2, radius, 0, Math.PI * 2);
+            context.stroke();
+            context.restore();
+        }
+        drawAvatarPreview();
+    };
+    const exportSquareCrop = (callback) => {
+        const radius = cropGuideRadius();
+        const diameter = radius * 2;
+        const output = document.createElement('canvas');
+        output.width = canvas.width;
+        output.height = canvas.height;
+        output.getContext('2d').drawImage(
+            canvas,
+            (canvas.width / 2) - radius,
+            (canvas.height / 2) - radius,
+            diameter,
+            diameter,
+            0,
+            0,
+            output.width,
+            output.height,
+        );
+        output.toBlob(callback, 'image/jpeg', 0.92);
     };
     const reset = () => {
         state.zoom = 1;
@@ -253,6 +321,7 @@
         }
     });
     zoomControl.addEventListener('input', () => { state.zoom = Number(zoomControl.value); draw(); });
+    window.addEventListener('tradeflow:themechange', () => { if (state.image) draw(); });
     modal.querySelectorAll('[data-tf-profile-crop-rotate]').forEach((button) => button.addEventListener('click', () => {
         state.rotation += Number(button.dataset.tfProfileCropRotate || 0);
         state.offsetX = 0;
@@ -276,9 +345,21 @@
         draw();
     });
     ['pointerup', 'pointercancel'].forEach((eventName) => canvas.addEventListener(eventName, () => { state.dragging = false; }));
+    canvas.addEventListener('keydown', (event) => {
+        const move = 12;
+        const offsets = { ArrowLeft: [-move, 0], ArrowRight: [move, 0], ArrowUp: [0, -move], ArrowDown: [0, move] };
+        if (!offsets[event.key]) return;
+        event.preventDefault();
+        state.offsetX += offsets[event.key][0];
+        state.offsetY += offsets[event.key][1];
+        draw();
+    });
+    modal.addEventListener('shown.bs.modal', () => canvas.focus());
     modal.querySelector('[data-tf-profile-crop-apply]').addEventListener('click', () => {
         if (!state.image) return;
-        canvas.toBlob((blob) => {
+        draw(false);
+        exportSquareCrop((blob) => {
+            draw();
             if (!blob) { setError('Unable to prepare this image. Please try another file.'); return; }
             const transfer = new DataTransfer();
             transfer.items.add(new File([blob], 'profile-image.jpg', { type: 'image/jpeg' }));
@@ -288,7 +369,7 @@
             fileStatus.textContent = 'Profile image ready. Click Save Profile Changes to upload it.';
             emptyAvatar?.classList.add('d-none');
             editor.hide();
-        }, 'image/jpeg', 0.92);
+        });
     });
 })();
 </script>

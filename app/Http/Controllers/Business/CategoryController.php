@@ -65,7 +65,10 @@ class CategoryController extends Controller
     public function update(StoreOrUpdateCategoryRequest $request, Category $category)
     {
         $this->ensureBusiness($category);
-        $category->update($request->validated());
+        $data = $request->validated();
+        // Preserve the category identity even if a request is manipulated.
+        $data['name'] = $category->name;
+        $category->update($data);
         $this->audit('Category Updated', $category);
 
         return redirect()->route('business.categories.index')->with('success', 'Category updated successfully.');

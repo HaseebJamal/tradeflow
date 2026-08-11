@@ -13,6 +13,15 @@
         'tax_value' => $item->tax_value,
     ])->values()->all() ?? []);
     $submissionToken = old('submission_token', $purchase?->submission_token ?? (string) \Illuminate\Support\Str::uuid());
+    // Purchases store their settled amounts rather than a separate display-only
+    // payment-type column.  Infer the edit-mode selection from those persisted
+    // financial values; new purchases always start as Full Credit.
+    $storedPaymentType = $purchase
+        ? ((float) $purchase->paid_amount <= 0
+            ? 'Full Credit'
+            : ((float) $purchase->balance > 0 ? 'Partial Payment' : 'Full Payment'))
+        : 'Full Credit';
+    $selectedPaymentType = old('payment_type', $storedPaymentType);
 @endphp
 <form method="POST"
     action="{{ $isEditing ? route('business.purchases.update', $purchase) : route('business.purchases.store') }}"
@@ -141,15 +150,16 @@
     <section class="border rounded p-3 mt-4" aria-label="Payment details">
         <h2 class="h5 mb-3">Payment details</h2>
         <div class="row g-3">
-            <div class="col-md-4"><label class="form-label d-block">Payment type</label>
-                <div class="btn-group w-100" role="group">
+            <fieldset class="col-md-4 tf-payment-type-control mb-0">
+                <legend class="form-label">Payment type</legend>
+                <div class="tf-payment-type-options" role="radiogroup" aria-label="Payment type">
                     @foreach(['Full Credit', 'Partial Payment', 'Full Payment'] as $type)<input type="radio"
-                        class="btn-check" name="payment_type" id="paymentType{{ Str::slug($type) }}" value="{{ $type }}"
-                        data-payment-type @checked(old('payment_type', $purchase?->paid_amount > 0 ? ($purchase->balance > 0 ? 'Partial Payment' : 'Full Payment') : 'Full Credit') === $type)><label
-                        class="btn btn-outline-primary"
+                        class="btn-check tf-payment-type-input" name="payment_type" id="paymentType{{ Str::slug($type) }}" value="{{ $type }}"
+                        data-payment-type @checked($selectedPaymentType === $type)><label
+                        class="btn tf-payment-type-option"
                     for="paymentType{{ Str::slug($type) }}">{{ $type }}</label>@endforeach
                 </div>
-            </div>
+            </fieldset>
             <div class="col-md-2"><label class="form-label">Grand total</label><input class="form-control"
                     data-payment-grand-total readonly></div>
             <div class="col-md-2"><label class="form-label">Amount paid now</label><input name="paid_amount"
@@ -259,14 +269,21 @@
                 const sync = () => { const option = product.selectedOptions[0]; stock.value = option?.value ? `${quantityLabel(option.dataset.stock)} ${option.dataset.unit || ''}` : ''; if (product.value && !cost.value) cost.value = whole(option.dataset.cost || 0); };
                 const add = () => { if (!supplier.value || supplier.value === '__create__') { setError('Please select or create a supplier before adding a purchase item.'); return; } const option = product.selectedOptions[0]; const amounts = lineAmounts(); const editableValues = [qty, cost, discountValue, taxValue]; if (editableValues.some(input => !/^\d+$/.test(String(input.value).replace(/,/g, '')))) { setError('Only whole numbers are allowed.'); return; } if (!product.value || number(qty.value) < 1 || number(cost.value) < 0 || discountType.value === 'percentage' && number(discountValue.value) > 100 || taxType.value === 'percentage' && number(taxValue.value) > 100 || amounts.discount > amounts.subtotal) { setError('Select a product and enter valid quantity, cost, discount and tax values.'); return; } const existing = rows().find(row => row.dataset.productId === product.value); const target = editing || existing || document.createElement('tr'); const existingQty = existing && existing !== editing ? number(existing.querySelector('[name$="[quantity]"]').value) : 0; writeRow(target, { product_id: product.value, product_name: option.text, unit: option.dataset.unit || 'Unit', quantity: whole(existingQty + number(qty.value)), unit_cost: whole(cost.value), discount_type: discountType.value, discount_value: whole(discountValue.value), tax_type: taxType.value, tax_value: whole(taxValue.value) }); if (!editing && !existing) body.appendChild(target); render(); reset(); };
                 const syncDueDate = () => { const terms = form.querySelector('[data-payment-terms]'); const date = form.querySelector('[data-invoice-date]').value || form.querySelector('[name="purchase_date"]').value.slice(0, 10); const due = form.querySelector('[data-due-date]'); const days = { 'Cash': 0, 'Due on Receipt': 0, 'Net 7': 7, 'Net 15': 15, 'Net 30': 30 }[terms.value]; due.readOnly = terms.value !== 'Custom'; if (days !== undefined && date) { const value = new Date(`${date}T00:00:00`); value.setDate(value.getDate() + days); due.value = value.toISOString().slice(0, 10); } };
-                supplier.addEventListener('change', () => { if (supplier.value === '__create__') { window.getTradeFlowTomSelect?.(supplier)?.setValue(''); const modal = document.querySelector('#purchaseSupplierModal'); if (modal && window.bootstrap) window.bootstrap.Modal.getOrCreateInstance(modal).show(); return; } updateAvailability(); }); product.addEventListener('change', sync);[qty, cost, discountValue, taxValue, discountType, taxType].forEach(input => input.addEventListener('input', () => { sync(); })); paidAmount.addEventListener('input', render); form.querySelectorAll('[data-payment-type]').forEach(input => input.addEventListener('change', () => { paidAmount.readOnly = paymentType() !== 'Partial Payment'; render(); })); paymentMethod.addEventListener('change', () => form.querySelector('[data-cheque-fields]').classList.toggle('d-none', paymentMethod.value !== 'Cheque')); form.querySelector('[data-payment-terms]').addEventListener('change', syncDueDate); form.querySelector('[data-invoice-date]').addEventListener('change', syncDueDate); form.querySelector('[name="purchase_date"]').addEventListener('change', syncDueDate); form.querySelector('[data-add-purchase-item]').addEventListener('click', add);
+                const syncPaymentType = () => {
+                    const isPartialPayment = paymentType() === 'Partial Payment';
+                    paidAmount.readOnly = !isPartialPayment;
+                    paidAmount.setAttribute('aria-readonly', String(!isPartialPayment));
+                    paidAmount.classList.toggle('tf-payment-amount-locked', !isPartialPayment);
+                    render();
+                };
+                supplier.addEventListener('change', () => { if (supplier.value === '__create__') { window.getTradeFlowTomSelect?.(supplier)?.setValue(''); const modal = document.querySelector('#purchaseSupplierModal'); if (modal && window.bootstrap) window.bootstrap.Modal.getOrCreateInstance(modal).show(); return; } updateAvailability(); }); product.addEventListener('change', sync);[qty, cost, discountValue, taxValue, discountType, taxType].forEach(input => input.addEventListener('input', () => { sync(); })); paidAmount.addEventListener('input', render); form.querySelectorAll('[data-payment-type]').forEach(input => input.addEventListener('change', syncPaymentType)); paymentMethod.addEventListener('change', () => form.querySelector('[data-cheque-fields]').classList.toggle('d-none', paymentMethod.value !== 'Cheque')); form.querySelector('[data-payment-terms]').addEventListener('change', syncDueDate); form.querySelector('[data-invoice-date]').addEventListener('change', syncDueDate); form.querySelector('[name="purchase_date"]').addEventListener('change', syncDueDate); form.querySelector('[data-add-purchase-item]').addEventListener('click', add);
                 body.addEventListener('click', event => { const row = event.target.closest('[data-purchase-row]'); if (!row) return; if (event.target.closest('[data-delete-purchase-item]')) { if (editing === row) reset(); row.remove(); render(); return; } if (event.target.closest('[data-edit-purchase-item]')) { editing = row; product.value = row.dataset.productId; qty.value = row.querySelector('[name$="[quantity]"]').value; cost.value = whole(row.querySelector('[name$="[unit_cost]"]').value); discountType.value = row.querySelector('[name$="[discount_type]"]').value; discountValue.value = whole(row.querySelector('[name$="[discount_value]"]').value); taxType.value = row.querySelector('[name$="[tax_type]"]').value; taxValue.value = whole(row.querySelector('[name$="[tax_value]"]').value); refreshOptions(); window.syncTradeFlowTomSelect?.(product); sync(); clearError(); } });
                 form.addEventListener('submit', event => { if (!supplier.value || supplier.value === '__create__') { event.preventDefault(); setError('Please select a supplier before saving this purchase.'); return; } if (!rows().length) { event.preventDefault(); setError('Please add at least one purchase item.'); return; } form.querySelectorAll('[data-purchase-submit]').forEach(button => button.disabled = true); });
                 @foreach($initialItems as $item)
                     { const option = [...product.options].find(candidate => String(candidate.value) === String(@json($item['product_id']))); if (option) { const row = document.createElement('tr'); writeRow(row, { product_id: @json($item['product_id']), product_name: option.text, unit: option.dataset.unit || 'Unit', quantity: @json($item['quantity']), unit_cost: @json($item['unit_cost']), discount_type: @json($item['discount_type'] ?? 'fixed'), discount_value: @json($item['discount_value'] ?? 0), tax_type: @json($item['tax_type'] ?? 'fixed'), tax_value: @json($item['tax_value'] ?? 0) }); body.appendChild(row); } }
                 @endforeach
                     const supplierForm = document.querySelector('[data-purchase-supplier-form]'); if (supplierForm) { supplierForm.addEventListener('submit', async event => { event.preventDefault(); const submit = supplierForm.querySelector('[data-create-supplier]'); submit.disabled = true; const errors = supplierForm.querySelector('[data-supplier-modal-errors]'); errors.classList.add('d-none'); try { const response = await fetch(form.dataset.purchaseQuickSupplierUrl, { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': form.querySelector('[name="_token"]').value }, body: new FormData(supplierForm) }); const payload = await response.json(); if (!response.ok) throw payload; const item = payload.supplier; const label = item.company_name ? `${item.supplier_name} - ${item.company_name}` : item.supplier_name; const select = window.getTradeFlowTomSelect?.(supplier); if (select) { select.addOption({ value: item.id, text: label }); select.setValue(item.id); } else { supplier.add(new Option(label, item.id, true, true)); } updateAvailability(); window.bootstrap.Modal.getInstance(document.querySelector('#purchaseSupplierModal'))?.hide(); window.Swal?.fire({ icon: 'success', title: 'Supplier created', timer: 1400, showConfirmButton: false }); } catch (payload) { const messages = Object.values(payload.errors || { supplier: ['Unable to create supplier.'] }).flat(); errors.textContent = messages.join(' '); errors.classList.remove('d-none'); } finally { submit.disabled = false; } }); }
-                sync(); syncDueDate(); render(); updateAvailability(); paymentMethod.dispatchEvent(new Event('change'));
+                sync(); syncDueDate(); syncPaymentType(); updateAvailability(); paymentMethod.dispatchEvent(new Event('change'));
             });
         </script>
     @endpush

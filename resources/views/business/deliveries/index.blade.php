@@ -185,7 +185,7 @@
                                     data-delivery-payment="{{ $paymentStatus }}"
                                     data-delivery-address="{{ $delivery->address ?: $sale?->delivery_address ?: '-' }}"
                                     data-delivery-timeline-label="{{ $timelineLabel }}"
-                                    data-delivery-timeline-at="{{ $timelineAt?->format('d M Y, h:i A') ?? '-' }}"
+                                    data-delivery-timeline-at="{{ $timelineAt?->format('n/j/Y, g:i A') ?? '-' }}"
                                     data-delivery-manage-url="{{ route('business.deliveries.show', $delivery) }}"
                                 ><i class="bi bi-eye me-2"></i>Quick View</button>
                             </li>

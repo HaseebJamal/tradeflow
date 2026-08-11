@@ -18,9 +18,6 @@ class BusinessFooterChangeService
             'phone' => 'Phone',
             'business_email' => 'Business Email',
             'website' => 'Website',
-            'tax_number' => 'NTN / Tax Number',
-            'powered_by_text' => app(BusinessDocumentFooterService::class)->platformPoweredByText().' Text',
-            'show_powered_by' => app(BusinessDocumentFooterService::class)->platformPoweredByText().' Visibility',
         ];
     }
 
@@ -28,8 +25,6 @@ class BusinessFooterChangeService
     {
         return match ($field) {
             'business_email' => $business->owner?->email,
-            'powered_by_text' => app(BusinessDocumentFooterService::class)->displayedPoweredByText($footer),
-            'show_powered_by' => $footer->show_powered_by ? '1' : '0',
             default => $business->{$field},
         };
     }
@@ -37,14 +32,6 @@ class BusinessFooterChangeService
     public function normalize(string $field, mixed $value): ?string
     {
         $value = is_string($value) ? trim($value) : $value;
-
-        if ($field === 'show_powered_by') {
-            if (! in_array((string) $value, ['0', '1'], true)) {
-                throw ValidationException::withMessages(['requested_value' => 'Choose whether '.app(BusinessDocumentFooterService::class)->platformPoweredByText().' should be visible.']);
-            }
-
-            return (string) $value;
-        }
 
         if (! is_string($value) || $value === '') {
             throw ValidationException::withMessages(['requested_value' => 'Provide the requested value.']);
@@ -81,9 +68,11 @@ class BusinessFooterChangeService
                 }
                 $owner->update(['email' => $value]);
                 break;
-            case 'powered_by_text':
             case 'show_powered_by':
-                $footer->update([$field => $field === 'show_powered_by' ? $value === '1' : $value]);
+                $footer->update(['show_powered_by' => true]);
+                break;
+            case 'powered_by_text':
+                $footer->update(['powered_by_text' => app(BusinessDocumentFooterService::class)->platformPoweredByText(), 'show_powered_by' => true]);
                 break;
             default:
                 $business->update([$field => $value]);

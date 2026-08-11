@@ -3,9 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    @include('components.theme-initializer')
     @php($dashboardTitle = str(trim($__env->yieldContent('title', $platformSettings->company_name.' Dashboard')))->replace('TradeFlow', $platformSettings->company_name))
     <title>{{ $dashboardTitle }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
@@ -13,8 +13,26 @@
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <link href="{{ asset('css/tradeflow.css') }}?v={{ filemtime(public_path('css/tradeflow.css')) }}" rel="stylesheet">
+    @vite('resources/css/theme-system.css')
 </head>
-<body>
+<body data-tf-sidebar-preference-key="{{ auth()->check() ? 'profitpoint.sidebar.'.auth()->id().'.collapsed' : '' }}">
+@auth
+<script>
+/* Apply an existing account-specific desktop choice before the dashboard shell
+   is parsed. A missing key deliberately leaves the sidebar expanded. */
+(() => {
+    const body = document.body;
+    const key = body?.dataset.tfSidebarPreferenceKey;
+    if (!key || !window.matchMedia('(min-width: 1200px)').matches) return;
+
+    try {
+        if (window.localStorage.getItem(key) === '1') body.classList.add('sidebar-collapsed');
+    } catch (_) {
+        // Storage may be unavailable; expanded is the safe first-visit state.
+    }
+})();
+</script>
+@endauth
 <div class="tf-dashboard-shell dashboard-wrapper">
     <aside class="tf-sidebar sidebar" data-tf-sidebar>
         @include('components.sidebar')
@@ -23,13 +41,14 @@
     <div class="tf-dashboard-main main-content d-flex flex-column">
         <div class="tf-dashboard-topbar dashboard-header px-3 px-lg-4 py-3 sticky-top">
             <div class="d-flex align-items-center gap-3 min-w-0">
-                <button class="btn btn-outline-secondary tf-sidebar-toggle d-lg-none" data-tf-sidebar-toggle aria-label="Open sidebar" title="Open sidebar"><i class="bi bi-list"></i></button>
+                <button class="btn btn-outline-secondary tf-sidebar-toggle tf-sidebar-toggle--topbar" data-tf-sidebar-toggle aria-label="Open sidebar" title="Open sidebar"><i class="bi bi-list"></i></button>
                 <div class="min-w-0">
                     <h1 class="h4 mb-0">@yield('page-title', 'Dashboard')</h1>
                     <small class="tf-muted">{{ str(trim($__env->yieldContent('page-subtitle', $platformSettings->company_name.' workspace')))->replace('TradeFlow', $platformSettings->company_name) }}</small>
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2 tf-topbar-actions">
+                @include('components.theme-toggle')
                 @auth
                     @if(request()->is('business/*') || request()->is('staff/*') || request()->is('admin/*'))
                         @include('components.notification-dropdown')
@@ -47,7 +66,7 @@
         <main class="dashboard-page flex-grow-1">
             @if($welcomeBackName = session('welcome_back_name'))
                 <div class="tf-welcome-back" role="status" aria-live="polite">
-                    <span class="tf-welcome-back-icon"><i class="bi bi-stars" aria-hidden="true"></i></span>
+                    <span class="tf-welcome-back-icon" aria-hidden="true"><i class="bi bi-stars"></i></span>
                     <div><strong>Welcome back, {{ $welcomeBackName }}.</strong><span>Your workspace is ready for you.</span></div>
                 </div>
             @endif
@@ -75,6 +94,7 @@
 <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@25.3.1/build/js/intlTelInput.min.js"></script>
 <script src="{{ asset('js/phone-input.js') }}?v={{ filemtime(public_path('js/phone-input.js')) }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ asset('js/theme.js') }}?v={{ filemtime(public_path('js/theme.js')) }}"></script>
 <script src="{{ asset('js/tradeflow.js') }}?v={{ filemtime(public_path('js/tradeflow.js')) }}"></script>
 @stack('scripts')
 @auth

@@ -19,8 +19,8 @@
             <tr>
                 <td><strong>{{ $quotation->quotation_number }}</strong></td>
                 <td>{{ $quotation->customer?->business_name ?? $quotation->customer?->name ?? 'Walk-in / prospective customer' }}</td>
-                <td>{{ $quotation->quotation_date?->format('d M Y') }}</td>
-                <td>{{ $quotation->valid_until?->format('d M Y') ?? '—' }}</td>
+                <td>{{ $quotation->quotation_date?->format('n/j/Y') }}</td>
+                <td>{{ $quotation->valid_until?->format('n/j/Y') ?? '—' }}</td>
                 <td>{{ $quotation->status }}</td>
                 <td>Rs {{ number_format($quotation->grand_total, 0) }}</td>
                 <td>

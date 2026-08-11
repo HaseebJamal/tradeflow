@@ -38,15 +38,20 @@ class PurchaseReceivingService
         return DB::transaction(function () use ($purchase, $data, $user): GoodsReceipt {
             Business::query()->lockForUpdate()->findOrFail($purchase->business_id);
             $locked = Purchase::where('business_id', $purchase->business_id)->lockForUpdate()->findOrFail($purchase->id);
-            if (in_array($locked->status, ['Draft', 'Cancelled'], true) || in_array($locked->receiving_status, ['Returned', 'Fully Received'], true)) {
-                throw ValidationException::withMessages(['receipt' => 'This purchase cannot receive more goods.']);
-            }
-
             if ($existing = GoodsReceipt::where('business_id', $locked->business_id)->where('submission_token', $data['submission_token'])->first()) {
                 return $existing;
             }
 
             $items = $locked->items()->lockForUpdate()->get()->keyBy('id');
+            $locked->setRelation('items', $items->values());
+            $receiptState = $this->state($locked);
+            if (! $receiptState['can_receive']) {
+                throw ValidationException::withMessages([
+                    'receipt' => $receiptState['pending_qty'] <= 0
+                        ? 'This purchase has already been fully received.'
+                        : 'This purchase cannot receive more goods.',
+                ]);
+            }
             $processedItemIds = [];
             $lines = collect($data['items'])->map(function (array $line, int $index) use ($items, &$processedItemIds): array {
                 $item = $items->get((int) ($line['purchase_item_id'] ?? 0));
@@ -158,17 +163,55 @@ class PurchaseReceivingService
 
     public function refreshReceivingStatus(Purchase $purchase): void
     {
-        $purchase->loadMissing('items.returnItems');
-        $ordered = (float) $purchase->items->sum('quantity');
-        $accepted = (float) $purchase->items->sum('received_quantity');
-        $processed = (float) $purchase->items->sum(fn (PurchaseItem $item) => (float) $item->received_quantity + (float) $item->damaged_quantity + (float) $item->rejected_quantity);
-        $returned = (float) $purchase->items->sum(fn (PurchaseItem $item) => (float) $item->returnItems->sum('quantity'));
-        $status = 'Not Received';
-        if ($accepted > 0 && $returned >= $accepted - 0.0001) $status = 'Returned';
-        elseif ($returned > 0) $status = 'Partially Returned';
-        elseif ($processed >= $ordered - 0.0001 && $ordered > 0) $status = 'Fully Received';
-        elseif ($processed > 0) $status = 'Partially Received';
-        $purchase->update(['receiving_status' => $status, 'received_at' => $processed > 0 ? ($purchase->received_at ?? now()) : null, 'updated_by' => auth()->id()]);
+        $state = $this->state($purchase);
+        $purchase->update([
+            'receiving_status' => $state['receipt_status'],
+            'received_at' => $state['processed_qty'] > 0 ? ($purchase->received_at ?? now()) : null,
+            'updated_by' => auth()->id(),
+        ]);
+    }
+
+    /**
+     * The single source of truth for purchase receiving. Accepted quantity is
+     * sellable stock; damaged and rejected quantity are still processed and
+     * therefore must close the receipt once the ordered quantity is covered.
+     *
+     * @return array{ordered_qty:float,accepted_qty:float,damaged_qty:float,rejected_qty:float,processed_qty:float,pending_qty:float,receipt_status:string,can_receive:bool,action_label:string}
+     */
+    public function state(Purchase $purchase): array
+    {
+        $purchase->loadMissing('items');
+
+        $ordered = round((float) $purchase->items->sum('quantity'), 3);
+        $accepted = round((float) $purchase->items->sum('received_quantity'), 3);
+        $damaged = round((float) $purchase->items->sum('damaged_quantity'), 3);
+        $rejected = round((float) $purchase->items->sum('rejected_quantity'), 3);
+        $processed = round($accepted + $damaged + $rejected, 3);
+        // Sum item-level remaining quantities. This is equivalent to
+        // ordered - processed for valid records, while also keeping a legacy
+        // over-received line from hiding another line that is still pending.
+        $pending = round($purchase->items->sum(function (PurchaseItem $item): float {
+            return max(0, (float) $item->quantity
+                - (float) $item->received_quantity
+                - (float) $item->damaged_quantity
+                - (float) $item->rejected_quantity);
+        }), 3);
+        $receiptStatus = $processed <= 0
+            ? 'Pending Receipt'
+            : ($pending <= 0 ? 'Fully Received' : 'Partially Received');
+        $eligiblePurchase = in_array($purchase->status, ['Confirmed', 'Received', 'Ordered'], true);
+
+        return [
+            'ordered_qty' => $ordered,
+            'accepted_qty' => $accepted,
+            'damaged_qty' => $damaged,
+            'rejected_qty' => $rejected,
+            'processed_qty' => $processed,
+            'pending_qty' => $pending,
+            'receipt_status' => $receiptStatus,
+            'can_receive' => $eligiblePurchase && $pending > 0,
+            'action_label' => $processed > 0 ? 'Receive Remaining Goods' : 'Receive Goods',
+        ];
     }
 
     private function post(Purchase $purchase, GoodsReceipt $receipt, string $source, float $amount, array $lines): void

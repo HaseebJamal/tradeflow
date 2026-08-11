@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\BusinessDetailChangeRequest;
 use App\Models\User;
+use App\Notifications\BusinessDetailsChangeRequestedNotification;
 use App\Services\BusinessDocumentFooterService;
 use App\Services\CompanyPermissionService;
-use App\Notifications\BusinessDetailsChangeRequestedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -25,8 +25,12 @@ class SettingsController extends Controller
         return view('business.settings.index', [
             'business' => $business,
             'canManageDocumentFooter' => $canManageDocumentFooter,
-            'pendingRequest' => $business
-                ? BusinessDetailChangeRequest::where('business_id', $business->id)->where('status', 'Pending')->latest()->first()
+            'pendingProtectedDetailRequest' => $business
+                ? BusinessDetailChangeRequest::query()
+                    ->where('business_id', $business->id)
+                    ->where('status', 'Pending')
+                    ->latest()
+                    ->first()
                 : null,
         ]);
     }
@@ -62,7 +66,6 @@ class SettingsController extends Controller
             'phone' => ['nullable', 'regex:/^\+[1-9]\d{7,14}$/'],
             'address' => ['nullable', 'string', 'max:1000'],
             'website' => ['nullable', 'url', 'max:255'],
-            'tax_number' => ['nullable', 'string', 'max:100'],
             'show_company_name' => ['nullable', 'boolean'],
             'show_footer_title' => ['nullable', 'boolean'],
             'show_footer_message' => ['nullable', 'boolean'],
@@ -70,15 +73,13 @@ class SettingsController extends Controller
             'show_address' => ['nullable', 'boolean'],
             'show_email' => ['nullable', 'boolean'],
             'show_website' => ['nullable', 'boolean'],
-            'show_tax_number' => ['nullable', 'boolean'],
-            'show_powered_by' => ['nullable', 'boolean'],
         ]);
 
         [$footer, $changed] = DB::transaction(function () use ($business, $data, $request): array {
             $lockedBusiness = \App\Models\Business::lockForUpdate()->findOrFail($business->id);
             $footer = app(BusinessDocumentFooterService::class)->for($lockedBusiness);
-            $businessFields = ['phone', 'address', 'website', 'tax_number'];
-            $footerFields = ['footer_title', 'footer_message', 'show_company_name', 'show_footer_title', 'show_footer_message', 'show_phone', 'show_address', 'show_email', 'show_website', 'show_tax_number', 'show_powered_by'];
+            $businessFields = ['phone', 'address', 'website'];
+            $footerFields = ['footer_title', 'footer_message', 'show_company_name', 'show_footer_title', 'show_footer_message', 'show_phone', 'show_address', 'show_email', 'show_website', 'show_powered_by'];
             $old = [
                 ...$lockedBusiness->only($businessFields),
                 ...$footer->only($footerFields),
@@ -95,8 +96,9 @@ class SettingsController extends Controller
                 'show_address' => $request->boolean('show_address'),
                 'show_email' => $request->boolean('show_email'),
                 'show_website' => $request->boolean('show_website'),
-                'show_tax_number' => $request->boolean('show_tax_number'),
-                'show_powered_by' => $request->boolean('show_powered_by'),
+                // Platform attribution is mandatory and cannot be changed by
+                // a hidden or manipulated form value.
+                'show_powered_by' => true,
             ])->save();
 
             $new = [
@@ -129,32 +131,69 @@ class SettingsController extends Controller
 
     public function updateBusiness(Request $request)
     {
+        abort_unless(auth()->user()?->role === 'business_owner', 403, 'Only the Business Owner can update business details.');
+
         $data = $request->validate([
-            'business_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'phone' => ['required', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'address' => ['required', 'string', 'max:1000'],
             'city' => ['required', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'category' => ['nullable', 'string', 'max:100'],
-            'owner_email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore(auth()->id())],
+        ]);
+
+        $business = auth()->user()->business;
+        abort_unless($business, 404);
+
+        $fields = ['phone', 'address', 'city'];
+        $oldValues = $business->only($fields);
+        $newValues = collect($data)->only($fields)->map(fn ($value) => $value === '' ? null : $value)->all();
+        $hasChanges = collect($newValues)->contains(fn ($value, string $field) => (string) $value !== (string) ($oldValues[$field] ?? ''));
+        if (!$hasChanges) {
+            return back()->withErrors(['business' => 'Change at least one business detail before saving.']);
+        }
+
+        $business->fill($newValues)->save();
+
+        AuditLog::create([
+            'user_id' => auth()->id(),
+            'actor_id' => auth()->id(),
+            'actor_role' => auth()->user()->role,
+            'business_id' => $business->id,
+            'module' => 'Settings',
+            'action' => 'business_details_updated',
+            'record_id' => $business->id,
+            'description' => auth()->user()->name.' updated business details.',
+            'old_values' => $oldValues,
+            'new_values' => $business->fresh()->only($fields),
+            'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+        ]);
+
+        return back()->with('success', 'Business details updated successfully.');
+    }
+
+    public function requestProtectedBusinessDetailsChange(Request $request)
+    {
+        abort_unless(auth()->user()?->role === 'business_owner', 403, 'Only the Business Owner can request protected business-detail changes.');
+
+        $data = $request->validate([
+            'requested_business_name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
+            'requested_owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore(auth()->id())],
             'reason' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
 
         $business = auth()->user()->business;
         abort_unless($business, 404);
 
-        $requestedValues = collect($data)->only(['business_name', 'phone', 'address', 'city', 'category', 'owner_email'])->all();
-        if (($requestedValues['owner_email'] ?? null) === $business->owner?->email) {
-            unset($requestedValues['owner_email']);
-        }
+        $oldValues = [
+            'business_name' => $business->business_name,
+            'owner_email' => $business->owner?->email,
+        ];
+        $requestedValues = [
+            'business_name' => $data['requested_business_name'],
+            'owner_email' => $data['requested_owner_email'],
+        ];
 
-        $protectedFields = ['business_name', 'phone', 'address', 'city', 'category'];
-        $oldValues = $business->only($protectedFields);
-        if (array_key_exists('owner_email', $requestedValues)) {
-            $oldValues['owner_email'] = $business->owner?->email;
-        }
-        $hasChanges = collect($requestedValues)->contains(fn ($value, string $field) => (string) $value !== (string) ($oldValues[$field] ?? ''));
-        if (!$hasChanges) {
-            return back()->withErrors(['business' => 'Enter at least one changed business detail before submitting a request.']);
+        if (! collect($requestedValues)->contains(fn ($value, string $field) => (string) $value !== (string) ($oldValues[$field] ?? ''))) {
+            return back()->withErrors(['protected_details' => 'Change the business name or login email before submitting a request.']);
         }
 
         $changeRequest = BusinessDetailChangeRequest::updateOrCreate(
@@ -176,22 +215,20 @@ class SettingsController extends Controller
             'actor_role' => auth()->user()->role,
             'business_id' => $business->id,
             'module' => 'Settings',
-            'action' => 'business_details_change_requested',
+            'action' => 'business_protected_details_change_requested',
             'record_id' => $changeRequest->id,
-            'description' => auth()->user()->name.' requested protected business-detail changes.',
-            // Login identifiers remain private in audit logs. The pending
-            // request itself retains the submitted value solely for the
-            // approval workflow to apply after approval.
-            'old_values' => collect($oldValues)->except('owner_email')->all(),
-            'new_values' => collect($requestedValues)->except('owner_email')->all(),
+            'description' => auth()->user()->name.' requested a protected business name or login email change.',
+            // Login identifiers are deliberately excluded from audit metadata.
+            'old_values' => ['business_name' => $oldValues['business_name']],
+            'new_values' => ['business_name' => $requestedValues['business_name']],
             'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
 
-        User::where('role', 'super_admin')->where('status', 'active')->get()
+        User::query()->where('role', 'super_admin')->where('status', 'active')->get()
             ->each(fn (User $admin) => $admin->notify(new BusinessDetailsChangeRequestedNotification($changeRequest->load('business'))));
 
-        return back()->with('success', 'Your business-details change request was submitted to Super Admin for review.');
+        return back()->with('success', 'Your protected business-details change request was sent to Super Admin for review.');
     }
 
     public function updateLogo(Request $request)

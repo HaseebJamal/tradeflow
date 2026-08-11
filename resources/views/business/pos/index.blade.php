@@ -79,7 +79,7 @@
 
         <section class="tf-pos-panel tf-pos-cart-panel">
             <div class="tf-pos-panel-head"><div><h2>Current Cart</h2><small>Add products and update quantities.</small></div><button type="button" class="btn btn-sm btn-outline-danger" data-pos-clear><i class="bi bi-trash"></i>Clear</button></div>
-            <div class="tf-pos-cart-scroll"><table class="table table-sm align-middle tf-pos-cart-table"><colgroup><col class="tf-pos-cart-col-index"><col class="tf-pos-cart-col-product"><col class="tf-pos-cart-col-quantity"><col class="tf-pos-cart-col-price"><col class="tf-pos-cart-col-adjustments"><col class="tf-pos-cart-col-total"><col class="tf-pos-cart-col-actions"></colgroup><thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Unit Price</th><th>Discount / Tax</th><th>Total</th><th>Actions</th></tr></thead><tbody data-pos-cart-body><tr data-pos-empty><td colspan="7" class="text-center text-muted py-5">Scan or select a product to start a sale.</td></tr></tbody></table></div>
+            <div class="tf-pos-cart-scroll"><table class="table table-sm align-middle tf-pos-cart-table"><colgroup><col class="tf-pos-cart-col-index"><col class="tf-pos-cart-col-product"><col class="tf-pos-cart-col-quantity"><col class="tf-pos-cart-col-price"><col class="tf-pos-cart-col-total"><col class="tf-pos-cart-col-actions"></colgroup><thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th><th>Actions</th></tr></thead><tbody data-pos-cart-body><tr data-pos-empty><td colspan="6" class="text-center text-muted py-5">Scan or select a product to start a sale.</td></tr></tbody></table></div>
         </section>
 
         <section class="tf-pos-panel tf-pos-checkout-panel">

@@ -36,7 +36,7 @@
             @forelse($lines as $line)
                 @php($balance += $line->credit - $line->debit)
                 <tr>
-                    <td>{{ $line->journalEntry?->entry_date?->format('M d, Y') }}</td>
+                    <td>{{ $line->journalEntry?->entry_date?->format('n/j/Y') }}</td>
                     <td>{{ $line->journalEntry?->voucher_number }}</td>
                     <td>{{ $line->description ?: $line->journalEntry?->description }}</td>
                     <td>Rs {{ number_format($line->debit) }}</td>

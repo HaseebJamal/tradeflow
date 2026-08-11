@@ -15,7 +15,7 @@
             </div>
             <div class="row g-3 mb-4">
                 <div class="col-md-4"><label class="form-label">Billing cycle</label><select name="billing_cycle" class="form-select" required data-checkout-cycle><option value="Monthly" @selected($cycle === 'Monthly')>Monthly</option><option value="Yearly" @selected($cycle === 'Yearly')>Yearly</option></select></div>
-                <div class="col-md-4"><label class="form-label">Subscription period</label><div class="form-control bg-light">{{ \Illuminate\Support\Carbon::parse($quote['period_starts_at'])->format('d M, Y') }} – {{ \Illuminate\Support\Carbon::parse($quote['period_ends_at'])->format('d M, Y') }}</div></div>
+                <div class="col-md-4"><label class="form-label">Subscription period</label><div class="form-control bg-light">{{ \Illuminate\Support\Carbon::parse($quote['period_starts_at'])->format('n/j/Y') }} – {{ \Illuminate\Support\Carbon::parse($quote['period_ends_at'])->format('n/j/Y') }}</div></div>
                 <div class="col-md-4"><label class="form-label">Total payable</label><div class="form-control bg-light fw-bold">Rs {{ number_format($quote['amount'], 2) }}</div><small class="tf-muted">Calculated from the current plan.</small></div>
             </div>
             <div class="border-top pt-4 row g-3">

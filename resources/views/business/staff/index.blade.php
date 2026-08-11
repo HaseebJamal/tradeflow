@@ -18,13 +18,13 @@
 @endforeach
 </div>
 
-@companyCan('staff.create')<div class="tf-card p-4 mb-4">
+@companyCan('staff.create')<div class="tf-card tf-staff-form-card p-4 mb-4">
     <h2 class="h5 mb-3">Create User Account</h2>
     @include('business.staff._form', ['staffMember' => null])
 </div>@endcompanyCan
 
 <section id="staff-results">
-<div class="tf-card p-4 mb-4 staff-filter-card">
+<div class="tf-card tf-staff-filter-card p-4 mb-4 staff-filter-card">
     <form method="GET" action="{{ route('business.staff') }}#staff-results" class="row g-3 align-items-end">
         <div class="col-md-4"><label class="form-label">Search</label><input name="search" class="form-control" value="{{ request('search') }}" placeholder="Name, email, or phone"></div>
         <div class="col-md-3"><label class="form-label">Custom Role</label><select name="role" class="form-select"><option value="">All Custom Roles</option>@foreach($customRoleNames as $roleName)<option value="{{ $roleName }}" @selected(request('role') === $roleName)>{{ $roleName }}</option>@endforeach</select></div>
@@ -33,7 +33,7 @@
     </form>
 </div>
 
-<x-table class="staff-table-wrap">
+<x-table class="tf-business-data-table tf-staff-data-table staff-table-wrap">
     <thead><tr><th>User</th><th>Role</th><th>Phone</th><th>Email</th><th>Joining Date</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody>
     @forelse($staff as $member)
@@ -44,14 +44,15 @@
             <td><span class="badge text-bg-primary">{{ $member->role === 'custom_staff' ? ($member->staffProfile?->custom_role_name ?: 'Custom Staff') : ($roles[$member->role] ?? $member->role) }}</span></td>
             <td>{{ $member->phone }}</td>
             <td>{{ $member->email }}</td>
-            <td>{{ $member->staffProfile?->joining_date?->format('M d, Y') ?? '-' }}</td>
+            <td>{{ $member->staffProfile?->joining_date?->format('n/j/Y') ?? '-' }}</td>
             <td><span class="badge {{ $member->status === 'active' ? 'text-bg-success' : ($member->status === 'suspended' ? 'text-bg-danger' : ($member->status === 'archived' ? 'text-bg-secondary' : 'text-bg-warning')) }}">{{ ucfirst($member->status) }}</span></td>
             <td>
                 @companyCan('staff.edit')
-                <div class="dropdown">
-                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false">Actions</button>
+                <div class="d-flex justify-content-end align-items-center gap-1">
+                    <a href="{{ route('business.staff.show', $member) }}" class="btn btn-sm btn-outline-primary tf-table-view-action">View</a>
+                    <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary tf-table-more-action" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false" aria-label="More actions for {{ $member->name }}"><i class="bi bi-three-dots"></i></button>
                     <div class="dropdown-menu dropdown-menu-end">
-                        <a class="dropdown-item" href="{{ route('business.staff.show', $member) }}">View</a>
                         @if($isCurrentStaffUser)
                             <span class="dropdown-item-text small text-muted">Manage your profile from Profile Settings.</span>
                         @else
@@ -62,19 +63,20 @@
                         @if($member->status === 'archived')
                             <form method="POST" action="{{ route('business.staff.restore', $member) }}">@csrf @method('PATCH')<button class="dropdown-item">Restore as Inactive</button></form>
                             @if($member->can_delete)
-                                <form method="POST" action="{{ route('business.staff.destroy', $member) }}" onsubmit="return confirm('Delete this archived staff account? This cannot be undone.')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>
+                                <form method="POST" action="{{ route('business.staff.destroy', $member) }}" data-tf-confirm-message="Delete this archived staff account? This cannot be undone." data-tf-confirm-title="Delete staff account?" data-tf-confirm-button="Delete account" data-tf-confirm-color="#dc3545">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>
                             @endif
                         @else
                             @if($member->status !== 'active')<form method="POST" action="{{ route('business.staff.status', $member) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="active"><button class="dropdown-item text-success">Activate</button></form>@endif
                             @if($member->status !== 'inactive')<form method="POST" action="{{ route('business.staff.status', $member) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="inactive"><button class="dropdown-item">Deactivate</button></form>@endif
                             @if($member->status !== 'suspended')<form method="POST" action="{{ route('business.staff.status', $member) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="suspended"><button class="dropdown-item text-danger">Suspend</button></form>@endif
-                            <form method="POST" action="{{ route('business.staff.archive', $member) }}" onsubmit="return confirm('Archive this staff account? Historical records will be retained.')">@csrf @method('PATCH')<button class="dropdown-item text-danger">Archive</button></form>
+                            <form method="POST" action="{{ route('business.staff.archive', $member) }}" data-tf-confirm-message="Archive this staff account? Historical records will be retained." data-tf-confirm-title="Archive staff account?" data-tf-confirm-button="Archive account" data-tf-confirm-color="#f59e0b">@csrf @method('PATCH')<button class="dropdown-item text-danger">Archive</button></form>
                             @if($member->can_delete)
-                                <form method="POST" action="{{ route('business.staff.destroy', $member) }}" onsubmit="return confirm('Delete this staff account? This cannot be undone.')">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>
+                                <form method="POST" action="{{ route('business.staff.destroy', $member) }}" data-tf-confirm-message="Delete this staff account? This cannot be undone." data-tf-confirm-title="Delete staff account?" data-tf-confirm-button="Delete account" data-tf-confirm-color="#dc3545">@csrf @method('DELETE')<button class="dropdown-item text-danger">Delete</button></form>
                             @endif
                         @endif
                         @endif
                     </div>
+                </div>
                 </div>
                 @else
                     <span class="tf-muted">-</span>

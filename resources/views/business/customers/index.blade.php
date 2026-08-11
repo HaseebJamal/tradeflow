@@ -69,7 +69,7 @@
                         <span class="tf-badge tf-badge-warning">{{ $customer->status }}</span>
                     @endif
                 </td>
-                <td>{{ $customer->creator?->name ?? '—' }}<small class="d-block tf-muted">{{ $customer->created_at?->format('d M Y') }}</small></td>
+                <td>{{ $customer->creator?->name ?? '—' }}<small class="d-block tf-muted">{{ $customer->created_at?->format('n/j/Y') }}</small></td>
                 <td class="text-end text-nowrap">
                     @if($customer->trashed())
                         @companyCan('customers.restore')<form class="d-inline" method="POST" action="{{ route('business.customers.restore', $customer->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-success">Restore</button></form>@endcompanyCan

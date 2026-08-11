@@ -23,6 +23,10 @@
     ];
 @endphp
 
+@if($accessExpiryAlert ?? null)
+    <x-business-access-expiry-alert :alert="$accessExpiryAlert" />
+@endif
+
 @if(!$hasOperationalAccess)
     <div class="tf-card p-5 text-center">
         <i class="bi bi-shield-lock fs-2 text-warning"></i>

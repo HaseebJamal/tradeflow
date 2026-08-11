@@ -5,12 +5,12 @@
 
 @section('content')
     @php
-        $activeTab = request('tab') === 'requests' ? 'requests' : 'billing';
+        $activeTab = in_array(request('tab'), ['billing', 'requests', 'renewals'], true) ? request('tab') : 'billing';
         $permissions = app(\App\Services\CompanyPermissionService::class);
         $statusBadge = fn(?string $status) => match (strtolower((string) $status)) {
             'active', 'approved', 'received', 'paid' => 'tf-badge-success',
             'pending', 'pending review', 'trial', 'expiring' => 'tf-badge-warning',
-            'cancelled', 'rejected', 'suspended', 'expired', 'failed' => 'tf-badge-danger',
+            'cancelled', 'rejected', 'suspended', 'expired', 'failed', 'overdue' => 'tf-badge-danger',
             default => 'tf-badge-info',
         };
         $billingSortUrl = function (string $column) use ($billingSort, $billingDirection) {
@@ -52,6 +52,9 @@
                 </a>
                 <a class="nav-link {{ $activeTab === 'requests' ? 'active' : '' }}" href="{{ route('business.subscription.history', array_merge(request()->except(['tab', 'billing_page']), ['tab' => 'requests'])) }}">
                     <i class="bi bi-clock-history me-1"></i>Request History
+                </a>
+                <a class="nav-link {{ $activeTab === 'renewals' ? 'active' : '' }}" href="{{ route('business.subscription.history', array_merge(request()->except(['tab', 'billing_page', 'request_page']), ['tab' => 'renewals'])) }}">
+                    <i class="bi bi-arrow-repeat me-1"></i>Renewal Invoices
                 </a>
             </div>
         </nav>
@@ -135,6 +138,14 @@
                 </tbody>
             </x-table>
             <div class="p-3"><x-table-result-summary :paginator="$billingHistory" />{{ $billingHistory->links('pagination::bootstrap-5') }}</div>
+        @elseif($activeTab === 'renewals')
+            <x-table class="tf-business-data-table mb-0">
+                <thead><tr><th>Invoice ID</th><th>Amount</th><th>Current Access End</th><th>Due Date</th><th>Status</th><th>Created</th></tr></thead>
+                <tbody>@forelse($renewalInvoices as $renewal)
+                    <tr><td class="fw-semibold">{{ $renewal->invoice_number }}</td><td>Rs {{ number_format((float) $renewal->amount, 2) }}</td><td>{{ $renewal->access_ends_at->format('n/j/Y') }}</td><td>{{ $renewal->due_date->format('n/j/Y') }}</td><td><span class="tf-badge {{ $statusBadge($renewal->status) }}">{{ $renewal->status }}</span></td><td><x-date-time :value="$renewal->created_at" /></td></tr>
+                @empty<tr><td colspan="6" class="text-center tf-muted py-5">No renewal invoices have been generated for this business.</td></tr>@endforelse</tbody>
+            </x-table>
+            <div class="p-3"><x-table-result-summary :paginator="$renewalInvoices" />{{ $renewalInvoices->links('pagination::bootstrap-5') }}</div>
         @else
             <x-table class="tf-business-data-table mb-0" style="min-width: 1320px">
                 <thead>
@@ -163,7 +174,7 @@
                             <td>{{ $change->billing_cycle ?: '—' }}</td>
                             <td>{{ $change->payment_method ?: '—' }}</td>
                             <td class="text-nowrap">Rs {{ number_format($change->expected_amount, 2) }}</td>
-                            <td class="text-nowrap">{{ $change->effective_at?->format('d M, Y') ?? '—' }}</td>
+                            <td class="text-nowrap">{{ $change->effective_at?->format('n/j/Y') ?? '—' }}</td>
                             <td><span class="tf-badge {{ $statusBadge($change->status) }}">{{ $change->status }}</span></td>
                             <td class="text-nowrap"><x-date-time :value="$change->created_at" /></td>
                             <td class="text-nowrap">@if($change->reviewed_at)<x-date-time :value="$change->reviewed_at" /><span class="d-block small tf-muted">{{ $change->reviewer?->name ?? 'System' }}</span>@else<span class="tf-muted">Not reviewed</span>@endif</td>
@@ -175,10 +186,10 @@
                                             data-request-id="#{{ $change->id }}" data-request-type="{{ $change->type }}"
                                             data-current-plan="{{ $change->currentPlan?->name ?? '—' }}" data-requested-plan="{{ $change->requestedPlan?->name ?? '—' }}"
                                             data-billing-cycle="{{ $change->billing_cycle ?: '—' }}" data-payment-method="{{ $change->payment_method ?: '—' }}"
-                                            data-amount="Rs {{ number_format($change->expected_amount, 2) }}" data-effective-date="{{ $change->effective_at?->format('d M, Y') ?? '—' }}"
+                                            data-amount="Rs {{ number_format($change->expected_amount, 2) }}" data-effective-date="{{ $change->effective_at?->format('n/j/Y') ?? '—' }}"
                                             data-status="{{ $change->status }}" data-requested-by="{{ $change->requester?->name ?? '—' }}"
-                                            data-requested-at="{{ $change->created_at?->format('d M, Y h:i A') ?? '—' }}" data-reviewed-by="{{ $change->reviewer?->name ?? 'Not reviewed' }}"
-                                            data-reviewed-at="{{ $change->reviewed_at?->format('d M, Y h:i A') ?? 'Not reviewed' }}" data-note="{{ $change->admin_note ?: ($change->note ?: '') }}">
+                                            data-requested-at="{{ $change->created_at?->format('n/j/Y, g:i A') ?? '—' }}" data-reviewed-by="{{ $change->reviewer?->name ?? 'Not reviewed' }}"
+                                            data-reviewed-at="{{ $change->reviewed_at?->format('n/j/Y, g:i A') ?? 'Not reviewed' }}" data-note="{{ $change->admin_note ?: ($change->note ?: '') }}">
                                             <i class="bi bi-eye me-2"></i>View Details
                                         </button>
                                         @if($change->status === 'Pending' && $canCancelRequest)

@@ -1,5 +1,6 @@
 @php
     $nested = $nested ?? false;
+    $isEdit = (bool) ($isEdit ?? false);
     $index = $index ?? 0;
     $values = $values ?? [];
     $fieldName = fn (string $field) => $nested ? "products[{$index}][{$field}]" : $field;
@@ -19,13 +20,17 @@
     $productNameError = $nested ? $errorKey('product_name') : 'name';
     $productName = $nested
         ? old($productNameError, data_get($values, 'product_name', ''))
-        : old('name', data_get($values, 'name', ''));
+        : ($isEdit ? data_get($values, 'name', '') : old('name', data_get($values, 'name', '')));
 @endphp
 
 <div class="row g-3" data-product-master-fields>
     <div class="col-lg-5 col-md-12">
         <label class="form-label" for="{{ $fieldId('product_name') }}">Product Name <span class="text-danger">*</span></label>
-        <input id="{{ $fieldId('product_name') }}" name="{{ $nested ? $fieldName('product_name') : $productNameField }}" data-product-field="product_name" class="form-control @error($productNameError) is-invalid @enderror" value="{{ $productName }}" required>
+        <div class="tf-identity-input-wrap">
+            <input id="{{ $fieldId('product_name') }}" name="{{ $nested ? $fieldName('product_name') : $productNameField }}" data-product-field="product_name" class="form-control tf-identity-input @error($productNameError) is-invalid @enderror" value="{{ $productName }}" @readonly($isEdit && ! $nested) required>
+            @if($isEdit && ! $nested)<i class="bi bi-lock-fill" aria-hidden="true"></i>@endif
+        </div>
+        @if($isEdit && ! $nested)<div class="form-text tf-identity-helper">Product name cannot be changed after creation.</div>@endif
         @error($productNameError)<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
     <div class="col-lg-4 col-md-6">

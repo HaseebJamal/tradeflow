@@ -11,6 +11,8 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
     const errors = form.querySelector('[data-product-create-errors]');
     const isAsync = form.dataset.productCreateAsync === 'true';
     let submissionConfirmed = false;
+    let submissionConfirming = false;
+    const isProductEdit = form.querySelector('input[name="_method"]')?.value?.toUpperCase() === 'PUT';
     const fieldFor = (kind) => kind === 'category' ? 'category_id' : 'unit_id';
     const catalogs = {
         category: [...form.querySelectorAll('[data-product-field="category_id"] option')].filter((option) => option.value).map((option) => ({ value: option.value, text: option.text })),
@@ -174,16 +176,19 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
     const confirmProductSave = async () => {
         const count = sections?.querySelectorAll('[data-product-section]').length || 1;
         const productLabel = count === 1 ? 'this product' : `${count} products`;
+        const isSingleProductEdit = isProductEdit && count === 1;
 
         if (window.Swal?.fire) {
             const result = await window.Swal.fire({
-                cancelButtonText: 'Review details',
-                confirmButtonText: 'Yes, save',
+                cancelButtonText: isSingleProductEdit ? 'Cancel' : 'Review details',
+                confirmButtonText: isSingleProductEdit ? 'Save Product' : 'Yes, save',
                 icon: 'question',
                 reverseButtons: true,
                 showCancelButton: true,
-                text: `You are about to save ${productLabel}.`,
-                title: 'Save product details?',
+                text: isSingleProductEdit
+                    ? 'Confirm that you want to save these product changes.'
+                    : `You are about to save ${productLabel}.`,
+                title: isSingleProductEdit ? 'Save product changes?' : 'Save product details?',
             });
 
             return result.isConfirmed;
@@ -307,15 +312,29 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
             }
             if (!submissionConfirmed) {
                 event.preventDefault();
-                if (!await confirmProductSave()) return;
+                if (submissionConfirming) return;
+
+                submissionConfirming = true;
+                const confirmed = await confirmProductSave();
+                submissionConfirming = false;
+                if (!confirmed) return;
 
                 submissionConfirmed = true;
+                // The shared update-form confirmation deliberately skips this
+                // purpose-built Product confirmation. Keep the bypass marker
+                // too, so a later delegated listener cannot reopen a second
+                // dialog while this confirmed submit is in progress.
+                form.dataset.tfSaveConfirmApproved = '1';
                 form.requestSubmit();
                 return;
             }
             const submit = form.querySelector('[data-save-products]');
             if (submit?.dataset.submitting === 'true') { event.preventDefault(); return; }
-            if (submit) { submit.dataset.submitting = 'true'; submit.disabled = true; submit.textContent = 'Saving Products...'; }
+            if (submit) {
+                submit.dataset.submitting = 'true';
+                submit.disabled = true;
+                submit.textContent = isProductEdit ? 'Saving Product...' : 'Saving Products...';
+            }
             return;
         }
 

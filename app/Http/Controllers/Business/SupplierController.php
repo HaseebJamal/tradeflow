@@ -40,8 +40,9 @@ class SupplierController extends Controller
         ]);
 
         $showArchived = ($filters['status'] ?? null) === 'Archived';
-        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? ($showArchived ? null : now()->startOfMonth()->toDateString()));
-        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? ($showArchived ? null : now()->toDateString()));
+        $today = now(config('app.timezone'))->toDateString();
+        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? $today);
+        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? $today);
 
         $query = Supplier::where('business_id', $businessId)->with('creator');
 
@@ -148,6 +149,9 @@ class SupplierController extends Controller
     {
         $supplier = $this->scoped($supplier);
         $validated = $this->normaliseSupplierFields($this->validated($request));
+        // Supplier name is its stable master-record identity.  It is locked in
+        // the edit form and protected again here against crafted payloads.
+        $validated['supplier_name'] = $supplier->supplier_name;
 
         DB::transaction(function () use ($supplier, $validated) {
             Business::query()->lockForUpdate()->findOrFail($supplier->business_id);

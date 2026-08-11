@@ -131,6 +131,22 @@
             },
         })
         : window.alert(`${title}${text ? `\n${text}` : ''}`);
+    // Register dialogs are rendered by SweetAlert instead of a native form, so
+    // the browser has no form-submit action to associate with Enter. Keep that
+    // keyboard action explicit for both opening and closing a register, while
+    // allowing Enter to remain a normal newline inside the optional note.
+    const submitRegisterDialogOnEnter = (popup) => {
+        popup.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' || event.isComposing || event.repeat) return;
+            if (event.target.closest('textarea')) return;
+            if (Swal.isLoading()) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            Swal.clickConfirm();
+        }, true);
+    };
+    const showRegisterFeedback = (state) => flash('success', `Register ${state}`);
     const showReceiptActions = async (payload) => {
         if (!window.Swal) {
             finishCompletedSale();
@@ -334,15 +350,12 @@
         const numericField = (field, value, min = 0, max = '') => `<input class="form-control form-control-sm" type="number" min="${min}"${max !== '' ? ` max="${max}"` : ''} step="1" inputmode="numeric" value="${value}" data-cart-field="${field}">`;
         const quantity = isEditing ? numericField('quantity', line.quantity, 1, line.stock) : line.quantity;
         const price = isEditing && config.canUseCustomPrice ? numericField('price', line.price, 0) : `Rs ${numberWithCommas(line.price)}`;
-        const adjustments = isEditing
-            ? `<div class="tf-pos-cart-adjustment-inputs">${numericField('discount', line.discount, 0, 100)}${numericField('tax', line.tax, 0, 100)}</div>`
-            : `<span class="tf-pos-cart-adjustment-values">${line.discount}%<small>Tax ${line.tax}%</small></span>`;
         const actions = isEditing
             ? '<button type="button" class="btn btn-sm btn-outline-success" data-cart-action="save">Save</button><button type="button" class="btn btn-sm btn-outline-secondary" data-cart-action="cancel">Cancel</button>'
             : '<button type="button" class="btn btn-sm btn-outline-primary" data-cart-action="edit">Edit</button><button type="button" class="btn btn-sm btn-outline-danger" data-cart-action="remove">Delete</button>';
         return `<tr data-cart-id="${line.id}" tabindex="0" class="${selectedCartId === line.id ? 'is-selected' : ''}">
             <td>${index + 1}</td><td class="tf-pos-product-cell"><strong>${escapeHtml(line.name)}</strong><small class="d-block text-muted">${escapeHtml(line.barcode || '')} | Stock ${line.stock}</small></td>
-            <td>${quantity}</td><td>${price}</td><td>${adjustments}</td>
+            <td>${quantity}</td><td>${price}</td>
             <td class="tf-pos-line-total"><strong data-cart-line-total>${currency(line.lineTotal)}</strong></td><td class="tf-pos-cart-actions-cell"><div class="tf-pos-cart-actions">${actions}</div>${isEditing ? '<small class="d-block text-danger mt-1" data-cart-error aria-live="polite"></small>' : ''}</td>
         </tr>`;
     };
@@ -354,7 +367,7 @@
         if (selectedCartId === null && cart.size) selectedCartId = [...cart.keys()][0];
         cartBody.innerHTML = cart.size
             ? [...cart.values()].map(cartRow).join('')
-            : '<tr data-pos-empty><td colspan="7" class="text-center text-muted py-5">Scan or select a product to start a sale.</td></tr>';
+            : '<tr data-pos-empty><td colspan="6" class="text-center text-muted py-5">Scan or select a product to start a sale.</td></tr>';
         window.initTradeFlowMoneyInputs?.(cartBody);
         return updateTotals();
     };
@@ -615,7 +628,10 @@
             cancelButtonText: 'Cancel',
             buttonsStyling: false,
             focusConfirm: false,
-            didOpen: () => focusElement(document.getElementById('pos-opening-cash'), true, true),
+            didOpen: (popup) => {
+                submitRegisterDialogOnEnter(popup);
+                focusElement(document.getElementById('pos-opening-cash'), true, true);
+            },
             customClass: {
                 popup: 'tf-pos-register-modal',
                 actions: 'tf-pos-register-actions',
@@ -652,16 +668,18 @@
             }
 
             updateTotals();
-            flash('success', 'Register opened');
+            showRegisterFeedback('opened');
             focusElement(search);
         } catch (error) {
             flash('error', 'Unable to open register', error.message);
         }
     };
     const closeRegister = async () => {
+        if (!config.registerId) return;
+
         const result = await Swal.fire({
-            title: 'Close Register',
-            html: `<div class="tf-pos-register-dialog">
+            title: 'Close register?',
+            html: `<p class="tf-pos-register-confirmation-copy">Are you sure you want to close the current POS register?</p><div class="tf-pos-register-dialog">
                 <div><label for="pos-closing-cash">Actual Closing Cash</label><input id="pos-closing-cash" class="swal2-input" type="number" min="0" step="1" inputmode="numeric" value="0"></div>
                 <div><label for="pos-closing-note">Closing Note <span>Optional</span></label><textarea id="pos-closing-note" class="swal2-textarea" rows="3" maxlength="500"></textarea></div>
             </div>`,
@@ -670,28 +688,41 @@
             cancelButtonText: 'Cancel',
             buttonsStyling: false,
             focusConfirm: false,
-            didOpen: () => focusElement(document.getElementById('pos-closing-cash'), true, true),
+            showLoaderOnConfirm: true,
+            allowOutsideClick: () => !Swal.isLoading(),
+            allowEscapeKey: () => !Swal.isLoading(),
+            didOpen: (popup) => {
+                submitRegisterDialogOnEnter(popup);
+                focusElement(document.getElementById('pos-closing-cash'), true, true);
+            },
             customClass: {
                 popup: 'tf-pos-register-modal',
                 actions: 'tf-pos-register-actions',
                 confirmButton: 'btn btn-tf-primary',
                 cancelButton: 'btn btn-outline-secondary',
             },
-            preConfirm: () => {
+            preConfirm: async () => {
                 const closingCashValue = document.getElementById('pos-closing-cash').value.trim();
                 if (!/^\d+$/.test(closingCashValue)) {
                     Swal.showValidationMessage('Closing cash must be a whole number of Rs 0 or more.');
                     return false;
                 }
 
-                return {
-                    closing_cash: whole(closingCashValue),
-                    closing_note: document.getElementById('pos-closing-note').value.trim(),
-                };
+                try {
+                    return await request(`${config.openRegisterUrl.replace('/open', '')}/${config.registerId}/close`, 'PATCH', {
+                        closing_cash: whole(closingCashValue),
+                        closing_note: document.getElementById('pos-closing-note').value.trim(),
+                    });
+                } catch (error) {
+                    Swal.showValidationMessage(error.message || 'Unable to close the register.');
+                    return false;
+                }
             },
         });
         if (!result.isConfirmed) return;
-        try { await request(`${config.openRegisterUrl.replace('/open', '')}/${config.registerId}/close`, 'PATCH', result.value); window.location.reload(); } catch (error) { flash('error', 'Unable to close register', error.message); }
+
+        await showRegisterFeedback('closed');
+        window.location.reload();
     };
     const beginEdit = (line) => {
         editingId = line.id;

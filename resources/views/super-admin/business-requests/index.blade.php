@@ -38,9 +38,9 @@
                     <td><div class="tf-table-person"><strong>{{ $requestItem->owner_name ?? 'Owner not assigned' }}</strong><small>{{ $requestItem->reviewer_name ? 'Reviewed by '.$requestItem->reviewer_name : 'Awaiting review' }}</small></div></td>
                     <td><span class="tf-plan-badge">{{ $requestItem->request_type }}</span></td>
                     <td><span class="tf-badge {{ in_array($requestItem->status, ['Approved', 'Active', 'Applied', 'Completed'], true) ? 'tf-badge-success' : (in_array($requestItem->status, ['Rejected', 'Cancelled'], true) ? 'tf-badge-danger' : 'tf-badge-warning') }}">{{ $requestItem->status }}</span></td>
-                    <td>{{ \Illuminate\Support\Carbon::parse($requestItem->requested_at)->format('d M, Y h:i A') }}</td>
+                    <td>{{ \Illuminate\Support\Carbon::parse($requestItem->requested_at)->format('n/j/Y, g:i A') }}</td>
                     <td>{{ $requestItem->reviewer_name ?? 'Not reviewed' }}</td>
-                    <td>{{ $requestItem->reviewed_at ? \Illuminate\Support\Carbon::parse($requestItem->reviewed_at)->format('d M, Y h:i A') : '—' }}</td>
+                    <td>{{ $requestItem->reviewed_at ? \Illuminate\Support\Carbon::parse($requestItem->reviewed_at)->format('n/j/Y, g:i A') : '—' }}</td>
                     <td class="text-end">
                         @php
                             $canReview = in_array($requestItem->source, ['subscription', 'footer', 'business_detail'], true)

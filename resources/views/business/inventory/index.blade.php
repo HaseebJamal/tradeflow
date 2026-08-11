@@ -14,13 +14,13 @@
     <div><h2 class="h5 mb-1">Inventory Control</h2><p class="tf-muted mb-0">Manage available stock and stock movement history.</p></div>
     <div class="d-flex flex-wrap gap-2"><a href="{{ route('business.inventory.history') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard-data me-1"></i>Stock History</a>@companyCan('products.create')<button type="button" class="btn btn-sm btn-tf-primary" data-bs-toggle="modal" data-bs-target="#inventoryProductCreateModal"><i class="bi bi-plus-lg me-1"></i>Add Product</button>@endcompanyCan</div>
 </div>
-@companyCan('inventory.adjust_stock')<div class="tf-card p-4 mb-4">
+@companyCan('inventory.adjust_stock')<div class="tf-card tf-inventory-adjustment-card p-4 mb-4">
     <h2 class="h5">Stock Adjustment</h2>
     <form method="POST" action="{{ route('business.inventory.adjust') }}" class="row g-3" data-inventory-product-form>@csrf
-        <div class="col-md-4"><select name="product_id" class="form-select" required><option value="">Select Product</option>@foreach($inventoryProducts ?? collect() as $product)<option value="{{ $product->id }}" @selected(old('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
-        <div class="col-md-2"><select name="type" class="form-select"><option value="added">Add Stock</option><option value="reduced">Reduce Stock</option><option value="adjustment">Set Stock Qty</option><option value="returned">Returned</option><option value="damaged">Damaged</option></select></div>
-        <div class="col-md-2"><input name="quantity" type="number" min="1" step="1" value="0" class="form-control js-whole-number" placeholder="Qty"></div>
-        <div class="col-md-1"><button class="btn btn-tf-primary w-100"><i class="bi bi-check-lg"></i></button></div>
+        <div class="col-md-4"><label class="form-label">Product</label><select name="product_id" class="form-select" required><option value="">Select Product</option>@foreach($inventoryProducts ?? collect() as $product)<option value="{{ $product->id }}" @selected(old('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
+        <div class="col-md-2"><label class="form-label">Adjustment Type</label><select name="type" class="form-select"><option value="added">Add Stock</option><option value="reduced">Reduce Stock</option><option value="adjustment">Set Stock Qty</option><option value="returned">Returned</option><option value="damaged">Damaged</option></select></div>
+        <div class="col-md-2"><label class="form-label">Quantity</label><input name="quantity" type="number" min="1" step="1" value="0" class="form-control js-whole-number" placeholder="Qty"></div>
+        <div class="col-md-2"><label class="form-label d-none d-md-block">&nbsp;</label><button class="btn btn-tf-primary w-100">Apply</button></div>
     </form>
 </div>@endcompanyCan
 <x-table class="tf-business-data-table">
@@ -32,20 +32,25 @@
             <td>
                 @companyCan('inventory.low_stock_alerts')
                     @if($inventory->product)
+                        <div class="d-flex align-items-center gap-2 tf-inventory-row-actions">
                         <form method="POST" action="{{ route('business.products.low-stock-alert', $inventory->product) }}" class="d-flex gap-2">
                             @csrf
                             @method('PATCH')
                             <input name="low_stock_alert_qty" type="number" min="0" step="1" value="{{ $inventory->product->low_stock_alert_qty ?? 10 }}" class="form-control form-control-sm js-whole-number" style="max-width:90px">
                             <button class="btn btn-sm btn-outline-primary">Save</button>
                         </form>
+                            @if(app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'products.edit') || app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'products.delete'))
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More inventory actions"><i class="bi bi-three-dots"></i></button>
+                                    <div class="dropdown-menu dropdown-menu-end">
+                                        @companyCan('products.edit')<a href="{{ route('business.products.edit', $inventory->product) }}" class="dropdown-item"><i class="bi bi-pencil me-2"></i>Edit product</a>@endcompanyCan
+                                        @companyCan('products.delete')<div class="dropdown-divider"></div><form method="POST" action="{{ route('business.products.destroy', $inventory->product) }}" data-tf-confirm-message="Delete or archive this product?" data-tf-confirm-title="Delete product?" data-tf-confirm-button="Delete product" data-tf-confirm-color="#dc3545">@csrf @method('DELETE')<button class="dropdown-item text-danger" type="submit"><i class="bi bi-trash me-2"></i>Delete product</button></form>@endcompanyCan
+                                    </div>
+                                </div>
+                            @endif
+                        </div>
                     @endif
                 @endcompanyCan
-                @if($inventory->product)
-                    <div class="d-flex gap-1 mt-2">
-                        @companyCan('products.edit')<a href="{{ route('business.products.edit', $inventory->product) }}" class="btn btn-sm btn-outline-secondary">Edit</a>@endcompanyCan
-                        @companyCan('products.delete')<form method="POST" action="{{ route('business.products.destroy', $inventory->product) }}" onsubmit="return confirm('Delete or archive this product?')">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Delete</button></form>@endcompanyCan
-                    </div>
-                @endif
             </td>
         </tr>
     @empty

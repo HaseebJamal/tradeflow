@@ -23,7 +23,7 @@
     :business="$order->business"
     :title="null"
     :number="$receiptNumber"
-    :date="$order->order_date?->format('d M Y g:i A')"
+    :date="$order->order_date?->format('n/j/Y, g:i A')"
     :cashier="$order->creator?->name"
     party-label="Customer"
     :party-name="$order->customer?->display_name ?? $order->customer?->name ?? 'Walk-in Customer'"

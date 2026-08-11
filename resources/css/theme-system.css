@@ -1,0 +1,2653 @@
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/plus-jakarta-sans/latin-600.css';
+@import '@fontsource/plus-jakarta-sans/latin-700.css';
+@import '@fontsource/plus-jakarta-sans/latin-800.css';
+
+:root {
+    --font-heading: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-soft: #f1f5f9;
+    --border: #e2e8f0;
+    --heading: #0f172a;
+    --text: #475569;
+    --muted: #64748b;
+    --primary: #2563eb;
+    --secondary: #4f46e5;
+    --success: #059669;
+    --success-soft: #d1fae5;
+    --warning: #d97706;
+    --warning-soft: #fef3c7;
+    --danger: #dc2626;
+    --danger-soft: #fee2e2;
+    --info: #2563eb;
+    --info-soft: #dbeafe;
+    --shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+    --sidebar-bg: #0b1f3a;
+    --sidebar-surface: #102847;
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+    --sidebar-text: #cbd5e1;
+    --sidebar-muted: #94a3b8;
+    --sidebar-active: rgba(255, 255, 255, 0.11);
+    --tf-sidebar-expanded-width: 260px;
+    --tf-sidebar-collapsed-width: 72px;
+    --tf-sidebar-mobile-width: min(280px, calc(100vw - 44px));
+    --tf-checkbox-surface: #ffffff;
+    --tf-checkbox-border: #cbd5e1;
+    --tf-tom-select-modal-z-index: 1060;
+    color-scheme: light;
+}
+
+/* Purchase payment type is a real radio group, not three independent action
+ * buttons.  Keep its checked state explicit so global outline-button styling
+ * cannot make the active option look inactive. */
+.tf-payment-type-control { min-width: 0; }
+.tf-payment-type-control .form-label { margin-bottom: 0.45rem; }
+.tf-payment-type-options {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.tf-payment-type-control .tf-payment-type-option {
+    align-items: center;
+    background: var(--surface) !important;
+    border: 1px solid var(--primary) !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    color: var(--primary) !important;
+    display: inline-flex;
+    font-family: var(--font-body) !important;
+    font-size: 0.875rem !important;
+    font-weight: 650 !important;
+    justify-content: center;
+    line-height: 1.25;
+    min-height: 44px;
+    padding: 0.45rem 0.7rem;
+    text-align: center;
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+    white-space: normal;
+}
+.tf-payment-type-control .tf-payment-type-input:checked + .tf-payment-type-option {
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+    box-shadow: none !important;
+    color: #fff !important;
+    transform: none !important;
+}
+.tf-payment-type-control .tf-payment-type-input:not(:checked) + .tf-payment-type-option:hover {
+    background: var(--surface-soft) !important;
+    border-color: var(--primary) !important;
+    box-shadow: none !important;
+    color: var(--primary) !important;
+    transform: translateY(-1px) !important;
+}
+.tf-payment-type-control .tf-payment-type-input:focus-visible + .tf-payment-type-option {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 45%, transparent) !important;
+    outline: 0;
+}
+.tf-payment-amount-locked { background: var(--surface-soft) !important; cursor: default; }
+
+@media (max-width: 575.98px) {
+    .tf-payment-type-options { grid-template-columns: 1fr; }
+}
+
+:root[data-theme='dark'] {
+    --bg: #0b1220;
+    --surface: #111827;
+    --surface-soft: #162033;
+    --border: #253247;
+    --heading: #f8fafc;
+    --text: #cbd5e1;
+    --muted: #94a3b8;
+    --primary: #3b82f6;
+    --secondary: #6366f1;
+    --success: #34d399;
+    --success-soft: rgba(16, 185, 129, 0.16);
+    --warning: #fbbf24;
+    --warning-soft: rgba(245, 158, 11, 0.16);
+    --danger: #f87171;
+    --danger-soft: rgba(239, 68, 68, 0.16);
+    --info: #60a5fa;
+    --info-soft: rgba(59, 130, 246, 0.16);
+    --shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
+    --tf-checkbox-surface: #111827;
+    --tf-checkbox-border: #475569;
+    color-scheme: dark;
+}
+
+html,
+body,
+.tf-dashboard-main,
+.dashboard-page,
+.tf-public-nav,
+.tf-dashboard-topbar,
+.tf-card,
+.card,
+.modal-content,
+.dropdown-menu,
+.form-control,
+.form-select,
+.form-control-color,
+.input-group-text,
+.accordion-item,
+.accordion-button {
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+/* Nested confirmations sit above their stable parent modal. Bootstrap's own
+ * backdrop is intentionally disabled for these child modals so opening one
+ * never tears down and reopens the parent. */
+.tf-nested-modal-backdrop {
+    background: rgba(15, 23, 42, 0.46);
+    inset: 0;
+    position: fixed;
+    z-index: 1058;
+}
+.modal[data-tf-nested-modal] { z-index: 1060; }
+:root[data-theme='dark'] .tf-nested-modal-backdrop { background: rgba(0, 0, 0, 0.58); }
+
+body {
+    background: var(--bg) !important;
+    color: var(--text) !important;
+    font-family: var(--font-body) !important;
+}
+
+:is(h1, h2, h3, h4, h5, h6, .tf-brand, .pp-brand-name, .pp-auth-brand strong) {
+    color: var(--heading);
+    font-family: var(--font-heading);
+}
+
+a { color: var(--primary); }
+a:hover { color: var(--primary); filter: brightness(1.08); }
+.tf-muted, small.text-muted, .text-muted { color: var(--muted) !important; }
+
+.tf-public-nav,
+.tf-dashboard-topbar,
+.pp-nav {
+    background: color-mix(in srgb, var(--surface) 94%, transparent) !important;
+    border-color: var(--border) !important;
+}
+
+.tf-dashboard-main,
+.dashboard-page,
+.main-content { background: var(--bg); }
+
+.tf-card,
+.card,
+.tf-summary-card,
+.tf-auth-card,
+.pp-registration-card,
+.pp-login-card,
+.tf-checkout-card,
+.tf-empty-state,
+.pagination .page-link {
+    background-color: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text);
+}
+
+.tf-card,
+.card { box-shadow: var(--shadow); }
+
+.form-label,
+.col-form-label,
+label,
+.form-check-label { color: var(--heading); }
+
+.form-control,
+.form-select,
+textarea.form-control,
+.input-group-text,
+.ts-control,
+.iti__selected-country {
+    background-color: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--heading) !important;
+}
+
+.form-control::placeholder,
+textarea::placeholder,
+.ts-control input::placeholder { color: var(--muted) !important; opacity: 1; }
+
+.form-control:focus,
+.form-select:focus,
+.ts-control.focus,
+.form-check-input:focus {
+    background-color: var(--surface) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--primary) 22%, transparent) !important;
+}
+
+/* Shared Tom Select menu treatment. Modal menus remain in their own control
+ * wrapper, which is clipped by modal-body and therefore never escapes the
+ * visible dialog while its content scrolls. */
+.ts-dropdown {
+    border-radius: 10px !important;
+    max-height: 260px;
+    overflow: hidden;
+    width: var(--ts-dropdown-width, auto);
+    z-index: var(--tf-tom-select-modal-z-index) !important;
+}
+.modal .ts-wrapper { position: relative; }
+.modal .ts-wrapper > .ts-dropdown {
+    pointer-events: auto;
+    z-index: 4 !important;
+}
+.ts-dropdown .dropdown-input-wrap {
+    background: var(--surface) !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 0.375rem !important;
+}
+.ts-dropdown .dropdown-input {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    color: var(--text) !important;
+    font-family: var(--font-body) !important;
+    font-size: 0.8125rem !important;
+    min-height: 36px !important;
+    padding: 0.35rem 0.55rem !important;
+}
+.ts-dropdown .dropdown-input:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--primary) 16%, transparent) !important;
+    outline: 0;
+}
+.ts-dropdown-content {
+    max-height: 220px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+    scrollbar-width: thin;
+}
+.ts-dropdown-content::-webkit-scrollbar { width: 6px; }
+.ts-dropdown-content::-webkit-scrollbar-track { background: transparent; }
+.ts-dropdown-content::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 38%, transparent); border-radius: 999px; }
+.ts-dropdown .option {
+    align-items: center;
+    display: flex;
+    font-family: var(--font-body) !important;
+    font-size: 0.8125rem !important;
+    min-height: 36px;
+    padding: 0.5rem 0.7rem !important;
+}
+
+/* Shared checkbox system. Switches retain Bootstrap's distinct switch shape;
+   every ordinary checkbox uses the same accessible control in every shell. */
+.form-check-input[type='checkbox']:not([role='switch']) {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--tf-checkbox-surface);
+    background-image: none;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 12px 12px;
+    border: 1px solid var(--tf-checkbox-border);
+    border-radius: 5px;
+    box-shadow: none;
+    box-sizing: border-box;
+    cursor: pointer;
+    flex: 0 0 auto;
+    height: 1.125rem;
+    margin-top: 0.125em;
+    transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+    width: 1.125rem;
+}
+
+.form-check-input[type='checkbox']:not([role='switch']):hover:not(:disabled):not(:checked):not(:indeterminate) {
+    background-color: color-mix(in srgb, var(--primary) 7%, var(--tf-checkbox-surface));
+    border-color: var(--primary);
+}
+
+.form-check-input[type='checkbox']:not([role='switch']):checked,
+.form-check-input[type='checkbox']:not([role='switch']):indeterminate {
+    background-color: var(--primary) !important;
+    border-color: var(--primary) !important;
+}
+
+.form-check-input[type='checkbox']:not([role='switch']):checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='m3 8 3 3 7-7'/%3E%3C/svg%3E") !important;
+}
+
+.form-check-input[type='checkbox']:not([role='switch']):indeterminate {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-width='2.5' d='M3 8h10'/%3E%3C/svg%3E") !important;
+}
+
+.form-check-input[type='checkbox']:not([role='switch']):focus-visible {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--primary) 28%, transparent) !important;
+    outline: 0;
+}
+
+.form-check-input[type='checkbox']:not([role='switch']):disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+}
+
+.form-check-input[type='checkbox'][role='switch'] {
+    background-color: var(--tf-checkbox-surface);
+    border-color: var(--tf-checkbox-border);
+    cursor: pointer;
+}
+
+.form-check-input[type='checkbox'][role='switch']:checked,
+.form-check-input[type='checkbox'][role='switch']:checked:focus {
+    background-color: var(--primary) !important;
+    border-color: var(--primary) !important;
+}
+
+.form-check-input[type='checkbox'][role='switch']:disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+}
+
+.form-check:has(.form-check-input[type='checkbox']:not([role='switch'])) {
+    align-items: flex-start;
+    column-gap: 0.55rem;
+}
+
+.form-check:has(.form-check-input[type='checkbox']:not([role='switch'])) .form-check-label,
+label.form-check:has(.form-check-input[type='checkbox']:not([role='switch'])) {
+    cursor: pointer;
+    line-height: 1.45;
+}
+
+.form-check:has(.form-check-input[type='checkbox']:not([role='switch'])) .form-check-input:disabled ~ .form-check-label,
+label.form-check:has(.form-check-input[type='checkbox']:not([role='switch'])) .form-check-input:disabled {
+    cursor: not-allowed;
+}
+
+/* The login checkbox intentionally uses a compact custom visual, but shares
+   the same tokens and focus treatment as standard checkboxes. */
+.pp-auth-remember span {
+    background: var(--tf-checkbox-surface) !important;
+    border-color: var(--tf-checkbox-border) !important;
+    flex: 0 0 18px;
+    height: 18px;
+    width: 18px;
+}
+
+.pp-auth-remember input:checked + span {
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+}
+
+/* Business receipt-footer editor: company profile values are informational
+   here, while footer content remains the only editable document setting. */
+.tf-business-receipt-footer {
+    max-width: 1280px;
+}
+
+.tf-business-receipt-footer .tf-footer-profile-field {
+    background: var(--surface-soft) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+    cursor: default;
+}
+
+.tf-business-receipt-footer .tf-footer-profile-field:focus {
+    border-color: var(--border) !important;
+    box-shadow: none !important;
+}
+
+.tf-business-receipt-footer .tf-footer-visibility-option {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    min-height: 44px;
+    transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.tf-business-receipt-footer .tf-footer-visibility-option:hover {
+    border-color: var(--primary);
+    box-shadow: 0 5px 14px color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+.tf-footer-preview-column {
+    align-self: flex-start;
+}
+
+.tf-footer-preview-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+}
+
+.tf-footer-preview-card > h2 {
+    color: var(--heading);
+    font-family: var(--font-heading);
+    font-weight: 700;
+}
+
+.tf-footer-preview-sheet {
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 0 auto;
+    max-width: 360px;
+    padding: 20px 18px;
+}
+
+.tf-footer-preview-content {
+    color: var(--text);
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+    text-align: center;
+}
+
+.tf-footer-preview-content [hidden] {
+    display: none !important;
+}
+
+.tf-footer-preview-title {
+    color: var(--heading);
+    font-weight: 700;
+}
+
+.tf-footer-preview-powered {
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin-top: 0.45rem;
+}
+
+@media (min-width: 992px) {
+    .tf-business-receipt-footer .tf-footer-preview-card {
+        position: sticky;
+        top: 98px;
+    }
+}
+
+@media (max-width: 991.98px) {
+    .tf-footer-preview-card {
+        margin-top: 0.25rem;
+    }
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--heading);
+    box-shadow: 0 0 0 1000px var(--surface) inset;
+    caret-color: var(--heading);
+}
+
+.btn-light,
+.btn-outline-secondary,
+.btn-outline-primary,
+.btn-outline-danger,
+.btn-outline-warning {
+    --bs-btn-color: var(--text);
+    --bs-btn-bg: var(--surface);
+    --bs-btn-border-color: var(--border);
+    --bs-btn-hover-bg: var(--surface-soft);
+    --bs-btn-hover-border-color: var(--primary);
+    --bs-btn-hover-color: var(--heading);
+}
+
+.btn-close { filter: var(--tf-close-filter, none); }
+:root[data-theme='dark'] .btn-close { --tf-close-filter: invert(1) grayscale(1) brightness(2); }
+
+.table,
+.tf-table {
+    --bs-table-bg: var(--surface);
+    --bs-table-color: var(--text);
+    --bs-table-border-color: var(--border);
+    --bs-table-hover-bg: var(--surface-soft);
+    --bs-table-hover-color: var(--heading);
+    background-color: var(--surface) !important;
+    color: var(--text) !important;
+}
+
+.table > :not(caption) > * > *,
+.tf-table > :not(caption) > * > * { border-color: var(--border); }
+
+.table thead th,
+.tf-table th,
+.dataTables_wrapper thead th {
+    background: var(--surface-soft) !important;
+    color: var(--heading) !important;
+    border-color: var(--border) !important;
+}
+
+.dropdown-menu,
+.ts-dropdown,
+.iti__country-list,
+.modal-content,
+.popover,
+.tooltip-inner,
+.swal2-popup {
+    background-color: var(--surface) !important;
+    border-color: var(--border) !important;
+    box-shadow: var(--shadow) !important;
+    color: var(--text) !important;
+}
+
+.dropdown-header,
+.dropdown-item,
+.ts-dropdown .option,
+.iti__country { color: var(--text) !important; }
+
+/* Keep every application action menu compact and self-contained. Bootstrap's
+ * Popper placement handles edge flipping; this prevents page/table CSS from
+ * stretching a menu to the width of its parent row or adding an inner scroll.
+ * Country and enhanced-select result lists retain their own sizing rules. */
+.dropdown-menu:not(.iti__country-list):not(.ts-dropdown) {
+    width: max-content !important;
+    min-width: 170px !important;
+    max-width: min(220px, calc(100vw - 1rem)) !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0.35rem !important;
+    z-index: 1080 !important;
+}
+.dropdown-menu:not(.iti__country-list):not(.ts-dropdown) .dropdown-item {
+    width: auto !important;
+    min-height: 34px;
+    padding: 0.5rem 0.625rem !important;
+    border-radius: 8px;
+    font-family: var(--font-body) !important;
+    font-size: 0.875rem !important;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+.dropdown-item:hover,
+.dropdown-item:focus,
+.ts-dropdown .option:hover,
+.ts-dropdown .option.active,
+.iti__country:hover { background: var(--surface-soft) !important; color: var(--heading) !important; }
+.dropdown-divider,
+.modal-header,
+.modal-footer { border-color: var(--border) !important; }
+
+.swal2-title,
+.swal2-html-container { color: var(--heading) !important; }
+.swal2-container { background: rgba(2, 6, 23, 0.58) !important; }
+
+.accordion-item,
+.accordion-button { background: var(--surface) !important; border-color: var(--border) !important; color: var(--heading) !important; }
+.accordion-button:not(.collapsed) { color: var(--primary) !important; box-shadow: none !important; }
+
+.pagination { --bs-pagination-bg: var(--surface); --bs-pagination-color: var(--primary); --bs-pagination-border-color: var(--border); --bs-pagination-hover-bg: var(--surface-soft); --bs-pagination-hover-color: var(--primary); --bs-pagination-disabled-bg: var(--surface-soft); --bs-pagination-disabled-color: var(--muted); }
+
+.alert-success { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 35%, var(--border)); color: var(--success); }
+.alert-warning { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); color: var(--warning); }
+.alert-danger { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); color: var(--danger); }
+.tf-access-expiry-alert {
+    align-items: center;
+    background: var(--warning-soft);
+    border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border));
+    border-radius: 12px;
+    color: var(--text);
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 0.875rem 1rem;
+}
+.tf-access-expiry-alert__content { align-items: center; display: flex; gap: 0.75rem; min-width: 0; }
+.tf-access-expiry-alert__icon { color: var(--warning); font-size: 1.2rem; line-height: 1; }
+.tf-access-expiry-alert strong { color: var(--heading); display: block; font-family: var(--font-heading); font-size: 0.9rem; margin-bottom: 0.15rem; }
+.tf-access-expiry-alert p { color: var(--text); font-size: 0.875rem; line-height: 1.45; }
+.tf-access-expiry-alert__actions { align-items: center; display: flex; flex: 0 0 auto; gap: 0.5rem; }
+.tf-access-expiry-alert__actions .btn-link { color: var(--text); font-size: 0.8125rem; text-decoration: none; }
+.tf-access-expiry-alert__actions .btn-link:hover,
+.tf-access-expiry-alert__actions .btn-link:focus { color: var(--heading); text-decoration: underline; }
+@media (max-width: 575.98px) {
+    .tf-access-expiry-alert { align-items: flex-start; flex-direction: column; }
+    .tf-access-expiry-alert__actions { padding-left: 1.95rem; }
+}
+.tf-badge-success { background: var(--success-soft); color: var(--success); }
+.tf-badge-warning { background: var(--warning-soft); color: var(--warning); }
+.tf-badge-danger { background: var(--danger-soft); color: var(--danger); }
+.tf-badge-info { background: var(--info-soft); color: var(--info); }
+
+.tf-dashboard-shell > .tf-sidebar,
+.tf-dashboard-shell > .sidebar {
+    background: var(--sidebar-bg) !important;
+    border-right-color: var(--sidebar-border) !important;
+    color: var(--sidebar-text) !important;
+}
+.tf-sidebar a:hover,
+.tf-sidebar a.active,
+.tf-sidebar .tf-sidebar-parent-link:hover,
+.tf-sidebar .tf-sidebar-parent-link.active,
+.tf-sidebar-parent:hover,
+.tf-sidebar-parent.is-open,
+.tf-sidebar-logout:hover { background: var(--sidebar-active); }
+
+.tf-theme-toggle {
+    align-items: center;
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--primary);
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 38px;
+    font-size: 0.95rem;
+    height: 38px;
+    justify-content: center;
+    padding: 0;
+    width: 38px;
+}
+
+.tf-theme-toggle:hover,
+.tf-theme-toggle:focus-visible { background: var(--info-soft); border-color: var(--primary); outline: none; }
+.tf-theme-toggle__moon { display: none; }
+:root[data-theme='dark'] .tf-theme-toggle__sun { display: none; }
+:root[data-theme='dark'] .tf-theme-toggle__moon { display: inline; }
+
+.pp-nav .tf-theme-toggle { margin-right: 0.15rem; }
+.tf-auth-theme-control { position: fixed; right: 1rem; top: 1rem; z-index: 1080; }
+
+/* Public marketing surfaces retain their composition while using shared dark tokens. */
+:root[data-theme='dark'] .pp-nav .navbar-collapse { background: var(--surface) !important; border-color: var(--border) !important; }
+:root[data-theme='dark'] .pp-brand,
+:root[data-theme='dark'] .pp-brand .pp-brand-name,
+:root[data-theme='dark'] .pp-nav-actions .pp-sign-in { color: var(--heading) !important; }
+:root[data-theme='dark'] .pp-hero { background: radial-gradient(circle at 74% 37%, rgba(79, 70, 229, 0.28), transparent 35%), radial-gradient(circle at 19% 8%, rgba(37, 99, 235, 0.2), transparent 34%), var(--bg) !important; }
+:root[data-theme='dark'] .pp-hero :is(h1, h2, h3, h4, h5, h6),
+:root[data-theme='dark'] .pp-section :is(h1, h2, h3, h4, h5, h6),
+:root[data-theme='dark'] .pp-footer h3 { color: var(--heading) !important; }
+:root[data-theme='dark'] .pp-hero-lead,
+:root[data-theme='dark'] .pp-section-heading p,
+:root[data-theme='dark'] .pp-section-intro,
+:root[data-theme='dark'] .pp-why-content > p,
+:root[data-theme='dark'] .pp-faq .col-lg-5 > p { color: var(--text) !important; }
+:root[data-theme='dark'] :is(.pp-logo-section, .pp-dashboard-section, .pp-features, .pp-workflow, .pp-pricing, .pp-final-cta) {
+    background: var(--bg) !important;
+}
+:root[data-theme='dark'] :is(.pp-overview, .pp-roles, .pp-why, .pp-testimonials, .pp-faq) {
+    background: #0f172a !important;
+}
+:root[data-theme='dark'] :is(.pp-overview-card, .pp-role-card, .pp-feature-card, .pp-testimonial-card, .pp-faq-accordion .accordion-item, .pp-why-card) {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    box-shadow: var(--shadow);
+}
+:root[data-theme='dark'] .pp-overview-main,
+:root[data-theme='dark'] .pp-overview-trust,
+:root[data-theme='dark'] .pp-testimonial-featured,
+:root[data-theme='dark'] .pp-why-main { background: linear-gradient(135deg, var(--surface), var(--surface-soft)) !important; }
+:root[data-theme='dark'] :is(.pp-overview-card p, .pp-role-card > span, .pp-feature-card p, .pp-benefit p, .pp-timeline p, .pp-testimonial-card blockquote, .pp-testimonial-person small) { color: var(--text) !important; }
+:root[data-theme='dark'] .pp-role-avatar.is-owner { background: #dbeafe !important; color: #1d4ed8 !important; }
+:root[data-theme='dark'] .pp-role-avatar.is-sales { background: #ede9fe !important; color: #6d28d9 !important; }
+:root[data-theme='dark'] .pp-role-avatar.is-stock { background: #d1fae5 !important; color: #047857 !important; }
+:root[data-theme='dark'] .pp-role-avatar.is-delivery { background: #fef3c7 !important; color: #92400e !important; }
+:root[data-theme='dark'] .pp-role-card ul { border-color: var(--border) !important; }
+:root[data-theme='dark'] .pp-role-card li { color: var(--muted) !important; }
+:root[data-theme='dark'] .pp-role-card li i { color: var(--success) !important; }
+:root[data-theme='dark'] :is(.pp-testimonial-person strong, .pp-why-card strong, .pp-benefit h3, .pp-timeline h3, .pp-logo-row span) { color: var(--heading) !important; }
+:root[data-theme='dark'] .pp-why-card small { color: var(--muted) !important; }
+:root[data-theme='dark'] .pp-timeline-number { background: var(--surface) !important; border-color: var(--border) !important; }
+:root[data-theme='dark'] .pp-timeline-icon { background: var(--surface-soft) !important; }
+:root[data-theme='dark'] .pp-proof-strip,
+:root[data-theme='dark'] .pp-logo-row span { border-color: var(--border) !important; }
+:root[data-theme='dark'] .pp-proof-strip { background: var(--surface) !important; color: var(--text) !important; }
+:root[data-theme='dark'] .pp-btn-secondary {
+    background: var(--surface-soft) !important;
+    border-color: var(--border) !important;
+    color: #bfdbfe !important;
+}
+:root[data-theme='dark'] .pp-btn-secondary:hover,
+:root[data-theme='dark'] .pp-btn-secondary:focus-visible {
+    background: color-mix(in srgb, var(--primary) 18%, var(--surface-soft)) !important;
+    border-color: var(--primary) !important;
+    color: #dbeafe !important;
+}
+:root[data-theme='dark'] .pp-faq-accordion .accordion-button:hover,
+:root[data-theme='dark'] .pp-faq-accordion .accordion-button:not(.collapsed) { background: var(--surface-soft) !important; }
+:root[data-theme='dark'] .pp-faq-accordion .accordion-body { color: var(--muted) !important; }
+:root[data-theme='dark'] .pp-footer { background: var(--surface) !important; border-color: var(--border) !important; color: var(--text) !important; }
+:root[data-theme='dark'] :is(.pp-footer a, .pp-footer-top > div > p, .pp-footer-newsletter p, .pp-footer-newsletter small, .pp-footer-bottom) { color: var(--muted) !important; }
+:root[data-theme='dark'] .pp-socials a { background: var(--surface-soft); color: var(--text) !important; }
+:root[data-theme='dark'] .pp-footer-newsletter input { background: var(--surface-soft) !important; border-color: var(--border) !important; color: var(--heading) !important; }
+:root[data-theme='dark'] .pp-footer-newsletter input:focus { border-color: var(--primary) !important; box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--primary) 22%, transparent); }
+
+/* Dark landing navigation: stable white labels without a color or movement jump. */
+:root[data-theme='dark'] .pp-nav .pp-nav-links .nav-link,
+:root[data-theme='dark'] .pp-nav-actions .pp-sign-in { color: #fff !important; }
+:root[data-theme='dark'] .pp-nav .pp-nav-links .nav-link:hover,
+:root[data-theme='dark'] .pp-nav .pp-nav-links .nav-link:focus-visible,
+:root[data-theme='dark'] .pp-nav .pp-nav-links .nav-link.is-active,
+:root[data-theme='dark'] .pp-nav-actions .pp-sign-in:hover,
+:root[data-theme='dark'] .pp-nav-actions .pp-sign-in:focus-visible {
+    color: #fff !important;
+}
+:root[data-theme='dark'] .pp-nav .pp-nav-links .nav-link::after {
+    background: var(--primary) !important;
+    display: block !important;
+}
+:root[data-theme='dark'] .pp-nav-actions .pp-sign-in:focus-visible {
+    background: transparent !important;
+    color: #fff !important;
+    outline-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+/* Authentication and registration components use the same high-contrast controls. */
+:root[data-theme='dark'] .pp-login-panel,
+:root[data-theme='dark'] .pp-registration-shell { background: var(--bg) !important; }
+:root[data-theme='dark'] .pp-login-card,
+:root[data-theme='dark'] .pp-registration-card { background: var(--surface) !important; border-color: var(--border) !important; box-shadow: var(--shadow); }
+:root[data-theme='dark'] :is(.pp-login-card header p, .pp-auth-support, .pp-registration-intro p, .pp-registration-section-title p, .pp-registration-password-meta, .pp-registration-cta-context) { color: var(--muted) !important; }
+:root[data-theme='dark'] .pp-auth-input { background: var(--surface-soft) !important; border-color: var(--border) !important; }
+:root[data-theme='dark'] .pp-auth-input input { background: transparent !important; color: var(--heading) !important; }
+:root[data-theme='dark'] .pp-registration-upload,
+:root[data-theme='dark'] .pp-registration-trial-field .input-group-text { background: var(--surface-soft) !important; border-color: var(--border) !important; color: var(--text) !important; }
+
+/* Super Admin dashboard: retain metrics and actions while removing light-only surfaces. */
+:root[data-theme='dark'] :is(.tf-dashboard-intro h2, .tf-dashboard-panel h2, .tf-section-heading h2) { color: var(--heading) !important; }
+:root[data-theme='dark'] :is(.tf-dashboard-intro p, .tf-section-heading p, .tf-panel-heading p) { color: var(--text) !important; }
+:root[data-theme='dark'] :is(.tf-stat-card, .tf-dashboard-panel, .tf-operation-card) {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    box-shadow: var(--shadow) !important;
+}
+:root[data-theme='dark'] .tf-dashboard-kpi-link:hover .tf-stat-card,
+:root[data-theme='dark'] .tf-operation-card:hover {
+    border-color: color-mix(in srgb, var(--primary) 62%, var(--border)) !important;
+    box-shadow: 0 18px 34px rgba(0, 0, 0, 0.32) !important;
+}
+:root[data-theme='dark'] .tf-operation-card { color: var(--heading) !important; }
+:root[data-theme='dark'] .tf-operation-card:hover { color: var(--heading) !important; }
+:root[data-theme='dark'] .tf-operation-copy small,
+:root[data-theme='dark'] .tf-operation-arrow,
+:root[data-theme='dark'] .tf-stat-card .tf-muted { color: var(--muted) !important; }
+:root[data-theme='dark'] .tf-stat-card .h3 { color: var(--heading) !important; }
+:root[data-theme='dark'] .tf-stat-card .small { color: var(--text) !important; }
+:root[data-theme='dark'] .tf-registration-chart {
+    background: var(--surface-soft) !important;
+    border-color: var(--border) !important;
+}
+:root[data-theme='dark'] .tf-registration-chart::before {
+    background: repeating-linear-gradient(to bottom, transparent 0, transparent 52px, rgba(148, 163, 184, 0.17) 53px) !important;
+}
+:root[data-theme='dark'] .tf-registration-value { color: var(--heading) !important; }
+:root[data-theme='dark'] .tf-registration-label,
+:root[data-theme='dark'] .tf-dashboard-empty { color: var(--muted) !important; }
+
+/* Login: keep each field, label, and eye control on one coherent dark surface. */
+:root[data-theme='dark'] .pp-login-card :is(h1, h2, h3) { color: var(--heading) !important; }
+:root[data-theme='dark'] .pp-auth-field label { color: var(--text) !important; }
+:root[data-theme='dark'] .pp-auth-input {
+    background: var(--surface-soft) !important;
+    border-color: var(--border) !important;
+}
+:root[data-theme='dark'] .pp-auth-input:focus-within {
+    background: var(--surface-soft) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 20%, transparent) !important;
+}
+:root[data-theme='dark'] .pp-auth-input input,
+:root[data-theme='dark'] .pp-auth-input input:-webkit-autofill,
+:root[data-theme='dark'] .pp-auth-input input:-webkit-autofill:hover,
+:root[data-theme='dark'] .pp-auth-input input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--heading) !important;
+    background: transparent !important;
+    box-shadow: 0 0 0 1000px var(--surface-soft) inset !important;
+    caret-color: var(--heading);
+    color: var(--heading) !important;
+}
+:root[data-theme='dark'] .pp-auth-input input::placeholder { color: var(--muted) !important; }
+:root[data-theme='dark'] .pp-auth-input > i { color: var(--muted) !important; }
+:root[data-theme='dark'] .pp-auth-password-toggle {
+    background: transparent !important;
+    border-left: 1px solid var(--border) !important;
+    border-radius: 0 8px 8px 0 !important;
+    color: var(--muted) !important;
+}
+:root[data-theme='dark'] .pp-auth-password-toggle:hover { background: var(--info-soft) !important; color: var(--info) !important; }
+:root[data-theme='dark'] .pp-auth-password-toggle:focus-visible { box-shadow: inset 0 0 0 2px var(--primary) !important; }
+
+/* The blue login story needs white content in both themes, including its supporting details. */
+.pp-login-story h1,
+.pp-login-story .pp-login-story-copy > p,
+.pp-login-story li,
+.pp-login-story .pp-login-trust strong,
+.pp-login-story .pp-login-trust small { color: #fff !important; }
+.pp-login-story .pp-auth-eyebrow { color: #dbeafe !important; }
+
+/* Keep the register prompt and secondary action part of the dark login card. */
+:root[data-theme='dark'] .pp-auth-divider { border-color: var(--border) !important; }
+:root[data-theme='dark'] .pp-auth-divider span {
+    background: var(--surface) !important;
+    color: var(--muted) !important;
+}
+:root[data-theme='dark'] .pp-auth-secondary {
+    background: var(--surface-soft) !important;
+    border-color: var(--border) !important;
+    box-shadow: none !important;
+    color: #bfdbfe !important;
+}
+:root[data-theme='dark'] .pp-auth-secondary:hover,
+:root[data-theme='dark'] .pp-auth-secondary:focus-visible {
+    background: color-mix(in srgb, var(--primary) 18%, var(--surface-soft)) !important;
+    border-color: var(--primary) !important;
+    color: #dbeafe !important;
+}
+
+/* Keep the secondary registration action readable and contained on compact login screens. */
+:root[data-theme='dark'] .pp-login-card .pp-auth-secondary {
+    background-color: #162033 !important;
+    border: 1px solid #3b82f6 !important;
+    color: #dbeafe !important;
+}
+:root[data-theme='dark'] .pp-login-card .pp-auth-secondary:hover {
+    background-color: #1b2b47 !important;
+    color: #ffffff !important;
+}
+
+/* Registration: dark controls match their adjacent inputs without changing sizing or behaviour. */
+:root[data-theme='dark'] .pp-registration-card :is(h1, h2, h3) { color: var(--heading) !important; }
+:root[data-theme='dark'] .pp-registration-card .form-label,
+:root[data-theme='dark'] .pp-registration-trial-field label { color: var(--text) !important; }
+:root[data-theme='dark'] .pp-registration-section { border-color: var(--border) !important; }
+:root[data-theme='dark'] .pp-registration-card .tf-password-toggle {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    border-left-color: var(--border) !important;
+    color: var(--muted) !important;
+}
+:root[data-theme='dark'] .pp-registration-card .tf-password-toggle:hover,
+:root[data-theme='dark'] .pp-registration-card .tf-password-toggle:focus-visible { background: var(--info-soft) !important; color: var(--info) !important; }
+:root[data-theme='dark'] .pp-registration-trial-field .form-control,
+:root[data-theme='dark'] .pp-registration-trial-field .input-group-text {
+    background: var(--surface-soft) !important;
+    border-color: var(--border) !important;
+    color: var(--heading) !important;
+}
+:root[data-theme='dark'] .pp-registration-trial-field small,
+:root[data-theme='dark'] .pp-registration-password-meta,
+:root[data-theme='dark'] .pp-registration-cta-context { color: var(--muted) !important; }
+:root[data-theme='dark'] .pp-registration-upload {
+    background: var(--surface-soft) !important;
+    border-color: color-mix(in srgb, var(--primary) 55%, var(--border)) !important;
+}
+:root[data-theme='dark'] .pp-registration-upload:hover { background: color-mix(in srgb, var(--primary) 12%, var(--surface-soft)) !important; border-color: var(--primary) !important; }
+:root[data-theme='dark'] .pp-registration-upload strong { color: var(--heading) !important; }
+:root[data-theme='dark'] :is(.pp-registration-upload small, .pp-registration-upload em, .pp-registration-signin) { color: var(--muted) !important; }
+
+/* Shared authentication polish: Login, registration, and password recovery use one control system. */
+.pp-login-story .pp-auth-brand,
+.pp-login-story .pp-auth-brand strong,
+.pp-auth-simple-brand,
+.pp-auth-simple-brand span { font-family: var(--font-heading) !important; }
+
+.pp-login-story h1,
+.pp-login-card h1,
+.pp-registration-intro h1,
+.pp-auth-simple-card h1,
+.pp-registration-section-title h2 {
+    font-family: var(--font-heading) !important;
+}
+
+.pp-login-story h1 {
+    font-size: clamp(3rem, 3.65vw, 3.5rem) !important;
+    line-height: 1.06 !important;
+    max-width: 28rem;
+}
+
+.pp-login-story-copy > p { font-family: var(--font-body); font-size: 1rem; line-height: 1.6; }
+.pp-login-story li { font-family: var(--font-body); font-size: 0.875rem; gap: 0.5rem; margin-block: 0.65rem; }
+
+.pp-login-card {
+    border-radius: 18px !important;
+    max-width: 30rem !important;
+    padding: clamp(2rem, 3vw, 2.375rem) !important;
+}
+
+.pp-login-card h1 {
+    font-size: clamp(1.875rem, 2.4vw, 2.125rem) !important;
+    line-height: 1.12 !important;
+    margin: 0.5rem 0 !important;
+}
+
+.pp-login-card header { margin-bottom: 1.45rem !important; }
+.pp-login-card header p { font-family: var(--font-body); font-size: 0.9375rem !important; line-height: 1.6 !important; }
+.pp-auth-eyebrow { font-family: var(--font-body); font-size: 0.65625rem !important; font-weight: 700 !important; letter-spacing: 0.1em !important; }
+.pp-auth-field { margin-top: 1rem !important; }
+.pp-auth-field label,
+.pp-auth-simple-field .form-label,
+.pp-registration-card .form-label,
+.pp-registration-trial-field label { font-family: var(--font-body); font-size: 0.8125rem !important; font-weight: 600 !important; }
+
+.pp-auth-input {
+    border-radius: 11px !important;
+    height: 46px !important;
+    margin-top: 0.375rem !important;
+    transition: border-color 220ms ease, box-shadow 220ms ease !important;
+}
+
+.pp-auth-input input { font-family: var(--font-body); font-size: 0.875rem !important; }
+.pp-auth-input:has(.is-invalid) { border-color: var(--danger) !important; }
+.pp-auth-inline-error,
+.pp-auth-simple-card .invalid-feedback,
+.pp-registration-card .invalid-feedback { color: var(--danger); font-family: var(--font-body); font-size: 0.75rem !important; line-height: 1.4; margin-top: 0.3rem; }
+
+.pp-auth-password-toggle { min-width: 46px; padding-inline: 0.75rem !important; }
+.pp-auth-remember { font-family: var(--font-body); font-size: 0.8125rem !important; margin: 1rem 0 1.125rem !important; }
+.pp-auth-submit,
+.pp-auth-secondary {
+    border-radius: 11px !important;
+    font-family: var(--font-body);
+    font-size: 0.875rem !important;
+    height: 46px !important;
+    min-height: 46px !important;
+}
+.pp-auth-divider { margin: 1.4rem 0 1.1rem !important; }
+.pp-auth-support { font-family: var(--font-body); font-size: 0.75rem !important; margin-top: 1rem !important; }
+
+.pp-registration-shell { background: var(--bg) !important; padding-block: 5.5rem 4rem !important; }
+.pp-registration-card { border-radius: 18px !important; max-width: 45rem; margin-inline: auto; padding: clamp(1.625rem, 3vw, 2rem) !important; }
+.pp-registration-intro { margin-bottom: 1.25rem !important; }
+.pp-registration-intro h1 { font-size: clamp(1.75rem, 3vw, 2rem) !important; line-height: 1.15 !important; }
+.pp-registration-intro p { font-family: var(--font-body); font-size: 0.9375rem !important; }
+.pp-registration-section { margin-top: 1.25rem !important; padding-top: 1.15rem !important; }
+.pp-registration-section-title { margin-bottom: 0.875rem !important; }
+.pp-registration-section-title h2 { font-size: 1rem !important; }
+.pp-registration-card .form-control { font-family: var(--font-body); height: 44px !important; }
+.pp-registration-card .tf-password-toggle { min-width: 44px !important; }
+.pp-registration-password-meta { font-family: var(--font-body); font-size: 0.6875rem !important; }
+.pp-registration-upload { min-height: 54px !important; }
+.pp-registration-submit { font-family: var(--font-body); font-size: 0.875rem !important; font-weight: 700 !important; height: 46px !important; margin-top: 1.25rem !important; }
+
+.pp-auth-simple-shell {
+    background: var(--bg) !important;
+    background-image: none !important;
+    padding-block: 2rem !important;
+}
+.pp-auth-simple-card {
+    border: 1px solid var(--border) !important;
+    border-radius: 18px !important;
+    box-shadow: var(--shadow) !important;
+    margin-inline: auto;
+    max-width: 31rem;
+    padding: clamp(2rem, 4vw, 2.375rem) !important;
+}
+.pp-auth-simple-brand { color: var(--heading) !important; font-size: 1.25rem; font-weight: 800; margin-bottom: 1.75rem; text-decoration: none; }
+.pp-auth-simple-card h1 { color: var(--heading); font-size: clamp(1.75rem, 3vw, 2rem); font-weight: 800; letter-spacing: -0.045em; line-height: 1.15; margin: 0.45rem 0 0.5rem; }
+.pp-auth-simple-intro { color: var(--muted); font-family: var(--font-body); font-size: 0.9375rem; line-height: 1.6; margin: 0 0 1.5rem; }
+.pp-auth-simple-form { display: grid; gap: 1rem; }
+.pp-auth-simple-form.row { row-gap: 1rem !important; }
+.pp-auth-simple-field .form-control { border-radius: 10px; font-family: var(--font-body); font-size: 0.875rem; height: 44px; }
+.pp-auth-simple-field .input-group > .form-control { border-radius: 10px 0 0 10px; }
+.pp-auth-simple-card .tf-password-toggle { background: var(--surface); border-color: var(--border); border-radius: 0 10px 10px 0; color: var(--muted); min-width: 44px; }
+.pp-auth-simple-card .tf-password-toggle:hover { background: var(--info-soft); color: var(--primary); }
+.pp-auth-simple-primary,
+.pp-auth-simple-secondary { align-items: center; border-radius: 11px; display: inline-flex; font-family: var(--font-body); font-size: 0.875rem; font-weight: 700; height: 46px; justify-content: center; min-height: 46px; transition: transform 220ms ease, box-shadow 220ms ease, background-color 220ms ease; }
+.pp-auth-simple-primary { background: linear-gradient(110deg, #2563eb, #4f46e5); border: 0; box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22); color: #fff; }
+.pp-auth-simple-primary:hover { box-shadow: 0 14px 27px rgba(37, 99, 235, 0.28); color: #fff; transform: translateY(-1px); }
+.pp-auth-simple-secondary { background: var(--surface); border: 1px solid var(--primary); color: var(--primary); }
+.pp-auth-simple-link { color: var(--primary); font-family: var(--font-body); font-size: 0.8125rem; font-weight: 600; text-align: center; text-decoration: none; }
+.pp-auth-password-help { color: var(--muted); display: block; font-family: var(--font-body); font-size: 0.6875rem; line-height: 1.4; margin-top: 0.35rem; }
+.pp-auth-feedback { border-radius: 10px; font-family: var(--font-body); font-size: 0.8125rem; margin-bottom: 1rem; padding: 0.7rem 0.8rem; }
+
+:root[data-theme='dark'] .pp-auth-simple-shell { background: var(--bg) !important; }
+:root[data-theme='dark'] .pp-auth-simple-card { background: var(--surface) !important; }
+:root[data-theme='dark'] .pp-auth-simple-card :is(.form-control, .tf-password-toggle) { background: var(--surface-soft) !important; border-color: var(--border) !important; color: var(--heading) !important; }
+:root[data-theme='dark'] .pp-auth-simple-card .form-control::placeholder { color: var(--muted) !important; }
+:root[data-theme='dark'] .pp-auth-simple-card .tf-password-toggle:hover { background: var(--info-soft) !important; color: var(--info) !important; }
+
+/* Contrast corrections for the final landing close and dark login controls. */
+body.pp-landing-page .pp-final-card h2 { color: #ffffff !important; }
+:root[data-theme='dark'] .pp-auth-remember { color: var(--text) !important; }
+:root[data-theme='dark'] .pp-auth-remember span { background: var(--tf-checkbox-surface) !important; border-color: var(--tf-checkbox-border) !important; }
+:root[data-theme='dark'] .pp-auth-remember input:checked + span { background: var(--primary) !important; border-color: var(--primary) !important; }
+
+/* Dashboard foundation: a single shell and component language for Super Admin and business workspaces. */
+.tf-dashboard-shell,
+.tf-dashboard-main,
+.dashboard-page { font-family: var(--font-body) !important; }
+
+.tf-dashboard-topbar { min-height: 70px !important; }
+.tf-dashboard-topbar h1,
+.dashboard-header h1,
+.tf-dashboard-intro h2,
+.tf-module-header h2,
+.tf-section-heading h2,
+.tf-panel-heading h2,
+.tf-module-table-heading h3,
+.modal-title,
+.offcanvas-title {
+    color: var(--heading) !important;
+    font-family: var(--font-heading) !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.04em;
+}
+.tf-dashboard-topbar h1,
+.dashboard-header h1 { font-size: clamp(1.5rem, 2vw, 1.875rem) !important; }
+.tf-dashboard-intro h2,
+.tf-module-header h2 { font-size: clamp(1.25rem, 1.8vw, 1.625rem) !important; line-height: 1.15 !important; }
+.tf-section-heading h2,
+.tf-panel-heading h2,
+.tf-module-table-heading h3 { font-size: clamp(1.125rem, 1.35vw, 1.375rem) !important; line-height: 1.2 !important; }
+.tf-dashboard-topbar small,
+.tf-dashboard-intro p,
+.tf-module-header p,
+.tf-section-heading p,
+.tf-panel-heading p,
+.tf-module-table-heading p { color: var(--muted) !important; font-family: var(--font-body) !important; }
+.tf-dashboard-eyebrow { font-family: var(--font-body) !important; font-size: 0.6875rem !important; font-weight: 700 !important; letter-spacing: 0.1em !important; }
+
+.tf-sidebar .tf-brand,
+.tf-sidebar .tf-brand span { font-family: var(--font-heading) !important; font-size: 1.1875rem !important; font-weight: 800 !important; }
+.tf-sidebar a,
+.tf-sidebar-parent,
+.tf-sidebar .tf-sidebar-parent-link,
+.tf-sidebar-logout { font-family: var(--font-body) !important; font-size: 0.875rem !important; font-weight: 600 !important; min-height: 44px !important; }
+
+.dashboard-page .btn,
+.tf-dashboard-topbar .btn,
+.modal .btn,
+.offcanvas .btn { border-radius: 10px; font-family: var(--font-body) !important; font-size: 0.875rem !important; font-weight: 700 !important; }
+.dashboard-page .btn:not(.btn-sm):not(.tf-table-more-action):not(.tf-billing-more-button),
+.tf-dashboard-primary-action,
+.tf-module-secondary-action { min-height: 42px; }
+.dashboard-page .btn-sm,
+.tf-table-view-action,
+.tf-table-review-action,
+.tf-table-more-action,
+.tf-billing-table-button,
+.tf-billing-more-button { font-size: 0.75rem !important; min-height: 34px; }
+
+.dashboard-page .form-control,
+.dashboard-page .form-select,
+.dashboard-page .ts-control { border-radius: 10px !important; font-family: var(--font-body) !important; font-size: 0.875rem !important; min-height: 43px; }
+.dashboard-page .form-label { color: var(--text) !important; font-family: var(--font-body) !important; font-size: 0.75rem !important; font-weight: 600 !important; }
+
+.tf-stat-card,
+.tf-dashboard-panel,
+.tf-operation-card,
+.tf-module-summary-card,
+.tf-module-filter-card,
+.tf-module-table-card,
+.tf-billing-workspace .tf-card {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+.tf-stat-card { min-height: 132px !important; padding: 1.125rem !important; }
+.tf-stat-card .tf-muted,
+.tf-module-summary-card small { color: var(--muted) !important; font-family: var(--font-body) !important; font-size: 0.75rem !important; font-weight: 600 !important; }
+.tf-stat-card .h3,
+.tf-module-summary-card strong { color: var(--heading) !important; font-family: var(--font-heading) !important; font-size: clamp(1.5rem, 2vw, 2rem) !important; font-weight: 800 !important; line-height: 1.1 !important; }
+.tf-operation-card { color: var(--heading) !important; min-height: 104px !important; }
+.tf-operation-card:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)) !important; color: var(--heading) !important; }
+.tf-operation-copy strong { color: var(--heading) !important; font-family: var(--font-heading) !important; font-size: 0.9375rem !important; font-weight: 700 !important; }
+.tf-operation-copy small { color: var(--muted) !important; font-family: var(--font-body) !important; font-size: 0.75rem !important; }
+
+.tf-module-filter-card { background: var(--surface) !important; padding: 1.125rem !important; }
+.tf-module-filter-heading strong { color: var(--heading) !important; font-family: var(--font-heading) !important; }
+.tf-module-filter-heading small { color: var(--muted) !important; }
+.tf-module-table-heading { background: var(--surface) !important; }
+.tf-module-table .tf-table thead th,
+.tf-billing-table .tf-table th { background: var(--surface-soft) !important; border-color: var(--border) !important; color: var(--text) !important; font-family: var(--font-body) !important; font-size: 0.6875rem !important; font-weight: 700 !important; }
+.tf-module-table .tf-table tbody td,
+.tf-billing-table .tf-table td { border-color: var(--border) !important; color: var(--text) !important; font-family: var(--font-body) !important; font-size: 0.8125rem !important; }
+.tf-module-table .tf-table tbody tr:hover,
+.tf-billing-table .tf-table tbody tr:hover { background: var(--surface-soft) !important; }
+.tf-company-cell strong,
+.tf-table-person strong,
+.tf-request-id { color: var(--heading) !important; font-family: var(--font-body) !important; }
+.tf-company-cell small,
+.tf-table-person small,
+.tf-request-summary,
+.tf-table-contact,
+.tf-table-date { color: var(--muted) !important; }
+
+.dashboard-page .dropdown-menu,
+.tf-dashboard-topbar .dropdown-menu {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 11px !important;
+    box-shadow: var(--shadow) !important;
+    font-family: var(--font-body) !important;
+    max-width: 220px;
+    min-width: 180px;
+    overflow: visible !important;
+    padding: 0.35rem !important;
+    width: max-content;
+    z-index: 1080;
+}
+.dashboard-page .dropdown-menu .dropdown-item,
+.tf-dashboard-topbar .dropdown-menu .dropdown-item { border-radius: 8px; font-size: 0.8125rem; padding: 0.5rem 0.625rem; white-space: nowrap; }
+
+.tf-badge,
+.tf-status-badge,
+.tf-plan-badge,
+.tf-table-result-count { font-family: var(--font-body) !important; font-size: 0.6875rem !important; font-weight: 700 !important; }
+.modal-dialog { margin: 1.75rem auto; }
+.modal-content { border-radius: 18px !important; max-height: 85vh; overflow: hidden; }
+.modal-body { font-family: var(--font-body); max-height: calc(85vh - 9rem); overflow-y: auto; }
+.modal-title { font-size: 1.25rem !important; }
+
+:root[data-theme='dark'] .tf-dashboard-shell,
+:root[data-theme='dark'] .dashboard-page,
+:root[data-theme='dark'] .tf-dashboard-main { background: var(--bg) !important; }
+:root[data-theme='dark'] .tf-dashboard-topbar { background: var(--surface) !important; border-bottom-color: var(--border) !important; }
+:root[data-theme='dark'] :is(.tf-stat-card, .tf-dashboard-panel, .tf-operation-card, .tf-module-summary-card, .tf-module-filter-card, .tf-module-table-card, .tf-billing-workspace .tf-card) { background: var(--surface) !important; border-color: var(--border) !important; box-shadow: var(--shadow) !important; }
+:root[data-theme='dark'] .tf-module-table-heading { background: var(--surface) !important; }
+:root[data-theme='dark'] .tf-module-table .tf-table thead th,
+:root[data-theme='dark'] .tf-billing-table .tf-table th { background: var(--surface-soft) !important; color: var(--text) !important; }
+:root[data-theme='dark'] .tf-module-table .tf-table tbody tr:hover,
+:root[data-theme='dark'] .tf-billing-table .tf-table tbody tr:hover { background: var(--surface-soft) !important; }
+:root[data-theme='dark'] .tf-status-track { background: var(--surface-soft) !important; }
+:root[data-theme='dark'] .tf-registration-chart { background: var(--surface-soft) !important; border-color: var(--border) !important; }
+:root[data-theme='dark'] .tf-topbar-actions :is(.tf-user-dropdown-toggle, .tf-notification-dropdown > .btn) { background: var(--surface-soft) !important; border-color: var(--border) !important; color: var(--text) !important; }
+
+@media (max-width: 767.98px) {
+    .tf-dashboard-topbar { min-height: 68px !important; }
+    .dashboard-page { padding: 1.25rem 1rem 2rem !important; }
+    .dashboard-page .dropdown-menu { max-width: min(220px, calc(100vw - 1rem)); }
+}
+
+/* Phase 4C: operational workspace consistency, scoped to the business/staff modules. */
+.quick-actions { gap: 0.625rem !important; margin-bottom: 1.25rem !important; }
+.quick-actions .btn { align-items: center; border-radius: 10px; display: inline-flex; font-family: var(--font-body); font-size: 0.875rem; font-weight: 700; min-height: 42px; padding-inline: 0.875rem; }
+.dashboard-cards > * { display: flex; }
+.dashboard-cards .tf-stat-card { flex: 1 1 auto; }
+
+.tf-business-data-table { font-family: var(--font-body) !important; }
+.tf-business-data-table .tf-table { min-width: 760px; table-layout: auto; }
+.tf-business-data-table .tf-table th { color: var(--text) !important; font-size: 0.6875rem !important; font-weight: 700 !important; letter-spacing: 0.035em; white-space: nowrap; }
+.tf-business-data-table .tf-table td { color: var(--text) !important; font-size: 0.8125rem !important; vertical-align: middle; }
+.tf-business-data-table .tf-table td strong { color: var(--heading); font-family: var(--font-body); font-weight: 700; }
+.tf-business-data-table .dropdown-menu { min-width: 180px; }
+
+.product-list-table .tf-table { min-width: 1510px; }
+.product-list-table .tf-table th:nth-child(1),
+.product-list-table .tf-table td:nth-child(1) { min-width: 58px; width: 58px; }
+.product-list-table .tf-table th:nth-child(2),
+.product-list-table .tf-table td:nth-child(2) { min-width: 200px; width: 200px; }
+.product-list-table .tf-table th:nth-child(3),
+.product-list-table .tf-table td:nth-child(3) { min-width: 112px; }
+.product-list-table .tf-table th:nth-child(4),
+.product-list-table .tf-table td:nth-child(4) { min-width: 70px; }
+.product-list-table .tf-table th:nth-child(5),
+.product-list-table .tf-table th:nth-child(6),
+.product-list-table .tf-table th:nth-child(7),
+.product-list-table .tf-table th:nth-child(8),
+.product-list-table .tf-table th:nth-child(9),
+.product-list-table .tf-table td:nth-child(5),
+.product-list-table .tf-table td:nth-child(6),
+.product-list-table .tf-table td:nth-child(7),
+.product-list-table .tf-table td:nth-child(8),
+.product-list-table .tf-table td:nth-child(9) { min-width: 122px; text-align: right; white-space: nowrap; }
+.product-list-table .tf-table th:nth-child(5),
+.product-list-table .tf-table td:nth-child(5),
+.product-list-table .tf-table th:nth-child(6),
+.product-list-table .tf-table td:nth-child(6),
+.product-list-table .tf-table th:nth-child(7),
+.product-list-table .tf-table td:nth-child(7),
+.product-list-table .tf-table th:nth-child(8),
+.product-list-table .tf-table td:nth-child(8) { min-width: 122px; }
+.product-list-table .tf-table th:nth-child(9),
+.product-list-table .tf-table td:nth-child(9) { min-width: 72px; }
+.product-list-table .tf-table th:nth-child(10),
+.product-list-table .tf-table td:nth-child(10) { min-width: 132px; }
+.product-list-table .tf-table th:nth-child(10),
+.product-list-table .tf-table td:nth-child(10),
+.product-list-table .tf-table th:nth-child(11),
+.product-list-table .tf-table td:nth-child(11),
+.product-list-table .tf-table th:nth-child(13),
+.product-list-table .tf-table td:nth-child(13) { white-space: nowrap; }
+.product-list-table .tf-table th:nth-child(11),
+.product-list-table .tf-table td:nth-child(11) { min-width: 108px; }
+.product-list-table .tf-table th:nth-child(12),
+.product-list-table .tf-table td:nth-child(12) { min-width: 112px; white-space: nowrap; }
+.product-list-table .tf-table th:nth-child(13),
+.product-list-table .tf-table td:nth-child(13) { min-width: 96px; }
+.tf-table td:has(.tf-inline-status-form) { min-width: 108px; }
+.tf-table .tf-inline-status-form { min-width: max-content; }
+.product-list-table .tf-table td:nth-child(2) > strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tf-inventory-adjustment-card { border-radius: 16px !important; }
+.tf-inventory-adjustment-card h2 { color: var(--heading); font-family: var(--font-heading); font-size: 1.125rem; font-weight: 700; }
+.tf-inventory-adjustment-card .form-control,
+.tf-inventory-adjustment-card .form-select { min-height: 43px; }
+.tf-inventory-adjustment-card .btn { min-height: 43px; }
+
+.tf-customers-form-card,
+.tf-customers-filter-card,
+.tf-customer-overview-card,
+.tf-customer-side-card,
+.tf-customer-update-card,
+.tf-customer-ledger-card { background: var(--surface) !important; border-color: var(--border) !important; }
+.tf-customers-table-heading h2,
+.tf-customers-form-card h2,
+.tf-customers-filter-card h2 { color: var(--heading) !important; font-family: var(--font-heading) !important; }
+.tf-customer-balance { color: var(--text) !important; font-family: var(--font-body); }
+.tf-customer-balance.is-outstanding { color: var(--warning) !important; }
+
+.tf-delivery-kpis .tf-stat-card { height: 100%; min-height: 126px !important; }
+.tf-delivery-filter-card { background: var(--surface) !important; border-color: var(--border) !important; border-radius: 16px !important; }
+.tf-delivery-filter-card .form-control,
+.tf-delivery-filter-card .form-select,
+.tf-delivery-filter-actions .btn { min-height: 43px !important; }
+.tf-delivery-actions { align-items: center; gap: 0.375rem !important; }
+.tf-delivery-actions .btn { min-height: 34px; }
+.tf-delivery-table .tf-table { min-width: 900px; }
+.tf-delivery-table .tf-table th,
+.tf-delivery-table .tf-table td { border-color: var(--border) !important; }
+.tf-delivery-cell strong,
+.tf-delivery-timeline strong { color: var(--heading) !important; font-family: var(--font-body); }
+.tf-delivery-cell small,
+.tf-delivery-timeline small { color: var(--muted) !important; }
+
+.tf-pos { color: var(--text); }
+.tf-pos-register-bar,
+.tf-pos-panel { background: var(--surface) !important; border-color: var(--border) !important; border-radius: 14px !important; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045); }
+.tf-pos-workspace { grid-template-columns: minmax(215px, 24fr) minmax(0, 52fr) minmax(220px, 24fr) !important; gap: 0.875rem !important; }
+.tf-pos-panel-head { border-bottom-color: var(--border) !important; padding: 0.875rem 1rem 0.7rem !important; }
+.tf-pos-panel-head h2 { color: var(--heading) !important; font-family: var(--font-heading) !important; font-size: 1rem !important; font-weight: 700 !important; }
+.tf-pos-panel-head small,
+.tf-pos-product-card small,
+.tf-pos-product-card em { color: var(--muted) !important; }
+.tf-pos-searches { padding: 0.75rem 1rem !important; }
+.tf-pos-categories button { background: var(--surface-soft) !important; border-color: var(--border) !important; color: var(--text) !important; }
+.tf-pos-categories button.active { background: var(--primary) !important; border-color: var(--primary) !important; color: #fff !important; }
+.tf-pos-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0.625rem !important; }
+.tf-pos-product-card { background: var(--surface) !important; border-color: var(--border) !important; border-radius: 10px !important; color: var(--heading) !important; }
+.tf-pos-product-card:hover,
+.tf-pos-product-card.is-keyboard-selected { border-color: var(--primary) !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 22%, transparent) !important; }
+.tf-pos-product-image { background: var(--info-soft) !important; color: var(--primary) !important; }
+.tf-pos-product-card span { color: var(--primary) !important; }
+.tf-pos-cart-table { width: 100% !important; min-width: 0 !important; table-layout: fixed !important; }
+.tf-pos-cart-table th { background: var(--surface-soft) !important; border-color: var(--border) !important; color: var(--text) !important; }
+.tf-pos-cart-table td { border-color: var(--border) !important; color: var(--text) !important; }
+.tf-pos-cart-col-index { width: 34px !important; }
+.tf-pos-cart-col-product { width: auto !important; }
+.tf-pos-cart-col-quantity { width: 64px !important; }
+.tf-pos-cart-col-price { width: 90px !important; }
+.tf-pos-cart-col-total { width: 90px !important; }
+.tf-pos-cart-col-actions { width: 140px !important; }
+.tf-pos-cart-table :is(th:nth-child(1), th:nth-child(3), th:nth-child(4), th:nth-child(5), th:nth-child(6), td:nth-child(1), td:nth-child(3), td:nth-child(4), td:nth-child(5), td:nth-child(6)) { text-align: center; white-space: nowrap; }
+.tf-pos-cart-table :is(th, td) { padding-inline: 0.25rem !important; }
+.tf-pos-cart-actions-cell { width: 140px !important; min-width: 140px !important; white-space: nowrap !important; }
+.tf-pos-cart-actions { width: 100%; gap: 0.35rem !important; justify-content: center; flex-wrap: nowrap !important; }
+.tf-pos-cart-actions .btn { flex: 1 1 0; font-size: 0.8125rem !important; min-height: 34px !important; padding-inline: 0.4rem !important; }
+.tf-pos-checkout-scroll { padding-inline: 1rem; }
+.tf-pos-checkout-scroll .form-control,
+.tf-pos-checkout-scroll .form-select { min-height: 43px !important; }
+.tf-pos-complete { border-top-color: var(--border) !important; padding: 0.875rem 1rem !important; }
+
+:root[data-theme='dark'] :is(.tf-customers-form-card, .tf-customers-filter-card, .tf-customer-overview-card, .tf-customer-side-card, .tf-customer-update-card, .tf-customer-ledger-card, .tf-delivery-filter-card, .tf-pos-register-bar, .tf-pos-panel) { background: var(--surface) !important; border-color: var(--border) !important; }
+:root[data-theme='dark'] .tf-customers-table tbody tr:hover,
+:root[data-theme='dark'] .tf-customer-ledger-table tbody tr:hover { background: var(--surface-soft) !important; }
+:root[data-theme='dark'] .tf-pos-cart-table th,
+:root[data-theme='dark'] .tf-pos-cart-table td { background: var(--surface-soft) !important; border-color: var(--border) !important; color: var(--text) !important; }
+:root[data-theme='dark'] .tf-pos-cart-table td { background: var(--surface) !important; }
+
+@media (max-width: 1199.98px) {
+    .tf-pos { height: auto; min-height: calc(100dvh - 92px); overflow: visible; }
+    .tf-pos-workspace { grid-template-columns: minmax(250px, 0.85fr) minmax(0, 1.35fr) !important; overflow: visible; }
+    .tf-pos-checkout-panel { grid-column: 1 / -1; max-height: none; }
+}
+
+@media (max-width: 575.98px) {
+    .tf-pos-cart-table { min-width: 500px !important; }
+}
+
+@media (max-width: 767.98px) {
+    .tf-pos-workspace { grid-template-columns: 1fr !important; }
+    .tf-pos-products-panel,
+    .tf-pos-cart-panel,
+    .tf-pos-checkout-panel { min-height: 360px; }
+    .tf-pos-register-bar { align-items: stretch; flex-direction: column; }
+    .tf-pos-actions { justify-content: flex-start; }
+    .tf-pos-actions .btn { flex: 1 1 auto; }
+    .tf-pos-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 575.98px) {
+    .pp-login-card { padding: 1.75rem 1.4rem !important; }
+    .pp-registration-shell { padding-block: 4.75rem 3rem !important; }
+    .pp-registration-card { padding: 1.5rem 1.125rem !important; }
+    .pp-auth-simple-card { padding: 1.75rem 1.4rem !important; }
+}
+
+@media (max-width: 991.98px) {
+    .pp-nav-actions .tf-theme-toggle { margin: 0.3rem 0 0.1rem; }
+    .tf-topbar-actions .tf-theme-toggle { flex-basis: 38px; }
+}
+
+@media (max-width: 575.98px) {
+    .tf-theme-toggle { flex-basis: 36px; height: 36px; width: 36px; }
+    .tf-auth-theme-control { right: 0.75rem; top: 0.75rem; }
+}
+
+/* Phase 4D: finance, reporting, people, and audit workspace consistency. */
+.tf-purchase-filter-card,
+.tf-suppliers-form-card,
+.tf-suppliers-filter-card,
+.tf-staff-form-card,
+.tf-staff-filter-card,
+.tf-audit-filter-card {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    border-radius: 16px !important;
+}
+
+.tf-purchase-filter-card .form-control,
+.tf-purchase-filter-card .form-select,
+.tf-suppliers-form-card .form-control,
+.tf-suppliers-form-card .form-select,
+.tf-suppliers-filter-card .form-control,
+.tf-suppliers-filter-card .form-select,
+.tf-staff-form-card .form-control,
+.tf-staff-form-card .form-select,
+.tf-staff-filter-card .form-control,
+.tf-staff-filter-card .form-select,
+.tf-audit-filter-card .form-control,
+.tf-audit-filter-card .form-select { min-height: 43px !important; }
+
+.tf-purchase-data-table .tf-table { min-width: 1040px; }
+.tf-purchase-data-table .tf-table th:nth-child(3),
+.tf-purchase-data-table .tf-table td:nth-child(3),
+.tf-purchase-data-table .tf-table th:nth-child(4),
+.tf-purchase-data-table .tf-table td:nth-child(4) { text-align: right; white-space: nowrap; }
+.tf-purchase-data-table .tf-table th:nth-child(6),
+.tf-purchase-data-table .tf-table td:nth-child(6),
+.tf-purchase-data-table .tf-table th:nth-child(7),
+.tf-purchase-data-table .tf-table td:nth-child(7),
+.tf-purchase-data-table .tf-table th:last-child,
+.tf-purchase-data-table .tf-table td:last-child { white-space: nowrap; }
+
+.tf-suppliers-data-table .tf-table { min-width: 820px; }
+.tf-suppliers-data-table .tf-table th:nth-child(4),
+.tf-suppliers-data-table .tf-table td:nth-child(4) { text-align: right; white-space: nowrap; }
+.tf-suppliers-data-table .tf-table th:last-child,
+.tf-suppliers-data-table .tf-table td:last-child { white-space: nowrap; }
+
+.dashboard-page .nav-tabs { border-bottom-color: var(--border) !important; gap: 0.25rem; }
+.dashboard-page .nav-tabs .nav-link {
+    border: 0 !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 8px 8px 0 0 !important;
+    color: var(--muted) !important;
+    font-family: var(--font-body) !important;
+    font-size: 0.8125rem !important;
+    font-weight: 700 !important;
+    padding: 0.625rem 0.75rem !important;
+}
+.dashboard-page .nav-tabs .nav-link:hover,
+.dashboard-page .nav-tabs .nav-link.active { background: transparent !important; border-bottom-color: var(--primary) !important; color: var(--primary) !important; }
+
+.dashboard-page .tab-pane > .tf-card,
+.dashboard-page .tab-pane > .row .tf-card,
+.dashboard-page .report-kpi,
+.dashboard-page .report-chart,
+.dashboard-page .report-insight-row { border-color: var(--border) !important; }
+.dashboard-page .tab-pane > .tf-card,
+.dashboard-page .tab-pane > .row .tf-card,
+.dashboard-page .report-kpi { background: var(--surface) !important; border-radius: 14px !important; }
+.dashboard-page .tab-pane > .tf-card h2,
+.dashboard-page .report-section-heading,
+.dashboard-page .report-kpi-value,
+.dashboard-page .report-chart h3,
+.dashboard-page .report-insight-row h3 { color: var(--heading) !important; font-family: var(--font-heading) !important; }
+.dashboard-page .report-section-heading { font-size: 1.05rem !important; font-weight: 750 !important; margin: 1.25rem 0 0.625rem !important; }
+.dashboard-page .report-kpi { box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04); padding: 0.875rem !important; }
+.dashboard-page .report-kpi-label,
+.dashboard-page .report-kpi-meta,
+.dashboard-page .report-period-label,
+.dashboard-page .report-chart-label,
+.dashboard-page .report-legend { color: var(--muted) !important; font-family: var(--font-body) !important; }
+.dashboard-page .report-kpi-value { font-size: 1.1875rem !important; }
+.dashboard-page .report-bars { border-bottom-color: var(--border) !important; }
+.dashboard-page .report-insight-row { font-family: var(--font-body) !important; }
+.dashboard-page #tab-general .tf-table th:nth-child(5),
+.dashboard-page #tab-general .tf-table td:nth-child(5),
+.dashboard-page #tab-general .tf-table th:nth-child(6),
+.dashboard-page #tab-general .tf-table td:nth-child(6),
+.dashboard-page #tab-general .tf-table th:nth-child(7),
+.dashboard-page #tab-general .tf-table td:nth-child(7),
+.dashboard-page #tab-trial .tf-table th:nth-child(4),
+.dashboard-page #tab-trial .tf-table td:nth-child(4),
+.dashboard-page #tab-trial .tf-table th:nth-child(5),
+.dashboard-page #tab-trial .tf-table td:nth-child(5),
+.dashboard-page #tab-trial .tf-table th:nth-child(6),
+.dashboard-page #tab-trial .tf-table td:nth-child(6),
+.dashboard-page #tab-balance .tf-table th:last-child,
+.dashboard-page #tab-balance .tf-table td:last-child { text-align: right; white-space: nowrap; }
+
+.tf-staff-data-table .tf-table { min-width: 790px; }
+.tf-staff-data-table .tf-table th:last-child,
+.tf-staff-data-table .tf-table td:last-child { white-space: nowrap; }
+.tf-audit-data-table .tf-table { min-width: 980px; }
+.tf-audit-data-table .tf-table th:nth-child(5),
+.tf-audit-data-table .tf-table td:nth-child(5),
+.tf-audit-data-table .tf-table th:nth-child(7),
+.tf-audit-data-table .tf-table td:nth-child(7),
+.tf-audit-data-table .tf-table th:last-child,
+.tf-audit-data-table .tf-table td:last-child { white-space: nowrap; }
+.tf-audit-data-table .tf-table th:first-child,
+.tf-audit-data-table .tf-table td:first-child,
+.tf-audit-data-table .tf-table th:last-child,
+.tf-audit-data-table .tf-table td:last-child { white-space: nowrap; }
+
+.tf-business-data-table.table-responsive { scrollbar-color: var(--border) transparent; }
+.tf-business-data-table .pagination { gap: 0.25rem; }
+.tf-business-data-table .page-link { background: var(--surface) !important; border-color: var(--border) !important; color: var(--text) !important; border-radius: 8px !important; font-family: var(--font-body) !important; }
+.tf-business-data-table .page-item.active .page-link { background: var(--primary) !important; border-color: var(--primary) !important; color: #fff !important; }
+
+:root[data-theme='dark'] :is(.tf-purchase-filter-card, .tf-suppliers-form-card, .tf-suppliers-filter-card, .tf-staff-form-card, .tf-staff-filter-card, .tf-audit-filter-card, .dashboard-page .tab-pane > .tf-card, .dashboard-page .tab-pane > .row .tf-card, .dashboard-page .report-kpi) { background: var(--surface) !important; border-color: var(--border) !important; }
+:root[data-theme='dark'] .dashboard-page .report-chart { background: var(--surface) !important; }
+:root[data-theme='dark'] .dashboard-page .report-bars { background: var(--surface-soft); }
+:root[data-theme='dark'] .dashboard-page .report-insight-row { border-bottom-color: var(--border) !important; }
+
+/* Phase 4B: secondary Super Admin workspaces. Keep these operational tools
+ * compact while inheriting the same light/dark tokens as the main dashboard. */
+.tf-support-ticket-table .tf-table { min-width: 1120px; }
+.tf-support-ticket-table .tf-table th:last-child,
+.tf-support-ticket-table .tf-table td:last-child { white-space: nowrap; }
+.tf-support-ticket-table .dropdown-menu { min-width: 180px !important; }
+.tf-newsletter-table .tf-table { min-width: 720px; }
+.tf-newsletter-table .tf-table th:last-child,
+.tf-newsletter-table .tf-table td:last-child { white-space: nowrap; }
+.tf-user-reset-row { background: var(--surface-soft) !important; }
+.tf-settings-section-heading { border-top: 1px solid var(--border); margin-top: 0.5rem; padding-top: 1.25rem; }
+.tf-settings-section-heading h2 { color: var(--heading); font-family: var(--font-heading); font-size: 1rem; font-weight: 750; margin: 0.15rem 0; }
+.tf-settings-section-heading p { color: var(--muted); font-family: var(--font-body); font-size: 0.8125rem; margin: 0; }
+.tf-settings-section-heading-first { border-top: 0; margin-top: 0; padding-top: 0; }
+
+@media (max-width: 767.98px) {
+    .tf-support-ticket-table .tf-table { min-width: 980px; }
+    .tf-newsletter-table .tf-table { min-width: 640px; }
+}
+
+@media (min-width: 768px) {
+    .tf-suppliers-form-card form > :is(.col-md-2, .col-md-3, .col-md-4) { flex: 0 0 auto; width: 50%; }
+}
+
+@media (max-width: 767.98px) {
+    .dashboard-page .nav-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 0.125rem; }
+    .dashboard-page .nav-tabs .nav-link { white-space: nowrap; }
+    .tf-purchase-filter-card,
+    .tf-suppliers-form-card,
+    .tf-suppliers-filter-card,
+    .tf-staff-form-card,
+    .tf-staff-filter-card,
+    .tf-audit-filter-card { padding: 1rem !important; }
+}
+
+/* Root-level operational UI consistency. These shared rules intentionally
+ * target only visual primitives: they do not alter any form names, routes,
+ * data tables, or workspace workflows. */
+
+/* Sidebar navigation is deliberately independent from the workspace theme.
+ * Light Mode changes the workspace only; the shared navigation stays navy. */
+.tf-sidebar,
+.tf-sidebar .tf-sidebar-inner {
+    background: var(--sidebar-bg) !important;
+    color: var(--sidebar-text) !important;
+}
+.tf-sidebar :is(a, .tf-sidebar-parent-link, .tf-sidebar-parent, .tf-sidebar-logout) {
+    color: var(--sidebar-text) !important;
+    transition: background-color 220ms ease, color 220ms ease !important;
+}
+.tf-sidebar :is(a, .tf-sidebar-parent-link, .tf-sidebar-parent, .tf-sidebar-logout) i {
+    color: var(--sidebar-muted) !important;
+}
+.tf-sidebar :is(a:hover, a.active, .tf-sidebar-parent-link:hover, .tf-sidebar-parent-link.active, .tf-sidebar-parent:hover, .tf-sidebar-parent.is-open, .tf-sidebar-logout:hover) {
+    background: var(--sidebar-active) !important;
+    color: #fff !important;
+}
+.tf-sidebar :is(a:hover, a.active, .tf-sidebar-parent-link:hover, .tf-sidebar-parent-link.active, .tf-sidebar-parent:hover, .tf-sidebar-parent.is-open, .tf-sidebar-logout:hover) i {
+    color: #fff !important;
+}
+.tf-sidebar .tf-sidebar-submenu {
+    background: transparent !important;
+    border-left-color: var(--sidebar-border) !important;
+}
+.tf-sidebar .tf-sidebar-toggle-inside,
+.tf-sidebar .tf-sidebar-close {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    color: #e2e8f0 !important;
+}
+
+/* Business/staff brand rows are identity, not a navigation destination. */
+.tf-sidebar-inner:has(.tf-sidebar-company-name) > .d-flex:first-child {
+    gap: 0.75rem;
+}
+.tf-sidebar .tf-brand:has(.tf-sidebar-company-name) {
+    align-items: center;
+    background: transparent !important;
+    border-radius: 11px;
+    color: #f8fafc !important;
+    gap: 0.6875rem !important;
+    min-height: 48px;
+    padding: 0.25rem;
+    transition: background-color 200ms ease, color 200ms ease !important;
+}
+.tf-sidebar .tf-brand:has(.tf-sidebar-company-name):hover,
+.tf-sidebar .tf-brand:has(.tf-sidebar-company-name):focus-visible {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: #f8fafc !important;
+    outline: 0;
+    transform: none !important;
+}
+.tf-sidebar .tf-brand:has(.tf-sidebar-company-name) .tf-sidebar-company-name {
+    color: #f8fafc !important;
+    font-family: var(--font-heading) !important;
+    font-size: 1.0625rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+}
+.tf-sidebar .tf-brand:has(.tf-sidebar-company-name) .tf-brand-mark {
+    border-radius: 11px !important;
+    box-shadow: none !important;
+    flex: 0 0 40px;
+    height: 40px !important;
+    margin-right: 0 !important;
+    transition: transform 200ms ease !important;
+    width: 40px !important;
+}
+.tf-sidebar .tf-brand:has(.tf-sidebar-company-name):hover .tf-brand-mark,
+.tf-sidebar .tf-brand:has(.tf-sidebar-company-name):focus-visible .tf-brand-mark {
+    box-shadow: none !important;
+    transform: scale(1.015) !important;
+}
+.tf-sidebar .tf-brand:has(.tf-sidebar-company-name) .tf-sidebar-company-mark img {
+    border-radius: inherit;
+    object-fit: cover;
+}
+.tf-sidebar-inner:has(.tf-sidebar-company-name) .tf-sidebar-toggle-inside {
+    flex: 0 0 40px;
+    margin-left: 0;
+}
+
+/* Shared printable document viewer: the viewer follows the workspace theme,
+ * while the document itself deliberately remains white printable paper. */
+.tf-document-viewer {
+    align-items: center;
+    background: #f6f8fc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow: auto;
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+}
+.tf-document-viewer__toolbar { align-self: stretch; margin: 0; }
+.tf-document-viewer__paper {
+    background: #fff !important;
+    border: 1px solid #dbe3ef;
+    border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+    color: #111827 !important;
+    max-width: 100%;
+    width: fit-content;
+}
+.tf-document-viewer__paper .tf-thermal-document { margin: 0 !important; box-shadow: none !important; }
+.tf-document-paper { width: min(100%, 760px); }
+.tf-document-paper :is(h1, h2, h3, h4, h5, h6, dt, dd, p, strong, span) { color: inherit; }
+.tf-document-paper .tf-muted { color: #64748b !important; }
+.tf-subscription-receipt-preview > .tf-card {
+    background: #fff !important;
+    border: 1px solid #dbe3ef !important;
+    border-radius: 4px !important;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08) !important;
+    color: #111827 !important;
+    width: min(100%, 760px);
+}
+.tf-subscription-receipt-preview > .tf-card .tf-muted { color: #64748b !important; }
+
+:root[data-theme='dark'] .tf-document-viewer {
+    background: var(--surface-soft) !important;
+    border-color: var(--border) !important;
+}
+
+@media (max-width: 575.98px) {
+    .tf-document-viewer { border-radius: 10px; padding: 1rem 0.5rem; }
+    .tf-document-viewer__toolbar .btn { flex: 1 1 auto; }
+}
+
+@media print {
+    body:has(.tf-document-viewer) .tf-sidebar,
+    body:has(.tf-document-viewer) .sidebar-overlay,
+    body:has(.tf-document-viewer) .tf-dashboard-topbar,
+    body:has(.tf-document-viewer) .tf-business-application-footer,
+    body:has(.tf-document-viewer) .dashboard-page > :not(.tf-document-viewer),
+    .tf-document-viewer__toolbar { display: none !important; }
+    body:has(.tf-document-viewer) .dashboard-page { background: #fff !important; padding: 0 !important; }
+    .tf-document-viewer { background: transparent !important; border: 0 !important; box-shadow: none !important; display: block !important; overflow: visible !important; padding: 0 !important; }
+    .tf-document-viewer__paper { background: #fff !important; border: 0 !important; box-shadow: none !important; margin: 0 auto !important; }
+}
+
+/* Profile image editor: the saved image remains a square crop, while the
+ * editor clearly previews the circular avatar used throughout the product. */
+#profileImageEditorModal .tf-profile-image-editor-dialog {
+    max-width: min(680px, calc(100vw - 2rem)) !important;
+}
+#profileImageEditorModal .tf-profile-image-editor-content {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16) !important;
+    max-height: 84vh;
+}
+#profileImageEditorModal .modal-header,
+#profileImageEditorModal .modal-footer { border-color: var(--border) !important; padding: 0.875rem 1rem !important; }
+#profileImageEditorModal .modal-body { overflow: auto; padding: 1rem !important; }
+#profileImageEditorModal .modal-title { font-size: 1.0625rem !important; }
+#profileImageEditorModal .modal-header .text-muted,
+#profileImageEditorModal .modal-body .text-muted { color: var(--muted) !important; }
+.tf-profile-crop-workbench { align-items: center; display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 340px) 120px; justify-content: center; }
+.tf-profile-crop-surface { background: var(--surface-soft) !important; border-color: var(--border) !important; border-radius: 14px !important; max-width: 340px !important; }
+.tf-profile-crop-surface canvas { aspect-ratio: 1; outline: none; width: 100% !important; }
+.tf-profile-crop-surface canvas:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 40%, transparent); }
+.tf-profile-crop-live-preview { align-items: center; color: var(--muted); display: grid; font-family: var(--font-body); gap: 0.45rem; justify-items: center; text-align: center; }
+.tf-profile-crop-live-preview > span { color: var(--text); font-size: 0.75rem; font-weight: 700; }
+.tf-profile-crop-live-preview canvas { border-radius: 50%; box-shadow: 0 0 0 1px var(--border); display: block; height: 88px; width: 88px; }
+.tf-profile-crop-live-preview small { font-size: 0.6875rem; line-height: 1.35; max-width: 120px; }
+#profileImageEditorModal .modal-footer .btn { min-height: 42px !important; }
+
+/* Welcome feedback stays integrated with both dashboard themes. */
+.tf-welcome-back {
+    background: linear-gradient(135deg, #eff6ff, #f5f3ff) !important;
+    border: 1px solid #dbeafe !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+    gap: 0.75rem !important;
+    margin-bottom: 1.25rem !important;
+    min-height: 72px;
+    padding: 0.875rem 1rem !important;
+}
+.tf-welcome-back-icon { border-radius: 10px !important; flex-basis: 34px !important; height: 34px !important; width: 34px !important; }
+.tf-welcome-back strong { color: var(--heading) !important; font-family: var(--font-heading) !important; font-size: 0.9375rem !important; font-weight: 700 !important; }
+.tf-welcome-back div > span { color: var(--muted) !important; font-family: var(--font-body) !important; font-size: 0.8125rem !important; margin-top: 0.125rem !important; }
+:root[data-theme='dark'] .tf-welcome-back { background: var(--surface) !important; border-color: var(--border) !important; }
+
+/* Shared table action column. JavaScript identifies only tables whose final
+ * header is Actions, so amount/date columns retain their existing layout. */
+table.tf-has-actions-column:not(.tf-pos-cart-table) > :is(thead, tbody) > tr > .tf-table-action-cell {
+    box-sizing: border-box;
+    min-width: 156px !important;
+    padding-left: 14px !important;
+    padding-right: 16px !important;
+    text-align: right !important;
+    vertical-align: middle !important;
+    white-space: nowrap !important;
+    width: 156px !important;
+}
+.tf-table-action-group {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.45rem;
+    justify-content: flex-end;
+    min-width: 130px;
+    white-space: nowrap;
+}
+.tf-table-action-group.btn-group { display: inline-flex; gap: 0.45rem; }
+.tf-table-action-group.btn-group > .btn:not(:first-child) { margin-left: 0 !important; }
+.tf-table-action-group.btn-group > .btn { border-radius: 9px !important; }
+.tf-table-action-group > :is(.btn, form > .btn) { min-height: 34px !important; }
+.tf-table-action-group .dropdown-toggle[aria-label] { align-items: center; display: inline-flex; height: 34px; justify-content: center; min-width: 34px; padding: 0 !important; width: 34px; }
+.tf-table-action-group .dropdown-menu { max-width: 220px; min-width: 180px; width: max-content; }
+.tf-access-table { min-width: 900px; }
+
+@media (max-width: 575.98px) {
+    #profileImageEditorModal .tf-profile-image-editor-dialog { max-width: calc(100vw - 1rem) !important; }
+    .tf-profile-crop-workbench { grid-template-columns: 1fr; }
+    .tf-profile-crop-surface { margin-inline: auto; max-width: min(100%, 300px) !important; }
+    .tf-profile-crop-live-preview { grid-template-columns: auto 1fr; text-align: left; }
+    .tf-profile-crop-live-preview small { max-width: none; }
+}
+
+/* Keep status feedback compact instead of looking like a floating dialog. */
+.swal2-popup.swal2-toast {
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1) !important;
+    font-family: var(--font-body) !important;
+    font-size: 0.875rem !important;
+    max-width: min(360px, calc(100vw - 2rem)) !important;
+    min-height: 0 !important;
+    padding: 0.875rem !important;
+    width: min(360px, calc(100vw - 2rem)) !important;
+}
+:root[data-theme='dark'] .swal2-popup.swal2-toast { background: var(--surface) !important; border-color: var(--border) !important; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12) !important; }
+:root:not([data-theme='dark']) .swal2-popup.swal2-toast { background: #fff !important; border-color: #e2e8f0 !important; }
+.swal2-popup.swal2-toast .swal2-title { color: var(--heading) !important; font-family: var(--font-body) !important; font-size: 0.875rem !important; font-weight: 650 !important; line-height: 1.35 !important; }
+.swal2-popup.swal2-toast .swal2-html-container { color: var(--text) !important; }
+.swal2-container.swal2-top-end { background: transparent !important; padding: 5.5rem 1rem 1rem !important; }
+
+/* A shared theme-safe fallback for file fields that are intentionally native
+ * (for example, document/proof submissions). Branded image/logo fields use
+ * the richer .tf-file-upload control above. */
+.form-control[type='file'] {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+    min-height: 43px;
+    padding: 0.28rem !important;
+}
+.form-control[type='file']::file-selector-button {
+    background: var(--surface-soft);
+    border: 0;
+    border-right: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--heading);
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
+    font-weight: 650;
+    margin-right: 0.65rem;
+    padding: 0.42rem 0.65rem;
+}
+
+/* Buttons retain their semantics while gaining a dependable, visible base. */
+.dashboard-page .btn:not(.btn-link),
+.modal .btn:not(.btn-link) {
+    align-items: center;
+    border-radius: 10px !important;
+    display: inline-flex;
+    font-family: var(--font-body) !important;
+    font-size: 0.875rem !important;
+    font-weight: 650 !important;
+    justify-content: center;
+    min-height: 40px;
+}
+.dashboard-page .btn-sm:not(.btn-link),
+.modal .btn-sm:not(.btn-link) { min-height: 34px; padding-block: 0.3rem; }
+.dashboard-page .btn-outline-secondary,
+.dashboard-page .btn-outline-primary,
+.dashboard-page .btn-outline-danger,
+.dashboard-page .btn-outline-warning {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+}
+.dashboard-page .btn-outline-primary { border-color: color-mix(in srgb, var(--primary) 65%, var(--border)) !important; color: var(--primary) !important; }
+.dashboard-page .btn-outline-danger { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)) !important; color: var(--danger) !important; }
+.dashboard-page .btn-success { background: var(--success) !important; border-color: var(--success) !important; color: #fff !important; }
+.dashboard-page .btn-danger { background: var(--danger) !important; border-color: var(--danger) !important; color: #fff !important; }
+
+/* One accessible file-upload treatment replaces browser-default chooser UI
+ * wherever a file field opts in, while retaining its original input/name. */
+.tf-file-upload { min-width: 0; }
+.tf-file-upload__control {
+    align-items: center;
+    background: var(--surface);
+    border: 1px dashed color-mix(in srgb, var(--primary) 42%, var(--border));
+    border-radius: 10px;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    gap: 0.7rem;
+    justify-content: flex-start;
+    min-height: 52px;
+    padding: 0.55rem 0.75rem;
+    transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+.tf-file-upload__control:hover { background: var(--surface-soft); border-color: var(--primary); }
+.tf-file-upload input:focus-visible + .tf-file-upload__control { border-color: var(--primary); box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--primary) 22%, transparent); }
+.tf-file-upload__control > i { color: var(--primary); font-size: 1.2rem; }
+.tf-file-upload__control span { display: grid; gap: 0.08rem; min-width: 0; }
+.tf-file-upload__control strong { color: var(--heading); font-family: var(--font-body); font-size: 0.8125rem; font-weight: 700; }
+.tf-file-upload__control small,
+.tf-file-upload__control em { color: var(--muted); font-family: var(--font-body); font-size: 0.6875rem; font-style: normal; }
+.tf-file-upload__control em { margin-left: auto; max-width: 42%; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.tf-file-upload:has(.is-invalid) .tf-file-upload__control { border-color: var(--danger); }
+
+/* Profile password eye controls are part of the input surface, never a
+ * browser-white appendage in either theme. */
+.dashboard-page .input-group > .tf-password-toggle {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--muted) !important;
+    min-width: 44px;
+}
+.dashboard-page .input-group > .tf-password-toggle:hover,
+.dashboard-page .input-group > .tf-password-toggle:focus-visible { background: var(--surface-soft) !important; color: var(--primary) !important; }
+
+/* The checkout action belongs to the checkout panel in both themes. */
+.tf-pos-actions .btn { background: var(--surface) !important; border-color: var(--border) !important; color: var(--text) !important; min-height: 40px; }
+.tf-pos-actions .btn.btn-outline-danger { border-color: color-mix(in srgb, var(--danger) 62%, var(--border)) !important; color: var(--danger) !important; }
+.tf-pos-actions .btn.btn-tf-primary { background: var(--primary) !important; border-color: var(--primary) !important; color: #fff !important; }
+.tf-pos-checkout-panel,
+.tf-pos-checkout-scroll,
+.tf-pos-complete { background: var(--surface) !important; }
+.tf-pos-complete { border-top: 1px solid var(--border) !important; }
+.tf-pos-complete .btn { min-height: 44px !important; }
+
+/* Light workspace buttons share one quiet, semantic interaction system.  This
+ * deliberately excludes the permanent navy sidebar and leaves Dark Mode's
+ * approved interactions untouched. */
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn:not(.btn-link) {
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn:not(.btn-link):focus-visible {
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.34) !important;
+    outline: 0 !important;
+    outline-offset: 2px;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn:not(.btn-link):not(:disabled):not(.disabled):hover {
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08) !important;
+    transform: translateY(-1px) !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn:not(.btn-link):not(:disabled):not(.disabled):active {
+    box-shadow: none !important;
+    transform: translateY(0) !important;
+}
+
+/* Filled primary actions stay blue on hover rather than inverting into a
+ * transparent or dark surface. */
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-primary, .btn-tf-primary) {
+    background: linear-gradient(110deg, #2563eb, #4f46e5) !important;
+    border-color: #2563eb !important;
+    box-shadow: none !important;
+    color: #fff !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-primary, .btn-tf-primary):not(:disabled):not(.disabled):hover {
+    background: linear-gradient(110deg, #1d4ed8, #4338ca) !important;
+    border-color: #1d4ed8 !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.16) !important;
+    color: #fff !important;
+    transform: translateY(-1px) !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-primary, .btn-tf-primary):not(:disabled):not(.disabled):active {
+    background: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+    box-shadow: none !important;
+    transform: translateY(0) !important;
+}
+
+/* Neutral and blue-outline actions remain blue-outline at rest and fill with
+ * the primary colour on interaction. This is deliberately separate from
+ * success, warning, and danger actions below. */
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-light, .btn-outline-secondary, .btn-outline-primary) {
+    background: #fff !important;
+    border-color: #2563eb !important;
+    box-shadow: none !important;
+    color: #2563eb !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-light, .btn-outline-secondary, .btn-outline-primary):not(:disabled):not(.disabled):hover {
+    background: #2563eb !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 3px 10px rgba(37, 99, 235, 0.14) !important;
+    color: #fff !important;
+    transform: translateY(-1px) !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-light, .btn-outline-secondary, .btn-outline-primary):not(:disabled):not(.disabled):active,
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .show > :is(.btn-light, .btn-outline-secondary, .btn-outline-primary) {
+    background: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+    box-shadow: none !important;
+    color: #fff !important;
+    transform: translateY(0) !important;
+}
+
+/* Preserve semantic feedback for compact table, form, and modal actions. */
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-danger {
+    background: #fff !important;
+    border-color: #fca5a5 !important;
+    box-shadow: none !important;
+    color: #dc2626 !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-danger:not(:disabled):not(.disabled):hover {
+    background: #fef2f2 !important;
+    border-color: #dc2626 !important;
+    box-shadow: 0 3px 10px rgba(220, 38, 38, 0.08) !important;
+    color: #dc2626 !important;
+    transform: translateY(-1px) !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-success:not(:disabled):not(.disabled):hover {
+    background: #ecfdf5 !important;
+    border-color: #059669 !important;
+    box-shadow: 0 3px 10px rgba(5, 150, 105, 0.08) !important;
+    color: #059669 !important;
+    transform: translateY(-1px) !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-warning:not(:disabled):not(.disabled):hover {
+    background: #fffbeb !important;
+    border-color: #d97706 !important;
+    box-shadow: 0 3px 10px rgba(217, 119, 6, 0.08) !important;
+    color: #b45309 !important;
+    transform: translateY(-1px) !important;
+}
+:root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn:not(.btn-link):hover > i {
+    color: currentColor !important;
+}
+
+/* Align every dashboard footer with the application surface, rather than a
+ * detached full-width rule. */
+.tf-business-application-footer {
+    background: var(--bg) !important;
+    border-top-color: var(--border) !important;
+    color: var(--muted) !important;
+    margin: 0 !important;
+    padding: 0.8rem 1.5rem !important;
+}
+
+/* Expenses present month and amount as content instead of a light badge. */
+.tf-expense-monthly-summary__items { display: flex; flex-wrap: wrap; gap: 0.625rem; }
+.tf-expense-monthly-summary__item {
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex;
+    flex: 1 1 170px;
+    flex-direction: column;
+    gap: 0.18rem;
+    min-width: 0;
+    padding: 0.7rem 0.8rem;
+}
+.tf-expense-monthly-summary__item span { color: var(--muted); font-size: 0.75rem; }
+.tf-expense-monthly-summary__item strong { color: var(--heading); font-family: var(--font-heading); font-size: 0.95rem; }
+
+.tf-inventory-row-actions { min-width: max-content; }
+.tf-inventory-row-actions .form-control { background: var(--surface) !important; border-color: var(--border) !important; color: var(--heading) !important; }
+
+/* Notifications use the table surface in dark mode; unread records receive a
+ * quiet blue tint rather than Bootstrap's hardcoded table-light white. */
+.tf-notification-data-table .tf-table { min-width: 950px; }
+.tf-notification-data-table .tf-notification-row--unread > * { background: var(--info-soft) !important; color: var(--text) !important; }
+.tf-notification-data-table .tf-notification-row--unread:hover > * { background: color-mix(in srgb, var(--info-soft) 78%, var(--surface-soft)) !important; }
+:root[data-theme='dark'] .table-light,
+:root[data-theme='dark'] .table-light > * {
+    --bs-table-bg: var(--surface-soft) !important;
+    --bs-table-color: var(--text) !important;
+    --bs-table-border-color: var(--border) !important;
+    --bs-table-striped-bg: var(--surface-soft) !important;
+    --bs-table-striped-color: var(--text) !important;
+}
+
+/* Consistent, compact pagination across Laravel's Bootstrap renderer. */
+.dashboard-page nav[role='navigation'] { margin-block: 0.25rem; }
+.dashboard-page .pagination { align-items: center; flex-wrap: wrap; gap: 0.4rem; margin: 0; }
+.dashboard-page .pagination .page-link {
+    align-items: center;
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 9px !important;
+    color: var(--text) !important;
+    display: inline-flex;
+    font-family: var(--font-body) !important;
+    font-size: 0.8125rem !important;
+    height: 36px;
+    justify-content: center;
+    margin: 0 !important;
+    min-width: 36px;
+    padding: 0.35rem 0.55rem;
+}
+.dashboard-page .pagination .page-link:hover { background: var(--surface-soft) !important; border-color: var(--primary) !important; color: var(--primary) !important; }
+.dashboard-page .pagination .page-item.active .page-link { background: var(--primary) !important; border-color: var(--primary) !important; color: #fff !important; }
+.dashboard-page .pagination .page-item.disabled .page-link { background: var(--surface-soft) !important; color: var(--muted) !important; }
+
+/* Shared semantic action buttons.  The variants use the established theme
+ * tokens, so their meaning stays clear in both workspace themes. */
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-success {
+    background: var(--surface) !important;
+    border-color: color-mix(in srgb, var(--success) 68%, var(--border)) !important;
+    box-shadow: none !important;
+    color: var(--success) !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-warning {
+    background: var(--surface) !important;
+    border-color: color-mix(in srgb, var(--warning) 68%, var(--border)) !important;
+    box-shadow: none !important;
+    color: var(--warning) !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-danger {
+    background: var(--surface) !important;
+    border-color: color-mix(in srgb, var(--danger) 68%, var(--border)) !important;
+    box-shadow: none !important;
+    color: var(--danger) !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-success {
+    background: var(--success) !important;
+    border-color: var(--success) !important;
+    box-shadow: none !important;
+    color: #fff !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-danger {
+    background: var(--danger) !important;
+    border-color: var(--danger) !important;
+    box-shadow: none !important;
+    color: #fff !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-success:not(:disabled):not(.disabled):hover {
+    background: color-mix(in srgb, var(--success) 13%, var(--surface)) !important;
+    border-color: var(--success) !important;
+    color: var(--success) !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-warning:not(:disabled):not(.disabled):hover {
+    background: color-mix(in srgb, var(--warning) 14%, var(--surface)) !important;
+    border-color: var(--warning) !important;
+    color: var(--warning) !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-danger:not(:disabled):not(.disabled):hover {
+    background: color-mix(in srgb, var(--danger) 13%, var(--surface)) !important;
+    border-color: var(--danger) !important;
+    color: var(--danger) !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-success, .btn-danger):not(:disabled):not(.disabled):hover {
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12) !important;
+    color: #fff !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-outline-success, .btn-outline-warning, .btn-outline-danger, .btn-success, .btn-danger) > i {
+    color: currentColor !important;
+}
+
+/* Non-semantic outlined actions use one interaction in both workspace themes.
+ * Keeping this late in the shared stylesheet wins over Bootstrap and older
+ * dashboard/POS rules without touching primary or semantic buttons. */
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-light, .btn-outline-secondary, .btn-outline-primary) {
+    background: var(--surface) !important;
+    border-color: var(--primary) !important;
+    box-shadow: none !important;
+    color: var(--primary) !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-light, .btn-outline-secondary, .btn-outline-primary):not(:disabled):not(.disabled):hover {
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--primary) 16%, transparent) !important;
+    color: #fff !important;
+    transform: translateY(-1px) !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-light, .btn-outline-secondary, .btn-outline-primary):not(:disabled):not(.disabled):active,
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) .show > :is(.btn-light, .btn-outline-secondary, .btn-outline-primary) {
+    background: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+    box-shadow: none !important;
+    color: #fff !important;
+    transform: translateY(0) !important;
+}
+:is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-light, .btn-outline-secondary, .btn-outline-primary) :is(i, svg) {
+    color: currentColor !important;
+}
+
+/* POS has a more specific action-bar base, so explicitly inherit the shared
+ * outlined interaction rather than falling back to its old muted hover. */
+.tf-pos-actions :is(.btn-outline-secondary, .btn-outline-primary) {
+    background: var(--surface) !important;
+    border-color: var(--primary) !important;
+    color: var(--primary) !important;
+}
+.tf-pos-actions :is(.btn-outline-secondary, .btn-outline-primary):not(:disabled):not(.disabled):hover {
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--primary) 16%, transparent) !important;
+    color: #fff !important;
+}
+
+/* POS register open/close dialogs share one themed confirmation surface. */
+.tf-pos-register-confirmation-copy {
+    color: var(--text) !important;
+    font-family: var(--font-body) !important;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    margin: 0 0 1rem;
+    text-align: left;
+}
+
+/* Dropdown actions receive the same semantic language as their matching
+ * buttons.  The JavaScript annotator applies these classes from labels only;
+ * it does not change visibility, order, handlers, or availability. */
+.dropdown-menu.tf-semantic-action-menu {
+    border: 1px solid var(--border) !important;
+    border-radius: 11px !important;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1) !important;
+    max-width: min(220px, calc(100vw - 1rem)) !important;
+    min-width: 180px !important;
+    padding: 0.35rem !important;
+}
+:root[data-theme='dark'] .dropdown-menu.tf-semantic-action-menu {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24) !important;
+}
+.dropdown-menu.tf-semantic-action-menu .dropdown-item {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+    min-height: 34px;
+    padding: 0.5rem 0.625rem !important;
+    transition: background-color 180ms ease, color 180ms ease !important;
+}
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--neutral { color: var(--text) !important; }
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--primary { color: var(--primary) !important; }
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--success { color: var(--success) !important; }
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--warning { color: var(--warning) !important; }
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--danger { color: var(--danger) !important; }
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--neutral:hover,
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--neutral:focus { background: var(--surface-soft) !important; color: var(--primary) !important; }
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--primary:hover,
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--primary:focus { background: var(--info-soft) !important; color: var(--primary) !important; }
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--success:hover,
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--success:focus { background: var(--success-soft) !important; color: var(--success) !important; }
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--warning:hover,
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--warning:focus { background: var(--warning-soft) !important; color: var(--warning) !important; }
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--danger:hover,
+.dropdown-menu.tf-semantic-action-menu .tf-action-item--danger:focus { background: var(--danger-soft) !important; color: var(--danger) !important; }
+.dropdown-menu.tf-semantic-action-menu .dropdown-item.disabled,
+.dropdown-menu.tf-semantic-action-menu .dropdown-item:disabled,
+.dropdown-menu.tf-semantic-action-menu .dropdown-item[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.5;
+    pointer-events: none;
+}
+.dropdown-menu.tf-semantic-action-menu .dropdown-divider { border-color: var(--border) !important; margin: 0.35rem 0 !important; }
+
+/* Tom Select renders its search box inside the dropdown, so it needs its own
+ * dark-theme surface rather than relying on the visible control alone. */
+:root[data-theme='dark'] .ts-wrapper .ts-control,
+:root[data-theme='dark'] .ts-dropdown {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+}
+:root[data-theme='dark'] .ts-dropdown .dropdown-input-wrap {
+    background: var(--surface) !important;
+    border-bottom-color: var(--border) !important;
+}
+:root[data-theme='dark'] .ts-dropdown .dropdown-input {
+    -webkit-text-fill-color: var(--text) !important;
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    caret-color: var(--heading) !important;
+    color: var(--text) !important;
+}
+:root[data-theme='dark'] .ts-dropdown .dropdown-input::placeholder {
+    -webkit-text-fill-color: var(--muted) !important;
+    color: var(--muted) !important;
+    opacity: 1;
+}
+:root[data-theme='dark'] .ts-dropdown .dropdown-input:focus {
+    background: var(--surface) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--primary) 22%, transparent) !important;
+}
+
+/* Dashboard modals share one continuous dark surface.  This covers normal
+ * management forms without touching document/receipt preview paper. */
+:root[data-theme='dark'] .modal:not(.pp-demo-modal) .modal-content {
+    --bs-modal-bg: var(--surface);
+    --bs-modal-color: var(--text);
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+}
+:root[data-theme='dark'] .modal:not(.pp-demo-modal) :is(.modal-header, .modal-body, .modal-footer) {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+}
+:root[data-theme='dark'] .modal:not(.pp-demo-modal) .modal-title,
+:root[data-theme='dark'] .modal:not(.pp-demo-modal) :is(h1, h2, h3, h4, h5, h6) {
+    color: var(--heading) !important;
+}
+:root[data-theme='dark'] .modal:not(.pp-demo-modal) :is(.form-control, .form-select, textarea.form-control, .input-group-text) {
+    background: var(--surface-soft) !important;
+    border-color: var(--border) !important;
+    color: var(--heading) !important;
+}
+:root[data-theme='dark'] .modal:not(.pp-demo-modal) :is(.form-control, textarea.form-control)::placeholder {
+    color: var(--muted) !important;
+    opacity: 1;
+}
+:root[data-theme='dark'] .modal:not(.pp-demo-modal) :is(.form-control, .form-select, textarea.form-control):focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--primary) 22%, transparent) !important;
+}
+:root[data-theme='dark'] .modal:not(.pp-demo-modal) .btn-close:hover,
+:root[data-theme='dark'] .modal:not(.pp-demo-modal) .btn-close:focus-visible {
+    background-color: var(--info-soft) !important;
+    border-radius: 8px;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent) !important;
+    outline: 0;
+}
+
+/* Support-ticket detail primitives deliberately use the shared modal tokens,
+ * preventing sender cards, messages, and history from splitting light. */
+:root[data-theme='dark'] .tf-ticket-modal :is(.tf-ticket-detail-grid > div, .tf-ticket-message, .tf-ticket-empty) {
+    background: var(--surface-soft) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+}
+:root[data-theme='dark'] .tf-ticket-modal .tf-ticket-section { border-bottom-color: var(--border) !important; }
+:root[data-theme='dark'] .tf-ticket-modal .tf-ticket-detail-grid span,
+:root[data-theme='dark'] .tf-ticket-modal :is(.tf-ticket-reference, .tf-ticket-timeline-item small, .tf-ticket-empty) { color: var(--muted) !important; }
+:root[data-theme='dark'] .tf-ticket-modal :is(.tf-ticket-detail-grid strong, .tf-ticket-timeline-item strong) { color: var(--heading) !important; }
+:root[data-theme='dark'] .tf-ticket-modal .tf-ticket-timeline-item p { color: var(--text) !important; }
+:root[data-theme='dark'] .tf-ticket-modal .tf-ticket-timeline-icon { background: var(--info-soft) !important; color: var(--info) !important; }
+:root[data-theme='dark'] .tf-ticket-modal .tf-badge-secondary {
+    background: var(--surface-soft) !important;
+    color: var(--text) !important;
+}
+
+@media (max-width: 575.98px) {
+    .tf-file-upload__control em { display: none; }
+    .dashboard-page .pagination { gap: 0.3rem; }
+    .dashboard-page .pagination .page-link { height: 34px; min-width: 34px; }
+}
+
+/* Shared authenticated application shell -------------------------------------------------
+ * The sidebar is fixed so its reserved width must always be mirrored by the main shell.
+ * These final rules intentionally centralize that relationship for Super Admin, business,
+ * and staff workspaces instead of allowing page-level offsets to accumulate. */
+html,
+body {
+    max-width: 100%;
+    overflow-x: clip;
+}
+
+.tf-dashboard-shell {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+}
+
+.tf-dashboard-shell > :is(.tf-sidebar, .sidebar) {
+    background: var(--sidebar-bg) !important;
+    flex: 0 0 var(--tf-sidebar-expanded-width) !important;
+    height: 100dvh;
+    left: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    position: fixed;
+    top: 0;
+    transform: none !important;
+    transition: left 220ms ease, width 220ms ease, flex-basis 220ms ease;
+    width: var(--tf-sidebar-expanded-width) !important;
+    z-index: 1040;
+}
+
+.tf-sidebar-inner {
+    min-width: var(--tf-sidebar-expanded-width) !important;
+    transition: min-width 220ms ease, padding 220ms ease;
+}
+
+.tf-dashboard-shell > :is(.tf-dashboard-main, .main-content) {
+    margin-left: var(--tf-sidebar-expanded-width) !important;
+    max-width: calc(100% - var(--tf-sidebar-expanded-width));
+    min-width: 0 !important;
+    transition: margin-left 220ms ease, width 220ms ease;
+    width: calc(100% - var(--tf-sidebar-expanded-width)) !important;
+}
+
+.tf-dashboard-topbar,
+.dashboard-page,
+.tf-business-application-footer {
+    max-width: 100%;
+    min-width: 0;
+}
+
+.dashboard-page {
+    overflow-x: clip;
+}
+
+.sidebar-overlay {
+    background: rgba(2, 8, 23, 0.56);
+    display: block !important;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    position: fixed;
+    transition: opacity 220ms ease;
+    z-index: 1035;
+}
+
+/* Compact icon rail shared by a manually collapsed desktop sidebar and tablet. */
+body.sidebar-collapsed .tf-dashboard-shell > :is(.tf-sidebar, .sidebar) {
+    flex-basis: var(--tf-sidebar-collapsed-width) !important;
+    width: var(--tf-sidebar-collapsed-width) !important;
+}
+
+body.sidebar-collapsed .tf-sidebar-inner {
+    min-width: var(--tf-sidebar-collapsed-width) !important;
+    padding-left: 0.625rem !important;
+    padding-right: 0.625rem !important;
+}
+
+body.sidebar-collapsed .tf-dashboard-shell > :is(.tf-dashboard-main, .main-content) {
+    margin-left: var(--tf-sidebar-collapsed-width) !important;
+    max-width: calc(100% - var(--tf-sidebar-collapsed-width));
+    width: calc(100% - var(--tf-sidebar-collapsed-width)) !important;
+}
+
+body.sidebar-collapsed .tf-sidebar-inner > .d-flex:first-child {
+    flex-direction: column;
+    gap: 0.625rem !important;
+}
+
+body.sidebar-collapsed .tf-sidebar .tf-sidebar-text {
+    display: none !important;
+}
+
+body.sidebar-collapsed .tf-sidebar :is(nav a, .tf-sidebar-parent-link, .tf-sidebar-logout) {
+    justify-content: center;
+    min-height: 44px;
+    padding-left: 0.625rem !important;
+    padding-right: 0.625rem !important;
+    position: relative;
+}
+
+body.sidebar-collapsed .tf-sidebar .tf-brand {
+    justify-content: center;
+    padding: 0.125rem !important;
+}
+
+body.sidebar-collapsed .tf-sidebar .tf-brand-mark {
+    margin-right: 0 !important;
+}
+
+body.sidebar-collapsed .tf-sidebar .tf-sidebar-submenu {
+    display: none !important;
+}
+
+body.sidebar-collapsed .tf-sidebar nav a[title]::after {
+    background: var(--sidebar-surface);
+    border: 1px solid var(--sidebar-border);
+    border-radius: 8px;
+    color: #f8fafc;
+    content: attr(title);
+    font-size: 0.75rem;
+    font-weight: 600;
+    left: calc(100% + 0.5rem);
+    opacity: 0;
+    padding: 0.4rem 0.55rem;
+    pointer-events: none;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%) translateX(-3px);
+    transition: opacity 160ms ease, transform 160ms ease;
+    white-space: nowrap;
+    z-index: 1070;
+}
+
+body.sidebar-collapsed .tf-sidebar nav a[title]:is(:hover, :focus-visible)::after {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+}
+
+/* Super Admin module-specific attention counts. They intentionally do not
+   share the global notification-bell count. */
+.tf-sidebar .tf-sidebar-attention-badge {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-family: var(--font-body);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    height: 1.25rem;
+    justify-content: center;
+    line-height: 1;
+    margin-left: auto;
+    min-width: 1.25rem;
+    padding: 0 0.375rem;
+}
+
+.tf-sidebar .tf-sidebar-attention-badge.is-warning {
+    background: #f59e0b;
+    color: #172033;
+}
+
+.tf-sidebar .tf-sidebar-attention-badge.is-critical {
+    background: #ef4444;
+    color: #fff;
+}
+
+body.sidebar-collapsed .tf-sidebar .tf-sidebar-attention-badge {
+    font-size: 0.625rem;
+    height: 1rem;
+    margin: 0;
+    min-width: 1rem;
+    padding: 0 0.1875rem;
+    position: absolute;
+    right: 0.25rem;
+    top: 0.25rem;
+    z-index: 1;
+}
+
+.tf-sidebar-toggle--topbar,
+.tf-sidebar-close {
+    display: none !important;
+}
+
+@media (min-width: 1200px) {
+    .tf-sidebar-toggle-inside {
+        display: inline-flex !important;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1199.98px) {
+    .tf-sidebar-toggle-inside,
+    .tf-sidebar-close {
+        display: none !important;
+    }
+
+    .dashboard-page {
+        padding-left: 1.25rem;
+        padding-right: 1.25rem;
+    }
+
+    .dashboard-cards,
+    .tf-dashboard-kpis,
+    .tf-operation-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 767.98px) {
+    body.sidebar-open {
+        overflow: hidden;
+    }
+
+    .tf-dashboard-shell {
+        display: block;
+    }
+
+    .tf-dashboard-shell > :is(.tf-sidebar, .sidebar) {
+        box-shadow: 18px 0 42px rgba(2, 8, 23, 0.28);
+        flex-basis: var(--tf-sidebar-mobile-width) !important;
+        left: calc(-1 * var(--tf-sidebar-mobile-width));
+        width: var(--tf-sidebar-mobile-width) !important;
+    }
+
+    .tf-sidebar-inner {
+        min-width: var(--tf-sidebar-mobile-width) !important;
+    }
+
+    .tf-dashboard-shell > :is(.tf-dashboard-main, .main-content) {
+        margin-left: 0 !important;
+        max-width: 100%;
+        width: 100% !important;
+    }
+
+    /* Guard against a persisted desktop preference before the sidebar script
+       initializes: mobile must never reserve the compact rail width. */
+    body.sidebar-collapsed .tf-dashboard-shell > :is(.tf-dashboard-main, .main-content) {
+        margin-left: 0 !important;
+        max-width: 100%;
+        width: 100% !important;
+    }
+
+    body.sidebar-collapsed .tf-sidebar .tf-sidebar-text {
+        display: inline !important;
+    }
+
+    body.sidebar-collapsed .tf-sidebar :is(nav a, .tf-sidebar-parent-link, .tf-sidebar-logout) {
+        justify-content: flex-start;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    body.sidebar-collapsed .tf-sidebar .tf-sidebar-attention-badge {
+        font-size: 0.6875rem;
+        height: 1.25rem;
+        margin-left: auto;
+        min-width: 1.25rem;
+        padding: 0 0.375rem;
+        position: static;
+    }
+
+    body.sidebar-collapsed .tf-sidebar .tf-sidebar-submenu {
+        display: block !important;
+    }
+
+    body.sidebar-open .tf-dashboard-shell > :is(.tf-sidebar, .sidebar) {
+        left: 0;
+    }
+
+    body.sidebar-open .sidebar-overlay {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .tf-sidebar-toggle--topbar,
+    .tf-sidebar-close {
+        display: inline-flex !important;
+    }
+
+    .tf-sidebar-toggle-inside {
+        display: none !important;
+    }
+
+    .tf-dashboard-topbar {
+        gap: 0.625rem !important;
+    }
+
+    .tf-dashboard-topbar .tf-topbar-actions {
+        gap: 0.375rem !important;
+    }
+
+    .tf-dashboard-topbar .tf-user-dropdown-toggle {
+        max-width: min(44vw, 176px);
+    }
+
+    .tf-dashboard-topbar .tf-user-dropdown-toggle :is(.tf-user-name, .user-name) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .dashboard-page {
+        overflow-x: clip;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .tf-dashboard-kpis,
+    .tf-operation-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Shared sidebar identity: a compact, polished home for the platform or
+   business mark without changing the navigation that follows it. */
+.tf-sidebar .tf-sidebar-brand {
+    align-items: center;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    color: #f8fbff !important;
+    gap: 11px !important;
+    min-height: 50px;
+    min-width: 0;
+    padding: 5px 7px !important;
+    text-decoration: none;
+    transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.tf-sidebar .tf-sidebar-brand .tf-brand-mark {
+    align-items: center;
+    background: linear-gradient(135deg, #3478f6 0%, #4f46e5 100%) !important;
+    border: 1px solid rgba(191, 219, 254, 0.28);
+    border-radius: 13px !important;
+    box-shadow: 0 9px 20px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+    display: inline-flex;
+    flex: 0 0 40px;
+    height: 40px !important;
+    justify-content: center;
+    margin-right: 0 !important;
+    overflow: hidden;
+    transition: box-shadow 180ms ease, transform 180ms ease;
+    width: 40px !important;
+}
+
+.tf-sidebar .tf-sidebar-brand .tf-brand-mark :is(img, .tf-brand-logo) {
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+}
+
+.tf-sidebar .tf-sidebar-brand .tf-brand-mark i {
+    color: #f8fbff !important;
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
+.tf-sidebar .tf-sidebar-brand .tf-sidebar-text {
+    color: #f8fbff !important;
+    font-family: var(--font-heading) !important;
+    font-size: 1.0625rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.022em;
+    line-height: 1.15;
+    min-width: 0;
+    text-shadow: 0 1px 10px rgba(15, 23, 42, 0.22);
+}
+
+.tf-sidebar .tf-sidebar-brand:hover,
+.tf-sidebar .tf-sidebar-brand:focus-visible {
+    background: linear-gradient(110deg, rgba(255, 255, 255, 0.085), rgba(96, 165, 250, 0.08)) !important;
+    border-color: rgba(191, 219, 254, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    color: #fff !important;
+    outline: 0;
+    transform: none !important;
+}
+
+.tf-sidebar .tf-sidebar-brand:hover .tf-brand-mark,
+.tf-sidebar .tf-sidebar-brand:focus-visible .tf-brand-mark {
+    box-shadow: 0 11px 24px rgba(37, 99, 235, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.23) !important;
+    transform: translateY(-1px);
+}
+
+body.sidebar-collapsed .tf-sidebar .tf-sidebar-brand {
+    justify-content: center;
+    padding: 5px !important;
+}
+
+body.sidebar-collapsed .tf-sidebar .tf-sidebar-brand .tf-brand-mark {
+    flex-basis: 40px;
+}
+
+/* Trial & Access table: keep goodwill days visually separate from the
+   financial paid period while retaining a compact, readable row. */
+.tf-access-table {
+    min-width: 980px;
+}
+
+.tf-access-table .tf-table-action-cell {
+    min-width: 128px !important;
+}
+
+.tf-access-extension-badge {
+    background: rgba(37, 99, 235, 0.12);
+    border-radius: 999px;
+    color: #2563eb;
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+    padding: 0.25rem 0.5rem;
+}
+
+:root[data-theme='dark'] .tf-access-extension-badge {
+    background: rgba(96, 165, 250, 0.16);
+    color: #93c5fd;
+}

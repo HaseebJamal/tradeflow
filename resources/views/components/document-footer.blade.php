@@ -18,7 +18,6 @@
                 'show_phone' => true,
                 'show_email' => true,
                 'show_website' => true,
-                'show_tax_number' => true,
                 'show_powered_by' => true,
             ]);
     }
@@ -26,7 +25,6 @@
     $address = trim(implode(', ', array_filter([data_get($business, 'address'), data_get($business, 'city')])));
     $email = data_get($business, 'email') ?: data_get($business, 'owner.email');
     $website = data_get($business, 'website');
-    $taxNumber = data_get($business, 'tax_number') ?: data_get($business, 'ntn_number');
     $footerTitle = trim((string) $footer->footer_title);
     $showCompanyName = $footer->show_company_name && filled($businessName);
     $showFooterTitle = ($footer->show_footer_title ?? true) && filled($footerTitle)
@@ -42,10 +40,9 @@
     @if($footer->show_phone && filled(data_get($business, 'phone')))<div>{{ data_get($business, 'phone') }}</div>@endif
     @if($footer->show_email && filled($email))<div>{{ $email }}</div>@endif
     @if($footer->show_website && filled($website))<div>{{ $website }}</div>@endif
-    @if($footer->show_tax_number && filled($taxNumber))<div>Tax / NTN: {{ $taxNumber }}</div>@endif
     @foreach($additionalLines as $line)
         @if(filled($line))<div>{{ $line }}</div>@endif
     @endforeach
     @if($showCompanyName)<div>&copy; {{ now()->year }} {{ $businessName }}</div>@endif
-    @if($footer->show_powered_by)<div>{{ $poweredByText }}</div>@endif
+    <div>{{ $poweredByText }}</div>
 </footer>

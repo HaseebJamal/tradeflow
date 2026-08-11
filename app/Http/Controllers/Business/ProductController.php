@@ -214,7 +214,9 @@ class ProductController extends Controller
     {
         $this->authorizeBusiness($product->business_id);
         $data = $request->validated();
-        $data['name'] = $data['product_name'] ?? $data['name'];
+        // A product's identity is established on creation.  Keep it immutable
+        // here as well as in the edit UI so a crafted request cannot rename it.
+        $data['name'] = $product->name;
         $data['has_batch_tracking'] = $request->boolean('has_batch_tracking');
         $data['unit'] = Unit::where('business_id', auth()->user()->business_id)->findOrFail($data['unit_id'])->short_code;
         unset($data['product_name'], $data['category'], $data['product_image'], $data['image']);

@@ -36,6 +36,7 @@
             </ul>
 
             <div class="pp-nav-actions">
+                @include('components.theme-toggle')
                 @auth
                     <a class="btn pp-nav-dashboard" href="{{ route('dashboard.redirect') }}">Go to dashboard <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
                 @else

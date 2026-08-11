@@ -12,7 +12,7 @@
                 <option value="">Select completed sale</option>
                 @foreach($orders as $availableOrder)
                     @php($remainingItems = $availableOrder->items->filter(fn ($item) => $item->quantity > $item->salesReturnItems->sum('quantity'))->count())
-                    <option value="{{ $availableOrder->id }}" @selected(old('order_id', $order?->id) == $availableOrder->id)>SALE - {{ $availableOrder->invoice?->invoice_number ?? $availableOrder->order_number }} - {{ $availableOrder->customer?->name ?? 'Walk-in Customer' }} - {{ $availableOrder->order_date?->timezone(config('app.timezone'))->format('d M Y h:i A') }} - Rs {{ number_format($availableOrder->grand_total, 0) }} - {{ $remainingItems }} returnable {{ \Illuminate\Support\Str::plural('item', $remainingItems) }}</option>
+                    <option value="{{ $availableOrder->id }}" @selected(old('order_id', $order?->id) == $availableOrder->id)>SALE - {{ $availableOrder->invoice?->invoice_number ?? $availableOrder->order_number }} - {{ $availableOrder->customer?->name ?? 'Walk-in Customer' }} - {{ $availableOrder->order_date?->timezone(config('app.timezone'))->format('n/j/Y, g:i A') }} - Rs {{ number_format($availableOrder->grand_total, 0) }} - {{ $remainingItems }} returnable {{ \Illuminate\Support\Str::plural('item', $remainingItems) }}</option>
                 @endforeach
             </select>
             @if($orders->isEmpty())<small class="text-warning d-block mt-2">No completed sales are available for return.</small>@endif

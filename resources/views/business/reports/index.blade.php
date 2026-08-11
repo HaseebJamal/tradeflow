@@ -102,7 +102,7 @@
 <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
     <div>
         <h2 class="h5 mb-1">Report overview</h2>
-        <div class="report-period-label">{{ $filters['label'] }}: {{ $filters['from']->format('d M Y') }} to {{ $filters['to']->format('d M Y') }}</div>
+        <div class="report-period-label">{{ $filters['label'] }}: {{ $filters['from']->format('n/j/Y') }} to {{ $filters['to']->format('n/j/Y') }}</div>
     </div>
 </div>
 
@@ -168,7 +168,7 @@
     <div class="col-lg-6 col-xl-3"><div class="tf-card p-3 h-100"><h3 class="h6">Low stock products</h3>@forelse($lowStockProducts as $product)<div class="report-insight-row border-bottom py-2 d-flex justify-content-between gap-2"><span>{{ $product->name }}</span><span class="text-nowrap">{{ $quantity($product->stock_quantity) }} <span class="badge {{ (float) $product->stock_quantity <= 0 ? 'text-bg-danger' : 'text-bg-warning' }}">{{ (float) $product->stock_quantity <= 0 ? 'Out of stock' : 'Low stock' }}</span></span></div>@empty<p class="text-muted small mb-0">No low-stock products.</p>@endforelse</div></div>
     <div class="col-lg-6 col-xl-3"><div class="tf-card p-3 h-100"><h3 class="h6">Top credit customers</h3>@forelse($topCustomers as $customer)<div class="report-insight-row border-bottom py-2 d-flex justify-content-between gap-2"><span>{{ $customer->display_name }}</span><span class="text-nowrap">{{ $money($customer->current_balance) }}</span></div>@empty<p class="text-muted small mb-0">No outstanding customer balances.</p>@endforelse</div></div>
     <div class="col-lg-6 col-xl-3"><div class="tf-card p-3 h-100"><h3 class="h6">Highest supplier balances</h3>@forelse($highestSupplierBalances as $supplier)<div class="report-insight-row border-bottom py-2 d-flex justify-content-between gap-2"><span>{{ $supplier->supplier_name }}</span><span class="text-nowrap">{{ $money($supplier->open_payable) }}</span></div>@empty<p class="text-muted small mb-0">No supplier payables.</p>@endforelse</div></div>
-    <div class="col-lg-6 col-xl-3"><div class="tf-card p-3 h-100"><h3 class="h6">Oldest outstanding purchases</h3>@forelse($oldestOutstandingPurchases as $purchase)<div class="report-insight-row border-bottom py-2"><div class="d-flex justify-content-between gap-2"><span>{{ $purchase->purchase_number }}</span><span class="text-nowrap">{{ $money($purchase->balance) }}</span></div><small class="text-muted d-block">{{ $purchase->supplier?->supplier_name }}@if($purchase->due_date) &middot; {{ $purchase->due_date->isPast() ? $purchase->due_date->diffInDays(now()).' days overdue' : 'Due '.$purchase->due_date->format('d M Y') }}@endif</small></div>@empty<p class="text-muted small mb-0">No outstanding purchases.</p>@endforelse</div></div>
+    <div class="col-lg-6 col-xl-3"><div class="tf-card p-3 h-100"><h3 class="h6">Oldest outstanding purchases</h3>@forelse($oldestOutstandingPurchases as $purchase)<div class="report-insight-row border-bottom py-2"><div class="d-flex justify-content-between gap-2"><span>{{ $purchase->purchase_number }}</span><span class="text-nowrap">{{ $money($purchase->balance) }}</span></div><small class="text-muted d-block">{{ $purchase->supplier?->supplier_name }}@if($purchase->due_date) &middot; {{ $purchase->due_date->isPast() ? $purchase->due_date->diffInDays(now()).' days overdue' : 'Due '.$purchase->due_date->format('n/j/Y') }}@endif</small></div>@empty<p class="text-muted small mb-0">No outstanding purchases.</p>@endforelse</div></div>
 </div>
 
 @companyCan('reports.export')

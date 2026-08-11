@@ -9,9 +9,9 @@
 </div>
 <form class="tf-card p-3 mb-3 row g-2 align-items-end">
     <div class="col-md-5"><label class="form-label">Search sale or return number</label><select name="search" class="form-select" data-placeholder="All sales and returns" autofocus><option value="">All</option>@foreach($references as $reference)<option value="{{ $reference }}" @selected(request('search') === $reference)>{{ $reference }}</option>@endforeach</select></div>
-    <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>
-    <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>
-    <div class="col-md-3 d-flex gap-2"><button class="btn btn-outline-primary">Filter</button><a href="{{ route('business.sales.returns.index') }}" class="btn btn-outline-secondary">Clear</a></div>
+    <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}" class="form-control"></div>
+    <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}" class="form-control"></div>
+    <div class="col-md-3 d-flex gap-2"><button class="btn btn-outline-primary">Filter</button><a href="{{ route('business.sales.returns.index', ['clear' => 1]) }}" class="btn btn-outline-secondary">Clear</a></div>
 </form>
 <x-table class="tf-business-data-table">
     <thead><tr><th>Return Number</th><th>Sale Number</th><th>Customer</th><th>Return Date</th><th>Refund Method</th><th>Refund Amount</th><th>Status</th><th>Created By</th><th>Actions</th></tr></thead>

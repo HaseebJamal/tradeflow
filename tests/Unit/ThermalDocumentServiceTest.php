@@ -79,7 +79,7 @@ class ThermalDocumentServiceTest extends TestCase
         $this->assertStringContainsString('max-width: 74mm', $html);
         $this->assertStringContainsString('Lahore', $html);
         $this->assertStringContainsString('+923001234567', $html);
-        $this->assertStringContainsString('Tax / NTN: NTN-123', $html);
+        $this->assertStringNotContainsString('Tax / NTN: NTN-123', $html);
         $this->assertStringNotContainsString('Cashier: Cashier', $html);
 
         $pdf = Pdf::loadHtml('<!doctype html><html><head><meta charset="utf-8"></head><body>'.$html.'</body></html>')
@@ -112,7 +112,7 @@ class ThermalDocumentServiceTest extends TestCase
             'show_email' => true,
             'show_website' => true,
             'show_tax_number' => false,
-            'show_powered_by' => true,
+            'show_powered_by' => false,
         ]);
 
         $html = Blade::render('<x-document-footer :business="$business" :footer="$footer" />', [
@@ -133,5 +133,6 @@ class ThermalDocumentServiceTest extends TestCase
         $this->assertStringContainsString((string) now()->year, $html);
         $this->assertStringNotContainsString('+923001234567', $html);
         $this->assertStringNotContainsString('NTN-123', $html);
+        $this->assertStringContainsString('Powered by TradeFlow', $html);
     }
 }

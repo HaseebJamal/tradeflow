@@ -27,7 +27,7 @@
                 <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Payment Method</small><strong>{{ $changeRequest->payment_method }}</strong></div></div>
                 <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Requested Price</small><strong>Rs {{ number_format($changeRequest->expected_amount) }}</strong></div></div>
                 <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Trial Status</small><strong>{{ $changeRequest->trial_eligible ? ((int) $changeRequest->trial_days.'-day trial') : 'No trial' }}</strong></div></div>
-                <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Requested Dates</small><strong>{{ $changeRequest->starts_at?->format('d M, Y') ?? '-' }} to {{ $changeRequest->ends_at?->format('d M, Y') ?? '-' }}</strong></div></div>
+                <div class="col-md-6"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">Requested Dates</small><strong>{{ $changeRequest->starts_at?->format('n/j/Y') ?? '-' }} to {{ $changeRequest->ends_at?->format('n/j/Y') ?? '-' }}</strong></div></div>
             </div>
         </div>
 
@@ -52,7 +52,7 @@
         </div>
     </div>
     <div class="col-lg-4">
-        <div class="tf-card p-4"><h2 class="h5 mb-3">Current Subscription</h2><p class="mb-1"><strong>{{ $currentSubscription?->plan?->name ?? 'No current subscription' }}</strong></p><p class="tf-muted mb-1">{{ $currentSubscription?->status ?? 'Not assigned' }}{{ $currentSubscription?->billing_cycle ? ' - '.$currentSubscription->billing_cycle : '' }}</p><p class="tf-muted mb-0">Expires: {{ $currentSubscription?->ends_at?->format('d M, Y') ?? '-' }}</p></div>
+        <div class="tf-card p-4"><h2 class="h5 mb-3">Current Subscription</h2><p class="mb-1"><strong>{{ $currentSubscription?->plan?->name ?? 'No current subscription' }}</strong></p><p class="tf-muted mb-1">{{ $currentSubscription?->status ?? 'Not assigned' }}{{ $currentSubscription?->billing_cycle ? ' - '.$currentSubscription->billing_cycle : '' }}</p><p class="tf-muted mb-0">Expires: {{ $currentSubscription?->ends_at?->format('n/j/Y') ?? '-' }}</p></div>
         @if($canProcess)
             <div class="tf-card p-4 mt-4"><h2 class="h5 mb-3">Decision</h2><form method="POST" action="{{ route('admin.subscription-change-requests.review', $changeRequest) }}" data-subscription-decision-form>@csrf @method('PATCH')<label class="form-label" for="decisionNote">Decision Note</label><textarea class="form-control mb-3" id="decisionNote" name="admin_note" rows="3" maxlength="2000" placeholder="Explain requested changes or the decision, if needed">{{ $changeRequest->admin_note }}</textarea><div class="d-grid gap-2"><button class="btn btn-outline-primary w-100" name="decision" value="Approved">Approve Request</button><button class="btn btn-success w-100" name="decision" value="Activate">Activate Subscription</button><button class="btn btn-outline-warning w-100" name="decision" value="Changes Requested">Request Changes</button><button class="btn btn-outline-danger w-100" name="decision" value="Rejected">Reject Request</button></div></form></div>
         @endif

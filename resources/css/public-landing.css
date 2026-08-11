@@ -158,6 +158,75 @@ body.pp-landing-page .pp-final-card h2 {
     text-wrap: balance;
 }
 
+/* Final CTA: keep the close focused and compact without changing its visual treatment. */
+body.pp-landing-page .pp-final-card {
+    border-radius: 24px;
+    padding: clamp(4.375rem, 6vw, 5.25rem) 1.5rem;
+}
+
+body.pp-landing-page .pp-final-card .pp-eyebrow {
+    display: block;
+    font-family: var(--font-body);
+    font-size: 0.65625rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    line-height: 1.25;
+    margin-bottom: 0.875rem;
+}
+
+body.pp-landing-page .pp-final-card h2 {
+    font-family: var(--font-heading);
+    font-size: clamp(1.75rem, 3.5vw, 3rem);
+    font-weight: 800;
+    letter-spacing: -0.0625rem;
+    line-height: 1.07;
+    margin: 0 auto 0.875rem;
+    max-width: 47.5rem;
+}
+
+body.pp-landing-page .pp-final-card > p {
+    font-family: var(--font-body);
+    font-size: clamp(0.9375rem, 1.25vw, 1.0625rem);
+    line-height: 1.6;
+    margin: 0 auto 1.25rem;
+    max-width: 42.5rem;
+}
+
+body.pp-landing-page .pp-final-card > .d-flex {
+    gap: 0.75rem !important;
+}
+
+body.pp-landing-page .pp-final-card > .d-flex .btn {
+    align-items: center;
+    border-radius: 11px;
+    display: inline-flex;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    font-weight: 700;
+    gap: 0.5rem;
+    height: 45px;
+    justify-content: center;
+    line-height: 1;
+    min-height: 45px;
+    padding: 0 1.375rem;
+}
+
+body.pp-landing-page .pp-final-trust {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    gap: 0.5rem 1.125rem;
+    justify-content: center;
+    line-height: 1.4;
+    margin-top: 1rem;
+}
+
+body.pp-landing-page .pp-final-trust span { white-space: nowrap; }
+body.pp-landing-page .pp-final-trust i { margin-right: 0.25rem; }
+
 body.pp-landing-page :is(.pp-overview-card h3, .pp-role-card h3, .pp-feature-card h3, .pp-benefit h3, .pp-timeline h3) {
     font-size: clamp(0.9375rem, 1.2vw, 1.125rem);
     font-weight: 700;
@@ -273,4 +342,13 @@ body.pp-landing-page .pp-footer-newsletter button {
     body.pp-landing-page .pp-btn-ghost { width: 100%; }
 
     body.pp-landing-page .pp-hero-actions .btn { width: 100%; }
+
+    body.pp-landing-page .pp-final-card { padding: 3.75rem 1.125rem; }
+
+    body.pp-landing-page .pp-final-card h2 {
+        font-size: clamp(1.75rem, 8vw, 2rem);
+        letter-spacing: -0.045em;
+    }
+
+    body.pp-landing-page .pp-final-card > .d-flex .btn { width: 100%; }
 }

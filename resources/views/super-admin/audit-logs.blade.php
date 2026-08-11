@@ -22,7 +22,7 @@
     @endif
 </div>
 
-<div class="tf-card p-3 mb-3">
+<div class="tf-card tf-audit-filter-card p-3 mb-3">
     <form method="GET" class="row g-2 align-items-end" data-audit-period-filter>
         <div class="col-md-3"><label class="form-label">Search</label><input name="search" value="{{ $filters['search'] ?? '' }}" class="form-control" placeholder="User, action, business, or module"></div>
         <div class="col-md-3"><label class="form-label">Company</label><select name="business_id" class="form-select"><option value="">All companies</option>@foreach($businesses as $business)<option value="{{ $business->id }}" @selected(request('business_id') == $business->id)>{{ $business->business_name }}</option>@endforeach</select></div>
@@ -42,24 +42,35 @@
 </div>
 
 @if($hasAuditLogPeriod)
-<x-table class="tf-admin-data-table">
-    <thead><tr><th>Date &amp; Time</th><th>User</th><th>Role</th><th>Business</th><th>Module</th><th>Action</th><th>IP Address</th></tr></thead>
+<x-table class="tf-admin-data-table tf-audit-data-table">
+    <thead><tr><th>Date &amp; Time</th><th>Actor</th><th>Action</th><th>Module</th><th>Target</th><th>Description</th><th>View</th></tr></thead>
     <tbody>
     @forelse($logs as $log)
+        @php($auditTarget = $log->record_type ? class_basename($log->record_type).($log->record_id ? ' #'.$log->record_id : '') : ($log->business?->business_name ?: 'Platform'))
         <tr>
-            <td>{{ \Illuminate\Support\Carbon::parse($log->occurred_at ?? $log->created_at)->timezone(config('app.timezone'))->format('m/d/Y h:i A') }}</td>
-            <td>{{ $log->user_name ?: $log->user?->name ?: 'System' }}</td>
-            <td>{{ $log->role ?: $log->actor_role ?: 'system' }}</td>
-            <td>{{ $log->business?->business_name ?: 'Platform' }}</td>
-            <td><x-activity-label :activity="$log" field="module" /></td>
+            <td>{{ \Illuminate\Support\Carbon::parse($log->occurred_at ?? $log->created_at)->timezone(config('app.timezone'))->format('n/j/Y, g:i A') }}</td>
+            <td><strong>{{ $log->user_name ?: $log->user?->name ?: 'System' }}</strong><small class="d-block tf-muted">{{ $log->role ?: $log->actor_role ?: 'system' }}</small></td>
             <td><x-activity-label :activity="$log" /></td>
-            <td>{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</td>
+            <td><x-activity-label :activity="$log" field="module" /></td>
+            <td>{{ $auditTarget }}</td>
+            <td title="{{ $log->description }}">{{ str($log->description ?: $log->action)->limit(64) }}</td>
+            <td><button type="button" class="btn btn-sm btn-outline-primary tf-table-view-action" data-bs-toggle="modal" data-bs-target="#auditLogModal{{ $log->id }}">View</button></td>
         </tr>
     @empty
         <tr><td colspan="7" class="text-center tf-muted py-4">No audit activity has been recorded yet.</td></tr>
     @endforelse
     </tbody>
 </x-table>
+@foreach($logs as $log)
+    @php($auditTarget = $log->record_type ? class_basename($log->record_type).($log->record_id ? ' #'.$log->record_id : '') : ($log->business?->business_name ?: 'Platform'))
+    <div class="modal fade" id="auditLogModal{{ $log->id }}" tabindex="-1" aria-labelledby="auditLogModalTitle{{ $log->id }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+            <div class="modal-header"><div><span class="tf-dashboard-eyebrow">Read-only audit record</span><h2 class="modal-title" id="auditLogModalTitle{{ $log->id }}">Audit log details</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body"><dl class="row mb-0 small"><dt class="col-sm-4">Date &amp; time</dt><dd class="col-sm-8"><x-date-time :value="$log->occurred_at ?? $log->created_at" /></dd><dt class="col-sm-4">Actor</dt><dd class="col-sm-8">{{ $log->user_name ?: $log->user?->name ?: 'System' }} <span class="tf-muted">({{ $log->role ?: $log->actor_role ?: 'system' }})</span></dd><dt class="col-sm-4">Action</dt><dd class="col-sm-8"><x-activity-label :activity="$log" /></dd><dt class="col-sm-4">Module</dt><dd class="col-sm-8"><x-activity-label :activity="$log" field="module" /></dd><dt class="col-sm-4">Target</dt><dd class="col-sm-8">{{ $auditTarget }}</dd><dt class="col-sm-4">Description</dt><dd class="col-sm-8 text-break">{{ $log->description ?: '—' }}</dd><dt class="col-sm-4">Route</dt><dd class="col-sm-8 text-break">{{ $log->route ?: '—' }}</dd><dt class="col-sm-4">IP address</dt><dd class="col-sm-8">{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</dd></dl></div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div>
+        </div></div>
+    </div>
+@endforeach
 <div class="mt-3 audit-log-pagination"><x-table-result-summary :paginator="$logs" />{{ $logs->links('pagination::bootstrap-5') }}</div>
 @else
     <div class="tf-card p-4 text-center tf-muted">Please select a date/time range to view audit logs.</div>

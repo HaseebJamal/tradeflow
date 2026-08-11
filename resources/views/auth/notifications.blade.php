@@ -51,7 +51,7 @@
                 <td class="fw-semibold">{{ data_get($notification->data, 'title', $platformSettings->company_name.' Notification') }}</td>
                 <td title="{{ data_get($notification->data, 'message') }}">{{ str(data_get($notification->data, 'message'))->limit(90) }}</td>
                 <td class="text-nowrap">@if(!$notification->read_at)<span class="tf-badge tf-badge-info">Unread</span>@else<span class="tf-badge">Read</span>@endif @if($requestStatus)<span class="tf-badge {{ $statusClass }}">{{ $requestStatus }}</span>@endif</td>
-                <td>{{ $notification->created_at?->format('d M, Y') }}</td>
+                <td>{{ $notification->created_at?->format('n/j/Y') }}</td>
                 <td>{{ $notification->created_at?->format('h:i A') }}</td>
                 <td class="text-nowrap">
                     @if($profileRequest || $emailChangeRequest)<details class="d-inline-block"><summary class="btn btn-sm btn-outline-primary">View</summary><div class="tf-notification-table-detail text-start">

@@ -23,32 +23,36 @@
 </section>
 @endif
 
-<form class="tf-card p-3 mb-3 row g-2 align-items-end">
-    <div class="col-md-3"><label class="form-label">Search</label><select name="purchase_id" class="form-select" data-placeholder="All Purchases" autofocus><option value="">All Purchases</option>@foreach($purchaseOptions as $option)<option value="{{ $option->id }}" @selected((int) request('purchase_id') === $option->id)>{{ $option->purchase_number }}{{ $option->supplier_invoice_number ? ' · ' . $option->supplier_invoice_number : '' }}{{ $option->supplier?->supplier_name ? ' · ' . $option->supplier->supplier_name : '' }}</option>@endforeach</select></div>
+<form class="tf-card tf-purchase-filter-card p-3 mb-3 row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label">Purchase / Invoice</label><select name="purchase_id" class="form-select" data-placeholder="All Purchases" autofocus><option value="">All Purchases</option>@foreach($purchaseOptions as $option)<option value="{{ $option->id }}" @selected((int) request('purchase_id') === $option->id)>{{ $option->purchase_number }}{{ $option->supplier_invoice_number ? ' · ' . $option->supplier_invoice_number : '' }}{{ $option->supplier?->supplier_name ? ' · ' . $option->supplier->supplier_name : '' }}</option>@endforeach</select></div>
     <div class="col-md-2"><label class="form-label">Supplier</label><select name="supplier_id" class="form-select"><option value="">All suppliers</option>@foreach($suppliers as $supplier)<option value="{{ $supplier->id }}" @selected(request('supplier_id') == $supplier->id)>{{ $supplier->supplier_name }}</option>@endforeach</select></div>
-    <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All statuses</option>@foreach(['Draft','Confirmed','Received','Cancelled','Closed','Ordered','Partially Returned','Returned'] as $status)<option @selected(request('status') === $status)>{{ $status }}</option>@endforeach</select></div>
-    <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>
-    <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ request('date_to', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>
-    <div class="col-md-1 d-flex gap-2"><button class="btn btn-outline-primary flex-fill">Filter</button><a href="{{ route('business.purchases.index') }}" class="btn btn-outline-secondary" aria-label="Clear filters"><i class="bi bi-arrow-counterclockwise"></i></a></div>
+    <div class="col-md-2"><label class="form-label">Payment Status</label><select name="payment_status" class="form-select"><option value="">All payment statuses</option>@foreach($paymentStatuses as $paymentStatus)<option value="{{ $paymentStatus }}" @selected(request('payment_status') === $paymentStatus)>{{ $paymentStatus }}</option>@endforeach</select></div>
+    <div class="col-md-2"><label class="form-label">Created By</label><select name="created_by" class="form-select"><option value="">All users</option>@foreach($creators as $creator)<option value="{{ $creator->id }}" @selected(request('created_by') == $creator->id)>{{ $creator->name }}</option>@endforeach</select></div>
+    <div class="col-md-2"><label class="form-label">Purchase Status</label><select name="status" class="form-select"><option value="">All statuses</option>@foreach(['Draft','Confirmed','Received','Cancelled','Closed','Ordered','Partially Returned','Returned'] as $status)<option @selected(request('status') === $status)>{{ $status }}</option>@endforeach</select></div>
+    <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}" class="form-control"></div>
+    <div class="col-md-2"><label class="form-label">Date To</label><input type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}" class="form-control"></div>
+    <div class="col-md-1 d-flex gap-2"><button class="btn btn-outline-primary flex-fill">Filter</button><a href="{{ route('business.purchases.index', ['clear' => 1]) }}" class="btn btn-outline-secondary" aria-label="Clear filters"><i class="bi bi-arrow-counterclockwise"></i></a></div>
 </form>
 
-<x-table class="tf-business-data-table tf-purchase-data-table"><thead><tr><th>Purchase</th><th>Supplier</th><th>Date</th><th>Total Qty</th><th>Grand total</th><th>Paid / Payable</th><th>Payment</th><th>Purchase status</th><th>Receiving</th><th>Created by</th><th>Actions</th></tr></thead><tbody>@forelse($purchases as $purchase)
+<x-table class="tf-business-data-table tf-purchase-data-table"><thead><tr><th>Purchase</th><th>Supplier</th><th>Amount</th><th>Paid / Due</th><th>Payment Status</th><th>Purchase Date</th><th>Created By</th><th>Actions</th></tr></thead><tbody>@forelse($purchases as $purchase)
     @php
         $receivedQuantity = (float) $purchase->items->sum('received_quantity');
         $returnedQuantity = (float) $purchase->returns->flatMap(fn ($return) => $return->items)->sum('quantity');
         $paymentMethod = $purchase->payment_method ?: $purchase->latestPayment?->method;
         $paymentMethodLabel = $paymentMethod ?: ((float) $purchase->paid_amount > 0 ? 'Payment recorded' : 'Not paid');
-        $canReceive = in_array($purchase->status, ['Confirmed', 'Received', 'Ordered'], true) && !in_array($purchase->receiving_status, ['Fully Received', 'Returned'], true);
+        $receiptState = $purchase->receipt_state;
+        $canReceive = $receiptState['can_receive'];
         $canPay = in_array($purchase->status, ['Confirmed', 'Received', 'Ordered'], true) && (float) $purchase->balance > 0;
         $canReturn = $receivedQuantity > $returnedQuantity;
         $canCancel = in_array($purchase->status, ['Draft', 'Confirmed'], true) && ! $purchase->received_at;
         $canEdit = in_array($purchase->status, ['Draft', 'Confirmed'], true) && ! $purchase->received_at && (int) $purchase->payments_count === 0;
     @endphp
-    <tr><td><strong>{{ $purchase->purchase_number }}</strong><small class="d-block tf-muted">{{ $purchase->supplier_invoice_number ?: 'No supplier invoice' }}</small></td><td>{{ $purchase->supplier?->supplier_name }}</td><td><x-date-time :value="$purchase->purchase_date" /></td><td><x-quantity :value="$purchase->items_sum_quantity" /></td><td>Rs {{ number_format($purchase->grand_total, 2) }}</td><td>Rs {{ number_format($purchase->paid_amount, 2) }}<small class="d-block tf-muted">Payable Rs {{ number_format($purchase->balance, 2) }}</small></td><td>{{ $paymentMethodLabel }}<small class="d-block"><span class="tf-badge {{ $purchase->payment_status === 'Paid' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $purchase->payment_status }}</span></small></td><td><span class="tf-badge {{ in_array($purchase->status, ['Confirmed','Received','Closed'], true) ? 'tf-badge-success' : ($purchase->status === 'Cancelled' ? 'tf-badge-danger' : 'tf-badge-warning') }}">{{ $purchase->status }}</span></td><td><span class="tf-badge {{ $purchase->receiving_status === 'Fully Received' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $purchase->receiving_status ?? 'Not Received' }}</span></td><td>{{ $purchase->creator?->name ?? 'System' }}</td><td>
-        <div class="dropdown">
-            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Actions</button>
+    <tr><td><strong>{{ $purchase->purchase_number }}</strong><small class="d-block tf-muted">{{ $purchase->supplier_invoice_number ?: 'No supplier invoice' }} · <x-quantity :value="$purchase->items_sum_quantity" /> units</small><small class="d-block mt-1"><span class="tf-badge {{ in_array($purchase->status, ['Confirmed','Received','Closed'], true) ? 'tf-badge-success' : ($purchase->status === 'Cancelled' ? 'tf-badge-danger' : 'tf-badge-warning') }}">{{ $purchase->status }}</span></small></td><td>{{ $purchase->supplier?->supplier_name }}</td><td>Rs {{ number_format($purchase->grand_total, 2) }}</td><td>Rs {{ number_format($purchase->paid_amount, 2) }}<small class="d-block tf-muted">Due Rs {{ number_format($purchase->balance, 2) }}</small></td><td>{{ $paymentMethodLabel }}<small class="d-block mt-1"><span class="tf-badge {{ $purchase->payment_status === 'Paid' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $purchase->payment_status }}</span></small></td><td><x-date-time :value="$purchase->purchase_date" /></td><td>{{ $purchase->creator?->name ?? 'System' }}</td><td>
+        <div class="d-flex justify-content-end align-items-center gap-1">
+            <a class="btn btn-sm btn-outline-primary tf-table-view-action" href="{{ route('business.purchases.show', $purchase) }}">View</a>
+            <div class="dropdown">
+            <button class="btn btn-sm btn-outline-primary tf-table-more-action" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false" aria-label="More actions for {{ $purchase->purchase_number }}"><i class="bi bi-three-dots"></i></button>
             <ul class="dropdown-menu dropdown-menu-end">
-                <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#purchaseDetailsModal{{ $purchase->id }}"><i class="bi bi-eye me-2"></i>View Details</button></li>
                 @companyCan('purchases.edit')
                     @if($canEdit)
                         <li><a class="dropdown-item" href="{{ route('business.purchases.edit', $purchase) }}"><i class="bi bi-pencil me-2"></i>Edit</a></li>
@@ -56,7 +60,7 @@
                 @endcompanyCan
                 @companyCan('purchases.receive')
                     @if($canReceive)
-                        <li><a class="dropdown-item" href="{{ route('business.purchases.receiving.create', $purchase) }}"><i class="bi bi-box-arrow-in-down me-2"></i>Receive Goods</a></li>
+                        <li><a class="dropdown-item" href="{{ route('business.purchases.receiving.create', $purchase) }}"><i class="bi bi-box-arrow-in-down me-2"></i>{{ $receiptState['action_label'] }}</a></li>
                     @endif
                 @endcompanyCan
                 @companyCan('purchases.pay')
@@ -79,9 +83,10 @@
                     @endif
                 @endcompanyCan
             </ul>
+            </div>
         </div>
     </td></tr>
-@empty<tr><td colspan="11" class="text-center tf-muted py-5">No purchases found.</td></tr>@endforelse</tbody></x-table>
+@empty<tr><td colspan="8" class="text-center tf-muted py-5">No purchases found.</td></tr>@endforelse</tbody></x-table>
 
 @foreach($purchases as $purchase)
     @php
@@ -103,14 +108,14 @@
                         <div class="col-6"><div class="text-muted mb-1">Supplier</div><div>{{ $purchase->supplier?->supplier_name ?? 'Not provided' }}</div></div>
                         <div class="col-6"><div class="text-muted mb-1">Purchase date</div><div><x-date-time :value="$purchase->purchase_date" /></div></div>
                         <div class="col-6"><div class="text-muted mb-1">Supplier invoice</div><div>{{ $purchase->supplier_invoice_number ?: 'Not provided' }}</div></div>
-                        <div class="col-6"><div class="text-muted mb-1">Due date</div><div>{{ $purchase->due_date?->format('d M, Y') ?: 'Not provided' }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Due date</div><div>{{ $purchase->due_date?->format('n/j/Y') ?: 'Not provided' }}</div></div>
                         <div class="col-6"><div class="text-muted mb-1">Grand total</div><div>Rs {{ number_format($purchase->grand_total, 2) }}</div></div>
                         <div class="col-6"><div class="text-muted mb-1">Paid amount</div><div>Rs {{ number_format($purchase->paid_amount, 2) }}</div></div>
                         <div class="col-6"><div class="text-muted mb-1">Remaining payable</div><div>Rs {{ number_format($purchase->balance, 2) }}</div></div>
                         <div class="col-6"><div class="text-muted mb-1">Payment method</div><div>{{ $modalPaymentMethodLabel }}</div></div>
                         <div class="col-6"><div class="text-muted mb-1">Payment status</div><div>{{ $purchase->payment_status }}</div></div>
                         <div class="col-6"><div class="text-muted mb-1">Purchase status</div><div>{{ $purchase->status }}</div></div>
-                        <div class="col-6"><div class="text-muted mb-1">Receiving</div><div>{{ $purchase->receiving_status ?: 'Not Received' }}</div></div>
+                        <div class="col-6"><div class="text-muted mb-1">Receiving</div><div>{{ $purchase->receipt_state['receipt_status'] }}</div></div>
                         <div class="col-6"><div class="text-muted mb-1">Created by</div><div>{{ $purchase->creator?->name ?? 'System' }}</div></div>
                     </div>
                 </div>

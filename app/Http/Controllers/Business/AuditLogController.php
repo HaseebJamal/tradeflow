@@ -137,7 +137,7 @@ class AuditLogController extends Controller
         }
 
         $query = $this->businessLogs()
-            ->select(['id', 'user_id', 'user_name', 'role', 'actor_role', 'business_id', 'module', 'action', 'ip_address', 'occurred_at', 'created_at'])
+            ->select(['id', 'user_id', 'user_name', 'role', 'actor_role', 'business_id', 'module', 'action', 'description', 'route', 'record_type', 'record_id', 'ip_address', 'occurred_at', 'created_at'])
             ->with('user:id,name')
             ->when($filters['user_id'] ?? null, fn ($q, $value) => $q->where('user_id', $value))
             ->when($filters['role'] ?? null, fn ($q, $value) => $q->where('role', $value))

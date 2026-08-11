@@ -57,10 +57,12 @@ class DeliveryController extends Controller
             'clear' => ['nullable', 'boolean'],
         ]);
         $dateColumn = $filters['date_type'] ?? 'created_at';
-        // Keep the initial delivery queue unfiltered. Date constraints remain
-        // available through the toolbar, but must not silently hide records.
-        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? null);
-        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? null);
+        // Delivery operations default to the current application date. Native
+        // date inputs receive ISO values, while the browser presents them in
+        // its local UI format (for example 8/10/2026).
+        $today = now(config('app.timezone'))->toDateString();
+        $dateFrom = $request->boolean('clear') ? null : ($filters['date_from'] ?? $today);
+        $dateTo = $request->boolean('clear') ? null : ($filters['date_to'] ?? $today);
         $query = $this->deliveryQuery()->with(['invoice.order.customer', 'invoice.order.payments', 'order.customer', 'order.payments', 'staff']);
         $query
             ->when($filters['order_number'] ?? null, fn ($q, $value) => $q->where(function ($delivery) use ($value) {
@@ -109,7 +111,7 @@ class DeliveryController extends Controller
         return view('business.deliveries.index', [
             'deliveries' => $deliveries,
             'stats' => [
-                'today' => (clone $statsQuery)->whereDate('created_at', today())->count(),
+                'today' => (clone $statsQuery)->whereDate('created_at', $today)->count(),
                 'pending' => (clone $statsQuery)->where('status', 'Pending')->count(),
                 'out' => (clone $statsQuery)->where('status', 'Out For Delivery')->count(),
                 'delivered' => (clone $statsQuery)->where('status', 'Delivered')->count(),

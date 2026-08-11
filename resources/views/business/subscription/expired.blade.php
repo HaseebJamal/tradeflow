@@ -15,7 +15,7 @@
         <div class="mb-3"><i class="bi bi-shield-lock fs-1 text-warning" aria-hidden="true"></i></div>
         <h2 class="h3 mb-2" id="subscription-expired-title">Your {{ $isTrial ? 'free trial' : 'subscription' }} has ended</h2>
         <p class="tf-muted mb-2">Your business data is safe, but workspace access is paused. Contact Profit Point to activate your subscription.</p>
-        <p class="small tf-muted mb-4"><strong>{{ $business->business_name }}</strong>@if($expiry) · Ended {{ $expiry->format('d M, Y') }}@endif</p>
+        <p class="small tf-muted mb-4"><strong>{{ $business->business_name }}</strong>@if($expiry) · Ended {{ $expiry->format('n/j/Y') }}@endif</p>
         <div class="d-flex flex-wrap justify-content-center gap-2">
             @if($settings->whatsapp_is_active && $whatsAppDigits)
                 <a class="btn btn-tf-primary" target="_blank" rel="noopener" href="https://wa.me/{{ $whatsAppDigits }}?text={{ $message }}">Contact on WhatsApp</a>

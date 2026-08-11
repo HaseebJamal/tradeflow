@@ -12,7 +12,7 @@
 </head>
 <body>
     <h1>TradeFlow {{ ucwords(str_replace('-', ' ', $type)) }} Report</h1>
-    <p>{{ $business?->business_name }}@if($business?->phone) &middot; {{ $business->phone }}@endif - {{ now()->format('M d, Y') }}</p>
+    <p>{{ $business?->business_name }}@if($business?->phone) &middot; {{ $business->phone }}@endif - {{ now()->format('n/j/Y') }}</p>
     <table class="summary">
         <tr><td>Subtotal</td><td>Rs {{ number_format($summary['subtotal'] ?? 0) }}</td></tr>
         <tr><td>Discount Amount</td><td>Rs {{ number_format($summary['discount_amount'] ?? 0) }}</td></tr>

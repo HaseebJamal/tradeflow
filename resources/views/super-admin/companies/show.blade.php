@@ -89,7 +89,7 @@
         <section class="tf-card p-4 tf-company-overview">
             <h2 class="h5 mb-3">Company Overview</h2>
             <dl class="tf-company-info-grid mb-0">
-                @foreach(['Company Name' => $company->business_name, 'Owner' => $company->owner?->name, 'Owner Login Email' => $company->owner?->email, 'Phone' => $company->phone, 'Business Type' => $company->display_business_type, 'Category' => $company->category, 'City' => $company->city, 'Created At' => $company->created_at?->format('d M, Y h:i A')] as $label => $value)
+                @foreach(['Company Name' => $company->business_name, 'Owner' => $company->owner?->name, 'Owner Login Email' => $company->owner?->email, 'Phone' => $company->phone, 'Business Type' => $company->display_business_type, 'City' => $company->city, 'Created At' => $company->created_at?->format('n/j/Y, g:i A')] as $label => $value)
                     <div><dt>{{ $label }}</dt><dd>{{ $value ?: '—' }}</dd></div>
                 @endforeach
             </dl>
@@ -107,9 +107,9 @@
                     <div><dt>Billing Cycle</dt><dd>{{ $activeSubscription->billing_cycle ?: 'Not recorded' }}</dd></div>
                     <div><dt>Price</dt><dd>@if(!is_null($activeSubscription->amount))Rs {{ number_format((int) $activeSubscription->amount) }}@else Not recorded @endif</dd></div>
                     <div><dt>Subscription Status</dt><dd><span class="tf-badge {{ strtolower((string) $activeSubscription->status) === 'active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $activeSubscription->status ?: 'Not recorded' }}</span></dd></div>
-                    <div><dt>Start Date</dt><dd>{{ $activeSubscription->starts_at?->format('d M, Y') ?: 'Not recorded' }}</dd></div>
-                    <div><dt>Expiry / Renewal Date</dt><dd>{{ $activeSubscription->ends_at?->format('d M, Y') ?: 'Not recorded' }}</dd></div>
-                    <div><dt>Trial</dt><dd>{{ $activeSubscription->trial_end_at ? 'Until '.$activeSubscription->trial_end_at->format('d M, Y') : 'No active trial' }}</dd></div>
+                    <div><dt>Start Date</dt><dd>{{ $activeSubscription->starts_at?->format('n/j/Y') ?: 'Not recorded' }}</dd></div>
+                    <div><dt>Expiry / Renewal Date</dt><dd>{{ $activeSubscription->ends_at?->format('n/j/Y') ?: 'Not recorded' }}</dd></div>
+                    <div><dt>Trial</dt><dd>{{ $activeSubscription->trial_end_at ? 'Until '.$activeSubscription->trial_end_at->format('n/j/Y') : 'No active trial' }}</dd></div>
                 </dl>
             @else
                 <div class="tf-company-empty-state"><i class="bi bi-credit-card-2-front"></i><div><strong>No active subscription plan.</strong><span>@if($planName) A {{ $planName }} {{ $planCycle ? '('.$planCycle.')' : '' }} registration selection is {{ strtolower($company->subscription_request_status ?: 'pending review') }}.@else Assign a plan to activate this company’s subscription.@endif</span></div></div>
@@ -192,26 +192,6 @@
             <dl class="tf-company-owner-list mb-0"><div><dt>Name</dt><dd>{{ $company->owner?->name ?: '—' }}</dd></div><div><dt>Email</dt><dd>{{ $company->owner?->email ?: 'Not provided' }}</dd></div><div><dt>Phone</dt><dd>{{ $company->owner?->phone ?: 'Not provided' }}</dd></div><div><dt>Role</dt><dd>{{ str($company->owner?->role ?: 'business owner')->replace('_', ' ')->title() }}</dd></div><div><dt>Account Status</dt><dd><span class="tf-badge {{ strtolower((string) $company->owner?->status) === 'active' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ ucfirst($company->owner?->status ?: 'Unknown') }}</span></dd></div></dl>
         </section>
 
-        <section class="tf-card p-4 mt-4">
-            <h2 class="h5 mb-1">Verification Documents</h2><p class="tf-muted small mb-3">Uploaded verification evidence is retained and cannot be replaced.</p>
-            <h3 class="tf-company-section-label">Existing Documents</h3>
-            @foreach($verificationLabels as $type => $label)
-                @php($document = $verificationDocuments->get($type))
-                <article class="tf-company-document-card">
-                    <div class="d-flex justify-content-between gap-2"><strong>{{ $label }}</strong>@if(filled($document?->file_path))<span class="tf-badge tf-badge-success">Uploaded</span>@else<span class="tf-badge">Missing</span>@endif</div>
-                    @if(filled($document?->file_path))<small class="tf-muted d-block text-truncate">{{ basename($document->file_path) }}</small><div class="mt-2"><x-admin-document-verification :company="$company" :document="$document" :label="$label" /></div>@else<p class="tf-muted small mb-0 mt-1">Not uploaded</p>@endif
-                </article>
-            @endforeach
-            @if($missingVerificationLabels->isNotEmpty())
-                <hr class="my-3"><h3 class="tf-company-section-label">Missing Documents</h3>
-                <form method="POST" action="{{ route('admin.companies.documents.store', $company) }}" enctype="multipart/form-data">@csrf
-                    @foreach($missingVerificationLabels as $type => $label)<div class="mb-3"><label class="form-label small" for="{{ $type }}">Upload {{ $label }}</label><input id="{{ $type }}" name="{{ $type }}" type="file" class="form-control form-control-sm" accept="{{ $type === 'shop_image' ? 'image/jpeg,image/png' : '.pdf,image/jpeg,image/png' }}"></div>@endforeach
-                    <small class="tf-muted d-block mb-3">PDF, JPG, or PNG up to 5MB.</small><button type="submit" class="btn btn-tf-primary w-100">Upload Missing Documents</button>
-                </form>
-            @else
-                <p class="small text-success mb-0 mt-3"><i class="bi bi-check2-circle me-1"></i>All verification documents have been uploaded.</p>
-            @endif
-        </section>
     </aside>
 </div>
 @endsection

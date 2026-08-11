@@ -1,5 +1,5 @@
 @php
-    $documentDate = $purchase->purchase_date?->format('d M Y g:i A');
+    $documentDate = $purchase->purchase_date?->format('n/j/Y, g:i A');
 @endphp
 <x-thermal-document
     :business="$business"

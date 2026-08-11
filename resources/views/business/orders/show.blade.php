@@ -59,7 +59,7 @@
 @if(($journalEntries ?? collect())->isNotEmpty())
 <div class="tf-card p-4 mt-4">
     <h2 class="h5">Journal Entries</h2>
-    <x-table><thead><tr><th>Date</th><th>Voucher</th><th>Description</th><th>Status</th></tr></thead><tbody>@foreach($journalEntries as $entry)<tr><td>{{ $entry->entry_date?->format('M d, Y') }}</td><td>{{ $entry->voucher_number }}</td><td>{{ $entry->description }}</td><td>{{ ucfirst($entry->status) }}</td></tr>@endforeach</tbody></x-table>
+    <x-table><thead><tr><th>Date</th><th>Voucher</th><th>Description</th><th>Status</th></tr></thead><tbody>@foreach($journalEntries as $entry)<tr><td>{{ $entry->entry_date?->format('n/j/Y') }}</td><td>{{ $entry->voucher_number }}</td><td>{{ $entry->description }}</td><td>{{ ucfirst($entry->status) }}</td></tr>@endforeach</tbody></x-table>
 </div>
 @endif
 

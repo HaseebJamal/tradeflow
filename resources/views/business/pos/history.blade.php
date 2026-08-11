@@ -10,7 +10,7 @@
         @php($receiptNumber = $order->invoice?->invoice_number ?? $order->order_number)
         <tr>
             <td>{{ $receiptNumber }}</td>
-            <td>{{ $order->order_date?->format('d M Y g:i A') }}</td>
+            <td>{{ $order->order_date?->format('n/j/Y, g:i A') }}</td>
             <td>{{ $order->customer?->name ?? 'Walk-in Customer' }}</td>
             <td>Rs {{ number_format($order->grand_total ?: $order->total) }}</td>
             <td>Rs {{ number_format($order->paid_amount) }}</td>

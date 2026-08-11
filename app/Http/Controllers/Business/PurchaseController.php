@@ -16,6 +16,7 @@ use App\Models\PurchaseReturnItem;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\SupplierPayment;
+use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use App\Services\ProductPurchaseCostService;
@@ -48,12 +49,17 @@ class PurchaseController extends Controller
             'purchase_id' => ['nullable', 'integer'],
             'supplier_id' => ['nullable', 'integer'],
             'status' => ['nullable', 'string', 'max:60'],
+            'payment_status' => ['nullable', 'string', 'max:60'],
+            'created_by' => ['nullable', 'integer'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'create' => ['nullable', 'boolean'],
+            'clear' => ['nullable', 'boolean'],
         ]);
-        $filters['date_from'] ??= now(config('app.timezone'))->toDateString();
-        $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
+        if (! $request->boolean('clear')) {
+            $filters['date_from'] ??= now(config('app.timezone'))->toDateString();
+            $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
+        }
         $purchases = Purchase::with([
             'supplier',
             'invoice',
@@ -64,15 +70,20 @@ class PurchaseController extends Controller
                 'supplier_payments.method',
                 'supplier_payments.payment_date',
             ]),
-            'items:id,purchase_id,received_quantity',
+            'items:id,purchase_id,quantity,received_quantity,damaged_quantity,rejected_quantity',
             'returns.items:id,purchase_return_id,quantity',
         ])->withCount('payments')->withSum('items', 'quantity')->where('business_id', $businessId)
             ->when($request->filled('purchase_id'), fn ($query) => $query->whereKey($request->integer('purchase_id')))
             ->when($request->filled('supplier_id'), fn ($query) => $query->where('supplier_id', $request->integer('supplier_id')))
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->value()))
-            ->when(! $request->filled('purchase_id'), fn ($query) => $query
+            ->when($request->filled('payment_status'), fn ($query) => $query->where('payment_status', $request->string('payment_status')->value()))
+            ->when($request->filled('created_by'), fn ($query) => $query->where('created_by', $request->integer('created_by')))
+            ->when(! $request->filled('purchase_id') && ! empty($filters['date_from']), fn ($query) => $query
                 ->where('purchase_date', '>=', Carbon::parse($filters['date_from'], config('app.timezone'))->startOfDay())
-                ->where('purchase_date', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay()))
+            )
+            ->when(! $request->filled('purchase_id') && ! empty($filters['date_to']), fn ($query) => $query
+                ->where('purchase_date', '<=', Carbon::parse($filters['date_to'], config('app.timezone'))->endOfDay())
+            )
             ->latest('purchase_date')->paginate(10)->withQueryString();
 
         $suppliers = Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get();
@@ -82,13 +93,20 @@ class PurchaseController extends Controller
             ->latest('purchase_date')
             ->get(['id', 'supplier_id', 'purchase_number', 'supplier_invoice_number']);
 
+        $purchases->getCollection()->each(function (Purchase $purchase): void {
+            $purchase->setAttribute('receipt_state', $this->receiving->state($purchase));
+        });
+
         return view('business.purchases.index', [
             'purchases' => $purchases,
             'purchaseOptions' => $purchaseOptions,
             'suppliers' => $suppliers,
+            'creators' => User::where('business_id', $businessId)->orderBy('name')->get(['id', 'name']),
+            'paymentStatuses' => Purchase::where('business_id', $businessId)->whereNotNull('payment_status')->distinct()->orderBy('payment_status')->pluck('payment_status'),
             'products' => $request->boolean('create') ? Product::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get() : collect(),
             'accounts' => Account::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(),
             'showPurchaseCreate' => $request->boolean('create'),
+            'filters' => $filters,
         ]);
     }
 
@@ -173,10 +191,12 @@ class PurchaseController extends Controller
     public function show(Request $request, Purchase $purchase)
     {
         $purchase = $this->scoped($purchase)->load(['supplier', 'items.product', 'invoice', 'payments.creator', 'payments.account', 'latestPayment', 'returns.items', 'goodsReceipts.items.product', 'goodsReceipts.creator', 'creator', 'updater', 'confirmer']);
+        $receiptState = $this->receiving->state($purchase);
+        $paymentSummary = $this->financialSummary->summary($purchase);
         $document = $request->validate(['document' => ['nullable', Rule::in(['print', 'pdf'])]])['document'] ?? null;
 
         if (! $document) {
-            return view('business.purchases.show', compact('purchase'));
+            return view('business.purchases.show', compact('purchase', 'receiptState', 'paymentSummary'));
         }
 
         $payload = $this->purchaseDocumentPayload($purchase);
@@ -549,6 +569,10 @@ class PurchaseController extends Controller
     {
         $purchase = $this->scoped($purchase);
         $this->ensureActionPermission('purchases.receive');
+        $receiptState = $this->receiving->state($purchase);
+        abort_if(! $receiptState['can_receive'], 422, $receiptState['pending_qty'] <= 0
+            ? 'This purchase has already been fully received.'
+            : 'This purchase cannot receive more goods.');
         // Keep the legacy endpoint alive, but direct it into the multi-GRN
         // workflow so it can no longer silently receive every item at once.
         return redirect()->route('business.purchases.receiving.create', $purchase);
@@ -578,6 +602,10 @@ class PurchaseController extends Controller
                 throw ValidationException::withMessages(['account_id' => 'Select a payment account from this business.']);
             }
             $locked = $this->financialSummary->sync($locked);
+            // An advance is a payment made before any goods have been
+            // processed. Receiving labels are derived data, so use the same
+            // quantity-based receipt state as the GRN workflow.
+            $isAdvance = $this->receiving->state($locked)['processed_qty'] <= 0;
             $tenderedAmount = (float) $data['amount'];
             $currentPayable = max(0, (float) $locked->balance);
             if ($tenderedAmount > $currentPayable) {
@@ -593,8 +621,8 @@ class PurchaseController extends Controller
                 'supplier_id' => $locked->supplier_id,
                 'purchase_id' => $locked->id,
                 'created_by' => auth()->id(),
-                'is_advance' => $locked->receiving_status === 'Not Received',
-                'remaining_amount' => $locked->receiving_status === 'Not Received' ? $appliedAmount : 0,
+                'is_advance' => $isAdvance,
+                'remaining_amount' => $isAdvance ? $appliedAmount : 0,
                 'reference_number' => $data['reference_number'] ?? null,
                 'cheque_number' => $data['method'] === 'Cheque' ? ($data['cheque_number'] ?? null) : null,
                 'cheque_due_date' => $data['method'] === 'Cheque' ? ($data['cheque_due_date'] ?? null) : null,

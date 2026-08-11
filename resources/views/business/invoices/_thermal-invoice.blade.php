@@ -21,7 +21,7 @@
     :business="$order->business"
     :title="null"
     :number="$invoice->invoice_number"
-    :date="($invoice->invoice_date ?: $invoice->created_at)?->format('d M Y g:i A')"
+    :date="($invoice->invoice_date ?: $invoice->created_at)?->format('n/j/Y, g:i A')"
     :cashier="$order->creator?->name"
     party-label="Customer"
     :party-name="$order->customer?->display_name ?? $order->customer?->name ?? 'Walk-in Customer'"

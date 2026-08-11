@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Notifications\SubscriptionStatusNotification;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
 /**
@@ -19,7 +20,12 @@ use Illuminate\Support\Carbon;
  */
 class SubscriptionLifecycleService
 {
+    // Keep the legacy constant for callers that only deal with trial access.
+    // These thresholds are the single source for both the live dashboard
+    // reminder and scheduled lifecycle-notification milestones.
     public const EXPIRING_SOON_DAYS = 7;
+    public const TRIAL_EXPIRING_SOON_DAYS = 7;
+    public const PAID_EXPIRING_SOON_DAYS = 5;
 
     public function __construct(private readonly CompanyPermissionService $permissions)
     {
@@ -54,16 +60,16 @@ class SubscriptionLifecycleService
         $current = $subscription->status;
         $target = $current;
 
-        if ($state['is_scheduled'] && in_array($current, ['Trial', 'Active', 'Expiring'], true)) {
+        // Suspensions and cancellations are deliberate administrative states;
+        // never reopen those workspaces merely because a stored period exists.
+        if (in_array($current, ['Suspended', 'Cancelled'], true)) {
+            $target = $current;
+        } elseif ($state['is_scheduled']) {
             $target = 'Pending';
-        } elseif ($current === 'Pending' && ! $state['is_scheduled'] && ! $state['is_expired'] && ($state['is_trial'] || $subscription->payment_status === 'Received')) {
-            $target = $state['is_trial'] ? 'Trial' : ($state['is_expiring_soon'] ? 'Expiring' : 'Active');
-        } elseif ($state['is_expired'] && in_array($current, ['Trial', 'Active', 'Expiring'], true)) {
+        } elseif ($state['is_expired']) {
             $target = 'Expired';
-        } elseif ($current === 'Active' && $state['is_expiring_soon']) {
-            $target = 'Expiring';
-        } elseif ($current === 'Expiring' && ! $state['is_expiring_soon'] && ! $state['is_expired']) {
-            $target = 'Active';
+        } elseif ($state['is_active_period']) {
+            $target = $state['is_trial'] ? 'Trial' : ($state['is_expiring_soon'] ? 'Expiring' : 'Active');
         }
 
         if ($target !== $current) {
@@ -82,7 +88,10 @@ class SubscriptionLifecycleService
     public function synchronizeAll(bool $dispatchNotifications = true): void
     {
         Subscription::with(['plan', 'business.owner'])
-            ->whereIn('status', ['Pending', 'Trial', 'Active', 'Expiring'])
+            // Include Expired records so a newly-recorded paid period with a
+            // future stored end can be promoted from an old trial expiry
+            // before filters and table presentation are evaluated.
+            ->whereIn('status', ['Pending', 'Trial', 'Active', 'Expiring', 'Expired'])
             ->chunkById(100, function ($subscriptions) use ($dispatchNotifications): void {
                 foreach ($subscriptions as $subscription) {
                     $this->synchronize($subscription, $dispatchNotifications);
@@ -90,45 +99,120 @@ class SubscriptionLifecycleService
             });
     }
 
+    /**
+     * Limit platform access work scans to subscriptions that can plausibly be
+     * expiring, expired, or restricted. Callers must still run `state()` on
+     * each result: this query is only a performance prefilter, while this
+     * service remains the source of truth for the final lifecycle decision.
+     *
+     * @return Builder<Business>
+     */
+    public function attentionCandidateBusinesses(): Builder
+    {
+        $trialCutoff = now(config('app.timezone'))
+            ->addDays(self::TRIAL_EXPIRING_SOON_DAYS)
+            ->toDateString();
+        $paidCutoff = now(config('app.timezone'))
+            ->addDays(self::PAID_EXPIRING_SOON_DAYS)
+            ->toDateString();
+
+        return Business::query()->where(function (Builder $businesses) use ($trialCutoff, $paidCutoff): void {
+            // A business without an access record is already restricted.
+            $businesses->whereDoesntHave('subscription')
+                ->orWhereHas('subscription', function (Builder $subscription) use ($trialCutoff, $paidCutoff): void {
+                    $subscription->whereIn('status', ['Pending', 'Expiring', 'Expired', 'Suspended', 'Cancelled'])
+                        ->orWhere(function (Builder $paidAccess) use ($paidCutoff): void {
+                            $paidAccess->where('payment_status', 'Received')
+                                ->whereNotNull('ends_at')
+                                ->where('ends_at', '<=', $paidCutoff);
+                        })
+                        ->orWhere(function (Builder $trialAccess) use ($trialCutoff): void {
+                            $trialAccess->where(function (Builder $paymentStatus): void {
+                                $paymentStatus->whereNull('payment_status')
+                                    ->orWhere('payment_status', '!=', 'Received');
+                            })
+                                ->whereNotNull('trial_end_at')
+                                ->where('trial_end_at', '<=', $trialCutoff);
+                        });
+                });
+        });
+    }
+
     /** @return array<string, mixed> */
     public function state(?Subscription $subscription, bool $includeUsage = false): array
     {
         $now = now(config('app.timezone'));
-        $today = $now->copy()->startOfDay();
-        // Trial dates are retained as historical evidence after a paid period
-        // begins. They must not turn a paid Active subscription back into a
-        // trial (or make it expire against the old trial end date).
-        $isTrial = $subscription && (
-            $subscription->status === 'Trial'
-            || (in_array($subscription->status, ['Pending', 'Expired'], true)
-                && $subscription->payment_status !== 'Received'
-                && $subscription->trial_start_at
-                && $subscription->trial_end_at)
-        );
-        $endDate = $subscription
-            ? ($isTrial ? ($subscription->trial_end_at ?? $subscription->ends_at) : $subscription->ends_at)
+        // A paid period takes priority over the historic trial period. Its
+        // financial end remains on Subscription, while complimentary days are
+        // summed separately by the access-extension ledger.
+        $hasPaidPeriod = (bool) ($subscription
+            && $subscription->payment_status === 'Received'
+            && $subscription->starts_at
+            && $subscription->ends_at);
+        $hasTrialPeriod = (bool) ($subscription
+            && $subscription->trial_start_at
+            && $subscription->trial_end_at);
+        $isTrial = ! $hasPaidPeriod && $hasTrialPeriod;
+        $extraAccessDays = $hasPaidPeriod ? $subscription->extraAccessDays() : 0;
+        $effectivePaidEnd = $hasPaidPeriod ? $subscription->effectivePaidAccessEnd() : null;
+        $paidDurationDays = $hasPaidPeriod
+            ? $subscription->starts_at->diffInDays($subscription->ends_at)
             : null;
-        $startDate = $subscription
-            ? ($isTrial ? ($subscription->trial_start_at ?? $subscription->starts_at) : $subscription->starts_at)
+        $startDate = $hasPaidPeriod
+            ? $subscription?->starts_at
+            : ($hasTrialPeriod ? $subscription?->trial_start_at : null);
+        $endDate = $hasPaidPeriod
+            ? $effectivePaidEnd
+            : ($hasTrialPeriod ? $subscription?->trial_end_at : null);
+        $startBoundary = $startDate
+            ? Carbon::parse($startDate->toDateString(), config('app.timezone'))->startOfDay()
             : null;
-        $isScheduled = $subscription && $startDate && $today->lt($startDate->copy()->startOfDay());
+        $isScheduled = $subscription && $startBoundary && $now->lt($startBoundary);
         // Subscription trial/access columns are calendar dates. A stored end
         // date remains valid through that local calendar day, then expires
         // exactly once at the following end-of-day boundary.
-        $expiryBoundary = $endDate?->copy()->endOfDay();
-        $daysRemaining = $endDate && ! $isScheduled
-            ? (int) $today->diffInDays($endDate->copy()->startOfDay(), false)
+        $expiryBoundary = $endDate
+            ? Carbon::parse($endDate->toDateString(), config('app.timezone'))->endOfDay()
             : null;
-        $isExpired = $subscription && ! $isScheduled && $expiryBoundary && $now->gt($expiryBoundary);
-        $effectiveStatus = $isScheduled && in_array($subscription?->status, ['Trial', 'Active', 'Expiring'], true)
-            ? 'Pending'
-            : ($isExpired && in_array($subscription?->status, ['Trial', 'Active', 'Expiring'], true)
-                ? 'Expired'
-                : $subscription?->status);
+        // Financial paid time is deliberately measured against the original
+        // paid end, never the effective access end. Complimentary access can
+        // keep a workspace available after this reaches zero, but it must not
+        // make the paid/billing period appear longer.
+        $paidExpiryBoundary = $hasPaidPeriod
+            ? Carbon::parse($subscription->ends_at->toDateString(), config('app.timezone'))->endOfDay()
+            : null;
+        // Date-only subscription fields deliberately remain valid through the
+        // local end of their stored end date. Use the actual local current
+        // time for display and status; never derive remaining time from start.
+        $daysRemaining = $endDate && ! $isScheduled
+            ? max(0, (int) $now->diffInDays($expiryBoundary, false))
+            : null;
+        $paidDaysRemaining = $paidExpiryBoundary && ! $isScheduled
+            ? max(0, (int) $now->diffInDays($paidExpiryBoundary, false))
+            : null;
+        // `end_now` and a reduction that consumes all remaining days store
+        // today's date (never yesterday) and mark the record Expired. Keep
+        // that explicit immediate restriction while ordinary same-day ends
+        // continue to display as "Ends today" through local end-of-day.
+        $wasEndedImmediately = $subscription
+            && $subscription->status === 'Expired'
+            && $endDate
+            && $endDate->isSameDay($now);
+        $isExpired = (bool) ($subscription
+            && ! $isScheduled
+            && ($wasEndedImmediately || ($expiryBoundary && $now->gte($expiryBoundary))));
+        $effectiveStatus = in_array($subscription?->status, ['Suspended', 'Cancelled'], true)
+            ? $subscription?->status
+            : ($isScheduled
+                ? 'Pending'
+                : ($isExpired
+                    ? 'Expired'
+                    : ($isTrial ? 'Trial' : ($hasPaidPeriod ? 'Active' : $subscription?->status))));
+        $warningDays = $isTrial ? self::TRIAL_EXPIRING_SOON_DAYS : self::PAID_EXPIRING_SOON_DAYS;
         $isExpiringSoon = ! $isExpired
             && $daysRemaining !== null
             && $daysRemaining >= 0
-            && $daysRemaining <= self::EXPIRING_SOON_DAYS
+            && $daysRemaining <= $warningDays
             && in_array($effectiveStatus, ['Trial', 'Active', 'Expiring'], true);
 
         $usage = null;
@@ -145,19 +229,33 @@ class SubscriptionLifecycleService
             'subscription' => $subscription,
             'plan' => $subscription?->plan,
             'status' => $effectiveStatus,
+            // Explicit effective-access fields keep dashboard/banner consumers
+            // independent from notification history and from trial-only dates.
+            'effective_access_type' => $hasPaidPeriod ? 'paid' : ($hasTrialPeriod ? 'trial' : null),
+            'is_paid_access_active' => (bool) $hasPaidPeriod && ! $isScheduled && ! $isExpired,
+            'paid_access_start' => $hasPaidPeriod ? $subscription?->starts_at : null,
+            'paid_access_end' => $hasPaidPeriod ? $subscription?->ends_at : null,
+            'paid_duration_days' => $paidDurationDays,
+            'extra_access_days' => $extraAccessDays,
+            'effective_access_end' => $hasPaidPeriod ? $effectivePaidEnd : null,
+            'paid_days_remaining' => $paidDaysRemaining,
             'is_trial' => (bool) $isTrial,
             'trial_start' => $subscription?->trial_start_at,
-            'trial_end' => $subscription?->trial_end_at ?? ($isTrial ? $subscription?->ends_at : null),
+            'trial_end' => $subscription?->trial_end_at,
             'subscription_start' => $subscription?->starts_at,
+            // Retain the financial paid end separately from the effective end
+            // so payment/receipt consumers never absorb complimentary days.
             'subscription_end' => $subscription?->ends_at,
             'start_date' => $startDate,
             'end_date' => $endDate,
             'billing_cycle' => $subscription?->billing_cycle,
             'payment_status' => $subscription?->payment_status ?? 'Pending',
             'days_remaining' => $isExpired ? 0 : $daysRemaining,
+            'warning_days' => $warningDays,
             'is_scheduled' => (bool) $isScheduled,
             'is_active_period' => ! $isScheduled && ! $isExpired && in_array($effectiveStatus, ['Trial', 'Active', 'Expiring'], true),
             'is_expiring_soon' => $isExpiringSoon,
+            'is_paid_access_expiring' => (bool) $hasPaidPeriod && $isExpiringSoon,
             'is_expired' => (bool) $isExpired || $effectiveStatus === 'Expired',
             // A workspace needs an actual, current trial or paid access record.
             // Legacy plan records remain attached for audit history only; they
@@ -168,11 +266,47 @@ class SubscriptionLifecycleService
         ];
     }
 
+    /**
+     * Build the dynamic workspace reminder from the already-calculated access
+     * state. This deliberately has no persistence side effects: lifecycle
+     * milestone notifications are created only by synchronizeAll().
+     *
+     * @param array<string, mixed> $state
+     * @return array<string, mixed>|null
+     */
+    public function dashboardExpiryAlert(array $state): ?array
+    {
+        if (! $state['can_access_business'] || ! $state['is_expiring_soon'] || ! $state['end_date']) {
+            return null;
+        }
+
+        $isTrial = (bool) $state['is_trial'];
+        $kind = $isTrial ? 'free trial' : 'paid access';
+        $days = max(0, (int) $state['days_remaining']);
+        $endDate = $state['end_date'];
+        $timing = match ($days) {
+            0 => "Your {$kind} ends today.",
+            1 => "Your {$kind} ends tomorrow.",
+            default => "Your {$kind} expires in {$days} days.",
+        };
+
+        return [
+            'kind' => $kind,
+            'title' => $isTrial ? 'Free trial ending soon' : 'Paid access ending soon',
+            'message' => $timing,
+            'days_remaining' => $days,
+            'ends_at' => $endDate,
+            // Tying dismissal to the cycle end prevents a stale dismissal from
+            // hiding an alert after Super Admin changes the access end date.
+            'dismiss_key' => $kind.'|'.$endDate->toDateString(),
+        ];
+    }
+
     /** @param array<string, mixed> $state */
     private function dispatchLifecycleNotifications(Subscription $subscription, array $state): void
     {
         $days = $state['days_remaining'];
-        $milestones = $state['is_trial'] ? [7, 5, 3, 1] : [4, 3, 2, 1];
+        $milestones = $state['is_trial'] ? [7, 5, 3, 1] : [5, 4, 3, 2, 1];
         $milestone = $state['is_expired'] ? 'expired' : (in_array($days, $milestones, true) ? $days.'_days' : null);
         if (! $milestone) {
             return;
