@@ -10,9 +10,6 @@
         <p class="tf-muted mb-0">Search, filter, and manage sales orders, invoices, and customer balances.</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
-        @companyCan('sales.quotations')
-            <a href="{{ route('business.sales.quotations.index') }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-text me-1"></i>Quotations</a>
-        @endcompanyCan
         @companyCan('sales.payments')
             <a href="{{ route('business.sales.payments.index') }}" class="btn btn-outline-primary"><i class="bi bi-cash-stack me-1"></i>Customer Payments</a>
         @endcompanyCan

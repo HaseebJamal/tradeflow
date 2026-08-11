@@ -104,7 +104,6 @@ class BusinessActionPermissionMiddleware
             'business.purchases.receive', 'business.purchases.receiving.create', 'business.purchases.receipts.store', 'business.goods-receipts.show' => 'purchases.receive', 'business.purchases.pay' => 'purchases.pay', 'business.purchases.return' => 'purchase_returns.process',
             'business.purchase-returns.index', 'business.purchase-returns.create', 'business.purchase-returns.show', 'business.purchase-returns.edit' => 'purchase_returns.view',
             'business.purchase-returns.start' => 'purchase_returns.process',
-            'business.sales.quotations.index', 'business.sales.quotations.create', 'business.sales.quotations.store', 'business.sales.quotations.show', 'business.sales.quotations.edit', 'business.sales.quotations.update', 'business.sales.quotations.convert', 'business.sales.quotations.destroy' => 'sales.quotations',
             'business.sales.index', 'business.sales.show', 'business.orders.index', 'business.orders.show' => 'sales.view',
             // Legacy creation URLs safely return visitors to the Sales listing.
             'business.sales.create', 'business.sales.store', 'business.orders.create', 'business.orders.store' => 'sales.view',

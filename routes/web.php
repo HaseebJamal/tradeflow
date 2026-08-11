@@ -183,7 +183,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::get('/notifications-center/registrations', fn(\Illuminate\Http\Request $request) => app(AdminNotificationController::class)->index($request, 'registrations'))->name('notifications.registrations');
     Route::get('/notifications-center/alerts', fn(\Illuminate\Http\Request $request) => app(AdminNotificationController::class)->index($request, 'alerts'))->name('notifications.alerts');
     Route::patch('/notifications-center/{notification}/read', [AdminNotificationController::class, 'markRead'])->name('notifications.read');
-    Route::patch('/notifications-center/{notification}/unread', [AdminNotificationController::class, 'markUnread'])->name('notifications.unread-item');
     Route::delete('/notifications-center/{notification}', [AdminNotificationController::class, 'destroy'])->name('notifications.destroy');
     Route::get('/notifications-center/{notification}', [AdminNotificationController::class, 'show'])->name('notifications.show');
     Route::get('/notifications-center/{notification}/review', [AdminNotificationController::class, 'review'])->name('notifications.review');
@@ -339,14 +338,6 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::post('/purchases/{purchase}/receive', [\App\Http\Controllers\Business\PurchaseController::class, 'receive'])->name('purchases.receive')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/payments', [\App\Http\Controllers\Business\PurchaseController::class, 'pay'])->name('purchases.pay')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/returns', [\App\Http\Controllers\Business\PurchaseController::class, 'processReturn'])->name('purchases.return')->middleware('business.permission:Purchases');
-    Route::get('/sales/quotations', [\App\Http\Controllers\Business\SalesQuotationController::class, 'index'])->name('sales.quotations.index')->middleware('business.permission:Sales');
-    Route::get('/sales/quotations/create', [\App\Http\Controllers\Business\SalesQuotationController::class, 'create'])->name('sales.quotations.create')->middleware('business.permission:Sales');
-    Route::post('/sales/quotations', [\App\Http\Controllers\Business\SalesQuotationController::class, 'store'])->name('sales.quotations.store')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
-    Route::get('/sales/quotations/{quotation}', [\App\Http\Controllers\Business\SalesQuotationController::class, 'show'])->name('sales.quotations.show')->middleware('business.permission:Sales');
-    Route::get('/sales/quotations/{quotation}/edit', [\App\Http\Controllers\Business\SalesQuotationController::class, 'edit'])->name('sales.quotations.edit')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
-    Route::put('/sales/quotations/{quotation}', [\App\Http\Controllers\Business\SalesQuotationController::class, 'update'])->name('sales.quotations.update')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
-    Route::post('/sales/quotations/{quotation}/convert', [\App\Http\Controllers\Business\SalesQuotationController::class, 'convert'])->name('sales.quotations.convert')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
-    Route::delete('/sales/quotations/{quotation}', [\App\Http\Controllers\Business\SalesQuotationController::class, 'destroy'])->name('sales.quotations.destroy')->middleware(['business.permission:Sales', 'company.permission:sales.quotations']);
     // Sales is the consolidated home for orders, customer payments, and sales invoices.
     Route::get('/sales', [OrderController::class, 'index'])->name('sales.index')->middleware('business.permission:Sales');
     Route::get('/sales/lookup', [OrderController::class, 'lookup'])->name('sales.lookup')->middleware('business.permission:Sales');

@@ -19,4 +19,5 @@ class PlatformPayment extends Model
     public function plan() { return $this->belongsTo(SubscriptionPlan::class, 'subscription_plan_id'); }
     public function recordedBy() { return $this->belongsTo(User::class, 'recorded_by'); }
     public function verifiedBy() { return $this->belongsTo(User::class, 'verified_by'); }
+    public function renewalInvoice() { return $this->hasOne(RenewalInvoice::class, 'platform_payment_id'); }
 }

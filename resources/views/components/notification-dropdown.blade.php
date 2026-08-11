@@ -1,9 +1,9 @@
 @php
     $notificationUser = auth()->user();
-    $isAdminArea = request()->is('admin/*');
     $notificationContextBusiness = $notificationUser?->role === 'super_admin' && session('super_admin_business_context_id')
         ? \App\Models\Business::find(session('super_admin_business_context_id'))
         : null;
+    $isPlatformSuperAdmin = $notificationUser?->role === 'super_admin' && ! $notificationContextBusiness;
     $notificationBusiness = $notificationContextBusiness
         ?? ($notificationUser?->role === 'business_owner'
             ? ($notificationUser?->ownedBusiness ?? $notificationUser?->business)
@@ -13,12 +13,11 @@
     // same company permission gate as the notification routes. Platform-level
     // Super Admin notifications remain available outside a company context.
     $canUseNotifications = (bool) $notificationUser
-        && ($isAdminArea && ! $notificationContextBusiness
-            ? $notificationUser->role === 'super_admin'
-            : ($notificationBusiness
+        && ($isPlatformSuperAdmin
+            || ($notificationBusiness
                 && app(\App\Services\CompanyPermissionService::class)
                     ->allowsUser($notificationUser, 'notifications.view', $notificationBusiness)));
-    $notificationIndexRoute = $isAdminArea
+    $notificationIndexRoute = $isPlatformSuperAdmin
         ? route('admin.notifications.index')
         : ($notificationContextBusiness ? route('business.context.notifications') : route('notifications.index'));
     $latestNotifications = $canUseNotifications ? $notificationUser?->notifications()->latest()->take(4)->get() : collect();
@@ -29,14 +28,12 @@
     <div class="dropdown tf-notification-dropdown">
         <button class="btn btn-light border position-relative" type="button" data-bs-toggle="dropdown" data-bs-auto-close="true" data-tf-notification-toggle aria-expanded="false" aria-label="Notifications" title="Notifications">
             <i class="bi bi-bell"></i>
-            @if($unreadNotificationCount)
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill text-bg-danger">{{ $unreadNotificationCount > 99 ? '99+' : $unreadNotificationCount }}</span>
-            @endif
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill text-bg-danger {{ $unreadNotificationCount ? '' : 'd-none' }}" data-notification-bell-count>{{ $unreadNotificationCount > 99 ? '99+' : $unreadNotificationCount }}</span>
         </button>
         <div class="dropdown-menu dropdown-menu-end p-0 shadow tf-notification-menu tf-notification-menu--compact" aria-label="Latest notifications">
             <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom">
                 <span class="fw-semibold">Notifications</span>
-                @if($unreadNotificationCount)<span class="badge text-bg-primary">{{ $unreadNotificationCount }} unread</span>@endif
+                <span class="badge text-bg-primary {{ $unreadNotificationCount ? '' : 'd-none' }}" data-notification-menu-unread-count>{{ $unreadNotificationCount }} unread</span>
             </div>
             <div class="tf-notification-list tf-notification-list--compact">
             @forelse($latestNotifications as $notification)

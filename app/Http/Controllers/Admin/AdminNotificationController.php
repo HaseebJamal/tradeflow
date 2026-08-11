@@ -97,6 +97,7 @@ class AdminNotificationController extends Controller
             'time' => $item->created_at?->format('h:i A'),
             'business' => data_get($data, 'business_name') ?? data_get($data, 'company_name'),
             'action' => $action,
+            'unread_count' => $request->user()->unreadNotifications()->count(),
         ]);
     }
 
@@ -105,14 +106,6 @@ class AdminNotificationController extends Controller
         $request->user()->unreadNotifications()->update(['read_at' => now()]);
 
         return back()->with('success', 'All notifications marked as read.');
-    }
-
-    public function markUnread(Request $request, string $notification)
-    {
-        $item = $request->user()->notifications()->findOrFail($notification);
-        $item->update(['read_at' => null]);
-
-        return back()->with('success', 'Notification marked as unread.');
     }
 
     public function destroy(Request $request, string $notification)

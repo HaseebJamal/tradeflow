@@ -7,6 +7,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BusinessDocumentFooter extends Model
 {
+    /**
+     * Business-controlled footer visibility options. Platform attribution is
+     * intentionally excluded because it is mandatory and set server-side.
+     */
+    public const VISIBILITY_FIELDS = [
+        'show_company_name',
+        'show_footer_title',
+        'show_footer_message',
+        'show_phone',
+        'show_email',
+        'show_address',
+        'show_website',
+    ];
+
     protected $fillable = [
         'business_id', 'footer_title', 'footer_message', 'show_company_name', 'show_footer_title', 'show_footer_message',
         'show_address', 'show_phone', 'show_email', 'show_website',

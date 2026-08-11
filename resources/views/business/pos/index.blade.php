@@ -14,17 +14,6 @@
         'registerId' => $register?->id,
         'canUseCustomPrice' => $canUseCustomPrice,
         'canCreateCustomer' => $canCreateCustomer,
-        'quotation' => $quotation ? [
-            'id' => $quotation->id,
-            'customer_id' => $quotation->customer_id,
-            'items' => $quotation->items->map(fn ($item) => [
-                'id' => $item->product_id,
-                'quantity' => (int) $item->quantity,
-                'price' => (int) $item->unit_price,
-                'discount' => (int) $item->discount_value,
-                'tax' => (int) $item->tax_value,
-            ])->values(),
-        ] : null,
     ]);
 @endphp
 <div class="tf-pos" data-pos-root data-pos-initialized="0" data-pos-config="{{ $posConfig }}">

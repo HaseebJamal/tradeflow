@@ -1657,7 +1657,13 @@ class AdminController extends Controller
                 $this->auditBusinessAccess($request, $business, 'Paid access activated', $subscription->fresh(), $old, $subscription->fresh()->only(['status', 'amount', 'starts_at', 'ends_at', 'payment_status']));
                 $business->owner?->notify(new SubscriptionStatusNotification('Paid access activated', 'Your workspace access is active until '.Carbon::parse($data['period_ends_at'])->format('d M, Y').'.', $business->id, $payment->id));
             } elseif ($renewalInvoice) {
-                $renewalInvoice->update(['status' => 'Pending Payment']);
+                // Keep one source of truth for a renewal payment awaiting
+                // verification. This also lets attention counters treat the
+                // invoice and its pending payment as one work item.
+                $renewalInvoice->update([
+                    'platform_payment_id' => $payment->id,
+                    'status' => 'Pending Payment',
+                ]);
             }
 
             return $payment;
@@ -1969,21 +1975,15 @@ class AdminController extends Controller
      */
     public function updateDemoVideoSettings(Request $request): RedirectResponse
     {
-        // Do this before Laravel's MIME validator. Some MIME sniffers load the
-        // full media stream, which turned an oversized video into a PHP memory
-        // exhaustion instead of a normal validation response.
+        if ($request->filled('demo_language')) {
+            return $this->updateBilingualDemoVideo($request);
+        }
         $videoFile = $request->file('demo_video_file');
         if ($videoFile) {
-            // Keep this below the active PHP post/upload limits (40MB).
-            $maximumVideoBytes = 40 * 1024 * 1024;
-            if (($videoFile->getSize() ?? 0) > $maximumVideoBytes) {
-                throw ValidationException::withMessages([
-                    'demo_video_file' => 'Demo video must not exceed 40MB.',
-                ]);
-            }
-
             $extension = strtolower($videoFile->getClientOriginalExtension());
-            if (! in_array($extension, ['mp4', 'webm', 'ogv'], true)) {
+            if (! $videoFile->isValid()
+                || ! in_array($extension, ['mp4', 'webm', 'ogv'], true)
+                || ! in_array($videoFile->getMimeType(), ['video/mp4', 'video/webm', 'video/ogg', 'application/ogg'], true)) {
                 throw ValidationException::withMessages([
                     'demo_video_file' => 'Upload an MP4, WebM, or OGV video file.',
                 ]);
@@ -2103,6 +2103,9 @@ class AdminController extends Controller
 
     public function removeDemoVideo(Request $request): RedirectResponse
     {
+        if ($request->filled('demo_language')) {
+            return $this->removeBilingualDemoVideo($request);
+        }
         $settingsService = app(PlatformSettingsService::class);
         $settings = $settingsService->current();
         $video = $settings->demo_video_url;
@@ -2125,6 +2128,94 @@ class AdminController extends Controller
         $this->audit('Public demo video removed', $request, 'Settings', $settings->id);
 
         return back()->with('success', 'Demo video removed from the landing page.');
+    }
+
+    private function updateBilingualDemoVideo(Request $request): RedirectResponse
+    {
+        $locale = $request->string('demo_language')->value();
+        abort_unless(in_array($locale, ['en', 'ur'], true), 422);
+        $prefix = 'demo_'.$locale.'_';
+        $videoField = $prefix.'video_file';
+        $posterField = $prefix.'poster_file';
+        $data = $request->validate([
+            'demo_language' => ['required', Rule::in(['en', 'ur'])],
+            $prefix.'title' => ['nullable', 'string', 'max:120'],
+            $prefix.'subtitle' => ['nullable', 'string', 'max:500'],
+            $prefix.'video_type' => ['required', Rule::in(['external', 'upload'])],
+            $prefix.'video_url' => ['nullable', 'string', 'max:2048'],
+            $videoField => ['nullable', 'file', 'max:524288'],
+            $posterField => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            $prefix.'remove_poster' => ['nullable', 'boolean'],
+            $prefix.'is_active' => ['nullable', 'boolean'],
+        ]);
+        $videoFile = $request->file($videoField);
+        if ($videoFile && (! $videoFile->isValid()
+            || ! in_array(strtolower($videoFile->getClientOriginalExtension()), ['mp4', 'webm', 'ogv'], true)
+            || ! in_array($videoFile->getMimeType(), ['video/mp4', 'video/webm', 'video/ogg', 'application/ogg'], true))) {
+            throw ValidationException::withMessages([$videoField => 'Upload a valid MP4, WebM, or OGV video file.']);
+        }
+
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $oldVideo = $settings->getAttribute($prefix.'video_url');
+        $oldVideoType = $settings->getAttribute($prefix.'video_type');
+        $oldPoster = $settings->getAttribute($prefix.'poster');
+        $newVideo = null;
+        $newPoster = null;
+        $removePoster = $request->boolean($prefix.'remove_poster');
+        try {
+            if ($data[$prefix.'video_type'] === 'external') {
+                $videoUrl = $this->validatedDemoVideoUrl($data[$prefix.'video_url'] ?? null);
+            } elseif ($videoFile) {
+                $newVideo = $videoFile->store('platform/demo-videos/'.$locale, 'public');
+                $videoUrl = $newVideo;
+            } elseif ($oldVideoType === 'upload' && filled($oldVideo)) {
+                $videoUrl = $oldVideo;
+            } else {
+                throw ValidationException::withMessages([$videoField => 'The video could not be uploaded. Please check the server upload configuration or try again.']);
+            }
+            if ($request->hasFile($posterField)) {
+                $newPoster = $request->file($posterField)->store('platform/demo-posters/'.$locale, 'public');
+            }
+            if ($request->boolean($prefix.'is_active') && ! filled($videoUrl)) {
+                throw ValidationException::withMessages([$prefix.'video_url' => 'Provide a valid demo video before enabling it.']);
+            }
+            $settings->update([
+                $prefix.'title' => filled($data[$prefix.'title'] ?? null) ? trim($data[$prefix.'title']) : ($locale === 'en' ? 'See Profit Point in action' : null),
+                $prefix.'subtitle' => filled($data[$prefix.'subtitle'] ?? null) ? trim($data[$prefix.'subtitle']) : null,
+                $prefix.'video_type' => $data[$prefix.'video_type'],
+                $prefix.'video_url' => $videoUrl,
+                $prefix.'poster' => $newPoster ?: ($removePoster ? null : $oldPoster),
+                $prefix.'is_active' => $request->boolean($prefix.'is_active'),
+            ]);
+        } catch (\Throwable $exception) {
+            if ($newVideo) Storage::disk('public')->delete($newVideo);
+            if ($newPoster) Storage::disk('public')->delete($newPoster);
+            throw $exception;
+        }
+        if ($newVideo && $oldVideoType === 'upload' && $oldVideo && $oldVideo !== $newVideo) Storage::disk('public')->delete($this->platformSettingStoragePath($oldVideo));
+        if (($newPoster || $removePoster) && $oldPoster && $oldPoster !== $newPoster) Storage::disk('public')->delete($this->platformSettingStoragePath($oldPoster));
+        $settingsService->forget();
+        $this->audit(strtoupper($locale).' landing demo updated', $request, 'Settings', $settings->id);
+        return back()->with('success', strtoupper($locale).' demo settings updated.');
+    }
+
+    private function removeBilingualDemoVideo(Request $request): RedirectResponse
+    {
+        $locale = $request->string('demo_language')->value();
+        abort_unless(in_array($locale, ['en', 'ur'], true), 422);
+        $prefix = 'demo_'.$locale.'_';
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $video = $settings->getAttribute($prefix.'video_url');
+        $type = $settings->getAttribute($prefix.'video_type');
+        $poster = $settings->getAttribute($prefix.'poster');
+        $settings->update([$prefix.'title' => null, $prefix.'subtitle' => null, $prefix.'video_type' => null, $prefix.'video_url' => null, $prefix.'poster' => null, $prefix.'is_active' => false]);
+        if ($type === 'upload' && $video) Storage::disk('public')->delete($this->platformSettingStoragePath($video));
+        if ($poster) Storage::disk('public')->delete($this->platformSettingStoragePath($poster));
+        $settingsService->forget();
+        $this->audit(strtoupper($locale).' landing demo removed', $request, 'Settings', $settings->id);
+        return back()->with('success', strtoupper($locale).' demo removed from the landing page.');
     }
 
     public function removeWhatsAppContact(Request $request): RedirectResponse
@@ -2219,6 +2310,15 @@ class AdminController extends Controller
         }
         if (! empty($oldValues['demo_poster'])) {
             Storage::disk('public')->delete($this->platformSettingStoragePath($oldValues['demo_poster']));
+        }
+        foreach (['en', 'ur'] as $locale) {
+            $prefix = 'demo_'.$locale.'_';
+            if (($oldValues[$prefix.'video_type'] ?? null) === 'upload' && ! empty($oldValues[$prefix.'video_url'])) {
+                Storage::disk('public')->delete($this->platformSettingStoragePath($oldValues[$prefix.'video_url']));
+            }
+            if (! empty($oldValues[$prefix.'poster'])) {
+                Storage::disk('public')->delete($this->platformSettingStoragePath($oldValues[$prefix.'poster']));
+            }
         }
 
         $settingsService->forget();

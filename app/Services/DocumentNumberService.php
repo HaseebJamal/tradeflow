@@ -16,7 +16,6 @@ class DocumentNumberService
         'payment' => ['scope' => 'payment', 'prefix' => 'PAY'],
         'credit_note' => ['scope' => 'credit_note', 'prefix' => 'CN', 'sources' => [['credit_notes', 'credit_note_number']]],
         'debit_note' => ['scope' => 'debit_note', 'prefix' => 'DN'],
-        'quotation' => ['scope' => 'quotation', 'prefix' => 'QT', 'sources' => [['sales_quotations', 'quotation_number']]],
     ];
 
     /**

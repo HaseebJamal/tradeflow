@@ -14,7 +14,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
         <div><h2 id="add-customer-title" class="h5 mb-1">Add Customer</h2><p class="tf-muted small mb-0">Create a customer record and set its credit details.</p></div>
     </div>
-    <form method="POST" action="{{ route('business.customers.store') }}" class="row g-3">
+    <form method="POST" action="{{ route('business.customers.store') }}" class="row g-3" data-tf-confirm-message="Create this customer record?" data-tf-confirm-title="Save customer?" data-tf-confirm-button="Save Customer" data-tf-confirm-color="#2563eb" data-tf-confirm-saving-text="Saving customer...">
         @csrf
         <div class="col-12 col-md-6 col-xl-3"><label class="form-label" for="customer-name">Owner Name <span class="text-danger">*</span></label><input id="customer-name" name="name" value="{{ old('name') }}" class="form-control" required></div>
         <div class="col-12 col-md-6 col-xl-3"><label class="form-label" for="customer-shop">Shop Name</label><input id="customer-shop" name="shop_name" value="{{ old('shop_name') }}" class="form-control"></div>

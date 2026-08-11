@@ -55,7 +55,6 @@ class StorePosSaleRequest extends FormRequest
             'payment_method' => ['required', Rule::in(['Cash', 'Credit', 'Split', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque'])],
             'cash_received' => ['nullable', 'integer', 'min:0'],
             'reference' => ['nullable', 'string', 'max:255'],
-            'quotation_id' => ['nullable', 'integer'],
             'quick_customer' => ['nullable', 'array'],
             'quick_customer.name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'quick_customer.phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],

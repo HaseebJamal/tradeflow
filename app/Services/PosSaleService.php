@@ -14,7 +14,6 @@ use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\PosRegister;
 use App\Models\Product;
-use App\Models\SalesQuotation;
 use App\Models\StockMovement;
 use App\Models\KhataLedger;
 use Illuminate\Support\Facades\DB;
@@ -151,39 +150,7 @@ class PosSaleService
                 throw ValidationException::withMessages(['delivery_address' => 'A delivery address is required when delivery is requested.']);
             }
 
-            $quotation = null;
-            if (! empty($data['quotation_id'])) {
-                $quotation = SalesQuotation::with('items')
-                    ->where('business_id', $businessId)
-                    ->lockForUpdate()
-                    ->findOrFail((int) $data['quotation_id']);
-                if (! in_array($quotation->status, ['Draft', 'Sent', 'Accepted'], true) || $quotation->valid_until?->isPast()) {
-                    throw ValidationException::withMessages(['quotation_id' => 'This quotation is no longer available for conversion.']);
-                }
-                if (! $quotation->customer_id || $quotation->items->isEmpty()) {
-                    throw ValidationException::withMessages(['quotation_id' => 'This quotation is missing a required customer or item.']);
-                }
-                if ($quotation->items->contains(fn ($item) => ($item->discount_type === 'fixed' && (int) $item->discount_value > 0) || ($item->tax_type === 'fixed' && (int) $item->tax_value > 0))) {
-                    throw ValidationException::withMessages(['quotation_id' => 'This quotation contains unsupported fixed adjustments.']);
-                }
-                if ((int) ($data['customer_id'] ?? 0) !== (int) $quotation->customer_id) {
-                    throw ValidationException::withMessages(['quotation_id' => 'The selected quotation does not match the requested sale.']);
-                }
-            }
-
             $requested = collect($data['items'])->keyBy('product_id');
-            if ($quotation) {
-                $quoted = $quotation->items->keyBy('product_id');
-                if ($requested->count() !== $quoted->count() || $requested->keys()->diff($quoted->keys())->isNotEmpty()) {
-                    throw ValidationException::withMessages(['quotation_id' => 'The selected quotation does not match the requested sale.']);
-                }
-                foreach ($quoted as $productId => $quotedItem) {
-                    $line = $requested->get($productId);
-                    if (! $line || (int) $line['quantity'] !== (int) $quotedItem->quantity || (int) ($line['unit_price'] ?? 0) !== (int) $quotedItem->unit_price || (int) ($line['discount_rate'] ?? 0) !== (int) $quotedItem->discount_value || (int) ($line['tax_rate'] ?? 0) !== (int) $quotedItem->tax_value) {
-                        throw ValidationException::withMessages(['quotation_id' => 'The selected quotation does not match the requested sale.']);
-                    }
-                }
-            }
             $products = Product::where('business_id', $businessId)->whereIn('id', $requested->keys())->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             if ($products->count() !== $requested->count()) {
                 throw ValidationException::withMessages(['items' => 'One or more products are unavailable.']);
@@ -201,11 +168,11 @@ class PosSaleService
             foreach ($requested as $productId => $line) {
                 $product = $products->get((int) $productId);
                 $defaultPrice = (int) ($product->retail_price ?: $product->wholesale_price ?: 0);
-                $price = $quotation ? (int) $line['unit_price'] : $defaultPrice;
-                if (! $quotation && $defaultPrice > 0 && isset($line['unit_price']) && (int) $line['unit_price'] === 0) {
+                $price = $defaultPrice;
+                if ($defaultPrice > 0 && isset($line['unit_price']) && (int) $line['unit_price'] === 0) {
                     throw ValidationException::withMessages(['items' => 'A product with a selling price cannot be completed with a zero unit price.']);
                 }
-                if (isset($line['unit_price']) && (int) $line['unit_price'] !== $defaultPrice && ! $quotation) {
+                if (isset($line['unit_price']) && (int) $line['unit_price'] !== $defaultPrice) {
                     if (! $this->permissions->allowsUser(auth()->user(), 'pos.custom_price')) {
                         throw ValidationException::withMessages(['items' => 'You do not have permission to use a custom price.']);
                     }
@@ -319,9 +286,6 @@ class PosSaleService
             }
 
             $this->postAccounting($order->fresh(['items']), $paid, $customer?->id);
-            if ($quotation) {
-                $quotation->update(['status' => 'Converted']);
-            }
             $this->activity->record($businessId, 'POS', 'Completed POS sale '.$number, $order->id, null, ['grand_total' => $grandTotal, 'paid_amount' => $paid, 'delivery_required' => $deliveryRequired]);
 
             return $order->fresh(['customer', 'items.product', 'invoice', 'payments']);

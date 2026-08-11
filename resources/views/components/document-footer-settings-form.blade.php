@@ -16,16 +16,17 @@
     $footerService = app(\App\Services\BusinessDocumentFooterService::class);
     $platformPoweredByText = $footerService->displayedPoweredByText($footer);
     $isBusinessFooterPage = ! $adminMode && ! $lockedCompany;
+    $footerPreviewBusinessName = $business->business_name ?: ($business->name ?? '');
     $footerPreviewAddress = trim(implode(', ', array_filter([$business->address, $business->city])));
     $footerPreviewTitle = trim((string) old('footer_title', $footer->footer_title));
     $footerPreviewMessage = trim((string) old('footer_message', $footer->footer_message));
     $footerPreviewVisibility = collect(['show_company_name', 'show_footer_title', 'show_footer_message', 'show_phone', 'show_email', 'show_address', 'show_website'])
-        ->mapWithKeys(fn (string $field) => [$field => (bool) old($field, $footer->{$field})])
+        ->mapWithKeys(fn (string $field) => [$field => (bool) old("footer_visibility.{$field}", old($field, $footer->{$field}))])
         ->all();
     $footerPreviewVisibility['show_powered_by'] = true;
     $footerPreviewShowsTitle = $footerPreviewVisibility['show_footer_title']
         && filled($footerPreviewTitle)
-        && (! $footerPreviewVisibility['show_company_name'] || strcasecmp($footerPreviewTitle, (string) $business->business_name) !== 0);
+        && (! $footerPreviewVisibility['show_company_name'] || strcasecmp($footerPreviewTitle, (string) $footerPreviewBusinessName) !== 0);
 @endphp
 <div @class(['tf-card p-4', 'tf-business-receipt-footer' => $isBusinessFooterPage])>
     <div class="row g-4">
@@ -60,17 +61,16 @@
                 <div class="col-md-6"><label class="form-label" for="footerMessage">Footer Message</label><input id="footerMessage" name="footer_message" class="form-control @error('footer_message') is-invalid @enderror" maxlength="500" value="{{ old('footer_message', $footer->footer_message) }}">@error('footer_message')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                 <div class="col-12"><h2 class="h6 mb-2">Show on Documents</h2><div class="row g-2">
                     @foreach(['show_company_name' => 'Business Name', 'show_footer_title' => 'Footer Title', 'show_footer_message' => 'Footer Message', 'show_phone' => 'Phone', 'show_email' => 'Business Email', 'show_address' => 'Address', 'show_website' => 'Website'] as $field => $label)
-                        @php($checkboxId = 'footer_visibility_'.$field)
+                        @php($checkboxId = 'footer_visibility_'.$business->id.'_'.$field)
                         <div class="col-md-6">
-                            <input type="hidden" name="{{ $field }}" value="0">
-                            <div class="form-check tf-footer-visibility-option p-2 h-100 d-flex align-items-center">
-                                <input id="{{ $checkboxId }}" class="form-check-input flex-shrink-0 m-0 me-2" type="checkbox" name="{{ $field }}" value="1" @checked(old($field, $footer->{$field}))>
-                                <label class="form-check-label flex-grow-1" for="{{ $checkboxId }}">{{ $label }}</label>
-                            </div>
+                            <label class="form-check tf-footer-visibility-option p-2 h-100 d-flex align-items-center w-100" for="{{ $checkboxId }}">
+                                <input type="hidden" name="footer_visibility[{{ $field }}]" value="0">
+                                <input id="{{ $checkboxId }}" class="form-check-input flex-shrink-0 m-0 me-2" type="checkbox" name="footer_visibility[{{ $field }}]" value="1" data-footer-visibility-toggle data-footer-visibility-field="{{ $field }}" @checked(old("footer_visibility.{$field}", old($field, $footer->{$field})))>
+                                <span class="form-check-label flex-grow-1">{{ $label }}</span>
+                            </label>
                         </div>
                     @endforeach
                     <div class="col-md-6">
-                        <input type="hidden" name="show_powered_by" value="1">
                         <div class="form-check tf-footer-visibility-option p-2 h-100 d-flex align-items-center">
                             <input id="footer_visibility_show_powered_by" class="form-check-input flex-shrink-0 m-0 me-2" type="checkbox" checked disabled aria-describedby="footerPoweredByLock">
                             <label class="form-check-label flex-grow-1" for="footer_visibility_show_powered_by">{{ $platformPoweredByText }}</label>
@@ -92,7 +92,7 @@
                     <h2 class="h6 mb-3">Footer Preview</h2>
                     <div class="tf-footer-preview-sheet">
                         <div class="tf-footer-preview-content">
-                            <div data-footer-preview-field="show_company_name" @if(! $footerPreviewVisibility['show_company_name'] || blank($business->business_name)) hidden @endif class="tf-footer-preview-title">{{ $business->business_name }}</div>
+                            <div data-footer-preview-field="show_company_name" data-footer-preview-business-name="{{ $footerPreviewBusinessName }}" @if(! $footerPreviewVisibility['show_company_name'] || blank($footerPreviewBusinessName)) hidden @endif class="tf-footer-preview-title">{{ $footerPreviewBusinessName }}</div>
                             <div data-footer-preview-field="show_footer_title" @if(! $footerPreviewShowsTitle) hidden @endif data-footer-preview-title class="tf-footer-preview-title">{{ $footerPreviewTitle }}</div>
                             <div data-footer-preview-field="show_footer_message" @if(! $footerPreviewVisibility['show_footer_message'] || blank($footerPreviewMessage)) hidden @endif data-footer-preview-message>{{ $footerPreviewMessage }}</div>
                             <div data-footer-preview-field="show_address" data-footer-preview-city="{{ $business->city }}" @if(! $footerPreviewVisibility['show_address'] || blank($footerPreviewAddress)) hidden @endif>{{ $footerPreviewAddress }}</div>
@@ -125,9 +125,9 @@
             const phone = form.querySelector('[name="phone"]');
             const website = form.querySelector('[name="website"]');
             const address = form.querySelector('[name="address"]');
-            const companyName = preview.querySelector('[data-footer-preview-field="show_company_name"]')?.textContent.trim() || '';
+            const companyName = preview.querySelector('[data-footer-preview-field="show_company_name"]')?.dataset.footerPreviewBusinessName?.trim() || '';
             const field = (name) => preview.querySelector(`[data-footer-preview-field="${name}"]`);
-            const isEnabled = (name) => Boolean(form.querySelector(`[name="${name}"][type="checkbox"]`)?.checked);
+            const isEnabled = (name) => Boolean(form.querySelector('[data-footer-visibility-field="' + name + '"]')?.checked);
             const setVisible = (name, visible) => {
                 const target = field(name);
                 if (target) target.hidden = !visible;
@@ -163,7 +163,7 @@
                 if (event.target === title || event.target === message || event.target === website || event.target === address || event.target.closest?.('[data-tf-phone-field]')) sync();
             });
             form.addEventListener('change', (event) => {
-                if (event.target.matches('[name^="show_"]')) sync();
+                if (event.target.matches('[data-footer-visibility-toggle]')) sync();
             });
             sync();
         };

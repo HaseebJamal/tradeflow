@@ -205,16 +205,6 @@ class CompanyController extends Controller
                 if ($request->hasFile('company_logo')) {
                     $company->update(['logo' => $request->file('company_logo')->store('business-logos', 'public')]);
                 }
-                foreach (['cnic_image', 'business_document', 'shop_image'] as $documentType) {
-                    if ($request->hasFile($documentType)) {
-                        BusinessDocument::create([
-                            'business_id' => $company->id,
-                            'document_type' => $documentType,
-                            'file_path' => $request->file($documentType)->store('business-documents', 'public'),
-                            'status' => 'Pending Verification',
-                        ]);
-                    }
-                }
 
                 app(AccountingService::class)->ensureDefaultAccounts($company->id);
                 $this->applyInitialPermissions($company, $data['permissions'] ?? []);
@@ -421,6 +411,8 @@ class CompanyController extends Controller
             'footer_title' => ['nullable', 'string', 'max:255'],
             'footer_message' => ['nullable', 'string', 'max:500'],
             'powered_by_text' => ['nullable', 'string', 'max:100'],
+            'footer_visibility' => ['nullable', 'array'],
+            'footer_visibility.*' => ['nullable', 'boolean'],
             'show_company_name' => ['nullable', 'boolean'],
             'show_footer_title' => ['nullable', 'boolean'],
             'show_footer_message' => ['nullable', 'boolean'],
@@ -449,13 +441,7 @@ class CompanyController extends Controller
                 'footer_title' => $data['footer_title'] ?: $lockedCompany->business_name,
                 'footer_message' => $data['footer_message'] ?: null,
                 'powered_by_text' => $data['powered_by_text'] ?: app(BusinessDocumentFooterService::class)->platformPoweredByText(),
-                'show_company_name' => $request->boolean('show_company_name'),
-                'show_footer_title' => $request->boolean('show_footer_title'),
-                'show_footer_message' => $request->boolean('show_footer_message'),
-                'show_address' => $request->boolean('show_address'),
-                'show_phone' => $request->boolean('show_phone'),
-                'show_email' => $request->boolean('show_email'),
-                'show_website' => $request->boolean('show_website'),
+                ...app(BusinessDocumentFooterService::class)->visibilityFromRequest($request),
                 'show_powered_by' => true,
             ])->save();
             $new = [

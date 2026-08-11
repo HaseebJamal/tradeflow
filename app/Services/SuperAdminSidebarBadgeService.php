@@ -45,13 +45,15 @@ class SuperAdminSidebarBadgeService
             'support' => SupportTicket::query()
                 ->whereNotIn('status', ['Resolved', 'Closed'])
                 ->count(),
-            // Pending payment verification and actionable renewal invoices
-            // are separate records, so both need Super Admin attention.
+            // Count only open billing work. A renewal-linked pending payment
+            // belongs to the renewal invoice's queue item, so it is excluded
+            // here and counted once by the invoice scope below.
             'payments' => PlatformPayment::query()
                 ->where('status', 'Pending')
+                ->whereDoesntHave('renewalInvoice')
                 ->count()
                 + RenewalInvoice::query()
-                    ->whereIn('status', ['Generated', 'Sent', 'Pending Payment', 'Overdue'])
+                    ->actionableForAdmin()
                     ->count(),
             'trial_access' => $accessAttention['count'],
             'trial_access_critical' => $accessAttention['has_critical'],

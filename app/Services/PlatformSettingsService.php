@@ -27,6 +27,8 @@ class PlatformSettingsService
             'demo_video_url' => null,
             'demo_poster' => null,
             'demo_is_active' => false,
+            'demo_en_title' => null, 'demo_en_subtitle' => null, 'demo_en_video_type' => null, 'demo_en_video_url' => null, 'demo_en_poster' => null, 'demo_en_is_active' => false,
+            'demo_ur_title' => null, 'demo_ur_subtitle' => null, 'demo_ur_video_type' => null, 'demo_ur_video_url' => null, 'demo_ur_poster' => null, 'demo_ur_is_active' => false,
             'whatsapp_number' => null,
             'whatsapp_message' => null,
             'whatsapp_tooltip' => null,

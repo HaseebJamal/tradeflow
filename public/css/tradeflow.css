@@ -3103,33 +3103,46 @@ body > .dropdown-menu.tf-action-dropdown-portal.tf-payment-actions {
     .tf-customers-pagination > nav { margin-left: 0; }
 }
 
-/* Customer profile: balanced overview, financial metrics, and full-width editor. */
+/* Customer profile: compact main workspace with a focused action rail. */
+.tf-customer-profile-layout { align-items: start; display: grid; gap: 24px; grid-template-columns: minmax(0, 7fr) minmax(270px, 3fr); }
+.tf-customer-profile-main { display: grid; gap: 24px; min-width: 0; }
+.tf-customer-profile-aside { min-width: 0; }
 .tf-customer-overview-card, .tf-customer-side-card, .tf-customer-update-card, .tf-customer-ledger-card { border-radius: 16px; }
-.tf-customer-info-grid { display: grid; gap: 14px 24px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tf-customer-overview-card, .tf-customer-side-card, .tf-customer-update-card { padding: 20px; }
+.tf-customer-info-grid { display: grid; gap: 12px 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tf-customer-info-grid > div { min-width: 0; }
 .tf-customer-info-grid dt { color: #64748b; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
 .tf-customer-info-grid dd { color: #1e293b; font-size: 14px; font-weight: 550; line-height: 1.45; margin: 0; }
 .tf-customer-info-wide { grid-column: 1 / -1; }
-.tf-customer-kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; flex-direction: column; gap: 4px; min-height: 80px; padding: 13px; }
+.tf-customer-kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; flex-direction: column; gap: 4px; height: 100%; min-height: 74px; padding: 12px; }
 .tf-customer-kpi small { color: #64748b; font-size: 11px; font-weight: 650; line-height: 1.25; }
-.tf-customer-kpi strong { color: #0f172a; font-size: 17px; line-height: 1.25; }
+.tf-customer-kpi strong { color: #0f172a; font-size: 16px; line-height: 1.25; }
 .tf-customer-kpi.is-warning { background: #fffbeb; border-color: #fde68a; }
 .tf-customer-kpi.is-warning strong { color: #b45309; }
 .tf-customer-kpi.is-success { background: #f0fdf4; border-color: #bbf7d0; }
 .tf-customer-kpi.is-success strong { color: #047857; }
-.tf-customer-ledger-heading { padding: 20px 20px 12px; }
+.tf-customer-ledger-heading, .tf-customer-section-heading { padding: 18px 20px 12px; }
+.tf-customer-update-card .tf-customer-section-heading { padding: 0 0 14px; }
 .tf-customer-ledger-table { margin-bottom: 0; }
 .tf-customer-ledger-table td, .tf-customer-ledger-table th { vertical-align: middle; }
 .tf-customer-ledger-table tbody tr { transition: background-color 200ms ease; }
 .tf-customer-ledger-table tbody tr:hover { background: #f8fafc; }
 .tf-customer-ledger-pagination { border-top: 1px solid #e2e8f0; }
+.tf-customer-side-card .btn { min-height: 38px; }
 .tf-customer-update-card .form-control, .tf-customer-update-card .form-select { min-height: 44px; border-radius: 10px; }
 .tf-customer-update-card .input-group-text { border-radius: 10px 0 0 10px; }
 .tf-customer-update-card .input-group .form-control { border-radius: 0 10px 10px 0; }
 .tf-customer-update-card .form-label { color: #334155; font-size: 13px; font-weight: 650; margin-bottom: 6px; }
 .tf-customer-update-card small { font-size: 11px; }
+@media (min-width: 992px) {
+    .tf-customer-profile-aside { position: sticky; top: 20px; }
+}
+@media (max-width: 991.98px) {
+    .tf-customer-profile-layout { grid-template-columns: 1fr; }
+}
 @media (max-width: 767.98px) {
-    .tf-customer-overview-card, .tf-customer-side-card, .tf-customer-update-card { padding: 16px !important; }
+    .tf-customer-profile-layout, .tf-customer-profile-main { gap: 20px; }
+    .tf-customer-overview-card, .tf-customer-side-card, .tf-customer-update-card { padding: 16px; }
     .tf-customer-info-grid { grid-template-columns: 1fr; }
     .tf-customer-info-wide { grid-column: auto; }
     .tf-customer-ledger-heading { padding: 16px 16px 8px; }

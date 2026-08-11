@@ -66,6 +66,8 @@ class SettingsController extends Controller
             'phone' => ['nullable', 'regex:/^\+[1-9]\d{7,14}$/'],
             'address' => ['nullable', 'string', 'max:1000'],
             'website' => ['nullable', 'url', 'max:255'],
+            'footer_visibility' => ['nullable', 'array'],
+            'footer_visibility.*' => ['nullable', 'boolean'],
             'show_company_name' => ['nullable', 'boolean'],
             'show_footer_title' => ['nullable', 'boolean'],
             'show_footer_message' => ['nullable', 'boolean'],
@@ -74,8 +76,9 @@ class SettingsController extends Controller
             'show_email' => ['nullable', 'boolean'],
             'show_website' => ['nullable', 'boolean'],
         ]);
+        $footerVisibility = app(BusinessDocumentFooterService::class)->visibilityFromRequest($request);
 
-        [$footer, $changed] = DB::transaction(function () use ($business, $data, $request): array {
+        [$footer, $changed] = DB::transaction(function () use ($business, $data, $footerVisibility): array {
             $lockedBusiness = \App\Models\Business::lockForUpdate()->findOrFail($business->id);
             $footer = app(BusinessDocumentFooterService::class)->for($lockedBusiness);
             $businessFields = ['phone', 'address', 'website'];
@@ -89,13 +92,7 @@ class SettingsController extends Controller
             $footer->fill([
                 'footer_title' => filled($data['footer_title'] ?? null) ? trim($data['footer_title']) : null,
                 'footer_message' => filled($data['footer_message'] ?? null) ? trim($data['footer_message']) : null,
-                'show_company_name' => $request->boolean('show_company_name'),
-                'show_footer_title' => $request->boolean('show_footer_title'),
-                'show_footer_message' => $request->boolean('show_footer_message'),
-                'show_phone' => $request->boolean('show_phone'),
-                'show_address' => $request->boolean('show_address'),
-                'show_email' => $request->boolean('show_email'),
-                'show_website' => $request->boolean('show_website'),
+                ...$footerVisibility,
                 // Platform attribution is mandatory and cannot be changed by
                 // a hidden or manipulated form value.
                 'show_powered_by' => true,
@@ -121,7 +118,7 @@ class SettingsController extends Controller
             );
         }
 
-        return redirect()->route('business.settings.document-footer.edit')->with('success', 'Receipt footer settings updated.');
+        return redirect()->route('business.settings.document-footer.edit')->with('success', 'Footer settings updated successfully.');
     }
 
     private function ensureFooterOwner(): void

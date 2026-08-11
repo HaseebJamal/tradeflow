@@ -4,7 +4,26 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     @include('components.theme-initializer')
-    @php($publicTitle = str(trim($__env->yieldContent('title', $platformSettings->company_name)))->replace('TradeFlow', $platformSettings->company_name))
+    @php
+        $normalisePresentationText = static function (mixed $value): string {
+            $text = trim((string) $value);
+
+            for ($attempt = 0; $attempt < 3; $attempt++) {
+                $decoded = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+                if ($decoded === $text) {
+                    break;
+                }
+
+                $text = $decoded;
+            }
+
+            return $text;
+        };
+
+        $publicTitle = str($normalisePresentationText($__env->yieldContent('title', $platformSettings->company_name)))
+            ->replace('TradeFlow', $platformSettings->company_name);
+    @endphp
     <title>{{ $publicTitle }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">

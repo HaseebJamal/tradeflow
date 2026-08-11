@@ -488,7 +488,6 @@
         focusElement(search);
     };
     const checkoutPayload = () => ({
-        quotation_id: config.quotation?.id || null,
         customer_id: isQuickCustomer() ? null : customer.value || null,
         quick_customer: isQuickCustomer() ? {
             name: quickCustomerName?.value.trim() || '',
@@ -698,7 +697,7 @@
             customClass: {
                 popup: 'tf-pos-register-modal',
                 actions: 'tf-pos-register-actions',
-                confirmButton: 'btn btn-tf-primary',
+                confirmButton: 'btn btn-danger',
                 cancelButton: 'btn btn-outline-secondary',
             },
             preConfirm: async () => {
@@ -1078,25 +1077,6 @@
     });
     root.addEventListener('wheel', (event) => { if (event.target === cash) event.preventDefault(); }, { passive: false });
 
-    if (config.quotation?.items?.length) {
-        config.quotation.items.forEach((quotedLine) => {
-            const card = visibleProductCards().find((candidate) => Number(parseProduct(candidate)?.id) === Number(quotedLine.id));
-            const quotedProduct = card ? parseProduct(card) : null;
-            if (!quotedProduct) return;
-            cart.set(Number(quotedLine.id), {
-                id: Number(quotedLine.id),
-                name: quotedProduct.name,
-                barcode: quotedProduct.barcode || '',
-                stock: Number(quotedProduct.stock_quantity ?? quotedProduct.stock ?? 0),
-                unit: quotedProduct.unit || '',
-                quantity: whole(quotedLine.quantity),
-                price: whole(quotedLine.price),
-                discount: whole(quotedLine.discount),
-                tax: whole(quotedLine.tax),
-            });
-        });
-        customer.value = String(config.quotation.customer_id || '');
-    }
     setActiveProduct(visibleProductCards().length ? 0 : -1);
     syncCustomerMode(false);
     search.value = '';

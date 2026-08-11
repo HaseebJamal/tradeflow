@@ -75,8 +75,15 @@ class ThermalDocumentServiceTest extends TestCase
         $this->assertStringContainsString('2 &times; Rs 50.00', $html);
         $this->assertStringContainsString('tf-thermal-document__item-details', $html);
         $this->assertStringNotContainsString('<table class="tf-thermal-document__items">', $html);
-        $this->assertStringContainsString('@page { margin: 3mm; }', $html);
-        $this->assertStringContainsString('max-width: 74mm', $html);
+        $this->assertStringContainsString('@page { margin: 0; }', $html);
+        $this->assertStringContainsString('max-width: 80mm', $html);
+        $this->assertStringContainsString('tf-thermal-document__content { box-sizing: border-box; margin: 3mm 3.5mm 4mm;', $html);
+        $this->assertStringContainsString('tf-thermal-document__label-content', $html);
+        $this->assertStringContainsString('tf-thermal-document__item-amount-content', $html);
+        $this->assertStringContainsString('tf-thermal-document__value { padding: 0; text-align: right; width: 60%; }', $html);
+        $this->assertStringContainsString('tf-thermal-document__item-amount { padding: 0; text-align: right; width: 42%;', $html);
+        $this->assertStringNotContainsString('max-width: none', $html);
+        $this->assertStringNotContainsString('POS Receipt</div>', $html);
         $this->assertStringContainsString('Lahore', $html);
         $this->assertStringContainsString('+923001234567', $html);
         $this->assertStringNotContainsString('Tax / NTN: NTN-123', $html);
@@ -135,4 +142,35 @@ class ThermalDocumentServiceTest extends TestCase
         $this->assertStringNotContainsString('NTN-123', $html);
         $this->assertStringContainsString('Powered by TradeFlow', $html);
     }
+
+    public function test_document_footer_hides_the_real_business_name_when_its_visibility_setting_is_disabled(): void
+    {
+        $footer = new BusinessDocumentFooter([
+            'footer_title' => 'Custom receipt footer',
+            'footer_message' => null,
+            'show_company_name' => false,
+            'show_footer_title' => true,
+            'show_footer_message' => false,
+            'show_address' => false,
+            'show_phone' => false,
+            'show_email' => false,
+            'show_website' => false,
+            'show_powered_by' => true,
+        ]);
+
+        $html = Blade::render('<x-document-footer :business="$business" :footer="$footer" />', [
+            'business' => (object) [
+                'business_name' => 'Rent a Car',
+                'address' => 'Main Street',
+                'city' => 'Lahore',
+                'phone' => '+923001234567',
+                'owner' => (object) ['email' => 'owner@example.test'],
+            ],
+            'footer' => $footer,
+        ]);
+
+        $this->assertStringContainsString('Custom receipt footer', $html);
+        $this->assertStringNotContainsString('Rent a Car', $html);
+    }
+
 }

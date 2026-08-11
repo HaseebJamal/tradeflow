@@ -398,8 +398,20 @@ label.form-check:has(.form-check-input[type='checkbox']:not([role='switch'])) .f
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 10px;
+    cursor: pointer;
     min-height: 44px;
     transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.tf-business-receipt-footer .tf-footer-visibility-option .form-check-input {
+    cursor: pointer;
+    pointer-events: auto;
+    position: relative;
+    z-index: 1;
+}
+
+.tf-business-receipt-footer .tf-footer-visibility-option .form-check-label {
+    cursor: pointer;
 }
 
 .tf-business-receipt-footer .tf-footer-visibility-option:hover {
@@ -1224,6 +1236,15 @@ body.pp-landing-page .pp-final-card h2 { color: #ffffff !important; }
 .tf-customers-filter-card h2 { color: var(--heading) !important; font-family: var(--font-heading) !important; }
 .tf-customer-balance { color: var(--text) !important; font-family: var(--font-body); }
 .tf-customer-balance.is-outstanding { color: var(--warning) !important; }
+.tf-customer-overview-card h2,
+.tf-customer-side-card h2,
+.tf-customer-update-card h2,
+.tf-customer-ledger-card h2,
+.tf-customer-kpi strong { color: var(--heading) !important; }
+.tf-customer-info-grid dd { color: var(--text) !important; }
+.tf-customer-kpi { background: var(--surface) !important; border-color: var(--border) !important; }
+.tf-customer-kpi.is-success { background: var(--success-soft) !important; border-color: color-mix(in srgb, var(--success) 28%, var(--border)) !important; }
+.tf-customer-kpi.is-warning { background: var(--warning-soft) !important; border-color: color-mix(in srgb, var(--warning) 28%, var(--border)) !important; }
 
 .tf-delivery-kpis .tf-stat-card { height: 100%; min-height: 126px !important; }
 .tf-delivery-filter-card { background: var(--surface) !important; border-color: var(--border) !important; border-radius: 16px !important; }
@@ -1895,10 +1916,10 @@ table.tf-has-actions-column:not(.tf-pos-cart-table) > :is(thead, tbody) > tr > .
     color: #dc2626 !important;
 }
 :root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-danger:not(:disabled):not(.disabled):hover {
-    background: #fef2f2 !important;
+    background: #dc2626 !important;
     border-color: #dc2626 !important;
-    box-shadow: 0 3px 10px rgba(220, 38, 38, 0.08) !important;
-    color: #dc2626 !important;
+    box-shadow: 0 3px 10px rgba(220, 38, 38, 0.18) !important;
+    color: #fff !important;
     transform: translateY(-1px) !important;
 }
 :root:not([data-theme='dark']) :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-success:not(:disabled):not(.disabled):hover {
@@ -2027,9 +2048,9 @@ table.tf-has-actions-column:not(.tf-pos-cart-table) > :is(thead, tbody) > tr > .
     color: var(--warning) !important;
 }
 :is(main, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-danger:not(:disabled):not(.disabled):hover {
-    background: color-mix(in srgb, var(--danger) 13%, var(--surface)) !important;
+    background: var(--danger) !important;
     border-color: var(--danger) !important;
-    color: var(--danger) !important;
+    color: #fff !important;
 }
 :is(main, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-success, .btn-danger):not(:disabled):not(.disabled):hover {
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12) !important;
@@ -2624,6 +2645,115 @@ body.sidebar-collapsed .tf-sidebar .tf-sidebar-brand {
 
 body.sidebar-collapsed .tf-sidebar .tf-sidebar-brand .tf-brand-mark {
     flex-basis: 40px;
+}
+
+/* Platform Settings public controls stay content-sized.  These cards used to
+   inherit a full-height marketing-card rule, leaving a large empty surface. */
+.tf-settings-public-controls,
+.tf-platform-demo-card {
+    max-width: 100%;
+}
+
+.tf-settings-public-controls .tf-demo-contact-grid {
+    align-items: start;
+}
+
+.tf-public-settings-layout {
+    align-items: start;
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: minmax(0, 0.38fr) minmax(0, 0.62fr);
+}
+
+.tf-public-settings-whatsapp,
+.tf-public-settings-whatsapp .tf-demo-contact-grid {
+    min-width: 0;
+}
+
+.tf-public-settings-whatsapp .tf-demo-contact-grid {
+    display: block;
+    max-width: none;
+}
+
+.tf-settings-public-controls .tf-settings-feature-card,
+.tf-platform-demo-card {
+    height: auto !important;
+    min-height: 0 !important;
+}
+
+.tf-platform-demo-card {
+    border: 1px solid var(--tf-border, #dbe5f1);
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035);
+    margin-bottom: 1.25rem;
+    padding: 1.25rem !important;
+}
+
+.tf-platform-demo-card .nav-pills {
+    border: 1px solid var(--tf-border, #dbe5f1);
+    border-radius: 10px;
+    display: inline-flex;
+    gap: 0.25rem !important;
+    margin-bottom: 1rem !important;
+    padding: 0.25rem;
+}
+
+.tf-platform-demo-card .nav-pills .nav-link {
+    border-radius: 7px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    padding: 0.375rem 0.75rem;
+}
+
+.tf-platform-demo-card .tab-content {
+    max-width: none;
+}
+
+.tf-platform-demo-card [data-demo-language-form] {
+    /* Keep source controls aligned to their labels. Bottom alignment pushed
+       the select down whenever the upload panel showed helper text. */
+    align-items: start;
+    row-gap: 0.75rem !important;
+}
+
+.tf-platform-demo-card [data-demo-language-panel] {
+    min-width: 0;
+}
+
+.tf-platform-demo-card [data-demo-language-form] .form-label {
+    margin-bottom: 0.35rem;
+}
+
+.tf-platform-demo-card [data-demo-language-form] .form-control,
+.tf-platform-demo-card [data-demo-language-form] .form-select {
+    min-height: 40px;
+}
+
+.tf-platform-demo-card [data-demo-language-form] .btn:not(.btn-sm) {
+    min-height: 40px;
+}
+
+@media (min-width: 992px) {
+    .tf-platform-demo-card {
+        margin-top: 0 !important;
+    }
+}
+
+@media (max-width: 991.98px) {
+    .tf-public-settings-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .tf-platform-demo-card {
+        margin-top: 1rem !important;
+        padding: 1rem !important;
+    }
+
+    .tf-platform-demo-card .nav-pills {
+        display: flex;
+    }
 }
 
 /* Trial & Access table: keep goodwill days visually separate from the

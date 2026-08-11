@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Business;
 use App\Models\BusinessDocumentFooter;
+use Illuminate\Http\Request;
 
 class BusinessDocumentFooterService
 {
@@ -64,5 +65,30 @@ class BusinessDocumentFooterService
         $business->setRelation('documentFooter', $footer);
 
         return $footer;
+    }
+
+    /**
+     * Normalise independently submitted visibility controls. Missing
+     * checkboxes deliberately become false, so an uncheck always persists.
+     *
+     * @return array<string, bool>
+     */
+    public function visibilityFromRequest(Request $request): array
+    {
+        $submittedVisibility = $request->input('footer_visibility', []);
+        $submittedVisibility = is_array($submittedVisibility) ? $submittedVisibility : [];
+
+        return collect(BusinessDocumentFooter::VISIBILITY_FIELDS)
+            ->mapWithKeys(function (string $field) use ($request, $submittedVisibility): array {
+                // The receipt-footer form always sends an explicit 0 or 1
+                // for each visibility option. Keep the direct-field fallback
+                // for older requests while normalizing both paths to booleans.
+                $value = array_key_exists($field, $submittedVisibility)
+                    ? $submittedVisibility[$field]
+                    : $request->input($field, false);
+
+                return [$field => filter_var($value, FILTER_VALIDATE_BOOLEAN)];
+            })
+            ->all();
     }
 }

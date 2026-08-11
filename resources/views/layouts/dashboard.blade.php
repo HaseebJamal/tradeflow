@@ -4,7 +4,35 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     @include('components.theme-initializer')
-    @php($dashboardTitle = str(trim($__env->yieldContent('title', $platformSettings->company_name.' Dashboard')))->replace('TradeFlow', $platformSettings->company_name))
+    @php
+        /*
+         * Blade sections can arrive here either as plain text or as text that
+         * has already been entity-encoded by a parent/partial.  Decode the
+         * presentation value until it is stable, then let Blade escape it once
+         * when it is output. This keeps browser titles such as "Trial & Access"
+         * readable without ever rendering unescaped HTML.
+         */
+        $normalisePresentationText = static function (mixed $value): string {
+            $text = trim((string) $value);
+
+            for ($attempt = 0; $attempt < 3; $attempt++) {
+                $decoded = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+                if ($decoded === $text) {
+                    break;
+                }
+
+                $text = $decoded;
+            }
+
+            return $text;
+        };
+
+        $dashboardTitle = str($normalisePresentationText($__env->yieldContent('title', $platformSettings->company_name.' Dashboard')))
+            ->replace('TradeFlow', $platformSettings->company_name);
+        $dashboardSubtitle = str($normalisePresentationText($__env->yieldContent('page-subtitle', $platformSettings->company_name.' workspace')))
+            ->replace('TradeFlow', $platformSettings->company_name);
+    @endphp
     <title>{{ $dashboardTitle }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -44,15 +72,13 @@
                 <button class="btn btn-outline-secondary tf-sidebar-toggle tf-sidebar-toggle--topbar" data-tf-sidebar-toggle aria-label="Open sidebar" title="Open sidebar"><i class="bi bi-list"></i></button>
                 <div class="min-w-0">
                     <h1 class="h4 mb-0">@yield('page-title', 'Dashboard')</h1>
-                    <small class="tf-muted">{{ str(trim($__env->yieldContent('page-subtitle', $platformSettings->company_name.' workspace')))->replace('TradeFlow', $platformSettings->company_name) }}</small>
+                    <small class="tf-muted">{{ $dashboardSubtitle }}</small>
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2 tf-topbar-actions">
                 @include('components.theme-toggle')
                 @auth
-                    @if(request()->is('business/*') || request()->is('staff/*') || request()->is('admin/*'))
-                        @include('components.notification-dropdown')
-                    @endif
+                    @include('components.notification-dropdown')
                 @endauth
                 @include('components.user-dropdown')
             </div>

@@ -7,9 +7,9 @@
 @if(session('success'))<div class="alert alert-success" role="alert">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
 
-<div class="row g-4 tf-customer-profile-layout">
-    <main class="col-lg-8">
-        <section class="tf-card tf-customer-overview-card p-4 mb-4" aria-labelledby="customer-overview-title">
+<div class="tf-customer-profile-layout">
+    <main class="tf-customer-profile-main">
+        <section class="tf-card tf-customer-overview-card" aria-labelledby="customer-overview-title">
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
                 <div><span class="tf-dashboard-eyebrow">Customer profile</span><h2 id="customer-overview-title" class="h4 mb-1">{{ $customer->display_name }}</h2><p class="tf-muted mb-0">{{ $customer->business_name ?: 'No shop name recorded' }}</p></div>
                 @if(in_array($customer->status, ['Active', 'Inactive'], true))
@@ -47,7 +47,7 @@
             </div>
         </section>
 
-        <section class="tf-card tf-customer-ledger-card p-0" aria-labelledby="customer-ledger-title">
+        <section class="tf-card tf-customer-ledger-card" aria-labelledby="customer-ledger-title">
             <div class="tf-customer-ledger-heading"><div><span class="tf-dashboard-eyebrow">Ledger</span><h2 id="customer-ledger-title" class="h5 mb-1">Customer Ledger</h2><p class="tf-muted small mb-0">Posted account activity for this customer.</p></div></div>
             <x-table class="tf-customer-ledger-table">
                 <thead><tr><th>Date</th><th>Voucher / Order</th><th>Account</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
@@ -58,17 +58,38 @@
                     @forelse($customer->ledgers as $ledger)
                         <tr><td>{{ $ledger->created_at?->format('n/j/Y') ?: '—' }}</td><td>{{ $ledger->order?->order_number ?? '—' }}</td><td>Legacy Khata</td><td>{{ $ledger->description ?: '—' }}</td><td class="text-end text-nowrap">Rs {{ number_format($ledger->amount) }}</td><td class="text-end">—</td></tr>
                     @empty
-                        <tr><td colspan="6" class="text-center tf-muted py-5">No ledger entries found.</td></tr>
+                        <tr><td colspan="6" class="text-center tf-muted py-4">No ledger entries found.</td></tr>
                     @endforelse
                 @endforelse
                 </tbody>
             </x-table>
             @if(method_exists($journalLines, 'links') && $journalLines->hasPages())<div class="tf-customer-ledger-pagination px-3 py-3">{{ $journalLines->withQueryString()->links('pagination::bootstrap-5') }}</div>@endif
         </section>
+
+        @companyCan('customers.edit')
+        <section class="tf-card tf-customer-update-card" id="update-customer" aria-labelledby="update-customer-title">
+            <div class="tf-customer-section-heading"><span class="tf-dashboard-eyebrow">Customer details</span><h2 id="update-customer-title" class="h5 mb-1">Update Customer</h2><p class="tf-muted small mb-0">Update contact and credit details. Status is managed from the profile switch above.</p></div>
+            <form method="POST" action="{{ route('business.customers.update', $customer) }}" class="row g-3">
+                @csrf @method('PATCH')
+                <input type="hidden" name="status" value="{{ $customer->status }}">
+                <div class="col-12 col-md-6"><label class="form-label" for="update-customer-name">Owner Name <span class="text-danger">*</span></label><input id="update-customer-name" name="name" value="{{ old('name', $customer->name) }}" class="form-control" required></div>
+                <div class="col-12 col-md-6"><label class="form-label" for="update-customer-shop">Shop Name</label><input id="update-customer-shop" name="shop_name" value="{{ old('shop_name', $customer->business_name) }}" class="form-control"></div>
+                <div class="col-12 col-md-6"><label class="form-label" for="update-customer-phone">Phone</label><x-phone-input id="update-customer-phone" name="phone" :value="old('phone', $customer->phone)" :error="$errors->first('phone')" /></div>
+                <div class="col-12 col-md-6"><label class="form-label" for="update-customer-email">Email</label><input id="update-customer-email" name="email" type="email" value="{{ old('email', $customer->email) }}" class="form-control"></div>
+                <div class="col-12 col-md-6"><label class="form-label" for="update-customer-city">City</label><input id="update-customer-city" name="city" value="{{ old('city', $customer->city) }}" class="form-control"></div>
+                <div class="col-12 col-md-6"><label class="form-label" for="update-customer-province">Province / Location</label><input id="update-customer-province" name="province" value="{{ old('province', $customer->province) }}" class="form-control"></div>
+                <div class="col-12 col-md-4"><label class="form-label" for="update-customer-type">Type</label><select id="update-customer-type" name="customer_type" class="form-select">@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option value="{{ $type }}" @selected(old('customer_type', $customer->customer_type) === $type)>{{ $type }}</option>@endforeach</select></div>
+                <div class="col-12 col-md-4"><label class="form-label" for="update-customer-credit-limit">Credit Limit</label><div class="input-group"><span class="input-group-text">Rs</span><input id="update-customer-credit-limit" name="credit_limit" type="number" min="0" step="1" value="{{ old('credit_limit', (int) $customer->credit_limit) }}" class="form-control js-whole-number"></div><small class="tf-muted">Defaults to Rs 0.</small></div>
+                <div class="col-12 col-md-4"><label class="form-label" for="update-customer-balance">Current Balance</label><div class="input-group"><span class="input-group-text">Rs</span><input id="update-customer-balance" name="current_balance" type="number" min="0" step="1" value="{{ old('current_balance', (int) $customer->current_balance) }}" class="form-control js-whole-number"></div></div>
+                <div class="col-12"><label class="form-label" for="update-customer-address">Address</label><input id="update-customer-address" name="address" value="{{ old('address', $customer->address) }}" class="form-control"></div>
+                <div class="col-12 d-flex justify-content-end"><button class="btn btn-tf-primary px-4">Save Changes</button></div>
+            </form>
+        </section>
+        @endcompanyCan
     </main>
 
-    <aside class="col-lg-4">
-        <section class="tf-card tf-customer-side-card p-4 mb-4" aria-labelledby="customer-controls-title">
+    <aside class="tf-customer-profile-aside">
+        <section class="tf-card tf-customer-side-card" aria-labelledby="customer-controls-title">
             <span class="tf-dashboard-eyebrow">Quick controls</span><h2 id="customer-controls-title" class="h5 mb-3">Customer Actions</h2>
             <a href="{{ route('business.customers.statement', $customer) }}" class="btn btn-outline-primary w-100"><i class="bi bi-receipt me-2"></i>Export Statement</a>
             @companyCan('customers.archive')
@@ -82,25 +103,4 @@
         </section>
     </aside>
 </div>
-
-@companyCan('customers.edit')
-<section class="tf-card tf-customer-update-card p-4 mt-4" id="update-customer" aria-labelledby="update-customer-title">
-    <div class="mb-3"><span class="tf-dashboard-eyebrow">Customer details</span><h2 id="update-customer-title" class="h5 mb-1">Update Customer</h2><p class="tf-muted small mb-0">Update contact and credit details. Status is managed from the profile switch above.</p></div>
-    <form method="POST" action="{{ route('business.customers.update', $customer) }}" class="row g-3">
-        @csrf @method('PATCH')
-        <input type="hidden" name="status" value="{{ $customer->status }}">
-        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-name">Owner Name <span class="text-danger">*</span></label><input id="update-customer-name" name="name" value="{{ old('name', $customer->name) }}" class="form-control" required></div>
-        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-shop">Shop Name</label><input id="update-customer-shop" name="shop_name" value="{{ old('shop_name', $customer->business_name) }}" class="form-control"></div>
-        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-phone">Phone</label><x-phone-input id="update-customer-phone" name="phone" :value="old('phone', $customer->phone)" :error="$errors->first('phone')" /></div>
-        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-email">Email</label><input id="update-customer-email" name="email" type="email" value="{{ old('email', $customer->email) }}" class="form-control"></div>
-        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-city">City</label><input id="update-customer-city" name="city" value="{{ old('city', $customer->city) }}" class="form-control"></div>
-        <div class="col-12 col-md-6"><label class="form-label" for="update-customer-province">Province / Location</label><input id="update-customer-province" name="province" value="{{ old('province', $customer->province) }}" class="form-control"></div>
-        <div class="col-12 col-md-4"><label class="form-label" for="update-customer-type">Type</label><select id="update-customer-type" name="customer_type" class="form-select">@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option value="{{ $type }}" @selected(old('customer_type', $customer->customer_type) === $type)>{{ $type }}</option>@endforeach</select></div>
-        <div class="col-12 col-md-4"><label class="form-label" for="update-customer-credit-limit">Credit Limit</label><div class="input-group"><span class="input-group-text">Rs</span><input id="update-customer-credit-limit" name="credit_limit" type="number" min="0" step="1" value="{{ old('credit_limit', (int) $customer->credit_limit) }}" class="form-control js-whole-number"></div><small class="tf-muted">Defaults to Rs 0.</small></div>
-        <div class="col-12 col-md-4"><label class="form-label" for="update-customer-balance">Current Balance</label><div class="input-group"><span class="input-group-text">Rs</span><input id="update-customer-balance" name="current_balance" type="number" min="0" step="1" value="{{ old('current_balance', (int) $customer->current_balance) }}" class="form-control js-whole-number"></div></div>
-        <div class="col-12"><label class="form-label" for="update-customer-address">Address</label><input id="update-customer-address" name="address" value="{{ old('address', $customer->address) }}" class="form-control"></div>
-        <div class="col-12 d-flex justify-content-end"><button class="btn btn-tf-primary px-4">Save Changes</button></div>
-    </form>
-</section>
-@endcompanyCan
 @endsection

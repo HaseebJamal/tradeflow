@@ -32,9 +32,6 @@ class StoreCompanyRequest extends FormRequest
             'permissions.*' => ['string', Rule::exists('permission_definitions', 'permission_key')],
             'company_logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'owner_profile_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'cnic_image' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
-            'business_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
-            'shop_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
     }
