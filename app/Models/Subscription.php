@@ -30,9 +30,11 @@ class Subscription extends Model
             return 0;
         }
 
+        // Extensions remain tied to the paid period's start. A Super Admin
+        // may correct that period's end without making already granted
+        // complimentary days disappear from the effective-access calculation.
         return max(0, (int) $this->accessExtensions()
             ->whereDate('paid_access_start_at', $this->starts_at?->toDateString())
-            ->whereDate('paid_access_end_at', $this->ends_at->toDateString())
             ->sum('days'));
     }
 

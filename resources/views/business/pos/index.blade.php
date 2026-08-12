@@ -9,8 +9,8 @@
         'openRegisterUrl' => route('business.pos.register.open'),
         'saleUrl' => route('business.pos.sales.store'),
         'holdUrl' => route('business.pos.hold'),
-        'historyUrl' => route('business.pos.history'),
-        'csrf' => csrf_token(),
+        'heldSearchUrl' => route('business.pos.held-sales.search'),
+        'invoiceSearchUrl' => route('business.pos.invoices.search'),
         'registerId' => $register?->id,
         'canUseCustomPrice' => $canUseCustomPrice,
         'canCreateCustomer' => $canCreateCustomer,
@@ -23,10 +23,23 @@
             <span>Opening cash <strong data-pos-opening-cash>Rs {{ number_format($register?->opening_cash ?? 0) }}</strong></span>
             <span>Current invoice <strong data-pos-invoice>New sale</strong></span>
         </div>
-        <div class="tf-pos-actions">
-            <button type="button" class="btn btn-outline-primary" data-pos-hold @disabled(! $register)><i class="bi bi-pause-circle"></i><span>Hold Sale</span></button>
-            <button type="button" class="btn btn-outline-primary" data-pos-resume><i class="bi bi-play-circle"></i><span>Resume</span></button>
-            <a class="btn btn-outline-primary" href="{{ route('business.pos.history') }}" data-pos-history><i class="bi bi-clock-history"></i><span>Sales History</span></a>
+        <div class="tf-pos-top-inputs" aria-label="POS actions">
+            <div class="tf-pos-top-input">
+                <label for="posHoldSale">Hold Sale</label>
+                <input id="posHoldSale" type="text" class="form-control" data-pos-hold-input placeholder="Enter / Generate Hold Number" autocomplete="off" @disabled(! $register)>
+            </div>
+            <div class="tf-pos-top-input">
+                <label for="posResumeSale">Resume</label>
+                <input id="posResumeSale" type="search" class="form-control" data-pos-resume-input placeholder="Enter Hold ID" autocomplete="off" aria-autocomplete="list" aria-expanded="false" aria-controls="posResumeSuggestions">
+                <div id="posResumeSuggestions" class="tf-pos-top-suggestions d-none" data-pos-resume-suggestions role="listbox" aria-label="Matching held sales"></div>
+                <small class="text-danger" data-pos-resume-error aria-live="polite" hidden></small>
+            </div>
+            <div class="tf-pos-top-input">
+                <label for="posHistorySearch">Search Sale History</label>
+                <input id="posHistorySearch" type="search" class="form-control" data-pos-history-input placeholder="Enter Invoice Number" autocomplete="off" aria-autocomplete="list" aria-expanded="false" aria-controls="posHistorySuggestions">
+                <div id="posHistorySuggestions" class="tf-pos-top-suggestions d-none" data-pos-history-suggestions role="listbox" aria-label="Matching invoices"></div>
+                <small class="text-danger" data-pos-history-error aria-live="polite" hidden></small>
+            </div>
             <span data-pos-register-action>
                 @if($register)
                     <button type="button" class="btn btn-outline-danger" data-pos-close-register><i class="bi bi-lock"></i><span>Close Register</span></button>
@@ -100,7 +113,6 @@
             </div>
         </section>
     </div>
-    <div class="modal fade" id="posHeldModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5">Resume Held Sale</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="list-group list-group-flush" data-pos-held-list>@forelse($heldSales as $held)<button type="button" class="list-group-item list-group-item-action" data-held-id="{{ $held->id }}">{{ $held->hold_number }} <small class="text-muted float-end">{{ $held->held_at?->format('g:i A') }}</small></button>@empty<div class="p-4 text-muted">No held sales.</div>@endforelse</div></div></div></div>
 </div>
 @endsection
 @push('scripts')

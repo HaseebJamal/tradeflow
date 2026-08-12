@@ -16,12 +16,15 @@ use App\Models\PosRegister;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\KhataLedger;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class PosSaleService
 {
+    private const RESUMABLE_HOLD_STATUSES = ['Held', 'Resumed'];
+
     public function __construct(
         private FinanceCalculator $finance,
         private AccountingService $accounting,
@@ -81,41 +84,127 @@ class PosSaleService
         });
     }
 
-    public function hold(PosRegister $register, int $businessId, int $userId, array $cart, array $checkout): HeldPosSale
+    public function hold(PosRegister $register, int $businessId, int $userId, array $cart, array $checkout, ?string $requestedHoldNumber = null, ?int $existingHeldSaleId = null): HeldPosSale
     {
         if ($cart === []) {
             throw ValidationException::withMessages(['items' => 'Add at least one product before holding a sale.']);
         }
 
-        return DB::transaction(function () use ($register, $businessId, $userId, $cart, $checkout): HeldPosSale {
-            $register = PosRegister::where('business_id', $businessId)->where('user_id', $userId)->where('status', 'Open')->lockForUpdate()->findOrFail($register->id);
-            $held = HeldPosSale::create([
-                'business_id' => $businessId,
-                'pos_register_id' => $register->id,
-                'user_id' => $userId,
-                'hold_number' => 'HOLD-'.Str::upper(Str::random(10)),
-                'customer_id' => $checkout['customer_id'] ?? null,
-                'cart_payload' => $cart,
-                'checkout_payload' => $checkout,
-                'status' => 'Held',
-                'held_at' => now(),
-            ]);
-            $this->activity->record($businessId, 'POS', 'POS sale held', $held->id);
+        $manualHoldNumber = $this->normalizeHoldNumber($requestedHoldNumber);
 
-            return $held;
-        });
+        try {
+            return DB::transaction(function () use ($register, $businessId, $userId, $cart, $checkout, $manualHoldNumber, $existingHeldSaleId): HeldPosSale {
+                $register = PosRegister::where('business_id', $businessId)->where('user_id', $userId)->where('status', 'Open')->lockForUpdate()->findOrFail($register->id);
+                $existingHeldSale = $existingHeldSaleId
+                    ? HeldPosSale::where('business_id', $businessId)->lockForUpdate()->findOrFail($existingHeldSaleId)
+                    : null;
+
+                if ($existingHeldSale && $existingHeldSale->status !== 'Resumed') {
+                    throw ValidationException::withMessages(['held_sale_id' => 'This held sale is no longer available for update.']);
+                }
+
+                $holdNumber = $manualHoldNumber ?? $existingHeldSale?->hold_number ?? $this->numbers->next('pos_hold');
+
+                $conflict = $this->holdsForBusiness($businessId)
+                    ->where('hold_number', $holdNumber)
+                    ->when($existingHeldSale, fn ($query) => $query->where((new HeldPosSale)->getQualifiedKeyName(), '!=', $existingHeldSale->id))
+                    ->exists();
+                if ($conflict) {
+                    $message = $existingHeldSale
+                        ? $holdNumber.' belongs to another held sale. Please use the current Hold ID or enter a new unique Hold ID.'
+                        : $holdNumber.' is already in use. Please enter a different Hold ID.';
+                    throw ValidationException::withMessages(['hold_number' => $message]);
+                }
+
+                $attributes = [
+                    'business_id' => $businessId,
+                    'pos_register_id' => $register->id,
+                    'user_id' => $userId,
+                    'hold_number' => $holdNumber,
+                    'customer_id' => $checkout['customer_id'] ?? null,
+                    'cart_payload' => $cart,
+                    'checkout_payload' => $checkout,
+                    'status' => 'Held',
+                    'held_at' => now(),
+                ];
+                if ($existingHeldSale) {
+                    $existingHeldSale->update($attributes);
+                    $held = $existingHeldSale->fresh();
+                    $this->activity->record($businessId, 'POS', 'POS sale held again', $held->id, null, ['hold_number' => $holdNumber]);
+                } else {
+                    $held = HeldPosSale::create($attributes);
+                    $this->activity->record($businessId, 'POS', 'POS sale held', $held->id);
+                }
+
+                return $held;
+            });
+        } catch (QueryException $exception) {
+            // The database unique index remains the final protection against a
+            // concurrent duplicate request. Do not replace a cashier's choice.
+            if ($manualHoldNumber && (string) $exception->getCode() === '23000') {
+                throw ValidationException::withMessages(['hold_number' => $manualHoldNumber.' is already in use. Please enter a different Hold ID.']);
+            }
+
+            throw $exception;
+        }
     }
 
-    public function resume(HeldPosSale $held, int $businessId): HeldPosSale
+    /**
+     * Convert every supported cashier entry to the one persisted hold format.
+     * This is deliberately shared by hold creation and held-sale lookup.
+     */
+    public function normalizeHoldNumber(?string $value): ?string
     {
-        abort_unless($held->business_id === $businessId, 403);
-        if ($held->status !== 'Held') {
-            throw ValidationException::withMessages(['held_sale' => 'This held sale is no longer available.']);
-        }
-        $held->update(['status' => 'Resumed', 'resumed_at' => now()]);
-        $this->activity->record($businessId, 'POS', 'POS sale resumed', $held->id);
+        $value = strtoupper(trim((string) $value));
+        if ($value === '') return null;
 
-        return $held->fresh();
+        if (! preg_match('/^(?:HOLD-)?(\d{1,6})$/', $value, $matches)) {
+            throw ValidationException::withMessages(['hold_number' => 'Enter a Hold ID like HOLD-000007.']);
+        }
+
+        return 'HOLD-'.str_pad($matches[1], 6, '0', STR_PAD_LEFT);
+    }
+
+    public function holdsForBusiness(int $businessId): Builder
+    {
+        return HeldPosSale::query()->where('business_id', $businessId);
+    }
+
+    public function resumableHoldsForBusiness(int $businessId): Builder
+    {
+        // "Resumed" is the in-progress state in the current POS lifecycle.
+        // It remains recoverable after a refresh until it is re-held or
+        // completed, so it must be searchable alongside a normal Held sale.
+        return $this->holdsForBusiness($businessId)
+            ->whereIn('status', self::RESUMABLE_HOLD_STATUSES);
+    }
+
+    public function resume(int $heldSaleId, int $businessId): HeldPosSale
+    {
+        return DB::transaction(function () use ($heldSaleId, $businessId): HeldPosSale {
+            $held = $this->holdsForBusiness($businessId)
+                ->lockForUpdate()
+                ->find($heldSaleId);
+
+            if (! $held) {
+                throw ValidationException::withMessages(['held_sale' => 'Hold number not found.']);
+            }
+            if ($held->status === 'Completed') {
+                throw ValidationException::withMessages(['held_sale' => 'This held sale has already been completed.']);
+            }
+            if (! in_array($held->status, self::RESUMABLE_HOLD_STATUSES, true)) {
+                throw ValidationException::withMessages(['held_sale' => 'This held sale is no longer available.']);
+            }
+
+            if ($held->status === 'Held') {
+                $held->update(['status' => 'Resumed', 'resumed_at' => now()]);
+                $this->activity->record($businessId, 'POS', 'POS sale resumed', $held->id);
+            } else {
+                $this->activity->record($businessId, 'POS', 'POS sale restored', $held->id);
+            }
+
+            return $held->fresh();
+        });
     }
 
     public function complete(int $businessId, int $userId, array $data): Order
@@ -125,6 +214,12 @@ class PosSaleService
             $register = PosRegister::where('business_id', $businessId)->where('user_id', $userId)->where('status', 'Open')->lockForUpdate()->first();
             if (! $register) {
                 throw ValidationException::withMessages(['register' => 'Open a register before completing a sale.']);
+            }
+            $resumedHeldSale = ! empty($data['held_sale_id'])
+                ? HeldPosSale::where('business_id', $businessId)->lockForUpdate()->findOrFail($data['held_sale_id'])
+                : null;
+            if ($resumedHeldSale && $resumedHeldSale->status !== 'Resumed') {
+                throw ValidationException::withMessages(['held_sale_id' => 'This held sale is no longer available for completion.']);
             }
 
             $paymentType = (string) $data['payment_type'];
@@ -286,6 +381,10 @@ class PosSaleService
             }
 
             $this->postAccounting($order->fresh(['items']), $paid, $customer?->id);
+            if ($resumedHeldSale) {
+                $resumedHeldSale->update(['status' => 'Completed']);
+                $this->activity->record($businessId, 'POS', 'Held sale completed', $resumedHeldSale->id, null, ['hold_number' => $resumedHeldSale->hold_number, 'order_id' => $order->id]);
+            }
             $this->activity->record($businessId, 'POS', 'Completed POS sale '.$number, $order->id, null, ['grand_total' => $grandTotal, 'paid_amount' => $paid, 'delivery_required' => $deliveryRequired]);
 
             return $order->fresh(['customer', 'items.product', 'invoice', 'payments']);

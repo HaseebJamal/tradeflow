@@ -8,6 +8,7 @@ class DocumentNumberService
 {
     private const TYPES = [
         'sales' => ['scope' => 'invoice', 'prefix' => 'INV', 'sources' => [['orders', 'order_number'], ['invoices', 'invoice_number']]],
+        'pos_hold' => ['scope' => 'pos_hold', 'prefix' => 'HOLD', 'sources' => [['held_pos_sales', 'hold_number']]],
         'purchase' => ['scope' => 'purchase_invoice', 'prefix' => 'PINV', 'sources' => [['purchases', 'purchase_number'], ['purchase_invoices', 'invoice_number']]],
         'supplier_invoice' => ['scope' => 'purchase_invoice', 'prefix' => 'PINV', 'sources' => [['purchases', 'purchase_number'], ['purchase_invoices', 'invoice_number']]],
         'sales_return' => ['scope' => 'sales_return', 'prefix' => 'SRN', 'sources' => [['sales_returns', 'return_number']]],

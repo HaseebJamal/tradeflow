@@ -877,26 +877,35 @@ class AdminController extends Controller
         return back()->with('success', $message);
     }
 
-    public function adjustPaidAccess(Request $request, Subscription $subscription): RedirectResponse
+    public function adjustPaidAccess(Request $request, Subscription $subscription): RedirectResponse|JsonResponse
     {
         $data = $request->validate([
-            // set_end remains only to return a clear response to stale forms;
-            // financial paid dates cannot be changed by access goodwill tools.
-            'action' => ['required', Rule::in(['extend', 'reduce', 'set_end', 'end_now'])],
+            'action' => ['required', Rule::in([
+                'extra_extend', 'extra_reduce',
+                'paid_duration_extend', 'paid_duration_reduce',
+                // Legacy values remain compatible with previously rendered
+                // extra-access forms.
+                'extend', 'reduce', 'set_end', 'end_now',
+            ])],
             'days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'ends_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string', 'max:2000'],
         ]);
         abort_unless($subscription->payment_status === 'Received', 422, 'Only a paid access period can be changed here.');
-        if (in_array($data['action'], ['extend', 'reduce'], true) && empty($data['days'])) {
+        $action = match ($data['action']) {
+            'extend' => 'extra_extend',
+            'reduce' => 'extra_reduce',
+            default => $data['action'],
+        };
+        if (in_array($action, ['extra_extend', 'extra_reduce', 'paid_duration_extend', 'paid_duration_reduce'], true) && empty($data['days'])) {
             throw ValidationException::withMessages(['days' => 'Enter the number of days to adjust.']);
         }
-        if ($data['action'] === 'set_end') {
-            throw ValidationException::withMessages(['action' => 'Paid access dates are financial records and cannot be changed from manual access controls.']);
+        if ($action === 'set_end') {
+            throw ValidationException::withMessages(['action' => 'Use the paid-duration controls to correct the paid access period.']);
         }
 
         $today = now(config('app.timezone'))->startOfDay();
-        [$subscription, $old, $new] = DB::transaction(function () use ($subscription, $request, $data, $today): array {
+        [$subscription, $old, $new] = DB::transaction(function () use ($subscription, $request, $data, $action, $today): array {
             $locked = Subscription::with('business.owner')->lockForUpdate()->findOrFail($subscription->id);
             abort_unless($locked->payment_status === 'Received' && $locked->starts_at && $locked->ends_at, 422, 'Only a paid access period can be changed here.');
 
@@ -905,13 +914,45 @@ class AdminController extends Controller
                     'status' => $record->status,
                     'paid_access_start' => $record->starts_at?->toDateString(),
                     'original_paid_access_end' => $record->ends_at?->toDateString(),
+                    'paid_duration_days' => $record->starts_at && $record->ends_at
+                        ? $record->starts_at->diffInDays($record->ends_at)
+                        : 0,
                     'extra_access_days' => $record->extraAccessDays(),
                     'effective_access_end' => $record->effectivePaidAccessEnd()?->toDateString(),
                 ];
             };
             $old = $snapshot($locked);
 
-            if ($data['action'] === 'extend') {
+            if ($action === 'paid_duration_extend') {
+                // This corrects the subscription access period only. The
+                // associated payment/invoice snapshots remain immutable.
+                $locked->update([
+                    'ends_at' => $locked->ends_at->copy()->addDays((int) $data['days']),
+                    'note' => $data['note'] ?? $locked->note,
+                ]);
+            } elseif ($action === 'paid_duration_reduce') {
+                $paidDuration = $locked->starts_at->diffInDays($locked->ends_at);
+                if ((int) $data['days'] >= $paidDuration) {
+                    throw ValidationException::withMessages([
+                        'days' => "Paid duration must retain at least one day. Only ".max(0, $paidDuration - 1).' day(s) can be reduced.',
+                    ]);
+                }
+
+                $newPaidEnd = $locked->ends_at->copy()->subDays((int) $data['days']);
+                $extraDays = $locked->extraAccessDays();
+                $update = [
+                    'ends_at' => $newPaidEnd,
+                    'note' => $data['note'] ?? $locked->note,
+                ];
+                // A paid correction that reaches today expires immediately
+                // only when no separately tracked complimentary access remains.
+                // Otherwise the effective end continues to honour that access.
+                if ($newPaidEnd->lte($today) && $extraDays === 0) {
+                    $update['access_ended_at'] = $today;
+                    $update['status'] = 'Expired';
+                }
+                $locked->update($update);
+            } elseif ($action === 'extra_extend') {
                 SubscriptionAccessExtension::create([
                     'subscription_id' => $locked->id,
                     'business_id' => $locked->business_id,
@@ -923,7 +964,7 @@ class AdminController extends Controller
                     'granted_by' => $request->user()?->id,
                     'granted_at' => now(),
                 ]);
-            } elseif ($data['action'] === 'reduce') {
+            } elseif ($action === 'extra_reduce') {
                 $extraDays = $locked->extraAccessDays();
                 if ((int) $data['days'] > $extraDays) {
                     throw ValidationException::withMessages(['days' => "Only {$extraDays} complimentary access day(s) can be reduced."]);
@@ -939,7 +980,7 @@ class AdminController extends Controller
                     'granted_by' => $request->user()?->id,
                     'granted_at' => now(),
                 ]);
-            } elseif ($data['action'] === 'end_now') {
+            } elseif ($action === 'end_now') {
                 // Administrative early-end override: the paid period and all
                 // complimentary history remain unchanged for audit purposes.
                 $locked->update(['access_ended_at' => $today, 'status' => 'Expired', 'note' => $data['note'] ?? $locked->note]);
@@ -950,25 +991,41 @@ class AdminController extends Controller
         });
         $subscription = app(SubscriptionLifecycleService::class)->synchronize($subscription);
         $renewals = app(RenewalInvoiceService::class);
-        if (in_array($data['action'], ['extend', 'reduce'], true)) {
+        if (in_array($action, ['extra_extend', 'extra_reduce', 'paid_duration_extend', 'paid_duration_reduce'], true)) {
             $renewals->reconcileEffectiveAccessEnd($subscription);
         }
         $renewals->generateDue();
-        $actionLabel = match ($data['action']) {
-            'extend' => 'Granted '.(int) $data['days'].' complimentary access days',
-            'reduce' => 'Reduced complimentary access by '.(int) $data['days'].' days',
+        $actionLabel = match ($action) {
+            'paid_duration_extend' => 'Paid duration extended by '.(int) $data['days'].' days',
+            'paid_duration_reduce' => 'Paid duration reduced by '.(int) $data['days'].' days',
+            'extra_extend' => 'Granted '.(int) $data['days'].' complimentary access days',
+            'extra_reduce' => 'Reduced complimentary access by '.(int) $data['days'].' days',
             'end_now' => 'Paid access ended manually',
         };
         $this->auditBusinessAccess($request, $subscription->business, $actionLabel, $subscription, $old, $new);
         $originalEnd = $subscription->ends_at?->format('d M, Y') ?? 'the original paid end';
         $effectiveEnd = $subscription->effectivePaidAccessEnd()?->format('d M, Y') ?? 'the effective access end';
         $subscription->business?->owner?->notify(new SubscriptionStatusNotification(
-            $data['action'] === 'end_now' ? 'Your access period has ended' : $actionLabel,
-            $data['action'] === 'end_now'
+            $action === 'end_now' ? 'Your access period has ended' : $actionLabel,
+            $action === 'end_now'
                 ? 'Your business data is safe. Contact '.app(PlatformSettingsService::class)->name().' to continue using your workspace.'
-                : "Your original paid access end remains {$originalEnd}. Your effective access end is {$effectiveEnd}.",
+                : (in_array($action, ['paid_duration_extend', 'paid_duration_reduce'], true)
+                    ? "Your paid access end is {$originalEnd}. Your effective access end is {$effectiveEnd}."
+                    : "Your original paid access end remains {$originalEnd}. Your effective access end is {$effectiveEnd}."),
             $subscription->business_id,
         ));
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $actionLabel.'.',
+                'paid_access_end' => $subscription->ends_at?->toDateString(),
+                'effective_access_end' => $subscription->effectivePaidAccessEnd()?->toDateString(),
+                'paid_duration_days' => $subscription->starts_at && $subscription->ends_at
+                    ? $subscription->starts_at->diffInDays($subscription->ends_at)
+                    : 0,
+                'extra_access_days' => $subscription->extraAccessDays(),
+            ]);
+        }
 
         return back()->with('success', $actionLabel.'.');
     }

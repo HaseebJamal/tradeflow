@@ -19,6 +19,16 @@
     let editSnapshot = null;
     let searchTimer = null;
     let searchVersion = 0;
+    let resumingHeldSale = false;
+    let holdingSale = false;
+    let resumeSearchTimer = null;
+    let historySearchTimer = null;
+    let resumeMatches = [];
+    let historyMatches = [];
+    let activeResumeMatch = -1;
+    let activeHistoryMatch = -1;
+    let resumeLookupMessage = '';
+    let currentHeldSale = null;
     let submitting = false;
     let keyboardProductSelection = false;
     let finishCompletedSale = () => {};
@@ -52,6 +62,13 @@
     const openingCash = $('[data-pos-opening-cash]');
     const registerAction = $('[data-pos-register-action]');
     const registerRequired = $('[data-pos-register-required]');
+    const holdInput = $('[data-pos-hold-input]');
+    const resumeInput = $('[data-pos-resume-input]');
+    const resumeSuggestions = $('[data-pos-resume-suggestions]');
+    const resumeError = $('[data-pos-resume-error]');
+    const historyInput = $('[data-pos-history-input]');
+    const historySuggestions = $('[data-pos-history-suggestions]');
+    const historyError = $('[data-pos-history-error]');
     const focusElement = (element, select = false, allowModalFocus = false) => requestAnimationFrame(() => {
         if (!element) return;
         if (!allowModalFocus && document.querySelector('.swal2-container')) return;
@@ -108,7 +125,7 @@
     const currency = (amount) => `Rs ${whole(amount).toLocaleString()}`;
     const roundCash = (value) => whole(value);
     const cashIsValid = () => /^\d+$/.test(rawMoney(cash.value));
-    const csrfHeaders = { 'X-CSRF-TOKEN': config.csrf, Accept: 'application/json', 'Content-Type': 'application/json' };
+    const currentCsrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     const flash = (icon, title, text = '') => window.Swal
         ? Swal.fire({
             icon,
@@ -204,14 +221,71 @@
         if (result.isConfirmed) finishCompletedSale();
     };
     const request = async (url, method = 'GET', body = null) => {
+        const token = currentCsrfToken();
+        const headers = {
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        };
+        if (!['GET', 'HEAD'].includes(method.toUpperCase())) {
+            headers['X-CSRF-TOKEN'] = token;
+        }
+        if (body) {
+            headers['Content-Type'] = 'application/json';
+        }
         const response = await fetch(url, {
             method,
-            headers: body ? csrfHeaders : { Accept: 'application/json' },
+            headers,
             body: body ? JSON.stringify(body) : null,
+            credentials: 'same-origin',
         });
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.message || Object.values(payload.errors || {}).flat()[0] || 'Unable to process this POS action.');
+        if (response.status === 419) {
+            const error = new Error('Your session has expired. Please refresh or sign in again.');
+            error.status = response.status;
+            throw error;
+        }
+        if (!response.ok) {
+            const error = new Error(payload.message || Object.values(payload.errors || {}).flat()[0] || 'Unable to process this POS action.');
+            error.status = response.status;
+            error.payload = payload;
+            throw error;
+        }
         return payload;
+    };
+    const clearInlineError = (element) => {
+        if (!element) return;
+        element.textContent = '';
+        element.hidden = true;
+    };
+    const showInlineError = (element, message) => {
+        if (!element) return;
+        element.textContent = message;
+        element.hidden = false;
+    };
+    const closeSuggestions = (input, container) => {
+        container?.classList.add('d-none');
+        input?.setAttribute('aria-expanded', 'false');
+    };
+    const renderSuggestions = (input, container, matches, activeIndex, render, choose) => {
+        if (!input || !container) return;
+        container.replaceChildren();
+        if (!matches.length) {
+            closeSuggestions(input, container);
+            return;
+        }
+        matches.forEach((match, index) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = `tf-pos-top-suggestion${index === activeIndex ? ' is-active' : ''}`;
+            item.setAttribute('role', 'option');
+            item.setAttribute('aria-selected', index === activeIndex ? 'true' : 'false');
+            item.addEventListener('mousedown', (event) => event.preventDefault());
+            item.addEventListener('click', () => choose(index));
+            render(item, match);
+            container.append(item);
+        });
+        container.classList.remove('d-none');
+        input.setAttribute('aria-expanded', 'true');
     };
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;',
@@ -465,6 +539,7 @@
     };
     finishCompletedSale = () => {
         clearCart();
+        currentHeldSale = null;
         customer.value = '';
         quickCustomerName && (quickCustomerName.value = '');
         if (quickCustomerPhone) {
@@ -487,7 +562,7 @@
         updateTotals();
         focusElement(search);
     };
-    const checkoutPayload = () => ({
+    const checkoutPayload = (includeHeldSale = true) => ({
         customer_id: isQuickCustomer() ? null : customer.value || null,
         quick_customer: isQuickCustomer() ? {
             name: quickCustomerName?.value.trim() || '',
@@ -503,6 +578,7 @@
         payment_method: paymentMethod.value,
         cash_received: cash.value === '' ? 0 : whole(cash.value),
         reference: reference.value.trim() || null,
+        ...(includeHeldSale ? { held_sale_id: currentHeldSale?.id || null } : {}),
         items: [...cart.values()].map((line) => ({
             product_id: line.id,
             quantity: whole(line.quantity),
@@ -571,19 +647,61 @@
         }
     };
     const hold = async () => {
+        if (holdingSale) return;
+        if (!config.registerId) return flash('warning', 'Open register first', 'Open your register before holding a sale.');
         if (!cart.size) return flash('warning', 'Cart is empty');
+        holdingSale = true;
+        let retryManualHold = false;
+        const reholding = Boolean(currentHeldSale);
+        if (holdInput) holdInput.disabled = true;
         try {
-            const payload = await request(config.holdUrl, 'POST', { register_id: config.registerId, cart: [...cart.values()], checkout: checkoutPayload() });
-            flash('success', 'Sale held', payload.held_sale.hold_number);
+            const payload = await request(config.holdUrl, 'POST', {
+                register_id: config.registerId,
+                hold_number: holdInput?.value.trim() || currentHeldSale?.holdNumber || null,
+                held_sale_id: currentHeldSale?.id || null,
+                cart: [...cart.values()],
+                checkout: checkoutPayload(false),
+            });
+            if (holdInput) holdInput.value = payload.held_sale.hold_number;
+            flash('success', reholding ? 'Sale held again successfully' : 'Sale held successfully', `Hold No: ${payload.held_sale.hold_number}`);
+            currentHeldSale = null;
             clearCart();
         } catch (error) {
-            flash('error', 'Unable to hold sale', error.message);
+            const holdError = error.payload?.errors?.hold_number?.[0] || '';
+            const duplicate = holdError.includes('already in use') || holdError.includes('belongs to another held sale');
+            if (duplicate) {
+                await flash('error', 'Hold ID already exists', holdError);
+                retryManualHold = true;
+            } else {
+                flash('error', 'Unable to hold sale', error.message);
+            }
+        } finally {
+            holdingSale = false;
+            if (holdInput) {
+                holdInput.disabled = !config.registerId;
+                if (retryManualHold) {
+                    focusElement(holdInput, true);
+                } else {
+                    window.setTimeout(() => { if (holdInput) holdInput.value = ''; }, 1800);
+                }
+            }
         }
     };
     const resume = async (id) => {
+        if (resumingHeldSale) return;
+        if (cart.size || currentHeldSale) {
+            await flash('warning', 'Current sale in progress', 'Please hold or clear the current cart before resuming another sale.');
+            focusElement(resumeInput, true);
+            return;
+        }
+        resumingHeldSale = true;
         try {
-            const payload = await request(`${config.holdUrl.replace('/hold', '')}/resume/${id}`, 'POST');
+            const payload = await request(`${config.holdUrl.replace('/hold', '')}/resume/${id}`, 'POST', {
+                current_cart_item_count: cart.size,
+                has_active_sale: Boolean(currentHeldSale),
+            });
             const held = payload.held_sale;
+            currentHeldSale = { id: held.id, holdNumber: held.hold_number };
             cart.clear();
             (held.cart_payload || []).forEach((line) => cart.set(Number(line.id || line.product_id), { ...line, id: Number(line.id || line.product_id) }));
             const checkout = held.checkout_payload || {};
@@ -609,11 +727,120 @@
             syncCustomerMode(false);
             selectedCartId = cart.size ? [...cart.keys()][0] : null;
             renderCart();
-            window.bootstrap?.Modal.getOrCreateInstance($('#posHeldModal')).hide();
+            if (holdInput) holdInput.value = held.hold_number;
+            if (resumeInput) resumeInput.value = '';
+            resumeLookupMessage = '';
+            resumeMatches = [];
+            activeResumeMatch = -1;
+            closeSuggestions(resumeInput, resumeSuggestions);
+            clearInlineError(resumeError);
             focusElement(search);
         } catch (error) {
             flash('error', 'Unable to resume sale', error.message);
+        } finally {
+            resumingHeldSale = false;
         }
+    };
+    const normalizedReference = (value) => String(value || '').trim().toUpperCase();
+    const referenceMatch = (term, matches, activeIndex, prefix, key) => {
+        const normalized = normalizedReference(term);
+        const padded = /^\d+$/.test(normalized) ? `${prefix}-${normalized.padStart(6, '0')}` : normalized;
+        return matches.find((match) => normalizedReference(match[key]) === normalized || normalizedReference(match[key]) === padded)
+            || matches[activeIndex]
+            || matches[0];
+    };
+    const renderResumeSuggestions = () => renderSuggestions(
+        resumeInput, resumeSuggestions, resumeMatches, activeResumeMatch,
+        (item, match) => {
+            item.innerHTML = `<strong>${escapeHtml(match.hold_number)}</strong><small>${escapeHtml(match.customer_name)}</small>`;
+        },
+        (index) => resumeMatches[index] && resume(resumeMatches[index].id),
+    );
+    const searchHeldSales = async () => {
+        const term = resumeInput?.value.trim() || '';
+        if (!term) {
+            resumeLookupMessage = '';
+            resumeMatches = [];
+            activeResumeMatch = -1;
+            renderResumeSuggestions();
+            return [];
+        }
+        try {
+            const payload = await request(`${config.heldSearchUrl}?${new URLSearchParams({ q: term })}`);
+            resumeMatches = payload.held_sales || [];
+            resumeLookupMessage = payload.message || '';
+            activeResumeMatch = resumeMatches.length ? 0 : -1;
+            renderResumeSuggestions();
+            return resumeMatches;
+        } catch (error) {
+            resumeMatches = [];
+            activeResumeMatch = -1;
+            renderResumeSuggestions();
+            resumeLookupMessage = 'Unable to search held sales. Please try again.';
+            showInlineError(resumeError, resumeLookupMessage);
+            return [];
+        }
+    };
+    const submitResumeSearch = async () => {
+        clearInlineError(resumeError);
+        const term = resumeInput?.value.trim() || '';
+        if (!term) return;
+        if (cart.size || currentHeldSale) {
+            await flash('warning', 'Current sale in progress', 'Please hold or clear the current cart before resuming another sale.');
+            focusElement(resumeInput, true);
+            return;
+        }
+        const matches = await searchHeldSales();
+        const match = referenceMatch(term, matches, activeResumeMatch, 'HOLD', 'hold_number');
+        if (!match) {
+            showInlineError(resumeError, resumeLookupMessage || 'Hold number not found.');
+            focusElement(resumeInput, true);
+            return;
+        }
+        resume(match.id);
+    };
+    const renderHistorySuggestions = () => renderSuggestions(
+        historyInput, historySuggestions, historyMatches, activeHistoryMatch,
+        (item, match) => {
+            item.innerHTML = `<strong>${escapeHtml(match.number)}</strong><small>${escapeHtml(match.customer_name)} - ${currency(match.amount)}</small>`;
+        },
+        (index) => historyMatches[index] && window.open(historyMatches[index].url, '_blank', 'noopener'),
+    );
+    const searchHistory = async () => {
+        const term = historyInput?.value.trim() || '';
+        if (!term) {
+            historyMatches = [];
+            activeHistoryMatch = -1;
+            renderHistorySuggestions();
+            return [];
+        }
+        try {
+            const payload = await request(`${config.invoiceSearchUrl}?${new URLSearchParams({ q: term })}`);
+            historyMatches = payload.invoices || [];
+            activeHistoryMatch = historyMatches.length ? 0 : -1;
+            renderHistorySuggestions();
+            return historyMatches;
+        } catch (error) {
+            historyMatches = [];
+            activeHistoryMatch = -1;
+            renderHistorySuggestions();
+            showInlineError(historyError, 'Unable to search sale history. Please try again.');
+            return [];
+        }
+    };
+    const submitHistorySearch = async () => {
+        clearInlineError(historyError);
+        const term = historyInput?.value.trim() || '';
+        if (!term) return;
+        const matches = await searchHistory();
+        const match = referenceMatch(term, matches, activeHistoryMatch, 'INV', 'number');
+        if (!match) {
+            showInlineError(historyError, 'Invoice number not found.');
+            focusElement(historyInput, true);
+            return;
+        }
+        window.open(match.url, '_blank', 'noopener');
+        closeSuggestions(historyInput, historySuggestions);
     };
     const openRegister = async () => {
         const result = await Swal.fire({
@@ -658,7 +885,7 @@
             registerStatus?.classList.add('is-open');
             if (registerLabel) registerLabel.textContent = 'Register Open';
             if (openingCash) openingCash.textContent = currency(register.opening_cash);
-            $('[data-pos-hold]')?.removeAttribute('disabled');
+            holdInput?.removeAttribute('disabled');
             registerRequired?.classList.add('d-none');
 
             if (registerAction) {
@@ -1017,14 +1244,57 @@
     });
     $('[data-pos-clear]').addEventListener('click', clearCart);
     completeButton.addEventListener('click', complete);
-    $('[data-pos-hold]')?.addEventListener('click', hold);
+    holdInput?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' || event.isComposing || event.repeat) return;
+        event.preventDefault();
+        event.stopPropagation();
+        hold();
+    });
     $('[data-pos-open-register]')?.addEventListener('click', openRegister);
     $('[data-pos-close-register]')?.addEventListener('click', closeRegister);
-    $('[data-pos-resume]').addEventListener('click', () => window.bootstrap?.Modal.getOrCreateInstance($('#posHeldModal')).show());
-    $('[data-pos-held-list]').addEventListener('click', (event) => {
-        const button = event.target.closest('[data-held-id]');
-        if (button) resume(button.dataset.heldId);
-    });
+    const bindTopSearch = (input, suggestions, error, getMatches, getActive, setActive, render, search, submit) => {
+        if (!input) return;
+        input.addEventListener('input', () => {
+            clearInlineError(error);
+            const timer = input === resumeInput ? resumeSearchTimer : historySearchTimer;
+            window.clearTimeout(timer);
+            const nextTimer = window.setTimeout(search, 180);
+            if (input === resumeInput) resumeSearchTimer = nextTimer;
+            else historySearchTimer = nextTimer;
+        });
+        input.addEventListener('keydown', (event) => {
+            if (event.isComposing || event.repeat) return;
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeSuggestions(input, suggestions);
+                return;
+            }
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                const matches = getMatches();
+                if (!matches.length) return;
+                event.preventDefault();
+                const next = Math.max(0, Math.min(matches.length - 1, getActive() + (event.key === 'ArrowDown' ? 1 : -1)));
+                setActive(next);
+                render();
+                return;
+            }
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            event.stopPropagation();
+            submit();
+        });
+        input.addEventListener('blur', () => window.setTimeout(() => closeSuggestions(input, suggestions), 120));
+    };
+    bindTopSearch(
+        resumeInput, resumeSuggestions, resumeError,
+        () => resumeMatches, () => activeResumeMatch, (index) => { activeResumeMatch = index; },
+        renderResumeSuggestions, searchHeldSales, submitResumeSearch,
+    );
+    bindTopSearch(
+        historyInput, historySuggestions, historyError,
+        () => historyMatches, () => activeHistoryMatch, (index) => { activeHistoryMatch = index; },
+        renderHistorySuggestions, searchHistory, submitHistorySearch,
+    );
     checkoutPanel?.addEventListener('keydown', (event) => {
         const field = event.target.closest('input, select, textarea, button');
         if (!field || !checkoutPanel.contains(field)) return;

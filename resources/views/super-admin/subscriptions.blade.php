@@ -207,11 +207,18 @@
                             @if(!empty($access['can_end_trial']))<div class="col-12"><button class="btn btn-outline-danger" type="button" data-trial-end-trigger="{{ $business->id }}">End Trial Now</button></div>@endif
                         </div>
                     @elseif($subscription && !empty($access['can_manage_paid']))
-                        <h6>Paid access controls</h6>
+                        <h6>Paid Duration Controls</h6>
                         <div class="row g-2">
-                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Grant complimentary access days? The original paid period will remain unchanged.">@csrf @method('PATCH')<input type="hidden" name="action" value="extend"><label class="form-label small">Extra days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-primary" type="submit">Grant Extra Days</button></div></form></div>
-                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Reduce only the complimentary extra-access allowance? The original paid period will remain unchanged.">@csrf @method('PATCH')<input type="hidden" name="action" value="reduce"><label class="form-label small">Reduce extra days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-outline-warning" type="submit">Reduce Extra Days</button></div></form></div>
-                            @if(!empty($access['can_end_paid']))<div class="col-12"><button class="btn btn-outline-danger" type="button" data-bs-toggle="modal" data-bs-target="#end-paid-access-{{ $business->id }}">End Access Now</button></div>@endif
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Extend the original paid duration? Payment and invoice history will remain unchanged." data-access-confirm-button="Extend Paid Duration" data-access-current-end="{{ optional($access['original_paid_access_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="paid_duration_extend"><label class="form-label small">Extend paid duration by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-primary" type="submit">Extend Paid Duration</button></div></form></div>
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Reduce the original paid duration? Payment and invoice history will remain unchanged." data-access-confirm-button="Reduce Paid Duration" data-access-current-end="{{ optional($access['original_paid_access_end'])->format('Y-m-d') }}" data-access-has-extra="{{ ($access['extra_access_days'] ?? 0) > 0 ? '1' : '0' }}">@csrf @method('PATCH')<input type="hidden" name="action" value="paid_duration_reduce"><label class="form-label small">Reduce paid duration by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-outline-warning" type="submit">Reduce Paid Duration</button></div></form></div>
+                        </div>
+
+                        <hr class="my-4">
+                        <h6>Complimentary / Extra Access Controls</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Grant complimentary access days? The original paid period will remain unchanged." data-access-confirm-button="Grant Extra Days" data-access-current-end="{{ optional($access['effective_access_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="extra_extend"><label class="form-label small">Extra days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-primary" type="submit">Grant Extra Days</button></div></form></div>
+                            <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" data-access-confirm="Reduce only the complimentary extra-access allowance? The original paid period will remain unchanged." data-access-confirm-button="Reduce Extra Days" data-access-current-end="{{ optional($access['effective_access_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="extra_reduce"><label class="form-label small">Reduce extra days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-outline-warning" type="submit">Reduce Extra Days</button></div></form></div>
+                            @if(!empty($access['can_end_paid']))<div class="col-12"><button class="btn btn-outline-danger" type="button" data-paid-end-trigger="{{ $business->id }}">End Access Now</button></div>@endif
                         </div>
                     @else
                         <p class="text-muted mb-0">There is no access record available to manage for this business.</p>
@@ -222,7 +229,7 @@
         </div>
 
         @if(!empty($access['can_end_trial']) && $subscription)
-            <form id="end-trial-form-{{ $business->id }}" method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" class="d-none" data-access-trial-confirm data-access-confirm="End this trial now? This will restrict workspace access immediately." data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}">
+            <form id="end-trial-form-{{ $business->id }}" method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" class="d-none" data-access-trial-confirm data-access-confirm="End this trial now? This will restrict workspace access immediately." data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}" data-access-parent-modal="manage-access-{{ $business->id }}">
                 @csrf
                 @method('PATCH')
                 <input type="hidden" name="action" value="end_now">
@@ -231,16 +238,12 @@
         @endif
 
         @if(!empty($access['can_end_paid']) && $subscription)
-            <div class="modal fade tf-access-modal" id="end-paid-access-{{ $business->id }}" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog"><form method="POST" class="modal-content" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}">
-                    @csrf
-                    @method('PATCH')
-                    <input type="hidden" name="action" value="end_now">
-                    <div class="modal-header"><h5 class="modal-title text-danger">End paid access?</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                    <div class="modal-body">End paid access for {{ $business->business_name }} now? Operational access will be restricted immediately. Business data will not be deleted.</div>
-                    <div class="modal-footer"><button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" type="submit">End Access</button></div>
-                </form></div>
-            </div>
+            <form id="end-paid-access-form-{{ $business->id }}" method="POST" action="{{ route('admin.subscriptions.paid-access.adjust', $subscription) }}" class="d-none" data-access-confirm="End paid access now? Workspace access will be restricted immediately. Business data will not be deleted." data-access-confirm-button="End Access" data-access-confirm-danger data-access-parent-modal="manage-access-{{ $business->id }}">
+                @csrf
+                @method('PATCH')
+                <input type="hidden" name="action" value="end_now">
+                <button type="submit">End Access</button>
+            </form>
         @endif
     @endforeach
 </div>
@@ -271,13 +274,25 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-trial-end-trigger]').forEach(function (trigger) {
         trigger.addEventListener('click', function () {
             var form = document.getElementById('end-trial-form-' + trigger.dataset.trialEndTrigger);
-            form?.requestSubmit();
+            if (form) {
+                form._accessReturnFocus = trigger;
+                form.requestSubmit();
+            }
+        });
+    });
+    document.querySelectorAll('[data-paid-end-trigger]').forEach(function (trigger) {
+        trigger.addEventListener('click', function () {
+            var form = document.getElementById('end-paid-access-form-' + trigger.dataset.paidEndTrigger);
+            if (form) {
+                form._accessReturnFocus = trigger;
+                form.requestSubmit();
+            }
         });
     });
 });
-document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form) {
-    if (form.dataset.accessTrialConfirmationReady === '1') return;
-    form.dataset.accessTrialConfirmationReady = '1';
+document.querySelectorAll('[data-access-confirm]').forEach(function (form) {
+    if (form.dataset.accessConfirmationReady === '1') return;
+    form.dataset.accessConfirmationReady = '1';
 
     form.addEventListener('submit', function (event) {
         if (form.dataset.accessProcessing === '1' || form.dataset.accessConfirming === '1') {
@@ -297,13 +312,15 @@ document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form)
         // SweetAlert is portaled above the Bootstrap Manage modal. Suspend
         // the background modal's focus trap while the foreground confirmation
         // is visible; otherwise it pulls keyboard focus back to its controls.
-        var manageModalElement = form.closest('.modal');
+        var manageModalElement = form.closest('.modal')
+            || document.getElementById(form.dataset.accessParentModal || '');
         var manageModal = manageModalElement && window.bootstrap?.Modal
             ? window.bootstrap.Modal.getInstance(manageModalElement)
             : null;
         var manageFocusTrap = manageModal?._focustrap;
 
-        var action = form.querySelector('[name="action"]')?.value;
+        var action = form.querySelector('[name="action"]')?.value || '';
+        var operation = action.replace('paid_duration_', '').replace('extra_', '');
         var days = Number(form.querySelector('[name="days"]')?.value || 0);
         var currentValue = form.dataset.accessCurrentEnd;
         var serverTodayValue = @json(now(config('app.timezone'))->toDateString());
@@ -315,16 +332,22 @@ document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form)
         var formatDate = function (date) { return (date.getMonth() + 1) + '/' + date.getDate() + '/' + date.getFullYear(); };
         var currentEnd = parseDate(currentValue);
         var newEnd = currentEnd && new Date(currentEnd.getTime());
-        if (newEnd && action === 'extend') newEnd.setDate(newEnd.getDate() + days);
-        if (newEnd && action === 'reduce') newEnd.setDate(newEnd.getDate() - days);
+        if (newEnd && operation === 'extend') newEnd.setDate(newEnd.getDate() + days);
+        if (newEnd && operation === 'reduce') newEnd.setDate(newEnd.getDate() - days);
         var preview = currentEnd && newEnd
             ? '<div class="text-start small"><div><strong>Current End:</strong> ' + formatDate(currentEnd) + '</div>'
-                + (action === 'reduce' ? '<div><strong>Days Removed:</strong> ' + days + '</div>' : '')
-                + (action === 'extend' ? '<div><strong>Days Added:</strong> ' + days + '</div>' : '')
+                + (operation === 'reduce' ? '<div><strong>Days Removed:</strong> ' + days + '</div>' : '')
+                + (operation === 'extend' ? '<div><strong>Days Added:</strong> ' + days + '</div>' : '')
                 + '<div><strong>New End:</strong> ' + formatDate(newEnd) + '</div></div>'
             : '';
         var today = parseDate(serverTodayValue) || new Date(); today.setHours(0, 0, 0, 0);
-        if (action === 'end_now' || (action === 'reduce' && newEnd && newEnd <= today)) {
+        if (action === 'end_now') {
+            preview += '<p class="text-danger small mb-0 mt-2">This change will restrict workspace access immediately.</p>';
+        } else if (action === 'paid_duration_reduce' && newEnd && newEnd <= today) {
+            preview += '<p class="text-danger small mb-0 mt-2">' + (form.dataset.accessHasExtra === '1'
+                ? 'The paid period will expire immediately; separately granted extra access remains in effect.'
+                : 'This change will expire paid access immediately and restrict workspace access.') + '</p>';
+        } else if (action === 'reduce' && newEnd && newEnd <= today) {
             preview += '<p class="text-danger small mb-0 mt-2">This change will expire the trial immediately and restrict workspace access.</p>';
         }
 
@@ -347,12 +370,12 @@ document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form)
                 });
                 var payload = await response.json().catch(function () { return {}; });
                 if (!response.ok) {
-                    window.Swal.showValidationMessage(payload.message || 'The trial change could not be saved. Please review the values and try again.');
+                    window.Swal.showValidationMessage(payload.message || 'The access change could not be saved. Please review the values and try again.');
                     return false;
                 }
                 return payload;
             } catch (_) {
-                window.Swal.showValidationMessage('The trial change could not be saved. Check your connection and try again.');
+                window.Swal.showValidationMessage('The access change could not be saved. Check your connection and try again.');
                 return false;
             } finally {
                 form.dataset.accessProcessing = '0';
@@ -361,12 +384,12 @@ document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form)
 
         Swal.fire({
             icon: 'warning',
-            title: 'Confirm access change',
+            title: action === 'end_now' ? 'End access?' : 'Confirm access change',
             html: preview + '<p class="mb-0 mt-3">' + form.dataset.accessConfirm + '</p>',
             showCancelButton: true,
-            confirmButtonText: 'Confirm',
+            confirmButtonText: form.dataset.accessConfirmButton || 'Confirm',
             cancelButtonText: 'Cancel',
-            confirmButtonColor: '#2563eb',
+            confirmButtonColor: form.hasAttribute('data-access-confirm-danger') ? '#dc3545' : '#2563eb',
             reverseButtons: true,
             allowEnterKey: true,
             allowEscapeKey: true,
@@ -378,6 +401,10 @@ document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form)
             preConfirm: submitTrialChange,
             willOpen: function () {
                 manageFocusTrap?.deactivate();
+                if (manageModalElement) {
+                    manageModalElement.inert = true;
+                    manageModalElement.setAttribute('aria-hidden', 'true');
+                }
             },
             didOpen: function () {
                 // Use the foreground action as the sole Enter-key target.
@@ -386,14 +413,23 @@ document.querySelectorAll('[data-access-trial-confirm]').forEach(function (form)
                 }, 0);
             },
             didClose: function () {
+                if (manageModalElement) {
+                    manageModalElement.inert = false;
+                    manageModalElement.removeAttribute('aria-hidden');
+                }
                 manageFocusTrap?.activate();
+                window.setTimeout(function () {
+                    var focusTarget = form._accessReturnFocus || form.querySelector('[type="submit"]');
+                    focusTarget?.focus({ preventScroll: true });
+                    form._accessReturnFocus = null;
+                }, 0);
             },
         }).then(function (result) {
             if (!result.isConfirmed) {
                 form.dataset.accessConfirming = '0';
                 return;
             }
-            window.sessionStorage.setItem('tf-trial-access-success', result.value?.message || 'Trial access updated successfully.');
+            window.sessionStorage.setItem('tf-trial-access-success', result.value?.message || 'Access updated successfully.');
             window.location.reload();
         });
     });

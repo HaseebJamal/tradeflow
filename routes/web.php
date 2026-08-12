@@ -349,6 +349,8 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
         Route::patch('/register/{register}/close', [PosController::class, 'closeRegister'])->name('register.close');
         Route::post('/sales', [PosController::class, 'store'])->name('sales.store');
         Route::get('/history', [PosController::class, 'history'])->name('history');
+        Route::get('/held-sales/search', [PosController::class, 'searchHeldSales'])->name('held-sales.search');
+        Route::get('/invoices/search', [PosController::class, 'searchInvoices'])->name('invoices.search');
         Route::post('/invoices/{invoice}/deliveries', [DeliveryController::class, 'assignFromPosInvoice'])->name('delivery.assign');
         Route::get('/receipts/{invoice}/view', [PosController::class, 'receiptView'])->name('receipt.view');
         Route::get('/receipts/{invoice}/download', [PosController::class, 'receiptDownload'])->name('receipt.download');

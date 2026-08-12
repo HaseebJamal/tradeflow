@@ -1264,6 +1264,20 @@ body.pp-landing-page .pp-final-card h2 { color: #ffffff !important; }
 .tf-pos { color: var(--text); }
 .tf-pos-register-bar,
 .tf-pos-panel { background: var(--surface) !important; border-color: var(--border) !important; border-radius: 14px !important; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045); }
+.tf-pos-top-inputs { display: flex; flex: 1 1 700px; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 0.5rem; }
+.tf-pos-top-input { position: relative; flex: 1 1 155px; min-width: 145px; max-width: 205px; }
+.tf-pos-top-input > label { display: block; margin: 0 0 0.25rem; color: var(--muted); font-size: 0.75rem; font-weight: 600; line-height: 1; }
+.tf-pos-top-input .form-control { min-height: 40px !important; border-radius: 10px !important; font-family: var(--font-body); font-size: 0.875rem !important; }
+.tf-pos-top-input .form-control:focus-visible { border-color: var(--primary) !important; box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--primary) 24%, transparent) !important; outline: 0; }
+.tf-pos-top-suggestions { position: absolute; z-index: 1070; top: calc(100% + 0.25rem); right: 0; left: 0; max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16); }
+.tf-pos-top-suggestion { display: flex; width: 100%; min-width: 0; flex-direction: column; gap: 0.125rem; padding: 0.55rem 0.7rem; border: 0; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text); text-align: left; }
+.tf-pos-top-suggestion:last-child { border-bottom: 0; }
+.tf-pos-top-suggestion strong { color: var(--heading); font-size: 0.8125rem; }
+.tf-pos-top-suggestion small { overflow: hidden; color: var(--muted); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
+.tf-pos-top-suggestion:is(:hover, .is-active) { background: var(--info-soft); }
+.tf-pos-top-input .text-danger { display: block; min-height: 1.1rem; margin-top: 0.2rem; font-size: 0.7rem; line-height: 1.1; }
+.tf-pos-top-inputs [data-pos-register-action] { flex: 0 0 auto; padding-top: 1rem; }
+.tf-pos-top-inputs [data-pos-register-action] .btn { min-height: 40px; white-space: nowrap; }
 .tf-pos-workspace { grid-template-columns: minmax(215px, 24fr) minmax(0, 52fr) minmax(220px, 24fr) !important; gap: 0.875rem !important; }
 .tf-pos-panel-head { border-bottom-color: var(--border) !important; padding: 0.875rem 1rem 0.7rem !important; }
 .tf-pos-panel-head h2 { color: var(--heading) !important; font-family: var(--font-heading) !important; font-size: 1rem !important; font-weight: 700 !important; }
@@ -1321,6 +1335,9 @@ body.pp-landing-page .pp-final-card h2 { color: #ffffff !important; }
     .tf-pos-cart-panel,
     .tf-pos-checkout-panel { min-height: 360px; }
     .tf-pos-register-bar { align-items: stretch; flex-direction: column; }
+    .tf-pos-top-inputs { justify-content: flex-start; }
+    .tf-pos-top-input { max-width: none; }
+    .tf-pos-top-inputs [data-pos-register-action] { padding-top: 0; }
     .tf-pos-actions { justify-content: flex-start; }
     .tf-pos-actions .btn { flex: 1 1 auto; }
     .tf-pos-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }

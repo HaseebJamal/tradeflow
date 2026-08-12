@@ -330,14 +330,18 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         const placeholderOption = [...element.options].find((option) => option.value === '');
         const isMultiple = element.multiple;
         const canClear = isMultiple || !element.required;
-        // The Create Order controls live in a compact inline form. Portaling
-        // their menus to <body> can leave them detached from the form, so keep
-        // those menus inside their own Tom Select wrapper instead.
-        const useInlineOrderDropdown = Boolean(element.closest('[data-order-form]'));
+        // Some compact forms need their menus to stay in the same scrolling
+        // context as the control. A body-level portal can otherwise retain a
+        // stale page position while the form scrolls. Pages opt in with
+        // data-tom-select-inline="true".
+        const useInlineDropdown = Boolean(
+            element.closest('[data-order-form]')
+            || element.dataset.tomSelectInline === 'true'
+        );
         // Modal dropdowns stay in their own Tom Select wrapper. Because the
         // wrapper lives in modal-body, the native scroll container keeps the
         // menu attached to its field and clips it inside the modal boundary.
-        const dropdownParent = (containingModal || useInlineOrderDropdown) ? null : 'body';
+        const dropdownParent = (containingModal || useInlineDropdown) ? null : 'body';
 
         const control = new window.TomSelect(element, {
             create: false,

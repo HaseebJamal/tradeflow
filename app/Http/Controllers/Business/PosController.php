@@ -26,7 +26,6 @@ class PosController extends Controller
             'products' => $this->availableProducts($businessId)->take(60)->get(),
             'categories' => Category::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(['id', 'name']),
             'customers' => Customer::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(['id', 'name', 'phone']),
-            'heldSales' => HeldPosSale::where('business_id', $businessId)->where('user_id', $request->user()->id)->where('status', 'Held')->latest('held_at')->get(['id', 'hold_number', 'held_at']),
             'canUseCustomPrice' => app(\App\Services\CompanyPermissionService::class)->allowsUser($request->user(), 'pos.custom_price'),
             'canCreateCustomer' => app(\App\Services\CompanyPermissionService::class)->allowsUser($request->user(), 'customers.create'),
         ]);
@@ -96,16 +95,88 @@ class PosController extends Controller
             'register_id' => ['required', 'integer'],
             'cart' => ['required', 'array', 'min:1'],
             'checkout' => ['nullable', 'array'],
+            'hold_number' => ['nullable', 'string', 'max:32'],
+            'held_sale_id' => ['nullable', 'integer'],
         ]);
         $register = PosRegister::where('business_id', $request->user()->business_id)->where('user_id', $request->user()->id)->where('status', 'Open')->findOrFail($data['register_id']);
-        $held = $this->pos->hold($register, $request->user()->business_id, $request->user()->id, $data['cart'], $data['checkout'] ?? []);
+        $held = $this->pos->hold($register, $request->user()->business_id, $request->user()->id, $data['cart'], $data['checkout'] ?? [], $data['hold_number'] ?? null, $data['held_sale_id'] ?? null);
         return $this->respond($request, ['held_sale' => $held], 'Sale held successfully.');
+    }
+
+    public function searchHeldSales(Request $request)
+    {
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:120']]);
+        $term = trim((string) ($data['q'] ?? ''));
+        if ($term === '') return response()->json(['held_sales' => []]);
+
+        $holdNumber = $this->pos->normalizeHoldNumber($term);
+        $hold = $this->pos->holdsForBusiness($request->user()->business_id)
+            ->with('customer:id,name,business_name')
+            ->where('hold_number', $holdNumber)
+            ->first(['id', 'hold_number', 'customer_id', 'status']);
+
+        if (! $hold) {
+            return response()->json(['held_sales' => []]);
+        }
+        if ($hold->status === 'Completed') {
+            return response()->json(['held_sales' => [], 'message' => 'This held sale has already been completed.']);
+        }
+        if (! $this->pos->resumableHoldsForBusiness($request->user()->business_id)
+            ->whereKey($hold->getKey())
+            ->exists()) {
+            return response()->json(['held_sales' => [], 'message' => 'This held sale is no longer available.']);
+        }
+
+        return response()->json(['held_sales' => [[
+            'id' => $hold->id,
+            'hold_number' => $hold->hold_number,
+            'customer_name' => $hold->customer?->display_name ?? 'Walk-in Customer',
+        ]]]);
+    }
+
+    public function searchInvoices(Request $request)
+    {
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:120']]);
+        $term = trim((string) ($data['q'] ?? ''));
+        if ($term === '') return response()->json(['invoices' => []]);
+
+        $orders = Order::query()
+            ->with(['customer:id,name,business_name', 'invoice:id,order_id,invoice_number'])
+            ->where('business_id', $request->user()->business_id)
+            ->where('sale_channel', 'pos')
+            ->where('status', 'Completed')
+            ->where(function ($query) use ($term) {
+                $query->where('order_number', 'like', "%{$term}%")
+                    ->orWhereHas('invoice', fn ($invoices) => $invoices->where('invoice_number', 'like', "%{$term}%"));
+            })
+            ->latest('order_date')
+            ->limit(7)
+            ->get(['id', 'order_number', 'customer_id', 'grand_total', 'total']);
+
+        return response()->json(['invoices' => $orders->map(function (Order $order) {
+            $number = $this->receiptReference($order);
+            return [
+                'number' => $number,
+                'customer_name' => $order->customer?->display_name ?? 'Walk-in Customer',
+                'amount' => (int) ($order->grand_total ?: $order->total),
+                'url' => route('business.pos.receipt.view', ['invoice' => $number]),
+            ];
+        })->values()]);
     }
 
     public function resume(Request $request, HeldPosSale $heldSale)
     {
-        abort_unless($heldSale->business_id === $request->user()->business_id && $heldSale->user_id === $request->user()->id, 403);
-        $held = $this->pos->resume($heldSale, $request->user()->business_id);
+        $data = $request->validate([
+            'current_cart_item_count' => ['required', 'integer', 'min:0'],
+            'has_active_sale' => ['required', 'boolean'],
+        ]);
+        if ($data['current_cart_item_count'] > 0 || $data['has_active_sale']) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'current_sale' => 'Please hold or clear the current cart before resuming another sale.',
+            ]);
+        }
+
+        $held = $this->pos->resume($heldSale->id, $request->user()->business_id);
         return $this->respond($request, ['held_sale' => $held], 'Held sale resumed.');
     }
 
