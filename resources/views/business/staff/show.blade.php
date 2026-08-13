@@ -15,9 +15,9 @@
             <h2 class="h5 mb-1">{{ $staff->name }}</h2>
             <p class="tf-muted mb-2">{{ $staff->role === 'custom_staff' ? ($staff->staffProfile?->custom_role_name ?: 'Custom Staff') : ($roles[$staff->role] ?? ucwords(str_replace('_', ' ', $staff->role))) }}</p>
             <span class="badge {{ $staff->status === 'active' ? 'text-bg-success' : ($staff->status === 'suspended' ? 'text-bg-danger' : ($staff->status === 'archived' ? 'text-bg-secondary' : 'text-bg-warning')) }}">{{ ucfirst($staff->status) }}</span>
-            <div class="d-grid gap-2 mt-4">
-                @companyCan('staff.edit')<a href="{{ route('business.staff.edit', $staff) }}" class="btn btn-tf-primary">Edit User</a>@endcompanyCan
-                <a href="{{ route('business.staff') }}" class="btn btn-outline-secondary">Back to Roles &amp; Users</a>
+            <div class="d-flex flex-wrap justify-content-center gap-2 mt-4 tf-staff-profile-actions">
+                @companyCan('staff.edit')<a href="{{ route('business.staff.edit', $staff) }}" class="btn btn-sm btn-tf-primary">Edit User</a>@endcompanyCan
+                <a href="{{ route('business.staff') }}" class="btn btn-sm btn-outline-secondary">Back to Roles &amp; Users</a>
             </div>
         </div>
     </div>

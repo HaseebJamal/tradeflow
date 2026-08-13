@@ -196,18 +196,15 @@ function positionTradeFlowTomSelectDropdown(control, force = false) {
     const viewportPadding = 12;
     const maxDropdownHeight = 260;
     let spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
-    let spaceAbove = rect.top - viewportPadding;
     const containingModal = control.wrapper?.closest('.modal') || control.input?.closest('.modal');
     if (containingModal) {
         const modalBody = control.wrapper?.closest('.modal-body') || containingModal.querySelector('.modal-body');
         const modalFooter = containingModal.querySelector('.modal-footer');
         const bodyRect = modalBody?.getBoundingClientRect();
         const footerRect = modalFooter?.getBoundingClientRect();
-        // The menu is mounted beside modal-content, so clamp it to the visible
-        // body range. The footer is a hard boundary: an open menu may never
-        // cover the form actions below it.
+        // The modal footer remains a hard visual boundary. Keep the compact
+        // menu below its trigger, then scroll its option list when needed.
         if (bodyRect) {
-            spaceAbove = Math.min(spaceAbove, Math.max(0, rect.top - bodyRect.top - 8));
             spaceBelow = Math.min(spaceBelow, Math.max(0, (footerRect?.top ?? bodyRect.bottom) - rect.bottom - 8));
         }
     }
@@ -216,15 +213,17 @@ function positionTradeFlowTomSelectDropdown(control, force = false) {
     const searchHeight = dropdownSearch?.offsetHeight || 0;
     const naturalOptionsHeight = Math.min(220, Math.max(40, dropdownContent?.scrollHeight || 40));
     const preferredHeight = Math.min(maxDropdownHeight, searchHeight + naturalOptionsHeight);
-    // Keep the normal direction downward whenever there is enough room for
-    // the search input and one compact option. The remaining options can
-    // scroll; a shortened menu below the trigger is less surprising than an
-    // unnecessary upward flip after the page has been scrolled.
-    const minimumDownwardHeight = Math.min(preferredHeight, Math.max(72, searchHeight + 40));
-    const openUpward = spaceBelow < minimumDownwardHeight && spaceAbove > spaceBelow;
-    const usableSpace = openUpward ? spaceAbove : spaceBelow;
-    const availableHeight = Math.min(maxDropdownHeight, Math.max(0, usableSpace));
-    const optionListHeight = Math.max(0, Math.min(220, availableHeight - searchHeight));
+    // The Business/Staff workspace always opens enhanced selects below their
+    // trigger. A compact, scrollable result list is preferable to a menu that
+    // jumps into unrelated content above the field after page scrolling.
+    // Page dropdowns live in the body portal, so they must keep their natural
+    // compact height and overlay the following card/table instead of being
+    // cropped to the few pixels left in the viewport. Only modal menus have a
+    // real visual boundary that needs height clamping.
+    const availableHeight = containingModal
+        ? Math.min(maxDropdownHeight, Math.max(searchHeight + 40, Math.min(spaceBelow, preferredHeight)))
+        : preferredHeight;
+    const optionListHeight = Math.max(40, Math.min(220, availableHeight - searchHeight));
 
     Object.assign(control.dropdown.style, {
         maxHeight: `${availableHeight}px`,
@@ -237,18 +236,14 @@ function positionTradeFlowTomSelectDropdown(control, force = false) {
     }
 
     if (control.dropdown.parentElement === control.wrapper) {
-        // Inline menus move with their own control while any dashboard, form,
-        // or modal scrolls. This avoids the stale viewport position a body
-        // portal can retain after a dynamically-added form section moves.
-        // Modal-body remains a hard visual boundary, so its footer is never
-        // covered by an open select menu.
-        control.wrapper.classList.toggle('tf-tom-select-up', openUpward);
-        Object.assign(control.dropdown.style, {
-            bottom: openUpward ? 'calc(100% + 4px)' : 'auto',
-            left: '0',
-            top: openUpward ? 'auto' : 'calc(100% + 4px)',
-            width: '100%',
-        });
+        // Inline menus move with their control while modal content scrolls.
+        // They intentionally remain below the trigger in every context.
+        [
+            ['bottom', 'auto'],
+            ['left', '0'],
+            ['top', 'calc(100% + 4px)'],
+            ['width', '100%'],
+        ].forEach(([property, value]) => control.dropdown.style.setProperty(property, value, 'important'));
         return;
     }
 
@@ -262,10 +257,8 @@ function positionTradeFlowTomSelectDropdown(control, force = false) {
         viewportPadding,
         Math.min(rect.left + window.scrollX, window.scrollX + viewportWidth - width - viewportPadding)
     );
-    const dropdownHeight = Math.min(control.dropdown.offsetHeight || availableHeight, availableHeight);
-    const top = window.scrollY + (openUpward ? rect.top - dropdownHeight : rect.bottom);
+    const top = window.scrollY + rect.bottom;
 
-    control.wrapper.classList.toggle('tf-tom-select-up', openUpward);
     const safeWidth = `${Math.max(0, width)}px`;
     // Tom Select's own placement routine and third-party CSS both position
     // body portals. A body portal is document-positioned, so its live viewport
@@ -325,7 +318,15 @@ function syncTradeFlowTomSelectSelectedOption(control) {
 }
 
 window.addEventListener('resize', queueTradeFlowTomSelectPosition);
-document.addEventListener('scroll', queueTradeFlowTomSelectPosition, { capture: true, passive: true });
+// A body-portaled dropdown must never retain coordinates from before a page
+// or scrollable-card movement. Closing it is deterministic and lets the next
+// interaction calculate a fresh below-trigger position.
+document.addEventListener('scroll', (event) => {
+    // Let the user scroll a long option list without dismissing it. Any page,
+    // card, or modal scroll still closes the menu before it can detach.
+    if (event.target instanceof Element && event.target.closest('.ts-dropdown')) return;
+    closeTradeFlowTomSelectDropdowns();
+}, { capture: true, passive: true });
 
 window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document, { force = false } = {}) {
     if (!window.TomSelect) return;
@@ -356,7 +357,10 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         // sections). Every non-modal selector therefore uses one body portal.
         // The shared fixed-coordinate positioner above keeps that portal
         // visually attached to its control during any scroll.
-        const dropdownParent = containingModal ? null : 'body';
+        // Use the actual body element as a portal target. This guarantees
+        // page menus are outside cards, responsive tables, and any ancestor
+        // that intentionally clips its own content.
+        const dropdownParent = containingModal ? null : document.body;
 
         const control = new window.TomSelect(element, {
             create: false,
@@ -376,9 +380,8 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
                 ...(canClear ? { clear_button: { title: 'Clear selection' } } : {}),
             },
             dropdownParent,
-            // The shared positioner owns the only upward-flip decision. Start
-            // every Tom Select downward so its internal `auto` heuristic
-            // cannot momentarily place a menu above an otherwise usable field.
+            // Never let Tom Select's internal auto-placement flip a workspace
+            // menu above its trigger.
             position: 'bottom',
             render: {
                 no_results: () => '<div class="no-results">No matching records found</div>',
@@ -415,7 +418,10 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         });
         control.on('item_add', () => requestAnimationFrame(() => syncTradeFlowTomSelectSelectedOption(control)));
         control.on('item_remove', () => requestAnimationFrame(() => syncTradeFlowTomSelectSelectedOption(control)));
-        control.on('dropdown_close', () => control.wrapper.classList.remove('tf-tom-select-up'));
+        control.on('dropdown_close', () => {
+            control.dropdown.style.removeProperty('max-height');
+            control.dropdown.querySelector('.ts-dropdown-content')?.style.removeProperty('max-height');
+        });
     });
 };
 

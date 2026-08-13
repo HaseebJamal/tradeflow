@@ -12,7 +12,6 @@ class BusinessDocumentFooter extends Model
      * intentionally excluded because it is mandatory and set server-side.
      */
     public const VISIBILITY_FIELDS = [
-        'show_company_name',
         'show_footer_title',
         'show_footer_message',
         'show_phone',

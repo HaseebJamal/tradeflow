@@ -26,9 +26,9 @@
     </div>
 </div>
 
-<div class="tf-card p-4">
-    <div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><h2 class="h5 mb-0">Supplier Statement</h2><form class="d-flex flex-wrap gap-2"><input type="date" name="date_from" value="{{ request('date_from') }}" class="form-control form-control-sm"><input type="date" name="date_to" value="{{ request('date_to') }}" class="form-control form-control-sm"><button class="btn btn-sm btn-outline-primary">Filter</button></form></div>
-    <div class="row small mb-3"><div class="col-md-3"><strong>Opening payable</strong><div>Rs {{ number_format($supplier->opening_balance, 2) }}</div></div><div class="col-md-3"><strong>Payments</strong><div>Rs {{ number_format($totalPayments, 2) }}</div></div><div class="col-md-3"><strong>Returns / credits</strong><div>Rs {{ number_format($returnsValue, 2) }}</div></div><div class="col-md-3"><strong>Current payable</strong><div>Rs {{ number_format($remainingPayable, 2) }}</div></div></div>
+<div class="tf-card p-4 tf-supplier-statement-card">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3"><h2 class="h5 mb-0">Supplier Statement</h2><form class="tf-supplier-statement-filters"><div><label class="form-label" for="supplierStatementDateFrom">Date From</label><input id="supplierStatementDateFrom" type="date" name="date_from" value="{{ $filters['date_from'] }}" class="form-control"></div><div><label class="form-label" for="supplierStatementDateTo">Date To</label><input id="supplierStatementDateTo" type="date" name="date_to" value="{{ $filters['date_to'] }}" class="form-control"></div><div class="tf-supplier-statement-filter-actions"><button class="btn btn-outline-primary">Filter</button><a href="{{ route('business.suppliers.show', $supplier) }}" class="btn btn-outline-secondary">Clear</a></div></form></div>
+    <div class="row g-3 small mb-3 tf-supplier-statement-summary"><div class="col-6 col-md-3"><strong>Opening payable</strong><div>Rs {{ number_format($supplier->opening_balance, 2) }}</div></div><div class="col-6 col-md-3"><strong>Payments</strong><div>Rs {{ number_format($totalPayments, 2) }}</div></div><div class="col-6 col-md-3"><strong>Returns / credits</strong><div>Rs {{ number_format($returnsValue, 2) }}</div></div><div class="col-6 col-md-3"><strong>Current payable</strong><div>Rs {{ number_format($remainingPayable, 2) }}</div></div></div>
     <x-table>
         <thead><tr><th>Date</th><th>Voucher</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
         <tbody>

@@ -13,12 +13,13 @@ use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use App\Services\CompanyPermissionService;
 use App\Services\FinanceCalculator;
+use App\Services\DocumentNumberService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PaymentController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private CompanyPermissionService $permissions)
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private CompanyPermissionService $permissions, private DocumentNumberService $numbers)
     {
     }
 
@@ -88,9 +89,10 @@ class PaymentController extends Controller
             $data['proof_image'] = $request->file('proof_image')->store('payments', 'public');
         $data['business_id'] = $businessId;
         $data['payment_date'] = $data['payment_date'] ?? now()->toDateString();
-        $data['reference_number'] = $data['reference_number'] ?? $data['transaction_reference'] ?? null;
+        $data['transaction_reference'] = $data['transaction_reference'] ?? $data['reference_number'] ?? null;
         $payment = null;
-        DB::transaction(function () use ($data, $customer, $order, &$payment) {
+        DB::transaction(function () use ($data, $businessId, $customer, $order, &$payment) {
+            $data['reference_number'] = $this->numbers->next($businessId, 'payment');
             $payment = Payment::create($data);
             $balance = max(0, (float) $customer->current_balance - (float) $data['amount']);
             $customer->update(['current_balance' => $balance]);

@@ -203,7 +203,11 @@ class AuthController extends Controller
         return match ($user->role) {
             'super_admin' => 'admin.dashboard',
             'retailer' => 'retailer.dashboard',
-            'custom_staff' => 'staff.dashboard',
+            // A staff member may be granted an operational module without
+            // being granted the optional Dashboard module. Send staff through
+            // the shared workspace resolver so they land on Dashboard when it
+            // is effective, or on their first permitted module otherwise.
+            'custom_staff' => 'dashboard.redirect',
             default => 'business.dashboard',
         };
     }

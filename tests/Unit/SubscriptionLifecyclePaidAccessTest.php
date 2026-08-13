@@ -79,4 +79,40 @@ class SubscriptionLifecyclePaidAccessTest extends TestCase
             Carbon::setTestNow();
         }
     }
+
+    public function test_current_paid_cycle_remains_active_with_its_remaining_days(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-13 12:00:00', config('app.timezone')));
+
+        try {
+            $subscription = new class extends Subscription {
+                public function extraAccessDays(): int
+                {
+                    return 0;
+                }
+
+                public function effectivePaidAccessEnd(): ?Carbon
+                {
+                    return $this->ends_at?->copy();
+                }
+            };
+            $subscription->forceFill([
+                'status' => 'Active',
+                'payment_status' => 'Received',
+                'starts_at' => '2026-08-13',
+                'ends_at' => '2026-08-17',
+            ]);
+
+            $lifecycle = app(SubscriptionLifecycleService::class);
+            $state = $lifecycle->state($subscription);
+
+            $this->assertSame('Active', $state['status']);
+            $this->assertTrue($lifecycle->hasActivePaidCycle($subscription));
+            $this->assertTrue($state['can_access_business']);
+            $this->assertSame(4, $state['paid_days_remaining']);
+            $this->assertSame('2026-08-17', $state['paid_access_end']?->toDateString());
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
 }

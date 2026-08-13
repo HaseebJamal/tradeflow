@@ -110,6 +110,9 @@ class SupplierController extends Controller
             ->findOrFail($supplier);
         $supplier = $this->scoped($supplier);
         $filters = $request->validate(['date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from']]);
+        $statementDate = now(config('app.timezone'))->toDateString();
+        $filters['date_from'] ??= $statementDate;
+        $filters['date_to'] ??= $statementDate;
         $lines = JournalEntryLine::with(['journalEntry', 'account'])
             ->where('supplier_id', $supplier->id)
             ->whereHas('journalEntry', fn ($q) => $q->where('business_id', $supplier->business_id)->where('status', 'posted'))
@@ -137,6 +140,7 @@ class SupplierController extends Controller
             'returnsValue' => $returns,
             'availableAdvances' => $availableAdvances,
             'overduePayable' => $overduePayable,
+            'filters' => $filters,
         ]);
     }
 
@@ -149,9 +153,10 @@ class SupplierController extends Controller
     {
         $supplier = $this->scoped($supplier);
         $validated = $this->normaliseSupplierFields($this->validated($request));
-        // Supplier name is its stable master-record identity.  It is locked in
-        // the edit form and protected again here against crafted payloads.
+        // Supplier identity is established on creation. These fields are
+        // locked in the edit form and protected again against crafted payloads.
         $validated['supplier_name'] = $supplier->supplier_name;
+        $validated['company_name'] = $supplier->company_name;
 
         DB::transaction(function () use ($supplier, $validated) {
             Business::query()->lockForUpdate()->findOrFail($supplier->business_id);

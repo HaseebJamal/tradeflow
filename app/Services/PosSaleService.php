@@ -103,7 +103,7 @@ class PosSaleService
                     throw ValidationException::withMessages(['held_sale_id' => 'This held sale is no longer available for update.']);
                 }
 
-                $holdNumber = $manualHoldNumber ?? $existingHeldSale?->hold_number ?? $this->numbers->next('pos_hold');
+                $holdNumber = $manualHoldNumber ?? $existingHeldSale?->hold_number ?? $this->numbers->next($businessId, 'pos_hold');
 
                 $conflict = $this->holdsForBusiness($businessId)
                     ->where('hold_number', $holdNumber)
@@ -303,7 +303,7 @@ class PosSaleService
                 throw ValidationException::withMessages(['cash_received' => 'Payment amount cannot exceed the amount due for this payment method.']);
             }
 
-            $number = $this->numbers->next('sales');
+            $number = $this->numbers->next($businessId, 'sales');
             $order = Order::create([
                 'order_number' => $number,
                 'business_id' => $businessId,
@@ -354,7 +354,7 @@ class PosSaleService
             }
 
             if ($paid > 0) {
-                Payment::create(['business_id' => $businessId, 'order_id' => $order->id, 'customer_id' => $customer?->id, 'method' => $data['payment_method'], 'amount' => $paid, 'transaction_reference' => $data['reference'] ?? null, 'reference_number' => $this->numbers->next('payment'), 'payment_date' => now()->toDateString(), 'status' => $order->payment_status]);
+                Payment::create(['business_id' => $businessId, 'order_id' => $order->id, 'customer_id' => $customer?->id, 'method' => $data['payment_method'], 'amount' => $paid, 'transaction_reference' => $data['reference'] ?? null, 'reference_number' => $this->numbers->next($businessId, 'payment'), 'payment_date' => now()->toDateString(), 'status' => $order->payment_status]);
             }
             if ($customer && $order->balance > 0) {
                 $customer->increment('current_balance', $order->balance);

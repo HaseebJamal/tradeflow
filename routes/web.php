@@ -23,7 +23,6 @@ use App\Http\Controllers\Business\PosController;
 use App\Http\Controllers\Business\ProductController;
 use App\Http\Controllers\Business\ReportController;
 use App\Http\Controllers\Business\StaffController;
-use App\Http\Controllers\Business\StaffDashboardController;
 use App\Http\Controllers\Business\SettingsController;
 use App\Http\Controllers\Business\SupportController;
 use App\Http\Controllers\Business\SupplierController;
@@ -457,7 +456,11 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
 });
 
 Route::prefix('staff')->name('staff.')->middleware(['auth', 'role:custom_staff', 'business.approved', 'track.activity'])->group(function () {
-    Route::get('/dashboard', StaffDashboardController::class)->name('dashboard')->middleware('business.permission:Dashboard');
+    // Legacy staff dashboard URL. Do not require Dashboard permission here:
+    // staff can validly be assigned an operational module without the optional
+    // dashboard module. The shared resolver safely sends them to Dashboard
+    // when granted, otherwise to their first effective business permission.
+    Route::get('/dashboard', DashboardRedirectController::class)->name('dashboard');
 });
 
 Route::prefix('retailer')->name('retailer.')->middleware(['auth', 'role:retailer'])->group(function () {

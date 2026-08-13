@@ -9,17 +9,17 @@
 
 @companyCan('suppliers.create')<div class="tf-card tf-suppliers-form-card p-4 mb-4">
     <h2 class="h5 mb-3">Add Supplier</h2>
-    <form method="POST" action="{{ route('business.suppliers.store') }}" class="row g-3">
+    <form method="POST" action="{{ route('business.suppliers.store') }}" class="row g-3 tf-supplier-create-form">
         @csrf
-        <div class="col-md-3"><input name="supplier_name" class="form-control" placeholder="Supplier name" required></div>
-        <div class="col-md-3"><input name="company_name" class="form-control" placeholder="Company name"></div>
-        <div class="col-md-2"><x-phone-input name="phone" :value="old('phone')" :error="$errors->first('phone')" /></div>
-        <div class="col-md-2"><input name="city" class="form-control" placeholder="City"></div>
-        <div class="col-md-2"><input name="email" type="email" class="form-control" placeholder="Email"></div>
-        <div class="col-md-3"><input name="opening_balance" type="number" step="1" min="0" value="{{ old('opening_balance') }}" class="form-control js-whole-number" placeholder="Opening balance"><small class="text-muted">Optional - defaults to Rs 0</small></div>
-        <div class="col-md-3"><select name="status" class="form-select"><option>Active</option><option>Inactive</option></select></div>
-        <div class="col-md-4"><input name="address" class="form-control" placeholder="Address"></div>
-        <div class="col-md-2"><button class="btn btn-tf-primary w-100">Save Supplier</button></div>
+        <div class="col-12 col-md-6"><input name="supplier_name" value="{{ old('supplier_name') }}" class="form-control" placeholder="Supplier name" required></div>
+        <div class="col-12 col-md-6"><input name="company_name" value="{{ old('company_name') }}" class="form-control" placeholder="Company name"></div>
+        <div class="col-12 col-md-6"><x-phone-input name="phone" :value="old('phone')" :error="$errors->first('phone')" /></div>
+        <div class="col-12 col-md-6"><input name="city" value="{{ old('city') }}" class="form-control" placeholder="City"></div>
+        <div class="col-12 col-md-6"><input name="email" type="email" value="{{ old('email') }}" class="form-control" placeholder="Email"></div>
+        <div class="col-12 col-md-6"><input name="opening_balance" type="number" step="1" min="0" value="{{ old('opening_balance') }}" class="form-control js-whole-number" placeholder="Opening balance"><small class="text-muted">Optional - defaults to Rs 0</small></div>
+        <div class="col-12 col-md-6"><select name="status" class="form-select"><option @selected(old('status', 'Active') === 'Active')>Active</option><option @selected(old('status') === 'Inactive')>Inactive</option></select></div>
+        <div class="col-12 col-md-6"><input name="address" value="{{ old('address') }}" class="form-control" placeholder="Address"></div>
+        <div class="col-12 tf-supplier-create-actions"><button class="btn btn-tf-primary" type="submit">Save Supplier</button></div>
     </form>
 </div>@endcompanyCan
 

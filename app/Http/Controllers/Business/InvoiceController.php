@@ -139,7 +139,7 @@ class InvoiceController extends Controller
             $note = CreditNote::create([
                 'business_id' => $invoice->business_id,
                 'invoice_id' => $invoice->id,
-                'credit_note_number' => $this->numbers->next('credit_note'),
+                'credit_note_number' => $this->numbers->next((int) $invoice->business_id, 'credit_note'),
                 'date' => now()->toDateString(),
                 'reason' => $data['reason'],
                 'amount' => $data['amount'],
@@ -175,7 +175,7 @@ class InvoiceController extends Controller
             [
                 'business_id' => $order->business_id,
                 'customer_id' => $order->customer_id,
-                'invoice_number' => $order->invoice?->invoice_number ?? $this->numbers->next('sales'),
+                'invoice_number' => $order->invoice?->invoice_number ?? $order->order_number ?? $this->numbers->next((int) $order->business_id, 'sales'),
                 'invoice_date' => $order->order_date ?? now()->toDateString(),
                 'subtotal' => $order->subtotal,
                 'discount_percentage' => $order->discount_percentage ?? $order->discount ?? 0,

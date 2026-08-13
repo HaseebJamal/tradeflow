@@ -74,8 +74,11 @@ class PurchaseController extends Controller
                 'supplier_payments.method',
                 'supplier_payments.payment_date',
             ]),
-            'items:id,purchase_id,quantity,received_quantity,damaged_quantity,rejected_quantity',
+            'items:id,purchase_id,product_id,product_name_snapshot,unit_snapshot,quantity,received_quantity,damaged_quantity,rejected_quantity,unit_cost,line_total',
             'returns.items:id,purchase_return_id,quantity',
+            'goodsReceipts:id,purchase_id,grn_number,received_at,created_by',
+            'goodsReceipts.items:id,goods_receipt_id,accepted_quantity,damaged_quantity,rejected_quantity',
+            'goodsReceipts.creator:id,name',
         ])->withCount('payments')->withSum('items', 'quantity')->where('business_id', $businessId)
             ->when($request->filled('purchase_id'), fn ($query) => $query->whereKey($request->integer('purchase_id')))
             ->when($request->filled('supplier_id'), fn ($query) => $query->where('supplier_id', $request->integer('supplier_id')))
@@ -390,7 +393,7 @@ class PurchaseController extends Controller
         $payment = $this->resolveInitialPayment($data, $grandTotal);
         $confirmed = true;
 
-        $purchaseNumber = $purchase?->purchase_number ?? $this->numbers->next('purchase');
+        $purchaseNumber = $purchase?->purchase_number ?? $this->numbers->next($businessId, 'purchase');
         $supplierInvoiceNumber = trim((string) ($data['supplier_invoice_number'] ?? ''))
             ?: ($purchase?->supplier_invoice_number ?: $purchaseNumber);
 
@@ -671,7 +674,7 @@ class PurchaseController extends Controller
             // Capture the open liability before this return's line items are
             // created. The summary service includes persisted returns.
             $summaryBeforeReturn = $this->financialSummary->summary($purchase);
-            $return = PurchaseReturn::create(['business_id' => $purchase->business_id, 'purchase_id' => $purchase->id, 'supplier_id' => $purchase->supplier_id, 'created_by' => auth()->id(), 'return_number' => $this->numbers->next('purchase_return'), 'return_date' => now()->toDateString(), 'reason' => $data['reason']]);
+            $return = PurchaseReturn::create(['business_id' => $purchase->business_id, 'purchase_id' => $purchase->id, 'supplier_id' => $purchase->supplier_id, 'created_by' => auth()->id(), 'return_number' => $this->numbers->next((int) $purchase->business_id, 'purchase_return'), 'return_date' => now()->toDateString(), 'reason' => $data['reason']]);
             $total = 0;
             $returnedProducts = collect();
             foreach (collect($data['items'])->filter(fn ($line) => (float) $line['quantity'] > 0) as $line) {

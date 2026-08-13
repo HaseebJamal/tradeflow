@@ -111,7 +111,6 @@ class ThermalDocumentServiceTest extends TestCase
         $footer = new BusinessDocumentFooter([
             'footer_title' => 'Apex Foods',
             'footer_message' => 'Thank you, Lahore!',
-            'show_company_name' => true,
             'show_footer_title' => true,
             'show_footer_message' => true,
             'show_address' => true,
@@ -143,12 +142,11 @@ class ThermalDocumentServiceTest extends TestCase
         $this->assertStringContainsString('Powered by TradeFlow', $html);
     }
 
-    public function test_document_footer_hides_the_real_business_name_when_its_visibility_setting_is_disabled(): void
+    public function test_document_footer_does_not_render_the_real_business_name(): void
     {
         $footer = new BusinessDocumentFooter([
             'footer_title' => 'Custom receipt footer',
             'footer_message' => null,
-            'show_company_name' => false,
             'show_footer_title' => true,
             'show_footer_message' => false,
             'show_address' => false,

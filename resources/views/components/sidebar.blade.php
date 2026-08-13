@@ -77,7 +77,7 @@
     }
 
     $businessDashboardItem = $area === 'business' && $companyPermissions->allowsUser(auth()->user(), 'dashboard.view')
-        ? ['Dashboard', 'bi-speedometer2', in_array($role, \App\Support\BusinessStaffRoles::DASHBOARD_ROLES, true) ? route('staff.dashboard') : route('business.dashboard')]
+        ? ['Dashboard', 'bi-speedometer2', route('business.dashboard')]
         : null;
 
     $businessItemsByModule = collect($items)->keyBy(fn ($item) => $item[3] ?? '');

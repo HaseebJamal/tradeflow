@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Business;
 use App\Models\Order;
+use App\Models\PlatformPayment;
 use App\Models\Product;
 use App\Models\Subscription;
 use App\Models\User;
@@ -56,6 +57,13 @@ class SubscriptionLifecycleService
     public function synchronize(Subscription $subscription, bool $dispatchNotifications = false): Subscription
     {
         $subscription->loadMissing(['plan', 'business.owner']);
+
+        // A received renewal may deliberately start after the current paid
+        // period.  Keep the current entitlement authoritative until it has
+        // actually ended, then promote the already-paid next cycle here.  A
+        // single Subscription row represents the *current* entitlement;
+        // PlatformPayment retains the immutable payment/cycle history.
+        $subscription = $this->activateDuePaidRenewal($subscription);
         $state = $this->state($subscription);
         $current = $subscription->status;
         $target = $current;
@@ -83,6 +91,124 @@ class SubscriptionLifecycleService
         }
 
         return $subscription;
+    }
+
+    /**
+     * True only while the stored paid cycle itself grants access today.
+     * Upcoming paid PlatformPayment rows are intentionally not considered
+     * here: they must never turn a still-active workspace into "Pending".
+     */
+    public function hasActivePaidCycle(Subscription $subscription): bool
+    {
+        $state = $this->state($subscription);
+
+        return $state['effective_access_type'] === 'paid'
+            && $state['is_paid_access_active']
+            && $state['can_access_business'];
+    }
+
+    /**
+     * Returns a received future paid cycle for a subscription, if one exists.
+     * This is intentionally scoped by business and subscription so one tenant
+     * can never influence another tenant's access lifecycle.
+     */
+    public function upcomingPaidCycle(Subscription $subscription): ?PlatformPayment
+    {
+        if (! $subscription->exists || ! $subscription->business_id) {
+            return null;
+        }
+
+        $today = now(config('app.timezone'))->startOfDay()->toDateString();
+
+        return PlatformPayment::query()
+            ->where('business_id', $subscription->business_id)
+            ->where('subscription_id', $subscription->id)
+            ->where('status', 'Received')
+            ->whereNotNull('period_starts_at')
+            ->whereNotNull('period_ends_at')
+            ->whereDate('period_starts_at', '>', $today)
+            ->orderBy('period_starts_at')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * Switch to a paid cycle only on/after its scheduled calendar date.  This
+     * runs before state resolution, so middleware never observes the expired
+     * old cycle between an early payment and the automatic switch.
+     */
+    private function activateDuePaidRenewal(Subscription $subscription): Subscription
+    {
+        if (! $subscription->exists || ! $subscription->business_id) {
+            return $subscription;
+        }
+
+        $today = now(config('app.timezone'))->startOfDay()->toDateString();
+
+        // Recovery for the formerly broken early-renewal flow.  It replaced a
+        // live Subscription with a future payment period.  When payment
+        // history still contains the valid current period, restore that as
+        // the current entitlement before doing any scheduled-cycle work.
+        if ($subscription->starts_at && $subscription->starts_at->isFuture()) {
+            $currentPayment = PlatformPayment::query()
+                ->where('business_id', $subscription->business_id)
+                ->where('subscription_id', $subscription->id)
+                ->where('status', 'Received')
+                ->whereNotNull('period_starts_at')
+                ->whereNotNull('period_ends_at')
+                ->whereDate('period_starts_at', '<=', $today)
+                ->whereDate('period_ends_at', '>=', $today)
+                ->whereDate('period_starts_at', '<', $subscription->starts_at->toDateString())
+                ->orderByDesc('period_starts_at')
+                ->orderByDesc('id')
+                ->first();
+
+            if ($currentPayment) {
+                return $this->promotePaidCycle($subscription, $currentPayment);
+            }
+        }
+
+        if ($this->hasActivePaidCycle($subscription)) {
+            return $subscription;
+        }
+
+        $nextPayment = PlatformPayment::query()
+            ->where('business_id', $subscription->business_id)
+            ->where('subscription_id', $subscription->id)
+            ->where('status', 'Received')
+            ->whereNotNull('period_starts_at')
+            ->whereNotNull('period_ends_at')
+            ->whereDate('period_starts_at', '<=', $today)
+            ->whereDate('period_ends_at', '>=', $today)
+            ->when($subscription->starts_at, fn (Builder $query) => $query->whereDate('period_starts_at', '>', $subscription->starts_at->toDateString()))
+            ->orderByDesc('period_starts_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $nextPayment) {
+            return $subscription;
+        }
+
+        return $this->promotePaidCycle($subscription, $nextPayment);
+    }
+
+    private function promotePaidCycle(Subscription $subscription, PlatformPayment $payment): Subscription
+    {
+        $subscription->update([
+            'subscription_plan_id' => $payment->subscription_plan_id ?: $subscription->subscription_plan_id,
+            'billing_cycle' => $payment->billing_cycle ?: $subscription->billing_cycle,
+            'amount' => $payment->amount,
+            'payment_method' => $payment->method,
+            'payment_status' => 'Received',
+            'payment_reference' => $payment->transaction_reference ?: $payment->reference_number,
+            'starts_at' => $payment->period_starts_at,
+            'ends_at' => $payment->period_ends_at,
+            'access_ended_at' => null,
+            'status' => 'Active',
+            'renewed_at' => $payment->verified_at ?: $payment->paid_at ?: now(config('app.timezone')),
+        ]);
+
+        return $subscription->fresh()->load(['plan', 'business.owner']);
     }
 
     public function synchronizeAll(bool $dispatchNotifications = true): void

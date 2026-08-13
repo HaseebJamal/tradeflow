@@ -86,6 +86,16 @@ class SubscriptionPaymentService
             $subscription = Subscription::where('business_id', $business->id)->lockForUpdate()->first() ?: new Subscription(['business_id' => $business->id]);
             $plan = $payment->plan ?: throw ValidationException::withMessages(['payment' => 'The requested plan is unavailable.']);
             $isCustomAccess = $payment->billing_cycle === 'Custom' && $payment->period_starts_at && $payment->period_ends_at;
+            $lifecycle = app(SubscriptionLifecycleService::class);
+            $hasCurrentPaidAccess = $subscription->exists && $lifecycle->hasActivePaidCycle($subscription);
+            $isFutureRenewal = $hasCurrentPaidAccess
+                && $payment->period_starts_at
+                && $payment->period_starts_at->gt(now(config('app.timezone'))->startOfDay());
+
+            if ($isFutureRenewal && $lifecycle->upcomingPaidCycle($subscription)) {
+                throw ValidationException::withMessages(['payment' => 'An upcoming paid renewal already exists for this business.']);
+            }
+
             $isExtendingCurrentPeriod = $subscription->exists
                 && $subscription->subscription_plan_id === $plan->id
                 && in_array($subscription->status, ['Active', 'Expiring'], true)
@@ -99,23 +109,32 @@ class SubscriptionPaymentService
                 ? $payment->period_ends_at
                 : ($payment->period_ends_at ?: $this->periodFor($subscription->exists ? $subscription : null, $payment->billing_cycle ?: 'Monthly')['ends_at']);
 
-            $subscription->fill([
-                'subscription_plan_id' => $plan->id,
-                'billing_cycle' => $payment->billing_cycle ?: 'Monthly',
-                'amount' => $isCustomAccess ? $payment->amount : $plan->priceFor($payment->billing_cycle ?: 'Monthly'),
-                'payment_method' => $payment->method,
-                'payment_status' => 'Received',
-                'payment_reference' => $payment->reference_number,
-                'starts_at' => $starts,
-                'ends_at' => $ends,
-                'access_ended_at' => null,
-                'trial_start_at' => $isCustomAccess ? $subscription->trial_start_at : null,
-                'trial_end_at' => $isCustomAccess ? $subscription->trial_end_at : null,
-                'status' => 'Active',
-                'renewed_at' => now(),
-                'cancellation_scheduled_at' => null,
-                'cancellation_reason' => null,
-            ])->save();
+            // An early renewal is payment-complete immediately, but its
+            // entitlement begins only after the current paid period.  Do not
+            // overwrite the current Subscription here: doing so made the
+            // business look "Paid Scheduled" and revoked access despite
+            // remaining paid days.  The paid PlatformPayment is the queued
+            // next cycle and SubscriptionLifecycleService promotes it on its
+            // start date.
+            if (! $isFutureRenewal) {
+                $subscription->fill([
+                    'subscription_plan_id' => $plan->id,
+                    'billing_cycle' => $payment->billing_cycle ?: 'Monthly',
+                    'amount' => $isCustomAccess ? $payment->amount : $plan->priceFor($payment->billing_cycle ?: 'Monthly'),
+                    'payment_method' => $payment->method,
+                    'payment_status' => 'Received',
+                    'payment_reference' => $payment->reference_number,
+                    'starts_at' => $starts,
+                    'ends_at' => $ends,
+                    'access_ended_at' => null,
+                    'trial_start_at' => $isCustomAccess ? $subscription->trial_start_at : null,
+                    'trial_end_at' => $isCustomAccess ? $subscription->trial_end_at : null,
+                    'status' => 'Active',
+                    'renewed_at' => now(),
+                    'cancellation_scheduled_at' => null,
+                    'cancellation_reason' => null,
+                ])->save();
+            }
 
             $payment->update([
                 'subscription_id' => $subscription->id,
@@ -137,7 +156,17 @@ class SubscriptionPaymentService
                 app(RenewalInvoiceService::class)->markPaid($renewalInvoice, $payment);
             }
 
-            $business->owner?->notify(new SubscriptionStatusNotification('Payment Verified', $isCustomAccess ? 'Your payment '.$payment->reference_number.' was verified. Your paid access is now active.' : 'Your payment '.$payment->reference_number.' was verified. Your subscription is now active.', $business->id, $payment->id));
+            $message = $isFutureRenewal
+                ? 'Your renewal payment '.$payment->reference_number.' was verified. Your current access remains active until '.$subscription->effectivePaidAccessEnd()?->format('d M, Y').'; renewed access will continue automatically from '.Carbon::parse($starts, config('app.timezone'))->format('d M, Y').'.'
+                : ($isCustomAccess
+                    ? 'Your payment '.$payment->reference_number.' was verified. Your paid access is now active.'
+                    : 'Your payment '.$payment->reference_number.' was verified. Your subscription is now active.');
+            $business->owner?->notify(new SubscriptionStatusNotification(
+                $isFutureRenewal ? 'Renewal payment received' : 'Payment Verified',
+                $message,
+                $business->id,
+                $payment->id,
+            ));
             return $payment->fresh(['business.owner', 'plan', 'subscription.plan']);
         });
     }

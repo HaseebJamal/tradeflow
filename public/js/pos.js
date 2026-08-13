@@ -348,7 +348,7 @@
     const visibleProductCards = () => [...grid.querySelectorAll('[data-product]')].filter((card) => (
         card.offsetParent !== null && !card.hidden && window.getComputedStyle(card).visibility !== 'hidden'
     ));
-    const setActiveProduct = (index, { focus = false } = {}) => {
+    const setActiveProduct = (index, { focus = false, ensureVisible = true } = {}) => {
         const cards = visibleProductCards();
         activeProduct = cards.length ? Math.max(0, Math.min(cards.length - 1, index)) : -1;
         cards.forEach((card, cardIndex) => {
@@ -357,7 +357,7 @@
             card.setAttribute('aria-selected', String(selected));
         });
         const selectedCard = cards[activeProduct];
-        selectedCard?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        if (ensureVisible) selectedCard?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         if (focus) selectedCard?.focus({ preventScroll: true });
         return selectedCard;
     };
@@ -417,10 +417,26 @@
             <span>${currency(price)}</span><em>${product.stock_quantity ?? product.stock ?? 0} ${escapeHtml(product.unit || '')}</em>
         </button>`;
     };
-    const renderProducts = (products) => {
+    const renderProducts = (products, { preserveScroll = false } = {}) => {
+        // Product searches and category changes intentionally start at the
+        // beginning of a new result set. Cart activity, however, must never
+        // move a cashier away from the products currently being browsed.
+        const previousScrollTop = preserveScroll ? grid.scrollTop : 0;
+        const activeCard = preserveScroll ? $$('[data-product]')[activeProduct] : null;
+        const activeProductId = Number(parseProduct(activeCard)?.id || 0);
+
         grid.innerHTML = products.length ? products.map(productCard).join('') : '<div class="text-muted p-3">No matching products.</div>';
         $('[data-pos-product-count]').textContent = `${products.length} available`;
-        setActiveProduct(products.length ? 0 : -1);
+        const restoredIndex = activeProductId
+            ? products.findIndex((product) => Number(product.id) === activeProductId)
+            : -1;
+        setActiveProduct(products.length ? Math.max(0, restoredIndex) : -1, { ensureVisible: !preserveScroll });
+
+        if (preserveScroll) {
+            requestAnimationFrame(() => {
+                grid.scrollTop = Math.min(previousScrollTop, Math.max(0, grid.scrollHeight - grid.clientHeight));
+            });
+        }
     };
 
     // A genuinely unavailable file should degrade to the existing product
@@ -487,22 +503,23 @@
         }
         selectedCartId = id;
         keyboardProductSelection = false;
-        search.value = '';
         barcode.value = '';
-        searchProducts();
+        // Adding to the cart only changes cart state. Keep the same product
+        // DOM node, search term, category, focus context, and scroll offset
+        // so a cashier can continue selecting nearby products uninterrupted.
         beginEdit(cart.get(id));
     };
     const parseProduct = (card) => {
         try { return JSON.parse(card.dataset.product); } catch (_) { return null; }
     };
-    const searchProducts = async () => {
+    const searchProducts = async ({ preserveScroll = false } = {}) => {
         const version = ++searchVersion;
         const params = new URLSearchParams({ q: search.value.trim() });
         const category = $('[data-pos-categories] .active')?.dataset.category;
         if (category) params.set('category_id', category);
         try {
             const payload = await request(`${config.productsUrl}?${params}`);
-            if (version === searchVersion) renderProducts(payload.products || []);
+            if (version === searchVersion) renderProducts(payload.products || [], { preserveScroll });
         } catch (_) {
             if (version === searchVersion) flash('error', 'Unable to load POS data', 'Please refresh and try again.');
         }

@@ -190,7 +190,7 @@ class OrderController extends Controller
 
             $discountPercentage = (int) ($data['discount'] ?? 0);
             $taxRate = (int) ($data['tax_rate'] ?? 0);
-            $order = Order::create(['order_number' => $this->numbers->next('sales'), 'business_id' => $businessId, 'customer_id' => $customer?->id, 'created_by' => auth()->id(), 'order_date' => now(), 'discount' => $discountPercentage, 'discount_percentage' => $discountPercentage, 'discount_amount' => 0, 'tax_rate' => $taxRate, 'tax_amount' => 0, 'payment_type' => $data['payment_type'] ?? 'Credit', 'status' => 'New']);
+            $order = Order::create(['order_number' => $this->numbers->next($businessId, 'sales'), 'business_id' => $businessId, 'customer_id' => $customer?->id, 'created_by' => auth()->id(), 'order_date' => now(), 'discount' => $discountPercentage, 'discount_percentage' => $discountPercentage, 'discount_amount' => 0, 'tax_rate' => $taxRate, 'tax_amount' => 0, 'payment_type' => $data['payment_type'] ?? 'Credit', 'status' => 'New']);
             $descriptionLines = [];
             $calculationLines = collect();
             foreach ($data['products'] as $line) {

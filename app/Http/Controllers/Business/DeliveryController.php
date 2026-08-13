@@ -15,12 +15,13 @@ use App\Services\BusinessActivityService;
 use App\Services\FinanceCalculator;
 use App\Services\CompanyPermissionService;
 use App\Services\PosDeliveryAssignmentService;
+use App\Services\DocumentNumberService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DeliveryController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private CompanyPermissionService $permissions, private PosDeliveryAssignmentService $posDeliveryAssignments) {}
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private CompanyPermissionService $permissions, private PosDeliveryAssignmentService $posDeliveryAssignments, private DocumentNumberService $numbers) {}
 
     public function assignFromPosInvoice(Request $request, Invoice $invoice)
     {
@@ -354,7 +355,7 @@ class DeliveryController extends Controller
                     'method' => $data['payment_method'],
                     'amount' => $collected,
                     'payment_date' => now()->toDateString(),
-                    'reference_number' => $data['payment_reference'] ?? null,
+                    'reference_number' => $this->numbers->next((int) $locked->business_id, 'payment'),
                     'transaction_reference' => $data['payment_reference'] ?? null,
                     'proof_image' => $paymentProofPath,
                     'status' => 'Paid',

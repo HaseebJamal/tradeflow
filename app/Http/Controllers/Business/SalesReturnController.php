@@ -124,7 +124,7 @@ class SalesReturnController extends Controller
             $salesReturn = DB::transaction(function () use ($order, $data) {
                 $return = SalesReturn::create([
                     'business_id' => $order->business_id,
-                    'return_number' => $this->numbers->next('sales_return'),
+                    'return_number' => $this->numbers->next((int) $order->business_id, 'sales_return'),
                     'order_id' => $order->id,
                     'customer_id' => $order->customer_id,
                     'processed_by' => auth()->id(),

@@ -77,7 +77,7 @@ class PurchaseReceivingService
                 'business_id' => $locked->business_id,
                 'purchase_id' => $locked->id,
                 'supplier_id' => $locked->supplier_id,
-                'grn_number' => $this->nextGrnNumber($locked->business_id),
+                'grn_number' => $this->numbers->next((int) $locked->business_id, 'goods_receipt'),
                 'submission_token' => $data['submission_token'],
                 'attachment_path' => $data['attachment_path'] ?? null,
                 'received_at' => $data['received_at'] ?? now(),
@@ -141,7 +141,7 @@ class PurchaseReceivingService
                 [
                     'business_id' => $locked->business_id,
                     'supplier_id' => $locked->supplier_id,
-                    'invoice_number' => $locked->invoice?->invoice_number ?? $this->numbers->next('supplier_invoice'),
+                    'invoice_number' => $locked->invoice?->invoice_number ?? $locked->purchase_number ?? $this->numbers->next((int) $locked->business_id, 'supplier_invoice'),
                     'invoice_date' => $locked->supplier_invoice_date ?? $receipt->received_at->toDateString(),
                     'grand_total' => $locked->grand_total,
                     'paid_amount' => $locked->paid_amount,
@@ -256,13 +256,6 @@ class PurchaseReceivingService
             $payment->update(['applied_amount' => round((float) $payment->applied_amount + $amount, 2), 'remaining_amount' => 0]);
             $this->post($purchase, $receipt, 'supplier_advance_application_'.$application->id, $amount, [['Accounts Payable', $amount, 0], ['Supplier Advances', 0, $amount]]);
         }
-    }
-
-    private function nextGrnNumber(int $businessId): string
-    {
-        $last = GoodsReceipt::where('business_id', $businessId)->orderByDesc('id')->value('grn_number');
-        $number = preg_match('/(\d+)$/', (string) $last, $matches) ? (int) $matches[1] + 1 : 1;
-        return 'GRN-B'.$businessId.'-'.str_pad((string) $number, 6, '0', STR_PAD_LEFT);
     }
 
     private function quantity(mixed $value): float

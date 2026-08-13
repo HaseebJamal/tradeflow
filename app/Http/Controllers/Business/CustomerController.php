@@ -102,10 +102,18 @@ class CustomerController extends Controller
             'current_balance' => ['nullable', 'integer', 'min:0'],
             'status' => ['required', 'in:Active,Blocked,Inactive'],
         ]);
-        if (!empty($data['shop_name'])) {
-            $data['business_name'] = $data['shop_name'];
-            unset($data['shop_name']);
+        // Customer identity is fixed after creation. Ignore modified request
+        // values so a crafted payload cannot rename an existing record.
+        $data['name'] = $customer->name;
+        $data['business_name'] = $customer->business_name;
+        unset($data['shop_name']);
+
+        // A customer balance is maintained by the sales/payment ledger. A blank
+        // form value must never overwrite that accounting value with NULL.
+        if (($data['current_balance'] ?? null) === null) {
+            unset($data['current_balance']);
         }
+
         $customer->update($data);
         return back()->with('success', 'Customer updated.');
     }

@@ -28,7 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
             return match ($request->user()?->role) {
                 'super_admin' => route('admin.dashboard'),
                 'retailer' => route('retailer.dashboard'),
-                'custom_staff' => route('staff.dashboard'),
+                // Keep the login redirect consistent with AuthController:
+                // the resolver chooses Dashboard or the staff member's first
+                // effective company-scoped permission.
+                'custom_staff' => route('dashboard.redirect'),
                 default => route('business.dashboard'),
             };
         });

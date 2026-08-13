@@ -192,7 +192,13 @@ class PosController extends Controller
 
     public function history(Request $request)
     {
-        $orders = Order::with(['customer', 'invoice'])->where('business_id', $request->user()->business_id)->where('sale_channel', 'pos')->latest('order_date')->paginate(12);
+        $orders = Order::with(['customer', 'invoice'])
+            ->where('business_id', $request->user()->business_id)
+            ->where('sale_channel', 'pos')
+            ->orderByDesc('order_date')
+            ->orderByDesc('id')
+            ->paginate(10)
+            ->withQueryString();
 
         return view('business.pos.history', [
             'orders' => $orders,

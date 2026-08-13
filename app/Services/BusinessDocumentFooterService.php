@@ -46,7 +46,6 @@ class BusinessDocumentFooterService
         return [
             'footer_title' => $business->business_name,
             'footer_message' => 'Thank you for your business!',
-            'show_company_name' => true,
             'show_footer_title' => true,
             'show_footer_message' => true,
             'show_address' => true,

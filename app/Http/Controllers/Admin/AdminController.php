@@ -1820,7 +1820,8 @@ class AdminController extends Controller
             }
         }
 
-        $payment = DB::transaction(function () use ($data, $request, &$business) {
+        $isEarlyRenewal = false;
+        $payment = DB::transaction(function () use ($data, $request, &$business, &$isEarlyRenewal) {
             $business = Business::with('subscription')->lockForUpdate()->findOrFail($data['business_id']);
             $renewalInvoice = isset($data['renewal_invoice_id'])
                 ? RenewalInvoice::lockForUpdate()->findOrFail($data['renewal_invoice_id'])
@@ -1836,11 +1837,32 @@ class AdminController extends Controller
                 $subscription = Subscription::create(['business_id' => $business->id, 'subscription_plan_id' => $legacyPlanId, 'billing_cycle' => 'Custom', 'amount' => 0, 'starts_at' => now()->toDateString(), 'ends_at' => now()->subDay()->toDateString(), 'status' => 'Expired', 'payment_status' => 'Pending']);
             }
 
+            $lifecycle = app(SubscriptionLifecycleService::class);
+            $isEarlyRenewal = $data['status'] === 'Received'
+                && $lifecycle->hasActivePaidCycle($subscription);
+
+            // A received payment during a valid paid period is a paid next
+            // cycle, not a replacement for the current entitlement.  Anchor
+            // it after the real effective end even if an old form submitted a
+            // stale date.  The entered duration remains unchanged.
+            if ($isEarlyRenewal) {
+                if ($lifecycle->upcomingPaidCycle($subscription)) {
+                    throw ValidationException::withMessages(['period_starts_at' => 'An upcoming paid renewal already exists for this business.']);
+                }
+
+                $requestedStart = Carbon::parse($data['period_starts_at'], config('app.timezone'))->startOfDay();
+                $requestedEnd = Carbon::parse($data['period_ends_at'], config('app.timezone'))->startOfDay();
+                $durationDays = max(1, $requestedStart->diffInDays($requestedEnd));
+                $nextStart = Carbon::parse($subscription->effectivePaidAccessEnd()->toDateString(), config('app.timezone'))->addDay()->startOfDay();
+                $data['period_starts_at'] = $nextStart->toDateString();
+                $data['period_ends_at'] = $nextStart->copy()->addDays($durationDays)->toDateString();
+            }
+
             $paymentData = collect($data)->except('renewal_invoice_id')->all();
             $payment = PlatformPayment::create($paymentData + ['subscription_id' => $subscription->id, 'subscription_plan_id' => $subscription->subscription_plan_id, 'billing_cycle' => 'Custom', 'submitted_at' => now(), 'recorded_by' => $request->user()->id]);
             $payment->update(['reference_number' => 'PP-'.now()->format('Ymd').'-'.str_pad((string) $payment->id, 6, '0', STR_PAD_LEFT)]);
 
-            if ($data['status'] === 'Received') {
+            if ($data['status'] === 'Received' && ! $isEarlyRenewal) {
                 $old = $subscription->only(['status', 'amount', 'starts_at', 'ends_at', 'payment_status']);
                 $subscription->update(['billing_cycle' => 'Custom', 'amount' => $data['amount'], 'payment_method' => $data['method'], 'payment_status' => 'Received', 'payment_reference' => $data['transaction_reference'] ?? $payment->reference_number, 'starts_at' => $data['period_starts_at'], 'ends_at' => $data['period_ends_at'], 'access_ended_at' => null, 'note' => $data['notes'] ?? null, 'status' => 'Active', 'renewed_at' => now()]);
                 $payment->update(['verified_at' => now(), 'verified_by' => $request->user()->id]);
@@ -1849,6 +1871,22 @@ class AdminController extends Controller
                 }
                 $this->auditBusinessAccess($request, $business, 'Paid access activated', $subscription->fresh(), $old, $subscription->fresh()->only(['status', 'amount', 'starts_at', 'ends_at', 'payment_status']));
                 $business->owner?->notify(new SubscriptionStatusNotification('Paid access activated', 'Your workspace access is active until '.Carbon::parse($data['period_ends_at'])->format('d M, Y').'.', $business->id, $payment->id));
+            } elseif ($data['status'] === 'Received') {
+                // Keep the currently active paid cycle unchanged.  This
+                // payment is already Received/Paid and will be promoted by
+                // the lifecycle service on its scheduled start date.
+                $payment->update(['verified_at' => now(), 'verified_by' => $request->user()->id]);
+                if ($renewalInvoice) {
+                    app(RenewalInvoiceService::class)->markPaid($renewalInvoice, $payment);
+                }
+                $currentEnd = $subscription->effectivePaidAccessEnd()?->format('d M, Y');
+                $nextStart = Carbon::parse($data['period_starts_at'], config('app.timezone'))->format('d M, Y');
+                $business->owner?->notify(new SubscriptionStatusNotification(
+                    'Renewal payment received',
+                    "Your current access remains active until {$currentEnd}. Your renewed access will continue automatically from {$nextStart}.",
+                    $business->id,
+                    $payment->id,
+                ));
             } elseif ($renewalInvoice) {
                 // Keep one source of truth for a renewal payment awaiting
                 // verification. This also lets attention counters treat the
@@ -1868,7 +1906,13 @@ class AdminController extends Controller
             app(RenewalInvoiceService::class)->generateDue();
         }
 
-        return back()->with('success', $data['status'] === 'Received' ? 'Custom payment recorded and paid access activated for '.$business->business_name.'.' : 'Custom payment recorded for '.$business->business_name.'.');
+        $success = $data['status'] === 'Received'
+            ? ($isEarlyRenewal
+                ? 'Renewal payment recorded. Current paid access remains active and the next cycle is scheduled automatically.'
+                : 'Custom payment recorded and paid access activated for '.$business->business_name.'.')
+            : 'Custom payment recorded for '.$business->business_name.'.';
+
+        return back()->with('success', $success);
     }
 
     public function approvePlatformPayment(Request $request, PlatformPayment $payment)

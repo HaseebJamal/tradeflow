@@ -11,7 +11,6 @@
             : new \App\Models\BusinessDocumentFooter([
                 'footer_title' => data_get($business, 'business_name') ?: data_get($business, 'name'),
                 'footer_message' => 'Thank you for your business!',
-                'show_company_name' => true,
                 'show_footer_title' => true,
                 'show_footer_message' => true,
                 'show_address' => true,
@@ -21,19 +20,15 @@
                 'show_powered_by' => true,
             ]);
     }
-    $businessName = data_get($business, 'business_name') ?: data_get($business, 'name');
     $address = trim(implode(', ', array_filter([data_get($business, 'address'), data_get($business, 'city')])));
     $email = data_get($business, 'email') ?: data_get($business, 'owner.email');
     $website = data_get($business, 'website');
     $footerTitle = trim((string) $footer->footer_title);
-    $showCompanyName = $footer->show_company_name && filled($businessName);
-    $showFooterTitle = ($footer->show_footer_title ?? true) && filled($footerTitle)
-        && (! $showCompanyName || strcasecmp($footerTitle, (string) $businessName) !== 0);
+    $showFooterTitle = ($footer->show_footer_title ?? true) && filled($footerTitle);
     $showFooterMessage = ($footer->show_footer_message ?? true) && filled($footer->footer_message);
     $poweredByText = app(\App\Services\BusinessDocumentFooterService::class)->displayedPoweredByText($footer);
 @endphp
 <footer class="tf-document-footer {{ $thermal ? 'tf-document-footer--thermal' : '' }}" style="margin-top: 1rem; text-align: center; color: #4b5563; font-size: {{ $thermal ? '9px' : '.875rem' }}; line-height: 1.45;">
-    @if($showCompanyName)<div class="tf-document-footer__title" style="font-weight: 700; color: #111827;">{{ $businessName }}</div>@endif
     @if($showFooterTitle)<div class="tf-document-footer__title" style="font-weight: 700; color: #111827;">{{ $footerTitle }}</div>@endif
     @if($showFooterMessage)<div>{{ $footer->footer_message }}</div>@endif
     @if($footer->show_address && filled($address))<div>{{ $address }}</div>@endif
@@ -43,6 +38,5 @@
     @foreach($additionalLines as $line)
         @if(filled($line))<div>{{ $line }}</div>@endif
     @endforeach
-    @if($showCompanyName)<div>&copy; {{ now()->year }} {{ $businessName }}</div>@endif
     <div>{{ $poweredByText }}</div>
 </footer>

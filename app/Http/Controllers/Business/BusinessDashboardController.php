@@ -66,6 +66,21 @@ class BusinessDashboardController extends Controller
         $totalSales = (clone $saleBase)->sum('grand_total');
         $monthlySalesTotal = (clone $monthlySales)->sum('grand_total');
         $inventoryValue = Product::where('business_id', $businessId)->get()->sum(fn (Product $product) => (float) $product->stock_quantity * (float) ($product->purchase_cost ?: $product->wholesale_price));
+        $trendStart = now()->subDays(6)->startOfDay();
+        $salesByDay = (clone $saleBase)
+            ->whereBetween('order_date', [$trendStart->toDateString(), now()->toDateString()])
+            ->selectRaw('DATE(order_date) as day, COALESCE(SUM(grand_total), 0) as total')
+            ->groupBy('day')
+            ->pluck('total', 'day');
+        $salesTrend = collect(range(0, 6))->map(function (int $offset) use ($trendStart, $salesByDay): array {
+            $day = $trendStart->copy()->addDays($offset);
+
+            return [
+                'label' => $day->format('D'),
+                'date' => $day->toDateString(),
+                'total' => (float) ($salesByDay[$day->toDateString()] ?? 0),
+            ];
+        })->all();
 
         return view('business.dashboard', [
             'hasOperationalAccess' => true,
@@ -84,6 +99,7 @@ class BusinessDashboardController extends Controller
             'expenses' => $expenses,
             'profit' => $totalSales - $costOfSales - $totalExpenses,
             'monthlyProfit' => $monthlySalesTotal - $monthlyCostOfSales - $expenses,
+            'salesTrend' => $salesTrend,
             'canManageSubscription' => $canManageSubscription,
             'subscription' => $canManageSubscription ? $subscriptionState['subscription'] : null,
             'subscriptionState' => $subscriptionState,

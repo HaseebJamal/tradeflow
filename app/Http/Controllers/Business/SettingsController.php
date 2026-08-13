@@ -68,7 +68,6 @@ class SettingsController extends Controller
             'website' => ['nullable', 'url', 'max:255'],
             'footer_visibility' => ['nullable', 'array'],
             'footer_visibility.*' => ['nullable', 'boolean'],
-            'show_company_name' => ['nullable', 'boolean'],
             'show_footer_title' => ['nullable', 'boolean'],
             'show_footer_message' => ['nullable', 'boolean'],
             'show_phone' => ['nullable', 'boolean'],
@@ -82,7 +81,7 @@ class SettingsController extends Controller
             $lockedBusiness = \App\Models\Business::lockForUpdate()->findOrFail($business->id);
             $footer = app(BusinessDocumentFooterService::class)->for($lockedBusiness);
             $businessFields = ['phone', 'address', 'website'];
-            $footerFields = ['footer_title', 'footer_message', 'show_company_name', 'show_footer_title', 'show_footer_message', 'show_phone', 'show_address', 'show_email', 'show_website', 'show_powered_by'];
+            $footerFields = ['footer_title', 'footer_message', 'show_footer_title', 'show_footer_message', 'show_phone', 'show_address', 'show_email', 'show_website', 'show_powered_by'];
             $old = [
                 ...$lockedBusiness->only($businessFields),
                 ...$footer->only($footerFields),
