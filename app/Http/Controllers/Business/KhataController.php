@@ -128,7 +128,9 @@ class KhataController extends Controller
             ->selectRaw('SUM(debit) as total_debit, SUM(credit) as total_credit')
             ->groupBy('customer_id')
             ->havingRaw('SUM(debit) <> 0 OR SUM(credit) <> 0')
-            ->with('customer:id,name,business_name')
+            // Ledger history must remain readable even after a customer is archived.
+            // A permanently removed legacy record is still handled safely by the view.
+            ->with(['customer' => fn ($query) => $query->withTrashed()->select('id', 'name', 'business_name')])
             ->orderBy('customer_id')
             ->paginate(10, ['*'], 'customer_page')
             ->withQueryString();
@@ -146,7 +148,8 @@ class KhataController extends Controller
             ->selectRaw('SUM(debit) as total_debit, SUM(credit) as total_credit')
             ->groupBy('supplier_id')
             ->havingRaw('SUM(debit) <> 0 OR SUM(credit) <> 0')
-            ->with('supplier:id,supplier_name,company_name')
+            // Keep historical supplier ledger rows identifiable after archival too.
+            ->with(['supplier' => fn ($query) => $query->withTrashed()->select('id', 'supplier_name', 'company_name')])
             ->orderBy('supplier_id')
             ->paginate(10, ['*'], 'supplier_page')
             ->withQueryString();

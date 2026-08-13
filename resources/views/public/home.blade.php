@@ -528,17 +528,30 @@
         @php($initialDemo = $publicDemos->first())
         <div class="modal fade pp-demo-modal" id="profitPointDemoModal" tabindex="-1" aria-labelledby="profitPointDemoTitle"
             aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <div>
+                        <div class="pp-demo-modal__copy">
                             <h2 class="modal-title h4 mb-1" id="profitPointDemoTitle">{{ $initialDemo['title'] }}</h2>
                             <p class="tf-muted mb-0 small {{ empty($initialDemo['subtitle']) ? 'd-none' : '' }}" id="profitPointDemoSubtitle">{{ $initialDemo['subtitle'] }}</p>
-                        </div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close demo"></button>
+                        </div>
+                        <div class="pp-demo-modal__actions">
+                            @if($publicDemos->count() > 1)
+                                <div class="pp-demo-language-switch" role="tablist" aria-label="Demo language">
+                                    @foreach($publicDemos as $locale => $demo)
+                                        <button type="button" class="{{ $loop->first ? 'is-active' : '' }}" role="tab" aria-selected="{{ $loop->first ? 'true' : 'false' }}" data-demo-language="{{ $locale }}" data-demo-title="{{ $demo['title'] }}" data-demo-subtitle="{{ $demo['subtitle'] }}" data-demo-url="{{ $demo['url'] }}" data-demo-poster="{{ $demo['poster'] }}" @if($locale === 'ur') lang="ur" dir="rtl" @endif>{{ $demo['label'] }}</button>
+                                    @endforeach
+                                </div>
+                            @endif
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close demo"></button>
+                        </div>
                     </div>
                     <div class="modal-body">
-                        @if($publicDemos->count() > 1)<div class="nav nav-pills gap-2 mb-3" role="tablist">@foreach($publicDemos as $locale => $demo)<button type="button" class="nav-link {{ $loop->first ? 'active' : '' }}" data-demo-language="{{ $locale }}" data-demo-title="{{ $demo['title'] }}" data-demo-subtitle="{{ $demo['subtitle'] }}" data-demo-url="{{ $demo['url'] }}" data-demo-poster="{{ $demo['poster'] }}" @if($locale === 'ur') lang="ur" dir="rtl" @endif>{{ $demo['label'] }}</button>@endforeach</div>@endif
-                        <div class="pp-demo-player"><video controls preload="metadata" playsinline data-demo-player data-demo-url="{{ $initialDemo['url'] }}" data-demo-poster="{{ $initialDemo['poster'] }}">Your browser does not support video playback.</video></div>
+                        <div class="pp-demo-player"><video controls autoplay muted preload="metadata" playsinline data-demo-player data-demo-url="{{ $initialDemo['url'] }}" data-demo-poster="{{ $initialDemo['poster'] }}">Your browser does not support video playback.</video></div>
+                    </div>
+                    <div class="modal-footer pp-demo-modal__footer">
+                        <a href="{{ route('register.business') }}" class="btn pp-btn-primary btn-sm">Start free trial <i class="bi bi-arrow-up-right"></i></a>
+                        <a href="{{ route('public.contact') }}" class="btn pp-btn-secondary btn-sm">Contact us</a>
                     </div>
                 </div>
             </div>
@@ -571,17 +584,30 @@
             document.querySelectorAll('.pp-btn-primary, .pp-btn-secondary, .pp-btn-white, .pp-btn-ghost, .pp-nav-cta').forEach(button => button.addEventListener('click', event => { const ripple = document.createElement('span'), rect = button.getBoundingClientRect(); ripple.className = 'pp-ripple'; ripple.style.left = `${event.clientX - rect.left}px`; ripple.style.top = `${event.clientY - rect.top}px`; button.append(ripple); ripple.addEventListener('animationend', () => ripple.remove()); }));
             const demoModal = document.getElementById('profitPointDemoModal');
             const demoPlayer = demoModal?.querySelector('[data-demo-player]');
+            const stopDemo = () => {
+                if (!demoPlayer) return;
+                demoPlayer.pause();
+                try { demoPlayer.currentTime = 0; } catch (_) {}
+                demoPlayer.removeAttribute('src');
+                demoPlayer.load();
+            };
             const loadDemo = button => {
                 if (!demoPlayer || !button) return;
-                demoPlayer.pause(); demoPlayer.removeAttribute('src'); demoPlayer.poster = button.dataset.demoPoster || '';
-                demoPlayer.src = button.dataset.demoUrl || demoPlayer.dataset.demoUrl || ''; demoPlayer.load();
+                stopDemo();
+                demoPlayer.muted = true;
+                demoPlayer.defaultMuted = true;
+                demoPlayer.poster = button.dataset.demoPoster || '';
+                demoPlayer.src = button.dataset.demoUrl || demoPlayer.dataset.demoUrl || '';
+                demoPlayer.load();
+                const autoplay = () => demoPlayer.play().catch(() => {});
+                demoPlayer.addEventListener('canplay', autoplay, { once: true });
                 const title = demoModal.querySelector('#profitPointDemoTitle'), subtitle = demoModal.querySelector('#profitPointDemoSubtitle');
                 if (title) title.textContent = button.dataset.demoTitle || title.textContent;
                 if (subtitle) { subtitle.textContent = button.dataset.demoSubtitle || ''; subtitle.classList.toggle('d-none', !button.dataset.demoSubtitle); }
             };
-            demoModal?.addEventListener('show.bs.modal', () => loadDemo(demoModal.querySelector('[data-demo-language].active') || demoPlayer));
-            demoModal?.querySelectorAll('[data-demo-language]').forEach(button => button.addEventListener('click', () => { demoModal.querySelectorAll('[data-demo-language]').forEach(item => item.classList.toggle('active', item === button)); loadDemo(button); }));
-            demoModal?.addEventListener('hidden.bs.modal', () => { if (demoPlayer) { demoPlayer.pause(); demoPlayer.removeAttribute('src'); demoPlayer.load(); } });
+            demoModal?.addEventListener('show.bs.modal', () => loadDemo(demoModal.querySelector('[data-demo-language].is-active') || demoPlayer));
+            demoModal?.querySelectorAll('[data-demo-language]').forEach(button => button.addEventListener('click', () => { demoModal.querySelectorAll('[data-demo-language]').forEach(item => { const selected = item === button; item.classList.toggle('is-active', selected); item.setAttribute('aria-selected', selected ? 'true' : 'false'); }); loadDemo(button); }));
+            demoModal?.addEventListener('hidden.bs.modal', stopDemo);
         });
     </script>
 @endpush

@@ -59,7 +59,7 @@
     <div class="tab-pane fade {{ $activeLedgerTab === 'customer' ? 'show active' : '' }}" id="tab-customer">
         <x-table class="tf-business-data-table">
             <thead><tr><th>Customer</th><th>Total Debits</th><th>Total Credits</th><th>Outstanding</th><th></th></tr></thead>
-            <tbody>@forelse($customerSummaries as $row)<tr><td>{{ $row['customer']->display_name }}</td><td>Rs {{ number_format($row['debit'], 2) }}</td><td>Rs {{ number_format($row['credit'], 2) }}</td><td>Rs {{ number_format($row['balance'], 2) }}</td><td><a href="{{ route('business.customers.show', $row['customer']) }}" class="btn btn-sm btn-outline-primary">Profile</a></td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No customer ledger entries.</td></tr>@endforelse</tbody>
+            <tbody>@forelse($customerSummaries as $row)<tr><td>{{ $row['customer']?->display_name ?? 'Removed customer' }}</td><td>Rs {{ number_format($row['debit'], 2) }}</td><td>Rs {{ number_format($row['credit'], 2) }}</td><td>Rs {{ number_format($row['balance'], 2) }}</td><td>@if($row['customer'] && ! $row['customer']->trashed())<a href="{{ route('business.customers.show', $row['customer']) }}" class="btn btn-sm btn-outline-primary">Profile</a>@else<span class="tf-muted">—</span>@endif</td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No customer ledger entries.</td></tr>@endforelse</tbody>
         </x-table>
         <div class="mt-3"><x-table-result-summary :paginator="$customerSummaries" />{{ $customerSummaries->appends(['tab' => 'customer'])->links('pagination::bootstrap-5') }}</div>
     </div>
@@ -67,7 +67,7 @@
     <div class="tab-pane fade {{ $activeLedgerTab === 'supplier' ? 'show active' : '' }}" id="tab-supplier">
         <x-table class="tf-business-data-table">
             <thead><tr><th>Supplier</th><th>Total Purchases / Credits</th><th>Total Payments / Debits</th><th>Remaining Payable</th><th></th></tr></thead>
-            <tbody>@forelse($supplierSummaries as $row)<tr><td>{{ $row['supplier']->company_name ?: $row['supplier']->supplier_name }}</td><td>Rs {{ number_format($row['credit']) }}</td><td>Rs {{ number_format($row['debit']) }}</td><td>Rs {{ number_format($row['balance']) }}</td><td><a href="{{ route('business.suppliers.show', $row['supplier']) }}" class="btn btn-sm btn-outline-primary">Profile</a></td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No supplier ledger entries.</td></tr>@endforelse</tbody>
+            <tbody>@forelse($supplierSummaries as $row)<tr><td>{{ $row['supplier'] ? ($row['supplier']->company_name ?: $row['supplier']->supplier_name) : 'Removed supplier' }}</td><td>Rs {{ number_format($row['credit']) }}</td><td>Rs {{ number_format($row['debit']) }}</td><td>Rs {{ number_format($row['balance']) }}</td><td>@if($row['supplier'] && ! $row['supplier']->trashed())<a href="{{ route('business.suppliers.show', $row['supplier']) }}" class="btn btn-sm btn-outline-primary">Profile</a>@else<span class="tf-muted">—</span>@endif</td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No supplier ledger entries.</td></tr>@endforelse</tbody>
         </x-table>
         <div class="mt-3"><x-table-result-summary :paginator="$supplierSummaries" />{{ $supplierSummaries->appends(['tab' => 'supplier'])->links('pagination::bootstrap-5') }}</div>
     </div>

@@ -91,12 +91,6 @@
             </div>
         @endif
         <main class="dashboard-page flex-grow-1">
-            @if($welcomeBackName = session('welcome_back_name'))
-                <div class="tf-welcome-back" role="status" aria-live="polite">
-                    <span class="tf-welcome-back-icon" aria-hidden="true"><i class="bi bi-stars"></i></span>
-                    <div><strong>Welcome back, {{ $welcomeBackName }}.</strong><span>Your workspace is ready for you.</span></div>
-                </div>
-            @endif
             @if($returnAlert = session('tradeflow_return_alert'))
                 <div class="alert alert-success visually-hidden" data-tf-alert-title="{{ data_get($returnAlert, 'title', 'Completed') }}">
                     {{ data_get($returnAlert, 'message') }}

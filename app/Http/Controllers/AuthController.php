@@ -143,9 +143,7 @@ class AuthController extends Controller
                 'permissions' => auth()->user()->permissions ?? [],
             ]);
 
-            return redirect()
-                ->route($this->dashboardRoute(auth()->user()))
-                ->with('welcome_back_name', auth()->user()->name);
+            return redirect()->route($this->dashboardRoute(auth()->user()));
         }
 
         return back()->withErrors(['email' => 'Invalid login details.'])->onlyInput('email');

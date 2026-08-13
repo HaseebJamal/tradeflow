@@ -16,9 +16,17 @@
     ];
     $statusTotal = max(1, ($pendingApprovals ?? 0) + ($activeBusinesses ?? 0) + ($rejectedBusinesses ?? 0) + ($suspendedBusinesses ?? 0));
     $maxRegistration = max(1, collect($registrationTrend ?? [])->max('count'));
+    $platformGreeting = now()->hour < 12 ? 'morning' : (now()->hour < 17 ? 'afternoon' : 'evening');
+    $platformUserName = auth()->user()?->name ?: 'Super Admin';
 @endphp
 
 <div data-tf-super-admin-dashboard>
+<section class="mb-4" data-tf-motion-item>
+    <span class="tf-dashboard-eyebrow"><i class="bi bi-activity"></i> Platform overview</span>
+    <h2 class="h3 mb-1">Good {{ $platformGreeting }}, {{ $platformUserName }}.</h2>
+    <p class="tf-muted mb-0">Here’s what’s happening across Profit Point today.</p>
+</section>
+
 <section class="tf-dashboard-intro" data-tf-motion-item>
     <canvas class="tf-dashboard-orbit" data-tf-dashboard-orbit aria-hidden="true"></canvas>
     <div class="tf-dashboard-intro-copy"><span class="tf-dashboard-eyebrow"><i class="bi bi-activity"></i> Platform pulse</span><h2>Everything is running in one place.</h2><p>Monitor business onboarding and platform operations with live data.</p></div>

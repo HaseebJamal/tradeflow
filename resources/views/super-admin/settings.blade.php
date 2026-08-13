@@ -79,7 +79,7 @@
             <div class="d-flex align-items-start justify-content-between gap-3 mb-4">
                 <div><span class="tf-settings-feature-icon is-green"><i class="bi bi-whatsapp"></i></span><h3 class="h5 mt-3 mb-1">Floating WhatsApp</h3><p class="tf-muted small mb-0">Offer a direct, pre-filled conversation from the landing page.</p></div>
                 @php($isWhatsAppActive = (bool) old('whatsapp_is_active', $settings->whatsapp_is_active))
-                <div class="d-inline-flex flex-column align-items-end gap-1"><input type="hidden" name="whatsapp_is_active" value="0"><input class="visually-hidden" type="checkbox" id="whatsAppIsActive" name="whatsapp_is_active" value="1" @checked($isWhatsAppActive) data-whatsapp-active-input><button type="button" class="tf-inline-status-switch {{ $isWhatsAppActive ? 'is-active' : 'is-inactive' }}" role="switch" aria-checked="{{ $isWhatsAppActive ? 'true' : 'false' }}" aria-label="{{ $isWhatsAppActive ? 'Deactivate' : 'Activate' }} Floating WhatsApp" data-whatsapp-active-switch @disabled(! filled($settings->whatsapp_number))><span class="tf-inline-status-track" aria-hidden="true"><span class="tf-inline-status-thumb"></span></span><span class="tf-inline-status-text" data-whatsapp-active-label>{{ $isWhatsAppActive ? 'Active' : 'Inactive' }}</span></button><small class="tf-muted" data-whatsapp-active-help @if(filled($settings->whatsapp_number)) hidden @endif>Enter a WhatsApp number before enabling it.</small></div>
+                <div class="d-inline-flex flex-column align-items-end gap-1"><input type="hidden" name="whatsapp_is_active" value="0"><input class="visually-hidden" type="checkbox" id="whatsAppIsActive" name="whatsapp_is_active" value="1" @checked($isWhatsAppActive) data-whatsapp-active-input><button type="button" class="tf-inline-status-switch {{ $isWhatsAppActive ? 'is-active' : 'is-inactive' }}" role="switch" aria-checked="{{ $isWhatsAppActive ? 'true' : 'false' }}" aria-label="{{ $isWhatsAppActive ? 'Deactivate' : 'Activate' }} Floating WhatsApp" data-whatsapp-active-switch><span class="tf-inline-status-track" aria-hidden="true"><span class="tf-inline-status-thumb"></span></span><span class="tf-inline-status-text" data-whatsapp-active-label>{{ $isWhatsAppActive ? 'Active' : 'Inactive' }}</span></button><small class="tf-muted" data-whatsapp-active-help @if(filled($settings->whatsapp_number)) hidden @endif>Enter a WhatsApp number before enabling it.</small></div>
             </div>
             <div class="row g-3">
                 <div class="col-12"><label class="form-label" for="whatsAppNumber">WhatsApp number</label><x-phone-input id="whatsAppNumber" name="whatsapp_number" :value="old('whatsapp_number', $settings->whatsapp_number ? '+'.$settings->whatsapp_number : '')" :error="$errors->first('whatsapp_number')" placeholder="WhatsApp phone number" helper-text="Choose the country, then enter the phone number. The public link uses a safe normalized format." /></div>
@@ -93,7 +93,18 @@
 </form>
 @if($settings->whatsapp_number)<form id="removeWhatsAppContactForm" method="POST" action="{{ route('admin.settings.whatsapp.destroy') }}" class="d-none" data-tf-confirm-message="This removes the WhatsApp contact and hides the floating landing-page button." data-tf-confirm-title="Remove WhatsApp contact?" data-tf-confirm-button="Remove contact" data-tf-confirm-color="#dc3545">@csrf @method('DELETE')</form>@endif
 <section class="tf-card tf-settings-feature-card tf-platform-demo-card p-4 mt-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4"><div><span class="tf-settings-feature-icon is-blue"><i class="bi bi-translate"></i></span><h2 class="h5 mt-3 mb-1">Landing page demo videos</h2><p class="tf-muted small mb-0">Manage English and Urdu demos independently. Large video uploads are supported; server upload limits remain infrastructure settings.</p></div></div>
+    <div class="tf-platform-demo-card__header mb-4">
+        <div class="tf-platform-demo-card__header-copy"><span class="tf-settings-feature-icon is-blue"><i class="bi bi-translate"></i></span><h2 class="h5 mt-3 mb-1">Landing page demo videos</h2><p class="tf-muted small mb-0">Manage English and Urdu demos independently. Large video uploads are supported; server upload limits remain infrastructure settings.</p></div>
+        <div class="tf-platform-demo-card__status d-inline-flex flex-column align-items-end gap-1" data-demo-header-switches>
+            @foreach(['en' => 'English', 'ur' => 'Urdu'] as $locale => $languageName)
+                @php($prefix = 'demo_'.$locale.'_')
+                @php($isDemoActive = (bool) old($prefix.'is_active', $settings->getAttribute($prefix.'is_active')))
+                @php($hasStoredDemoVideo = filled($settings->getAttribute($prefix.'video_url')))
+                <button type="button" class="tf-inline-status-switch {{ $isDemoActive ? 'is-active' : 'is-inactive' }} {{ $locale === 'en' ? '' : 'd-none' }}" role="switch" aria-checked="{{ $isDemoActive ? 'true' : 'false' }}" aria-label="{{ $isDemoActive ? 'Deactivate' : 'Activate' }} {{ $languageName }} demo" data-demo-header-switch data-demo-language="{{ $locale }}" data-demo-configured="{{ $hasStoredDemoVideo ? 'true' : 'false' }}" data-toggle-endpoint="{{ route('admin.settings.demo-video.active') }}"><span class="tf-inline-status-track" aria-hidden="true"><span class="tf-inline-status-thumb"></span></span><span class="tf-inline-status-text" data-demo-active-label>{{ $isDemoActive ? 'Active' : 'Inactive' }}</span></button>
+            @endforeach
+            <small class="tf-muted" data-demo-header-help></small>
+        </div>
+    </div>
     <ul class="nav nav-pills gap-2 mb-4" role="tablist"><li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#demo-language-en" type="button">English</button></li><li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#demo-language-ur" type="button" lang="ur" dir="rtl">اردو</button></li></ul>
     <div class="tab-content">
     @foreach(['en' => ['English', 'English'], 'ur' => ['Urdu', 'اردو']] as $locale => [$languageName, $languageLabel])
@@ -106,7 +117,8 @@
             <form id="demoLanguageForm-{{ $locale }}" method="POST" action="{{ route('admin.settings.demo-video.update') }}" enctype="multipart/form-data" class="row g-3" data-demo-language-form data-demo-stored-video="{{ filled($storedVideo) ? 'true' : 'false' }}" data-demo-stored-video-type="{{ $storedVideoType }}">
                 @csrf @method('PUT')<input type="hidden" name="demo_language" value="{{ $locale }}">
                 @php($isDemoActive = (bool) old($prefix.'is_active', $settings->getAttribute($prefix.'is_active')))
-                <div class="col-12 d-flex justify-content-between align-items-center gap-3"><h3 class="h6 mb-0">{{ $languageName }} demo <span lang="{{ $locale === 'ur' ? 'ur' : 'en' }}" @if($locale === 'ur') dir="rtl" @endif>({{ $languageLabel }})</span></h3><div class="d-inline-flex flex-column align-items-end gap-1"><input type="hidden" name="{{ $prefix }}is_active" value="0"><input class="visually-hidden" type="checkbox" id="{{ $prefix }}active" name="{{ $prefix }}is_active" value="1" @checked($isDemoActive) data-demo-active-input><button type="button" class="tf-inline-status-switch {{ $isDemoActive ? 'is-active' : 'is-inactive' }}" role="switch" aria-checked="{{ $isDemoActive ? 'true' : 'false' }}" aria-label="{{ $isDemoActive ? 'Deactivate' : 'Activate' }} {{ $languageName }} demo" data-demo-active-switch @disabled(! filled($storedVideo))><span class="tf-inline-status-track" aria-hidden="true"><span class="tf-inline-status-thumb"></span></span><span class="tf-inline-status-text" data-demo-active-label>{{ $isDemoActive ? 'Active' : 'Inactive' }}</span></button><small class="tf-muted" data-demo-active-help @if(filled($storedVideo)) hidden @endif>Configure a video before enabling it.</small></div></div>
+                <input type="hidden" name="{{ $prefix }}is_active" value="0"><input class="visually-hidden" type="checkbox" id="{{ $prefix }}active" name="{{ $prefix }}is_active" value="1" @checked($isDemoActive) data-demo-active-input>
+                <div class="col-12"><h3 class="h6 mb-0">{{ $languageName }} demo <span lang="{{ $locale === 'ur' ? 'ur' : 'en' }}" @if($locale === 'ur') dir="rtl" @endif>({{ $languageLabel }})</span></h3></div>
                 <div class="col-md-6"><label class="form-label">Title</label><input name="{{ $prefix }}title" class="form-control" maxlength="120" value="{{ old($prefix.'title', $settings->getAttribute($prefix.'title')) }}"></div>
                 <div class="col-md-6"><label class="form-label">Supporting text</label><input name="{{ $prefix }}subtitle" class="form-control" maxlength="500" value="{{ old($prefix.'subtitle', $settings->getAttribute($prefix.'subtitle')) }}"></div>
                 <div class="col-md-4"><label class="form-label">Video source</label><select name="{{ $prefix }}video_type" class="form-select" data-demo-language-source><option value="external" @selected(old($prefix.'video_type', $settings->getAttribute($prefix.'video_type') ?: 'external') === 'external')>Secure video URL</option><option value="upload" @selected(old($prefix.'video_type', $settings->getAttribute($prefix.'video_type')) === 'upload')>Upload video</option></select></div>
@@ -142,65 +154,116 @@ document.addEventListener('DOMContentLoaded', () => {
     const whatsAppLabel = document.querySelector('[data-whatsapp-active-label]');
     const whatsAppHelp = document.querySelector('[data-whatsapp-active-help]');
     const whatsAppNumber = document.querySelector('#whatsAppNumber');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const showAlert = (options) => window.Swal
+        ? window.Swal.fire(options)
+        : Promise.resolve({ isConfirmed: window.confirm(options.text || options.title || '') });
+    const setSwitchState = (switchButton, active, label) => {
+        switchButton.classList.toggle('is-active', active);
+        switchButton.classList.toggle('is-inactive', !active);
+        switchButton.setAttribute('aria-checked', active ? 'true' : 'false');
+        switchButton.setAttribute('aria-label', `${active ? 'Deactivate' : 'Activate'} ${label}`);
+        switchButton.querySelector('[data-whatsapp-active-label],[data-demo-active-label]')?.replaceChildren(active ? 'Active' : 'Inactive');
+    };
+    const readError = async (response, fallback) => {
+        try {
+            const data = await response.json();
+            return Object.values(data.errors || {}).flat()[0] || data.message || fallback;
+        } catch (_) {
+            return fallback;
+        }
+    };
+    const confirmAndPersistToggle = async ({ switchButton, endpoint, active, payload, label, invalidMessage }) => {
+        if (switchButton.dataset.busy === 'true') return;
+        if (invalidMessage) {
+            await showAlert({ icon: 'warning', title: invalidMessage, confirmButtonText: 'OK' });
+            return;
+        }
+        const action = active ? 'Enable' : 'Disable';
+        const result = await showAlert({
+            icon: 'question',
+            title: `${action} ${label}?`,
+            text: active
+                ? `${label} will become ${label === 'Floating WhatsApp' ? 'visible on the public landing page.' : 'available on the public landing page.'}`
+                : `${label} will ${label === 'Floating WhatsApp' ? 'be hidden from the public landing page.' : 'no longer be available on the public landing page.'}`,
+            showCancelButton: true,
+            confirmButtonText: action,
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: active ? '#059669' : '#dc3545',
+        });
+        if (!result.isConfirmed) return;
+
+        switchButton.dataset.busy = 'true';
+        switchButton.disabled = true;
+        try {
+            const response = await fetch(endpoint, {
+                method: 'PATCH', credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': csrfToken },
+                body: JSON.stringify({ ...payload, is_active: active }),
+            });
+            if (!response.ok) throw new Error(await readError(response, 'Unable to update this setting. Please try again.'));
+            setSwitchState(switchButton, active, label);
+            const hiddenInput = document.querySelector(switchButton.dataset.stateInput);
+            if (hiddenInput) hiddenInput.checked = active;
+            if (window.Swal) window.Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: active ? `${label} enabled.` : `${label} disabled.`, showConfirmButton: false, timer: 2200, timerProgressBar: true });
+        } catch (error) {
+            await showAlert({ icon: 'error', title: 'Unable to update setting', text: error.message || 'Please try again.', confirmButtonText: 'OK' });
+        } finally {
+            delete switchButton.dataset.busy;
+            switchButton.disabled = false;
+        }
+    };
     const syncWhatsAppSwitch = () => {
         if (!whatsAppInput || !whatsAppSwitch || !whatsAppLabel) return;
         const canActivate = Boolean(whatsAppNumber?.value.trim());
-        if (!canActivate) whatsAppInput.checked = false;
-        whatsAppInput.disabled = !canActivate;
-        whatsAppSwitch.disabled = !canActivate;
-        whatsAppSwitch.classList.toggle('is-active', whatsAppInput.checked);
-        whatsAppSwitch.classList.toggle('is-inactive', !whatsAppInput.checked);
-        whatsAppSwitch.setAttribute('aria-checked', whatsAppInput.checked ? 'true' : 'false');
-        whatsAppLabel.textContent = whatsAppInput.checked ? 'Active' : 'Inactive';
+        setSwitchState(whatsAppSwitch, whatsAppInput.checked, 'Floating WhatsApp');
         if (whatsAppHelp) whatsAppHelp.hidden = canActivate;
     };
-    whatsAppSwitch?.addEventListener('click', () => {
-        if (!whatsAppInput || whatsAppSwitch.disabled) return;
-        whatsAppInput.checked = !whatsAppInput.checked;
-        whatsAppInput.dispatchEvent(new Event('change', { bubbles: true }));
+    whatsAppSwitch?.addEventListener('click', async () => {
+        if (!whatsAppInput) return;
+        await confirmAndPersistToggle({
+            switchButton: whatsAppSwitch,
+            endpoint: @json(route('admin.settings.whatsapp.active')),
+            active: !whatsAppInput.checked,
+            payload: {},
+            label: 'Floating WhatsApp',
+            invalidMessage: !whatsAppNumber?.value.trim() ? 'Please configure a valid WhatsApp number first.' : '',
+        });
     });
     whatsAppInput?.addEventListener('change', syncWhatsAppSwitch);
     whatsAppNumber?.addEventListener('input', syncWhatsAppSwitch);
+    if (whatsAppSwitch) whatsAppSwitch.dataset.stateInput = '#whatsAppIsActive';
     syncWhatsAppSwitch();
+    document.querySelectorAll('[data-demo-header-switch]').forEach(switchButton => {
+        const locale = switchButton.dataset.demoLanguage;
+        const hiddenInput = document.querySelector(`#demo_${locale}_active`);
+        switchButton.dataset.stateInput = `#demo_${locale}_active`;
+        switchButton.addEventListener('click', async () => {
+            const active = switchButton.getAttribute('aria-checked') !== 'true';
+            await confirmAndPersistToggle({
+                switchButton,
+                endpoint: switchButton.dataset.toggleEndpoint,
+                active,
+                payload: { demo_language: locale },
+                label: 'Demo Video',
+                invalidMessage: active && switchButton.dataset.demoConfigured !== 'true' ? 'Demo video is not configured yet.' : '',
+            });
+        });
+        if (hiddenInput) hiddenInput.checked = switchButton.getAttribute('aria-checked') === 'true';
+    });
+    const syncDemoHeaderSwitch = (locale) => {
+        document.querySelectorAll('[data-demo-header-switch]').forEach(switchButton => switchButton.classList.toggle('d-none', switchButton.dataset.demoLanguage !== locale));
+        const activeSwitch = document.querySelector(`[data-demo-header-switch][data-demo-language="${locale}"]`);
+        const help = document.querySelector('[data-demo-header-help]');
+        if (help) help.textContent = activeSwitch?.dataset.demoConfigured === 'true' ? '' : 'Configure and save a video before enabling it.';
+    };
+    document.querySelectorAll('[data-bs-toggle="pill"][data-bs-target^="#demo-language-"]').forEach(tab => tab.addEventListener('shown.bs.tab', () => syncDemoHeaderSwitch(tab.dataset.bsTarget.replace('#demo-language-', ''))));
+    syncDemoHeaderSwitch('en');
     document.querySelectorAll('[data-demo-language-form]').forEach(form => {
         const source = form.querySelector('[data-demo-language-source]');
         const sync = () => form.querySelectorAll('[data-demo-language-panel]').forEach(panel => panel.classList.toggle('d-none', panel.dataset.demoLanguagePanel !== source?.value));
-        const activeInput = form.querySelector('[data-demo-active-input]');
-        const activeSwitch = form.querySelector('[data-demo-active-switch]');
-        const activeLabel = form.querySelector('[data-demo-active-label]');
-        const activeHelp = form.querySelector('[data-demo-active-help]');
-        const videoUrl = form.querySelector('input[name$="_video_url"]');
-        const videoFile = form.querySelector('input[name$="_video_file"]');
-        const hasConfigurableVideo = () => {
-            if (source?.value === 'external') return Boolean(videoUrl?.value.trim());
-            if (source?.value === 'upload') {
-                return Boolean(videoFile?.files.length)
-                    || (form.dataset.demoStoredVideo === 'true' && form.dataset.demoStoredVideoType === 'upload');
-            }
-            return form.dataset.demoStoredVideo === 'true';
-        };
-        const syncActiveSwitch = () => {
-            if (!activeInput || !activeSwitch || !activeLabel) return;
-            const canActivate = hasConfigurableVideo();
-            if (!canActivate) activeInput.checked = false;
-            activeInput.disabled = !canActivate;
-            activeSwitch.disabled = !canActivate;
-            activeSwitch.classList.toggle('is-active', activeInput.checked);
-            activeSwitch.classList.toggle('is-inactive', !activeInput.checked);
-            activeSwitch.setAttribute('aria-checked', activeInput.checked ? 'true' : 'false');
-            activeLabel.textContent = activeInput.checked ? 'Active' : 'Inactive';
-            if (activeHelp) activeHelp.hidden = canActivate;
-        };
-        activeSwitch?.addEventListener('click', () => {
-            if (!activeInput || activeSwitch.disabled) return;
-            activeInput.checked = !activeInput.checked;
-            activeInput.dispatchEvent(new Event('change', { bubbles: true }));
-        });
-        activeInput?.addEventListener('change', syncActiveSwitch);
-        source?.addEventListener('change', () => { sync(); syncActiveSwitch(); });
-        videoUrl?.addEventListener('input', syncActiveSwitch);
-        videoFile?.addEventListener('change', syncActiveSwitch);
-        sync(); syncActiveSwitch();
+        source?.addEventListener('change', sync);
+        sync();
         form.addEventListener('submit', event => {
             const file = form.querySelector('input[type="file"][name$="_video_file"]')?.files[0];
             if (!file || !window.XMLHttpRequest) return;

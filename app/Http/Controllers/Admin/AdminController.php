@@ -2372,6 +2372,69 @@ class AdminController extends Controller
         return back()->with('success', 'WhatsApp contact settings updated.');
     }
 
+    /** Update only the public WhatsApp visibility state, without overwriting its saved configuration. */
+    public function toggleWhatsAppActive(Request $request): JsonResponse|RedirectResponse
+    {
+        $request->validate(['is_active' => ['required', 'boolean']]);
+
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $isActive = $request->boolean('is_active');
+        $number = filled($settings->whatsapp_number) ? '+'.ltrim((string) $settings->whatsapp_number, '+') : null;
+
+        if ($isActive && ! app(PhoneNumberService::class)->isValidE164($number)) {
+            throw ValidationException::withMessages([
+                'whatsapp_number' => 'Please configure a valid WhatsApp number first.',
+            ]);
+        }
+
+        $settings->update(['whatsapp_is_active' => $isActive]);
+        $settingsService->forget();
+        $this->audit('Floating WhatsApp '.($isActive ? 'enabled' : 'disabled'), $request, 'Settings', $settings->id);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'active' => $isActive,
+                'message' => $isActive ? 'Floating WhatsApp enabled.' : 'Floating WhatsApp disabled.',
+            ]);
+        }
+
+        return back()->with('success', $isActive ? 'Floating WhatsApp enabled.' : 'Floating WhatsApp disabled.');
+    }
+
+    /** Update one localized landing-demo visibility state without changing its content. */
+    public function toggleDemoVideoActive(Request $request): JsonResponse|RedirectResponse
+    {
+        $data = $request->validate([
+            'demo_language' => ['required', Rule::in(['en', 'ur'])],
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $prefix = 'demo_'.$data['demo_language'].'_';
+        $settingsService = app(PlatformSettingsService::class);
+        $settings = $settingsService->current();
+        $isActive = $request->boolean('is_active');
+
+        if ($isActive && ! filled($settings->getAttribute($prefix.'video_url'))) {
+            throw ValidationException::withMessages([
+                $prefix.'video_url' => 'Demo video is not configured yet.',
+            ]);
+        }
+
+        $settings->update([$prefix.'is_active' => $isActive]);
+        $settingsService->forget();
+        $this->audit(strtoupper($data['demo_language']).' landing demo '.($isActive ? 'enabled' : 'disabled'), $request, 'Settings', $settings->id);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'active' => $isActive,
+                'message' => $isActive ? 'Demo video enabled.' : 'Demo video disabled.',
+            ]);
+        }
+
+        return back()->with('success', $isActive ? 'Demo video enabled.' : 'Demo video disabled.');
+    }
+
     public function removeDemoVideo(Request $request): RedirectResponse
     {
         if ($request->filled('demo_language')) {

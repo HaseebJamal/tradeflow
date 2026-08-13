@@ -255,6 +255,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::put('/settings', [AdminController::class, 'updateSettings'])->name('settings.update');
     Route::put('/settings/demo-video', [AdminController::class, 'updateDemoVideoSettings'])->name('settings.demo-video.update');
     Route::put('/settings/whatsapp-contact', [AdminController::class, 'updateWhatsAppContact'])->name('settings.whatsapp.update');
+    Route::patch('/settings/demo-video/active', [AdminController::class, 'toggleDemoVideoActive'])->name('settings.demo-video.active');
+    Route::patch('/settings/whatsapp-contact/active', [AdminController::class, 'toggleWhatsAppActive'])->name('settings.whatsapp.active');
     Route::delete('/settings/demo-video', [AdminController::class, 'removeDemoVideo'])->name('settings.demo-video.destroy');
     Route::delete('/settings/whatsapp-contact', [AdminController::class, 'removeWhatsAppContact'])->name('settings.whatsapp.destroy');
     Route::put('/settings/restore-default-logo', [AdminController::class, 'restoreDefaultLogo'])->name('settings.restore-default-logo');

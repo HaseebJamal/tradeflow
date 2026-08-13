@@ -5,15 +5,17 @@
 @section('content')
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
-<div class="tf-card p-4 mb-4">
-    <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
-        <div>
-            <h2 class="h5 mb-1">Welcome, {{ $user->name }}</h2>
-            <p class="tf-muted mb-0">{{ $user->role === 'custom_staff' ? ($user->staffProfile?->custom_role_name ?: 'Custom Staff') : ucwords(str_replace('_', ' ', $user->role)) }} access for your assigned business modules.</p>
-        </div>
-        <span class="badge text-bg-success">Active</span>
+@php
+    $staffGreeting = now()->hour < 12 ? 'morning' : (now()->hour < 17 ? 'afternoon' : 'evening');
+@endphp
+<section class="d-flex flex-wrap justify-content-between gap-3 align-items-start mb-4">
+    <div>
+        <span class="tf-dashboard-eyebrow">Your workspace</span>
+        <h2 class="h3 mb-1">Good {{ $staffGreeting }}, {{ $user->name }}.</h2>
+        <p class="tf-muted mb-0">Here’s what’s happening across your assigned business modules today.</p>
     </div>
-</div>
+    <span class="badge text-bg-success">Active</span>
+</section>
 
 @if($deliveryStats)
 <div class="row g-3 mb-4">
