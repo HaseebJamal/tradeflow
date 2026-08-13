@@ -7,6 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 
 class RenewalInvoice extends Model
 {
+    public const STATUS_GENERATED = 'Generated';
+    public const STATUS_SENT = 'Sent';
+    public const STATUS_PENDING_PAYMENT = 'Pending Payment';
+    public const STATUS_PAID = 'Paid';
+    public const STATUS_CANCELLED = 'Cancelled';
+    public const STATUS_SUPERSEDED = 'Superseded';
+    public const STATUS_OVERDUE = 'Overdue';
+
     /**
      * Renewal states that still need a Super Admin billing decision.
      *
@@ -15,13 +23,24 @@ class RenewalInvoice extends Model
      * accidentally appearing in an attention badge.
      */
     public const ADMIN_ACTIONABLE_STATUSES = [
-        'Generated',
+        self::STATUS_GENERATED,
         'Pending Renewal',
-        'Pending Payment',
+        self::STATUS_PENDING_PAYMENT,
         'Awaiting Verification',
-        'Overdue',
+        self::STATUS_OVERDUE,
         'Failed Send',
         'Delivery Failed',
+    ];
+
+    /**
+     * Legacy Sent records remain manageable so they can progress into the
+     * current payment lifecycle. New draft actions do not create Sent.
+     */
+    public const MANAGEABLE_STATUSES = [
+        self::STATUS_GENERATED,
+        self::STATUS_SENT,
+        self::STATUS_PENDING_PAYMENT,
+        self::STATUS_OVERDUE,
     ];
 
     protected $fillable = ['business_id', 'subscription_id', 'platform_payment_id', 'invoice_number', 'amount', 'last_payment_method', 'access_starts_at', 'access_ends_at', 'due_date', 'status', 'email_sent_at', 'email_draft_opened_at', 'whatsapp_opened_at', 'paid_at', 'cancelled_at', 'email_error', 'generated_by', 'sent_by'];

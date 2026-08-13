@@ -16,6 +16,7 @@ use App\Models\StockMovement;
 use App\Models\Unit;
 use App\Services\BarcodeService;
 use App\Services\SubscriptionLimitService;
+use App\Services\CompanyPermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -29,6 +30,8 @@ class ProductController extends Controller
 
     public function index(Request $request)
     {
+        $permissions = app(CompanyPermissionService::class);
+        $canUseCategories = $permissions->allowsUser($request->user(), 'categories.view');
         $query = Product::with(['category', 'creator'])->where('business_id', auth()->user()->business_id);
         if (request('status') === 'Archived' || request('archived')) {
             $query->onlyTrashed();
@@ -38,7 +41,7 @@ class ProductController extends Controller
         if (request('product_id')) {
             $query->where('id', request('product_id'));
         }
-        if (request('category_id')) {
+        if ($canUseCategories && request('category_id')) {
             $query->where('category_id', request('category_id'));
         }
         if (request('batch_number')) {
@@ -63,10 +66,11 @@ class ProductController extends Controller
         return view('business.products.index', [
             'products' => $query->latest()->paginate(10)->withQueryString(),
 
-            'categories' => Category::where('business_id', auth()->user()->business_id)
+            'categories' => $canUseCategories ? Category::where('business_id', auth()->user()->business_id)
                 ->where('type', 'Product')
                 ->orderBy('name')
-                ->get(),
+                ->get() : collect(),
+            'canUseCategories' => $canUseCategories,
 
             'productOptions' => Product::where('business_id', auth()->user()->business_id)
                 ->select('id', 'name', 'barcode')
@@ -91,9 +95,14 @@ class ProductController extends Controller
 
     public function create()
     {
+        $permissions = app(CompanyPermissionService::class);
+        $canUseCategories = $permissions->allowsUser(auth()->user(), 'categories.view');
+        $canUseUnits = $permissions->allowsUser(auth()->user(), 'units.view');
         return view('business.products.create', [
-            'categories' => Category::where('business_id', auth()->user()->business_id)->where('type', 'Product')->where('status', 'Active')->orderBy('name')->get(),
-            'units' => Unit::where('business_id', auth()->user()->business_id)->where('status', 'Active')->orderBy('unit_name')->get(),
+            'categories' => $canUseCategories ? Category::where('business_id', auth()->user()->business_id)->where('type', 'Product')->where('status', 'Active')->orderBy('name')->get() : collect(),
+            'units' => $canUseUnits ? Unit::where('business_id', auth()->user()->business_id)->where('status', 'Active')->orderBy('unit_name')->get() : collect(),
+            'canUseCategories' => $canUseCategories,
+            'canUseUnits' => $canUseUnits,
         ]);
     }
 
@@ -107,7 +116,9 @@ class ProductController extends Controller
             $products = DB::transaction(function () use ($request, $businessId, &$storedImages) {
                 return collect($request->validated('products'))
                     ->map(function (array $data, $index) use ($request, $businessId, &$storedImages) {
-                        $unit = Unit::where('business_id', $businessId)->findOrFail($data['unit_id']);
+                        $unit = isset($data['unit_id'])
+                            ? Unit::where('business_id', $businessId)->findOrFail($data['unit_id'])
+                            : null;
                         $image = $request->file("products.{$index}.product_image");
                         $imagePath = $image?->store('products', 'public');
                         if ($imagePath) {
@@ -115,10 +126,10 @@ class ProductController extends Controller
                         }
                         $product = Product::create([
                             'business_id' => $businessId,
-                            'category_id' => $data['category_id'],
-                            'unit_id' => $unit->id,
+                            'category_id' => $data['category_id'] ?? null,
+                            'unit_id' => $unit?->id,
                             'name' => $data['product_name'],
-                            'unit' => $unit->short_code,
+                            'unit' => $unit?->short_code,
                             'image' => $imagePath,
                             'batch_number' => $data['batch_number'] ?? null,
                             'manufacturing_date' => $data['manufacturing_date'] ?? null,
@@ -199,14 +210,19 @@ class ProductController extends Controller
     public function edit(Product $product)
     {
         $this->authorizeBusiness($product->business_id);
+        $permissions = app(CompanyPermissionService::class);
+        $canUseCategories = $permissions->allowsUser(auth()->user(), 'categories.view');
+        $canUseUnits = $permissions->allowsUser(auth()->user(), 'units.view');
         return view('business.products.create', [
             'product' => $product,
-            'categories' => Category::where('business_id', auth()->user()->business_id)->where('type', 'Product')
-                ->where(fn($query) => $query->where('status', 'Active')->orWhere('id', $product->category_id))->orderBy('name')->get(),
-            'units' => Unit::where('business_id', auth()->user()->business_id)
+            'categories' => $canUseCategories ? Category::where('business_id', auth()->user()->business_id)->where('type', 'Product')
+                ->where(fn($query) => $query->where('status', 'Active')->orWhere('id', $product->category_id))->orderBy('name')->get() : collect(),
+            'units' => $canUseUnits ? Unit::where('business_id', auth()->user()->business_id)
                 ->where(fn($query) => $query->where('status', 'Active')->orWhere('id', $product->unit_id))
                 ->orderBy('unit_name')
-                ->get(),
+                ->get() : collect(),
+            'canUseCategories' => $canUseCategories,
+            'canUseUnits' => $canUseUnits,
         ]);
     }
 
@@ -218,7 +234,15 @@ class ProductController extends Controller
         // here as well as in the edit UI so a crafted request cannot rename it.
         $data['name'] = $product->name;
         $data['has_batch_tracking'] = $request->boolean('has_batch_tracking');
-        $data['unit'] = Unit::where('business_id', auth()->user()->business_id)->findOrFail($data['unit_id'])->short_code;
+        $permissions = app(CompanyPermissionService::class);
+        if ($permissions->allowsUser($request->user(), 'units.view')) {
+            $data['unit'] = Unit::where('business_id', auth()->user()->business_id)->findOrFail($data['unit_id'])->short_code;
+        } else {
+            unset($data['unit_id']);
+        }
+        if (! $permissions->allowsUser($request->user(), 'categories.view')) {
+            unset($data['category_id']);
+        }
         unset($data['product_name'], $data['category'], $data['product_image'], $data['image']);
         $image = $request->file('product_image') ?: $request->file('image');
         if ($image) {

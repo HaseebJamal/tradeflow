@@ -9,8 +9,11 @@
     $passwordIconId = $editing ? 'staffPasswordIcon'.$staffMember->id : 'staffPasswordCreateIcon';
     $confirmId = $editing ? 'staffPasswordConfirm'.$staffMember->id : 'staffPasswordConfirmCreate';
     $confirmIconId = $editing ? 'staffPasswordConfirmIcon'.$staffMember->id : 'staffPasswordConfirmCreateIcon';
-    $currentRole = old('role', $editing ? ($staffMember?->staffProfile?->custom_role_name ?: 'Custom Role') : '');
     $isSelfManagedStaff = $editing && auth()->id() === $staffMember->id;
+    $canManagePermissions = $permissionService->allowsUser(auth()->user(), 'staff.permissions');
+    $currentRole = old('role', $editing
+        ? ($staffMember?->staffProfile?->custom_role_name ?: 'Custom Role')
+        : ($canManagePermissions ? '' : 'Custom Role'));
 @endphp
 
 <form method="POST" action="{{ $editing ? route('business.staff.update', $staffMember) : route('business.staff.store') }}" enctype="multipart/form-data" class="row g-3" data-staff-form data-company-permission-form novalidate>
@@ -46,7 +49,7 @@
     <div class="col-12 mt-2"><h3 class="h6 mb-0">Job Information</h3></div>
     <div class="col-md-3">
         <label for="staff-role" class="form-label">Role <span class="text-danger" aria-hidden="true">*</span></label>
-        <input id="staff-role" name="role" list="staff-role-options" class="form-control @error('role') is-invalid @enderror" value="{{ $currentRole }}" maxlength="100" autocomplete="off" required @readonly($isSelfManagedStaff)>
+        <input id="staff-role" name="role" list="staff-role-options" class="form-control @error('role') is-invalid @enderror" value="{{ $currentRole }}" maxlength="100" autocomplete="off" required @readonly($isSelfManagedStaff || ! $canManagePermissions)>
         <datalist id="staff-role-options">@foreach($customRoleNames ?? [] as $roleName)<option value="{{ $roleName }}">@endforeach</datalist>
         @error('role')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
@@ -73,6 +76,9 @@
         @if($isSelfManagedStaff)
             @foreach($selectedPermissions as $permission)<input type="hidden" name="permissions[]" value="{{ $permission }}">@endforeach
             <div class="alert alert-light border mb-0">Role and permission controls are locked for your own account.</div>
+        @elseif(! $canManagePermissions)
+            @foreach($staffMember?->permissions ?? [] as $permission)<input type="hidden" name="permissions[]" value="{{ $permission }}">@endforeach
+            <div class="alert alert-light border mb-0">Role and permission management is not enabled for your account.</div>
         @else
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><h3 class="h6 mb-0">Role &amp; User Permissions</h3><small class="tf-muted">Only permissions enabled for this business can be assigned.</small></div>
         <label class="form-check border rounded p-3 mb-3 fw-semibold"><input class="form-check-input ms-0 me-2" type="checkbox" data-permission-master> Select All Permissions <span class="tf-muted" data-permission-total-selected></span></label>

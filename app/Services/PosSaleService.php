@@ -431,7 +431,15 @@ class PosSaleService
             ]);
         }
 
-        return $customerId ? Customer::where('business_id', $businessId)->where('status', 'Active')->findOrFail($customerId) : null;
+        if (! $customerId) {
+            return null;
+        }
+
+        // A crafted POS request must not turn the POS module into a customer
+        // lookup bypass when the Super Admin has disabled Customers.
+        $this->requirePermission('customers.view');
+
+        return Customer::where('business_id', $businessId)->where('status', 'Active')->findOrFail($customerId);
     }
 
     private function roundCash(mixed $value): int

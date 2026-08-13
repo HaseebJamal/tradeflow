@@ -399,6 +399,9 @@
     };
     const productCard = (product) => {
         const price = sellingPrice(product);
+        const imageUrl = typeof product.image_url === 'string' && product.image_url !== ''
+            ? product.image_url
+            : null;
         const payload = JSON.stringify({
             id: product.id,
             name: product.name,
@@ -406,10 +409,10 @@
             unit: product.unit,
             price,
             stock: product.stock_quantity ?? product.stock ?? 0,
-            image: product.image,
+            image_url: imageUrl,
         }).replace(/'/g, '&#039;');
         return `<button type="button" class="tf-pos-product-card" data-product='${payload}' tabindex="-1" role="option" aria-selected="false">
-            <div class="tf-pos-product-image">${product.image ? `<img src="${escapeHtml(`/storage/${product.image}`)}" alt="">` : '<i class="bi bi-box-seam"></i>'}</div>
+            <div class="tf-pos-product-image">${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="" data-pos-product-image>` : '<i class="bi bi-box-seam"></i>'}</div>
             <strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.barcode || '')}</small>
             <span>${currency(price)}</span><em>${product.stock_quantity ?? product.stock ?? 0} ${escapeHtml(product.unit || '')}</em>
         </button>`;
@@ -419,6 +422,16 @@
         $('[data-pos-product-count]').textContent = `${products.length} available`;
         setActiveProduct(products.length ? 0 : -1);
     };
+
+    // A genuinely unavailable file should degrade to the existing product
+    // placeholder. A normal cart/search refresh never changes image URLs.
+    grid.addEventListener('error', (event) => {
+        const image = event.target;
+        if (!(image instanceof HTMLImageElement) || !image.matches('[data-pos-product-image]')) return;
+        image.closest('.tf-pos-product-image')?.replaceChildren(Object.assign(document.createElement('i'), {
+            className: 'bi bi-box-seam',
+        }));
+    }, true);
     const cartRow = (line, index) => {
         const isEditing = editingId === line.id;
         const numericField = (field, value, min = 0, max = '') => `<input class="form-control form-control-sm" type="number" min="${min}"${max !== '' ? ` max="${max}"` : ''} step="1" inputmode="numeric" value="${value}" data-cart-field="${field}">`;

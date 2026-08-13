@@ -57,13 +57,8 @@ class BusinessPermissionMiddleware
 
     private function deny(Request $request, string $message, string $key = 'company_permission'): Response
     {
-        if ($request->expectsJson()) {
-            abort(403, $message);
-        }
-
-        // The basic dashboard never uses this middleware. It is therefore a
-        // stable permission-denied destination and cannot redirect back to the
-        // route that was denied.
-        return redirect()->route('business.dashboard')->withErrors([$key => $message]);
+        // UI visibility is only a convenience layer. Direct navigation and
+        // crafted form requests must receive an authoritative 403 response.
+        abort(403, $message);
     }
 }

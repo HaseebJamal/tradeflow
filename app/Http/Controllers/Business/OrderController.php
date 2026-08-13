@@ -32,6 +32,7 @@ class OrderController extends Controller
     public function index(Request $request)
     {
         $businessId = auth()->user()->business_id;
+        $canViewCustomers = $this->permissions->allowsUser($request->user(), 'customers.view');
         $filters = $request->validate([
             'order_number' => ['nullable', 'string', 'max:100'],
             'customer_id' => ['nullable', 'integer'],
@@ -64,7 +65,10 @@ class OrderController extends Controller
 
         return view('business.orders.index', [
             'orders' => $query->latest()->paginate(10)->withQueryString(),
-            'customers' => Customer::where('business_id', $businessId)->orderBy('name')->get(),
+            'customers' => $canViewCustomers
+                ? Customer::where('business_id', $businessId)->orderBy('name')->get()
+                : collect(),
+            'canViewCustomers' => $canViewCustomers,
             'products' => Product::where('business_id', $businessId)->orderBy('name')->get(),
             'creators' => User::where('business_id', $businessId)->orderBy('name')->get(),
             'saleNumbers' => Order::where('business_id', $businessId)
@@ -79,8 +83,13 @@ class OrderController extends Controller
     public function create()
     {
         $businessId = auth()->user()->business_id;
+        $canViewCustomers = $this->permissions->allowsUser(auth()->user(), 'customers.view');
+
         return view('business.orders.create', [
-            'customers' => Customer::where('business_id', $businessId)->where('status', 'Active')->get(),
+            'customers' => $canViewCustomers
+                ? Customer::where('business_id', $businessId)->where('status', 'Active')->get()
+                : collect(),
+            'canViewCustomers' => $canViewCustomers,
             'products' => Product::where('business_id', $businessId)->where('status', 'Active')->get(),
         ]);
     }
@@ -125,10 +134,12 @@ class OrderController extends Controller
         $businessId = auth()->user()->business_id;
         $isWalkIn = ($data['customer_id'] ?? null) === 'walk_in';
         if (!empty($data['customer_id']) && is_numeric($data['customer_id'])) {
+            abort_unless($this->permissions->allowsUser($request->user(), 'customers.view'), 403);
             $customer = Customer::where('business_id', $businessId)->findOrFail($data['customer_id']);
         } elseif ($isWalkIn) {
             $customer = null;
         } else {
+            abort_unless($this->permissions->allowsUser($request->user(), 'customers.create'), 403);
             if (empty($data['new_customer_name']) && empty($data['new_customer_phone'])) {
                 return back()->withErrors(['customer_id' => 'Select a customer, choose Walk-in Customer, or add customer name/phone.'])->withInput();
             }

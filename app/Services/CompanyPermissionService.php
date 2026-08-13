@@ -270,6 +270,25 @@ class CompanyPermissionService
             $permissions->push('deliveries.view');
         }
 
+        // Purchases are supplier-backed records. Keeping the lookup permission
+        // with every purchase capability prevents an enabled Purchases module
+        // from rendering a required supplier field that the company cannot use.
+        $purchasePermissions = [
+            'purchases.view',
+            'purchases.create',
+            'purchases.edit',
+            'purchases.confirm',
+            'purchases.receive',
+            'purchases.pay',
+            'purchases.cancel',
+            'purchase_returns.view',
+            'purchase_returns.process',
+        ];
+
+        if ($permissions->intersect($purchasePermissions)->isNotEmpty()) {
+            $permissions->push('suppliers.view');
+        }
+
         return $permissions->unique()->values()->all();
     }
 }

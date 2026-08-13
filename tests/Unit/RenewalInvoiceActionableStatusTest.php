@@ -29,4 +29,18 @@ class RenewalInvoiceActionableStatusTest extends TestCase
         $this->assertSame(RenewalInvoice::ADMIN_ACTIONABLE_STATUSES, $query->getBindings());
         $this->assertStringContainsString('where', strtolower($query->toSql()));
     }
+
+    public function test_only_open_lifecycle_states_are_manageable(): void
+    {
+        $open = RenewalInvoice::MANAGEABLE_STATUSES;
+
+        $this->assertContains(RenewalInvoice::STATUS_GENERATED, $open);
+        $this->assertContains(RenewalInvoice::STATUS_PENDING_PAYMENT, $open);
+        $this->assertContains(RenewalInvoice::STATUS_OVERDUE, $open);
+        $this->assertContains(RenewalInvoice::STATUS_SENT, $open, 'Legacy sent records remain recoverable.');
+
+        $this->assertNotContains(RenewalInvoice::STATUS_PAID, $open);
+        $this->assertNotContains(RenewalInvoice::STATUS_CANCELLED, $open);
+        $this->assertNotContains(RenewalInvoice::STATUS_SUPERSEDED, $open);
+    }
 }

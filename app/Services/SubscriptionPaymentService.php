@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Business;
 use App\Models\PlatformPayment;
+use App\Models\RenewalInvoice;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
@@ -123,6 +124,19 @@ class SubscriptionPaymentService
                 'verified_at' => now(),
                 'verified_by' => $admin->id,
             ]);
+
+            // A verified pending payment that originated from a renewal must
+            // complete that exact invoice lifecycle too. This prevents the
+            // payment record from saying Received while its renewal invoice
+            // remains stuck at Pending Payment.
+            $renewalInvoice = RenewalInvoice::query()
+                ->where('platform_payment_id', $payment->id)
+                ->lockForUpdate()
+                ->first();
+            if ($renewalInvoice && app(RenewalInvoiceService::class)->canRecordPayment($renewalInvoice)) {
+                app(RenewalInvoiceService::class)->markPaid($renewalInvoice, $payment);
+            }
+
             $business->owner?->notify(new SubscriptionStatusNotification('Payment Verified', $isCustomAccess ? 'Your payment '.$payment->reference_number.' was verified. Your paid access is now active.' : 'Your payment '.$payment->reference_number.' was verified. Your subscription is now active.', $business->id, $payment->id));
             return $payment->fresh(['business.owner', 'plan', 'subscription.plan']);
         });

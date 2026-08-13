@@ -84,9 +84,11 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         feedback.textContent = message;
     };
     const updateSaveAvailability = () => {
-        // A product form can be submitted whenever both catalogs are available.
-        // Native required validation still enforces a selection in every product block.
-        const ready = ['category', 'unit'].every((kind) => {
+        // Only controls actually rendered by the permission-aware Blade
+        // partial participate. A denied catalog leaves no hidden required
+        // select behind to trigger native validation.
+        const renderedKinds = ['category', 'unit'].filter((kind) => form.querySelector(`[data-product-field="${fieldFor(kind)}"]`));
+        const ready = renderedKinds.every((kind) => {
             const selects = [...form.querySelectorAll(`[data-product-field="${fieldFor(kind)}"]`)];
 
             return selects.length > 0 && selects.every((select) => !select.disabled);

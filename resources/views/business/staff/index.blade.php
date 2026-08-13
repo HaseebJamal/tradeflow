@@ -57,7 +57,7 @@
                             <span class="dropdown-item-text small text-muted">Manage your profile from Profile Settings.</span>
                         @else
                             <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}">Edit</a>
-                            <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}#permissions">Manage Permissions</a>
+                            @companyCan('staff.permissions')<a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}#permissions">Manage Permissions</a>@endcompanyCan
                             <a class="dropdown-item" href="{{ route('business.staff.edit', $member) }}#staff-role">Change Role</a>
                             <a class="dropdown-item" href="{{ route('business.staff.show', $member) }}#reset-password">Reset Password</a>
                         @if($member->status === 'archived')

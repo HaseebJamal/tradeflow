@@ -11,13 +11,14 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
+use App\Services\CompanyPermissionService;
 use App\Services\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PaymentController extends Controller
 {
-    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity)
+    public function __construct(private FinanceCalculator $finance, private AccountingService $accounting, private BusinessActivityService $activity, private CompanyPermissionService $permissions)
     {
     }
 
@@ -31,6 +32,8 @@ class PaymentController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
         ]);
         $businessId = auth()->user()->business_id;
+        $canViewCustomers = $this->permissions->allowsUser($request->user(), 'customers.view');
+        abort_if($request->filled('customer_id') && ! $canViewCustomers, 403);
         $payments = Payment::with(['customer', 'order'])->where('business_id', $businessId);
         $dateFrom = $request->input('date_from') ?: now(config('app.timezone'))->toDateString();
         $dateTo = $request->input('date_to') ?: now(config('app.timezone'))->toDateString();
@@ -44,7 +47,8 @@ class PaymentController extends Controller
         $payments->where('payment_date', '<=', \Illuminate\Support\Carbon::parse($dateTo, config('app.timezone'))->endOfDay());
         return view('business.payments.index', [
             'payments' => $payments->latest()->paginate(12)->withQueryString(),
-            'customers' => Customer::where('business_id', $businessId)->get(),
+            'customers' => $canViewCustomers ? Customer::where('business_id', $businessId)->get() : collect(),
+            'canViewCustomers' => $canViewCustomers,
             'orders' => Order::where('business_id', $businessId)->latest()->get(),
         ]);
     }
@@ -63,6 +67,7 @@ class PaymentController extends Controller
             'status' => ['required', 'in:Paid,Partial,Pending'],
         ]);
         $businessId = auth()->user()->business_id;
+        abort_unless($this->permissions->allowsUser($request->user(), 'customers.view'), 403);
         $customer = Customer::where('business_id', $businessId)->findOrFail($data['customer_id']);
         $order = null;
         if (!empty($data['order_id'])) {

@@ -109,18 +109,35 @@ class SubscriptionLifecycleService
      */
     public function attentionCandidateBusinesses(): Builder
     {
-        $trialCutoff = now(config('app.timezone'))
+        $today = now(config('app.timezone'));
+        $trialCutoff = $today->copy()
             ->addDays(self::TRIAL_EXPIRING_SOON_DAYS)
             ->toDateString();
-        $paidCutoff = now(config('app.timezone'))
+        $paidCutoff = $today->copy()
             ->addDays(self::PAID_EXPIRING_SOON_DAYS)
             ->toDateString();
+        $todayDate = $today->toDateString();
 
-        return Business::query()->where(function (Builder $businesses) use ($trialCutoff, $paidCutoff): void {
+        return Business::query()->where(function (Builder $businesses) use ($todayDate, $trialCutoff, $paidCutoff): void {
             // A business without an access record is already restricted.
             $businesses->whereDoesntHave('subscription')
-                ->orWhereHas('subscription', function (Builder $subscription) use ($trialCutoff, $paidCutoff): void {
-                    $subscription->whereIn('status', ['Pending', 'Expiring', 'Expired', 'Suspended', 'Cancelled'])
+                ->orWhereHas('subscription', function (Builder $subscription) use ($todayDate, $trialCutoff, $paidCutoff): void {
+                    // A paid period with a future start is intentionally
+                    // Pending. It is scheduled work, not a restricted or
+                    // expiring entitlement, so leave it out of the attention
+                    // queue unless another condition below applies.
+                    $subscription->where(function (Builder $attention) use ($todayDate): void {
+                        $attention->whereIn('status', ['Expiring', 'Expired', 'Suspended', 'Cancelled'])
+                            ->orWhere(function (Builder $pending) use ($todayDate): void {
+                                $pending->where('status', 'Pending')
+                                    ->where(function (Builder $notFuturePaid) use ($todayDate): void {
+                                        $notFuturePaid->whereNull('payment_status')
+                                            ->orWhere('payment_status', '!=', 'Received')
+                                            ->orWhereNull('starts_at')
+                                            ->orWhereDate('starts_at', '<=', $todayDate);
+                                    });
+                            });
+                    })
                         ->orWhere(function (Builder $paidAccess) use ($paidCutoff): void {
                             $paidAccess->where('payment_status', 'Received')
                                 ->whereNotNull('ends_at')
@@ -233,6 +250,7 @@ class SubscriptionLifecycleService
             // independent from notification history and from trial-only dates.
             'effective_access_type' => $hasPaidPeriod ? 'paid' : ($hasTrialPeriod ? 'trial' : null),
             'is_paid_access_active' => (bool) $hasPaidPeriod && ! $isScheduled && ! $isExpired,
+            'is_paid_access_scheduled' => (bool) $hasPaidPeriod && $isScheduled,
             'paid_access_start' => $hasPaidPeriod ? $subscription?->starts_at : null,
             'paid_access_end' => $hasPaidPeriod ? $subscription?->ends_at : null,
             'paid_duration_days' => $paidDurationDays,

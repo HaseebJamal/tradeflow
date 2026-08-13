@@ -28,7 +28,7 @@
 
 @unless($hideProductFormActions ?? false)
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-4">
-        <button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Another Product</button>
+        <button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Product</button>
         <button type="submit" class="btn btn-tf-primary" data-save-products>Save Products</button>
     </div>
 @endunless

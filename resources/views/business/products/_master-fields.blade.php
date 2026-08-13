@@ -21,10 +21,16 @@
     $productName = $nested
         ? old($productNameError, data_get($values, 'product_name', ''))
         : ($isEdit ? data_get($values, 'name', '') : old('name', data_get($values, 'name', '')));
+    $canUseCategories = $canUseCategories ?? app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'categories.view');
+    $canUseUnits = $canUseUnits ?? app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'units.view');
+    // Keep a normal desktop input width even when permission-dependent
+    // catalogue fields are unavailable. Fields become full-width naturally on
+    // mobile through Bootstrap's default column behaviour.
+    $identityWidth = 'col-lg-5 col-md-6';
 @endphp
 
 <div class="row g-3" data-product-master-fields>
-    <div class="col-lg-5 col-md-12">
+    <div class="{{ $identityWidth }}">
         <label class="form-label" for="{{ $fieldId('product_name') }}">Product Name <span class="text-danger">*</span></label>
         <div class="tf-identity-input-wrap">
             <input id="{{ $fieldId('product_name') }}" name="{{ $nested ? $fieldName('product_name') : $productNameField }}" data-product-field="product_name" class="form-control tf-identity-input @error($productNameError) is-invalid @enderror" value="{{ $productName }}" @readonly($isEdit && ! $nested) required>
@@ -33,6 +39,7 @@
         @if($isEdit && ! $nested)<div class="form-text tf-identity-helper">Product name cannot be changed after creation.</div>@endif
         @error($productNameError)<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
+    @if($canUseCategories)
     <div class="col-lg-4 col-md-6">
         <label class="form-label" for="{{ $fieldId('category_id') }}">Category <span class="text-danger">*</span></label>
         <div class="d-flex gap-2" data-product-select-control>
@@ -47,6 +54,8 @@
         @error($errorKey('category_id'))<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
         @if(($categories ?? collect())->isEmpty())<div class="form-text text-danger" data-product-catalog-empty="category">Please create a category first.</div>@endif
     </div>
+    @endif
+    @if($canUseUnits)
     <div class="col-lg-3 col-md-6">
         <label class="form-label" for="{{ $fieldId('unit_id') }}">Unit <span class="text-danger">*</span></label>
         <div class="d-flex gap-2" data-product-select-control>
@@ -61,6 +70,12 @@
         @error($errorKey('unit_id'))<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
         @if(($units ?? collect())->isEmpty())<div class="form-text text-danger" data-product-catalog-empty="unit">Please create a unit first.</div>@endif
     </div>
+    @endif
+
+    @if(! ($canUseCategories && $canUseUnits))
+        {{-- Keep optional supporting fields below the compact identity row. --}}
+        <div class="w-100 d-none d-lg-block" aria-hidden="true"></div>
+    @endif
 
     <div class="col-md-4">
         <label class="form-label" for="{{ $fieldId('product_image') }}">Product Image</label>

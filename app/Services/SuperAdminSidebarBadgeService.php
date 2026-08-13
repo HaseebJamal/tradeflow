@@ -79,8 +79,12 @@ class SuperAdminSidebarBadgeService
             ->chunkById(200, function ($businesses) use ($lifecycle, &$count, &$hasCritical): void {
                 foreach ($businesses as $business) {
                     $state = $lifecycle->state($business->subscription);
-                    $isRestricted = in_array($state['status'], ['Pending', 'Suspended', 'Cancelled'], true)
-                        || ! $state['subscription'];
+                    // `Pending` also represents a legitimate future paid
+                    // period. Scheduled paid access is not a restriction and
+                    // must not inflate the Trial & Access attention badge.
+                    $isRestricted = ! $state['is_scheduled']
+                        && (in_array($state['status'], ['Pending', 'Suspended', 'Cancelled'], true)
+                        || ! $state['subscription']);
                     $isCritical = $state['is_expired'] || $isRestricted;
 
                     if (! $state['is_expiring_soon'] && ! $isCritical) {

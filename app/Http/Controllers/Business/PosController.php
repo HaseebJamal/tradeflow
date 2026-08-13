@@ -10,6 +10,7 @@ use App\Models\HeldPosSale;
 use App\Models\Order;
 use App\Models\PosRegister;
 use App\Models\Product;
+use App\Services\CompanyPermissionService;
 use App\Services\PosSaleService;
 use App\Services\ThermalDocumentService;
 use Illuminate\Http\Request;
@@ -21,13 +22,22 @@ class PosController extends Controller
     public function index(Request $request)
     {
         $businessId = $request->user()->business_id;
+        $permissions = app(CompanyPermissionService::class);
+        $canViewCustomers = $permissions->allowsUser($request->user(), 'customers.view');
+        $canViewCategories = $permissions->allowsUser($request->user(), 'categories.view');
+
         return view('business.pos.index', [
             'register' => PosRegister::where('business_id', $businessId)->where('user_id', $request->user()->id)->where('status', 'Open')->latest('opened_at')->first(),
             'products' => $this->availableProducts($businessId)->take(60)->get(),
-            'categories' => Category::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(['id', 'name']),
-            'customers' => Customer::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(['id', 'name', 'phone']),
-            'canUseCustomPrice' => app(\App\Services\CompanyPermissionService::class)->allowsUser($request->user(), 'pos.custom_price'),
-            'canCreateCustomer' => app(\App\Services\CompanyPermissionService::class)->allowsUser($request->user(), 'customers.create'),
+            'categories' => $canViewCategories
+                ? Category::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(['id', 'name'])
+                : collect(),
+            'customers' => $canViewCustomers
+                ? Customer::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(['id', 'name', 'phone'])
+                : collect(),
+            'canViewCustomers' => $canViewCustomers,
+            'canUseCustomPrice' => $permissions->allowsUser($request->user(), 'pos.custom_price'),
+            'canCreateCustomer' => $permissions->allowsUser($request->user(), 'customers.create'),
         ]);
     }
 

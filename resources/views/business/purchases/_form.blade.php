@@ -2,6 +2,7 @@
     $purchase = $purchase ?? null;
     $isEditing = (bool) $purchase;
     $permissionService = app(\App\Services\CompanyPermissionService::class);
+    $canViewSuppliers = $canViewSuppliers ?? $permissionService->allowsUser(auth()->user(), 'suppliers.view');
     $canCreateSupplier = $permissionService->allowsUser(auth()->user(), 'suppliers.create');
     $initialItems = old('items', $purchase?->items?->map(fn($item) => [
         'product_id' => $item->product_id,
@@ -35,6 +36,7 @@
     <section class="mb-4">
         <h2 class="h5 mb-3">Supplier and document details</h2>
         <div class="row g-3">
+            @if($canViewSuppliers)
             <div class="col-md-6">
                 <label class="form-label">Supplier <span class="text-danger">*</span></label>
                 <select name="supplier_id" class="form-select js-select2" required autofocus data-purchase-supplier>
@@ -50,6 +52,9 @@
                     <div class="form-text text-warning">No suppliers are available. Contact an authorized user to create
                 one.</div>@endif
             </div>
+            @else
+                <div class="col-md-6"><div class="alert alert-warning mb-0">Supplier lookup is not enabled for this company. Contact your Super Admin to enable Suppliers before creating or editing a purchase.</div></div>
+            @endif
             <div class="col-md-3"><label class="form-label">Purchase date <span
                         class="text-danger">*</span></label><input name="purchase_date" type="datetime-local"
                     value="{{ old('purchase_date', $purchase?->purchase_date?->format('Y-m-d\\TH:i') ?? now()->format('Y-m-d\\TH:i')) }}"

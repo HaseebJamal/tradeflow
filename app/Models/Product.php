@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
@@ -24,6 +25,19 @@ class Product extends Model
         'latest_purchase_price' => 'decimal:2',
         'average_purchase_price' => 'decimal:2',
     ];
+
+    /**
+     * Keep every server-rendered and JSON product consumer on the exact same
+     * public-storage URL. POS used to receive a raw path after an AJAX search
+     * while its initial Blade cards received Storage::url(), which made an
+     * uploaded image disappear as soon as the product panel was rebuilt.
+     */
+    protected $appends = ['image_url'];
+
+    public function getImageUrlAttribute(): ?string
+    {
+        return $this->image ? Storage::disk('public')->url($this->image) : null;
+    }
 
     public function business() { return $this->belongsTo(Business::class); }
     public function category() { return $this->belongsTo(Category::class); }

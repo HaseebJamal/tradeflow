@@ -12,8 +12,8 @@
 <div class="row g-4">
     <div class="col-lg-4">
         <div class="tf-card p-4">
-            @if($product->image)
-                <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($product->image) }}" alt="{{ $product->name }}" class="tf-product-img mb-3 w-100 object-fit-cover rounded">
+            @if($product->image_url)
+                <img src="{{ $product->image_url }}" alt="{{ $product->name }}" class="tf-product-img mb-3 w-100 object-fit-cover rounded">
             @else
                 <div class="tf-product-img mb-3 d-flex align-items-center justify-content-center"><i class="bi bi-box-seam fs-1 text-primary"></i></div>
             @endif

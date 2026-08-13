@@ -728,53 +728,74 @@ class CompanyController extends Controller
 
     public function approveDetailChangeRequest(Request $request, BusinessDetailChangeRequest $changeRequest)
     {
-        abort_unless($changeRequest->status === 'Pending', 404);
         $data = $request->validate(['review_note' => ['nullable', 'string', 'max:2000']]);
-        $changeRequest->update([
-            'status' => 'Approved',
-            'reviewed_by' => auth()->id(),
-            'reviewed_at' => now(),
-            'review_note' => $data['review_note'] ?? null,
-        ]);
-        $this->audit($request, 'business details change approved for application', $changeRequest->business, $this->auditableChangeValues($changeRequest->old_values), $this->auditableChangeValues($changeRequest->requested_values));
+        $reviewedAt = now();
 
-        return back()->with('success', 'Request approved. Review it once more, then use Apply Changes to update the business and notify its owner.');
+        [$approvedRequest, $owner] = DB::transaction(function () use ($request, $changeRequest, $data, $reviewedAt): array {
+            $approvedRequest = BusinessDetailChangeRequest::lockForUpdate()->findOrFail($changeRequest->id);
+            if ($approvedRequest->status !== 'Pending') {
+                throw ValidationException::withMessages(['request' => 'This business-detail change request has already been reviewed.']);
+            }
+
+            $company = Business::lockForUpdate()->findOrFail($approvedRequest->business_id);
+            $owner = User::lockForUpdate()->findOrFail($company->owner_id);
+            $requestedName = trim((string) data_get($approvedRequest->requested_values, 'business_name'));
+            $requestedEmail = strtolower(trim((string) data_get($approvedRequest->requested_values, 'owner_email')));
+
+            if ($requestedName === '' || $requestedEmail === '') {
+                throw ValidationException::withMessages(['request' => 'This request does not contain valid protected business details.']);
+            }
+            if (User::query()
+                ->where('email', $requestedEmail)
+                ->where($owner->getQualifiedKeyName(), '!=', $owner->id)
+                ->exists()) {
+                throw ValidationException::withMessages(['owner_email' => 'The requested login email is already in use.']);
+            }
+
+            $oldValues = [
+                'business_name' => $company->business_name,
+                'owner_email_changed' => false,
+            ];
+            $company->update(['business_name' => $requestedName]);
+            if (strcasecmp($owner->email, $requestedEmail) !== 0) {
+                $owner->update(['email' => $requestedEmail]);
+                $oldValues['owner_email_changed'] = true;
+            }
+            $approvedRequest->update([
+                'status' => 'Approved',
+                'reviewed_by' => auth()->id(),
+                'reviewed_at' => $reviewedAt,
+                'review_note' => $data['review_note'] ?? null,
+            ]);
+
+            // Keep the request snapshots immutable; this audit records only
+            // the canonical values that were actually applied.
+            \App\Models\AuditLog::create([
+                'user_id' => auth()->id(),
+                'actor_id' => auth()->id(),
+                'actor_role' => auth()->user()?->role,
+                'business_id' => $company->id,
+                'module' => 'Companies',
+                'action' => 'business_details_change_approved',
+                'record_id' => $approvedRequest->id,
+                'description' => 'Approved and applied protected business details for '.$company->business_name,
+                'old_values' => $oldValues,
+                'new_values' => ['business_name' => $company->business_name, 'owner_email_changed' => $oldValues['owner_email_changed']],
+                'ip_address' => app(\App\Services\AuditIpResolver::class)->capture($request),
+                'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+            ]);
+
+            return [$approvedRequest->fresh()->load('business'), $owner->fresh()];
+        });
+
+        $owner->notify(new BusinessDetailsChangeDecisionNotification($approvedRequest));
+
+        return back()->with('success', 'Business details were approved and updated successfully. The business owner has been notified.');
     }
 
     public function applyDetailChangeRequest(Request $request, BusinessDetailChangeRequest $changeRequest)
     {
-        abort_unless($changeRequest->status === 'Approved', 404);
-        $company = $changeRequest->business()->with('owner')->firstOrFail();
-        $oldValues = $company->only(['business_name', 'phone', 'address', 'city', 'category', 'logo']);
-        $oldOwnerEmail = $company->owner?->email;
-        $updates = collect($changeRequest->requested_values ?? [])
-            ->only(['business_name', 'phone', 'address', 'city', 'category', 'logo'])
-            ->all();
-
-        DB::transaction(function () use ($company, $updates, $changeRequest): void {
-            $company->update($updates);
-            $requestedEmail = data_get($changeRequest->requested_values, 'owner_email');
-            if ($requestedEmail && $company->owner && $requestedEmail !== $company->owner->email) {
-                $company->owner->update(['email' => $requestedEmail]);
-            }
-            $changeRequest->update(['status' => 'Applied']);
-        });
-
-        if (!empty($updates['logo']) && $oldValues['logo'] && $oldValues['logo'] !== $updates['logo']) {
-            Storage::disk('public')->delete($oldValues['logo']);
-        }
-
-        $auditOldValues = $oldValues;
-        $auditNewValues = $updates;
-        if (data_get($changeRequest->requested_values, 'owner_email')) {
-            $auditOldValues['owner_email_changed'] = (bool) $oldOwnerEmail;
-            $auditNewValues['owner_email_changed'] = true;
-        }
-        $this->audit($request, 'business details change applied', $company, $auditOldValues, $auditNewValues);
-        $changeRequest->refresh()->load('business');
-        $company->owner?->notify(new BusinessDetailsChangeDecisionNotification($changeRequest));
-
-        return back()->with('success', 'Approved business-detail changes were applied. The business owner has been notified.');
+        return back()->withErrors(['request' => 'Approved business-detail changes are applied automatically.']);
     }
 
     public function rejectDetailChangeRequest(Request $request, BusinessDetailChangeRequest $changeRequest)

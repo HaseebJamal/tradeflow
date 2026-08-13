@@ -5,6 +5,7 @@
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
+@if($canViewCustomers)
 @companyCan('sales.payments')
 <section class="tf-card p-3 p-lg-4 mb-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">Record Customer Payment</h2><p class="tf-muted small mb-0">Payments update the customer balance, sales record, Khata, and accounting automatically.</p></div></div>
@@ -21,9 +22,12 @@
     </form>
 </section>
 @endcompanyCan
+@endif
 
 <form class="tf-card p-3 mb-3 row g-2 align-items-end">
+    @if($canViewCustomers)
     <div class="col-md-3"><label class="form-label">Customer</label><select name="customer_id" class="form-select"><option value="">All customers</option>@foreach($customers as $customer)<option value="{{ $customer->id }}" @selected(request('customer_id') == $customer->id)>{{ $customer->display_name }}</option>@endforeach</select></div>
+    @endif
     <div class="col-md-2"><label class="form-label">Method</label><select name="method" class="form-select"><option value="">All methods</option>@foreach(['Cash','Bank Transfer','Jazz Cash','Easypaisa','Cheque'] as $method)<option value="{{ $method }}" @selected(request('method') === $method)>{{ $method }}</option>@endforeach</select></div>
     <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All statuses</option>@foreach(['Paid','Partial','Pending'] as $status)<option value="{{ $status }}" @selected(request('status') === $status)>{{ $status }}</option>@endforeach</select></div>
     <div class="col-md-2"><label class="form-label">Date From</label><input type="date" name="date_from" value="{{ request('date_from', now(config('app.timezone'))->toDateString()) }}" class="form-control"></div>

@@ -36,6 +36,7 @@
                 @endforeach
             </select>
         </div>
+        @if($canViewCustomers)
         <div>
             <label class="form-label" for="deliveryCustomerFilter">Customer</label>
             <select name="customer_id" id="deliveryCustomerFilter" class="form-select">
@@ -43,6 +44,7 @@
                 @foreach($customers as $customer)<option value="{{ $customer->id }}" @selected((string) request('customer_id') === (string) $customer->id)>{{ $customer->display_name }}</option>@endforeach
             </select>
         </div>
+        @endif
         <div>
             <label class="form-label" for="deliveryStaffFilter">Delivery Staff</label>
             <select name="delivery_staff_id" id="deliveryStaffFilter" class="form-select">

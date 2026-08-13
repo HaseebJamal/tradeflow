@@ -16,12 +16,12 @@ class BusinessDetailsChangeDecisionNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
-        $applied = strtolower($this->changeRequest->status) === 'applied';
+        $approved = in_array(strtolower($this->changeRequest->status), ['approved', 'applied'], true);
         return [
             'category' => 'business_detail_change_decision',
-            'title' => $applied ? 'Business Details Change Applied' : 'Business Details Change Rejected',
-            'message' => $applied
-                ? 'Your requested business-detail changes were approved and have now been applied by Super Admin.'
+            'title' => $approved ? 'Business details updated' : 'Business Details Change Rejected',
+            'message' => $approved
+                ? 'Your requested business details change has been approved.'
                 : 'Your requested business-detail changes were rejected.'.($this->changeRequest->review_note ? ' Note: '.$this->changeRequest->review_note : ''),
             'business_id' => $this->changeRequest->business_id,
             'change_request_id' => $this->changeRequest->id,

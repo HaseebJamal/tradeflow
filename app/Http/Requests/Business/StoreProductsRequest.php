@@ -4,6 +4,7 @@ namespace App\Http\Requests\Business;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Services\CompanyPermissionService;
 
 class StoreProductsRequest extends FormRequest
 {
@@ -15,25 +16,28 @@ class StoreProductsRequest extends FormRequest
     public function rules(): array
     {
         $businessId = $this->user()->business_id;
+        $permissions = app(CompanyPermissionService::class);
+        $canUseCategories = $permissions->allowsUser($this->user(), 'categories.view');
+        $canUseUnits = $permissions->allowsUser($this->user(), 'units.view');
 
         return [
             'products' => ['required', 'array', 'min:1', 'max:25'],
             'products.*.product_name' => ['required', 'string', 'max:255'],
-            'products.*.category_id' => [
+            'products.*.category_id' => $canUseCategories ? [
                 'required',
                 Rule::exists('categories', 'id')->where(fn ($query) => $query
                     ->where('business_id', $businessId)
                     ->where('type', 'Product')
                     ->where('status', 'Active')
                     ->whereNull('deleted_at')),
-            ],
-            'products.*.unit_id' => [
+            ] : ['prohibited'],
+            'products.*.unit_id' => $canUseUnits ? [
                 'required',
                 Rule::exists('units', 'id')->where(fn ($query) => $query
                     ->where('business_id', $businessId)
                     ->where('status', 'Active')
                     ->whereNull('deleted_at')),
-            ],
+            ] : ['prohibited'],
             'products.*.product_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'products.*.brand' => ['nullable', 'string', 'max:100'],
             'products.*.manufacturer' => ['nullable', 'string', 'max:100'],

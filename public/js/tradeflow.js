@@ -189,8 +189,8 @@ window.syncTradeFlowTomSelect = (element) => {
     control.setValue(value, true);
 };
 
-function positionTradeFlowTomSelectDropdown(control) {
-    if (!control?.isOpen) return;
+function positionTradeFlowTomSelectDropdown(control, force = false) {
+    if (!control || (!control.isOpen && !force)) return;
 
     const rect = control.control.getBoundingClientRect();
     const viewportPadding = 12;
@@ -213,10 +213,15 @@ function positionTradeFlowTomSelectDropdown(control) {
     }
     const dropdownContent = control.dropdown.querySelector('.ts-dropdown-content');
     const dropdownSearch = control.dropdown.querySelector('.dropdown-input-wrap');
-    const searchHeight = dropdownSearch?.offsetHeight || 44;
+    const searchHeight = dropdownSearch?.offsetHeight || 0;
     const naturalOptionsHeight = Math.min(220, Math.max(40, dropdownContent?.scrollHeight || 40));
     const preferredHeight = Math.min(maxDropdownHeight, searchHeight + naturalOptionsHeight);
-    const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
+    // Keep the normal direction downward whenever there is enough room for
+    // the search input and one compact option. The remaining options can
+    // scroll; a shortened menu below the trigger is less surprising than an
+    // unnecessary upward flip after the page has been scrolled.
+    const minimumDownwardHeight = Math.min(preferredHeight, Math.max(72, searchHeight + 40));
+    const openUpward = spaceBelow < minimumDownwardHeight && spaceAbove > spaceBelow;
     const usableSpace = openUpward ? spaceAbove : spaceBelow;
     const availableHeight = Math.min(maxDropdownHeight, Math.max(0, usableSpace));
     const optionListHeight = Math.max(0, Math.min(220, availableHeight - searchHeight));
@@ -231,10 +236,12 @@ function positionTradeFlowTomSelectDropdown(control) {
         });
     }
 
-    if (containingModal && control.dropdown.parentElement === control.wrapper) {
-        // Keep modal menus in their own control wrapper. The scrollable modal
-        // body is then the hard visual boundary, so a menu moves with its
-        // field and can never escape over the modal footer or page.
+    if (control.dropdown.parentElement === control.wrapper) {
+        // Inline menus move with their own control while any dashboard, form,
+        // or modal scrolls. This avoids the stale viewport position a body
+        // portal can retain after a dynamically-added form section moves.
+        // Modal-body remains a hard visual boundary, so its footer is never
+        // covered by an open select menu.
         control.wrapper.classList.toggle('tf-tom-select-up', openUpward);
         Object.assign(control.dropdown.style, {
             bottom: openUpward ? 'calc(100% + 4px)' : 'auto',
@@ -245,20 +252,36 @@ function positionTradeFlowTomSelectDropdown(control) {
         return;
     }
 
-    if (control.settings.dropdownParent !== 'body') return;
+    // Use the actual mounted parent instead of the original configuration.
+    // Tom Select versions may normalize `dropdownParent` to an element.
+    if (control.dropdown.parentElement !== document.body) return;
 
     const viewportWidth = window.innerWidth;
     const width = Math.min(rect.width, Math.max(0, viewportWidth - (viewportPadding * 2)));
-    const left = Math.max(viewportPadding, Math.min(rect.left + window.scrollX, window.scrollX + viewportWidth - width - viewportPadding));
+    const left = Math.max(
+        viewportPadding,
+        Math.min(rect.left + window.scrollX, window.scrollX + viewportWidth - width - viewportPadding)
+    );
     const dropdownHeight = Math.min(control.dropdown.offsetHeight || availableHeight, availableHeight);
     const top = window.scrollY + (openUpward ? rect.top - dropdownHeight : rect.bottom);
 
     control.wrapper.classList.toggle('tf-tom-select-up', openUpward);
-    Object.assign(control.dropdown.style, {
-        left: `${left}px`,
-        top: `${top}px`,
-        width: `${Math.max(0, width)}px`,
-    });
+    const safeWidth = `${Math.max(0, width)}px`;
+    // Tom Select's own placement routine and third-party CSS both position
+    // body portals. A body portal is document-positioned, so its live viewport
+    // rectangle must be converted to document coordinates with scrollX/Y.
+    // Mixing those coordinates with `position: fixed` is what made menus jump
+    // above their trigger after scrolling.
+    [
+        ['bottom', 'auto'],
+        ['left', `${left}px`],
+        ['min-width', safeWidth],
+        ['position', 'absolute'],
+        ['top', `${top}px`],
+        ['transform', 'none'],
+        ['width', safeWidth],
+        ['z-index', '1080'],
+    ].forEach(([property, value]) => control.dropdown.style.setProperty(property, value, 'important'));
 }
 
 function positionOpenTradeFlowTomSelectDropdowns() {
@@ -316,10 +339,9 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         // transient DOM do not need an enhanced select instance.
         if (element.closest('.swal2-container')) return;
 
-        // A Tom Select dropdown is portaled to <body>. Initializing a select
-        // inside a hidden Bootstrap modal can therefore leave the plugin's
-        // search input orphaned in the page flow. Defer it until Bootstrap
-        // emits shown.bs.modal below.
+        // Initializing a select inside a hidden Bootstrap modal can leave its
+        // enhanced search input in an invalid layout. Defer it until
+        // Bootstrap emits shown.bs.modal below.
         const containingModal = element.closest('.modal');
         if (containingModal && !containingModal.classList.contains('show')) return;
 
@@ -330,18 +352,11 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         const placeholderOption = [...element.options].find((option) => option.value === '');
         const isMultiple = element.multiple;
         const canClear = isMultiple || !element.required;
-        // Some compact forms need their menus to stay in the same scrolling
-        // context as the control. A body-level portal can otherwise retain a
-        // stale page position while the form scrolls. Pages opt in with
-        // data-tom-select-inline="true".
-        const useInlineDropdown = Boolean(
-            element.closest('[data-order-form]')
-            || element.dataset.tomSelectInline === 'true'
-        );
-        // Modal dropdowns stay in their own Tom Select wrapper. Because the
-        // wrapper lives in modal-body, the native scroll container keeps the
-        // menu attached to its field and clips it inside the modal boundary.
-        const dropdownParent = (containingModal || useInlineDropdown) ? null : 'body';
+        // A page/card can clip an inline menu (especially dynamic product
+        // sections). Every non-modal selector therefore uses one body portal.
+        // The shared fixed-coordinate positioner above keeps that portal
+        // visually attached to its control during any scroll.
+        const dropdownParent = containingModal ? null : 'body';
 
         const control = new window.TomSelect(element, {
             create: false,
@@ -354,15 +369,17 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
             hideSelected: element.dataset.hideSelected === 'true',
             searchField: ['text'],
             placeholder: element.dataset.placeholder || element.getAttribute('placeholder') || placeholderOption?.textContent?.trim() || 'Select an option',
-            // Keep search inside the open menu, separate from the selected
-            // value shown in the control. This gives every dropdown one clear,
-            // labelled place to filter long option lists.
+            // Keep the filter input inside the open menu, above the option
+            // list. The closed control must display only its selected value.
             plugins: {
                 dropdown_input: {},
                 ...(canClear ? { clear_button: { title: 'Clear selection' } } : {}),
             },
             dropdownParent,
-            position: 'auto',
+            // The shared positioner owns the only upward-flip decision. Start
+            // every Tom Select downward so its internal `auto` heuristic
+            // cannot momentarily place a menu above an otherwise usable field.
+            position: 'bottom',
             render: {
                 no_results: () => '<div class="no-results">No matching records found</div>',
                 option: (data, escape) => `<div class="tf-tom-select-option"><span class="tf-tom-select-option-label">${escape(data.text)}</span></div>`,
@@ -373,6 +390,13 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         if (dropdownSearchInput) {
             dropdownSearchInput.placeholder = 'Search options…';
             dropdownSearchInput.setAttribute('aria-label', 'Search options');
+        }
+
+        // Tom Select runs its own placement routine after opening. Replace it
+        // with the shared viewport-based routine so a body-portaled menu never
+        // uses stale page-load offsets after the dashboard has scrolled.
+        if (typeof control.positionDropdown === 'function') {
+            control.positionDropdown = () => positionTradeFlowTomSelectDropdown(control, true);
         }
 
         // When the menu is portaled to body, lock its width to the originating

@@ -61,15 +61,10 @@ class BusinessActionPermissionMiddleware
             ]);
         }
 
-        if ($request->expectsJson()) {
-            abort(403, $message);
-        }
-
-        // Never redirect a denied request to its referrer or to the first
-        // enabled route: either can be the same protected route and create a
-        // browser redirect loop. The basic business dashboard is deliberately
-        // unguarded by business.permission and is safe for every approved user.
-        return redirect()->route('business.dashboard')->withErrors(['permission' => $message]);
+        // A denied route must remain denied. Redirecting a direct request made
+        // it look like the route merely disappeared and left non-GET actions
+        // vulnerable to accidental retry on a different page.
+        abort(403, $message);
     }
 
     private function permissionFor(?string $route): ?string
@@ -97,7 +92,7 @@ class BusinessActionPermissionMiddleware
             'business.inventory' => 'inventory.view', 'business.inventory.adjust' => 'inventory.adjust_stock', 'business.inventory.alert' => 'inventory.low_stock_alerts',
             'business.customers.index', 'business.customers.show', 'business.customers.statement' => 'customers.view',
             'business.customers.store' => 'customers.create', 'business.customers.update', 'business.customers.status' => 'customers.edit',
-            'business.customers.archive' => 'customers.archive', 'business.customers.restore' => 'customers.restore',
+            'business.customers.archive', 'business.customers.destroy' => 'customers.archive', 'business.customers.restore' => 'customers.restore',
             'business.suppliers.index', 'business.suppliers.show' => 'suppliers.view',
             'business.suppliers.create', 'business.suppliers.store' => 'suppliers.create', 'business.suppliers.edit', 'business.suppliers.update' => 'suppliers.edit', 'business.suppliers.archive', 'business.suppliers.restore', 'business.suppliers.destroy' => 'suppliers.archive',
             'business.purchases.index', 'business.purchases.show' => 'purchases.view', 'business.purchases.create', 'business.purchases.store' => 'purchases.create',

@@ -225,6 +225,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     // 405 while users refresh to the current PATCH markup.
     Route::match(['put', 'patch'], '/subscriptions/{subscription}/trial', [AdminController::class, 'adjustTrial'])->name('subscriptions.trial.adjust');
     Route::match(['put', 'patch'], '/subscriptions/{subscription}/paid-access', [AdminController::class, 'adjustPaidAccess'])->name('subscriptions.paid-access.adjust');
+    Route::match(['put', 'patch'], '/subscriptions/{subscription}/reactivate-paid-access', [AdminController::class, 'reactivatePaidAccess'])->name('subscriptions.paid-access.reactivate');
     Route::get('/subscription-change-requests/{changeRequest}/review', [AdminController::class, 'subscriptionChangeRequestReview'])->name('subscription-change-requests.show');
     Route::patch('/subscription-change-requests/{changeRequest}/review-details', [AdminController::class, 'updateSubscriptionChangeRequestReview'])->name('subscription-change-requests.review-details');
     Route::patch('/subscription-change-requests/{changeRequest}', [AdminController::class, 'reviewSubscriptionChangeRequest'])->name('subscription-change-requests.review');

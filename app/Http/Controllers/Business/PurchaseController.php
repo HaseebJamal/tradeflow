@@ -45,6 +45,10 @@ class PurchaseController extends Controller
     public function index(Request $request)
     {
         $businessId = $this->businessId();
+        $permissions = app(CompanyPermissionService::class);
+        $canViewSuppliers = $permissions->allowsUser($request->user(), 'suppliers.view');
+        $canCreatePurchases = $permissions->allowsUser($request->user(), 'purchases.create');
+        $showPurchaseCreate = $request->boolean('create') && $canViewSuppliers && $canCreatePurchases;
         $filters = $request->validate([
             'purchase_id' => ['nullable', 'integer'],
             'supplier_id' => ['nullable', 'integer'],
@@ -86,7 +90,9 @@ class PurchaseController extends Controller
             )
             ->latest('purchase_date')->paginate(10)->withQueryString();
 
-        $suppliers = Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get();
+        $suppliers = $canViewSuppliers
+            ? Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get()
+            : collect();
         $purchaseOptions = Purchase::query()
             ->with('supplier:id,supplier_name,company_name')
             ->where('business_id', $businessId)
@@ -101,11 +107,12 @@ class PurchaseController extends Controller
             'purchases' => $purchases,
             'purchaseOptions' => $purchaseOptions,
             'suppliers' => $suppliers,
+            'canViewSuppliers' => $canViewSuppliers,
             'creators' => User::where('business_id', $businessId)->orderBy('name')->get(['id', 'name']),
             'paymentStatuses' => Purchase::where('business_id', $businessId)->whereNotNull('payment_status')->distinct()->orderBy('payment_status')->pluck('payment_status'),
-            'products' => $request->boolean('create') ? Product::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get() : collect(),
+            'products' => $showPurchaseCreate ? Product::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get() : collect(),
             'accounts' => Account::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(),
-            'showPurchaseCreate' => $request->boolean('create'),
+            'showPurchaseCreate' => $showPurchaseCreate,
             'filters' => $filters,
         ]);
     }
@@ -135,6 +142,7 @@ class PurchaseController extends Controller
     public function store(Request $request)
     {
         $businessId = $this->businessId();
+        $this->ensureActionPermission('suppliers.view');
         $data = $this->validatedPurchase($request);
         $this->ensureActionPermission('purchases.confirm');
 
@@ -159,12 +167,16 @@ class PurchaseController extends Controller
     {
         $purchase = $this->scoped($purchase);
         $this->ensureActionPermission('purchases.edit');
+        $canViewSuppliers = app(CompanyPermissionService::class)->allowsUser(auth()->user(), 'suppliers.view');
         $purchase->loadCount('payments');
         $this->assertPurchaseIsEditable($purchase);
 
         return view('business.purchases.edit', [
             'purchase' => $purchase->load('items'),
-            'suppliers' => Supplier::where('business_id', $purchase->business_id)->where('status', 'Active')->orderBy('supplier_name')->get(),
+            'suppliers' => $canViewSuppliers
+                ? Supplier::where('business_id', $purchase->business_id)->where('status', 'Active')->orderBy('supplier_name')->get()
+                : collect(),
+            'canViewSuppliers' => $canViewSuppliers,
             'products' => Product::where('business_id', $purchase->business_id)->where('status', 'Active')->orderBy('name')->get(),
             'accounts' => Account::where('business_id', $purchase->business_id)->where('status', 'Active')->orderBy('name')->get(),
         ]);
@@ -173,6 +185,7 @@ class PurchaseController extends Controller
     public function update(Request $request, Purchase $purchase)
     {
         $purchase = $this->scoped($purchase);
+        $this->ensureActionPermission('suppliers.view');
         $data = $this->validatedPurchase($request);
         $this->ensureActionPermission('purchases.confirm');
 

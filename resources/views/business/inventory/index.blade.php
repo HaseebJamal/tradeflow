@@ -69,7 +69,7 @@
                 @php($draftProducts = [[]])
                 @include('business.products._multi-create-fields', ['hideProductFormActions' => true])
             </div>
-            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Another Product</button><button type="submit" class="btn btn-tf-primary" data-save-products>Save Products</button></div></div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Product</button><button type="submit" class="btn btn-tf-primary" data-save-products>Save Products</button></div></div>
         </form>
     </div></div>
 </div>

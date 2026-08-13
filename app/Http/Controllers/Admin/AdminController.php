@@ -391,7 +391,7 @@ class AdminController extends Controller
 
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
-            'access_status' => ['nullable', Rule::in(['trial_active', 'trial_expiring', 'trial_expired', 'paid_active', 'paid_expiring', 'restricted'])],
+            'access_status' => ['nullable', Rule::in(['trial_active', 'trial_expiring', 'trial_expired', 'paid_scheduled', 'paid_active', 'paid_expiring', 'restricted'])],
             'trial_status' => ['nullable', Rule::in(['active', 'expiring', 'expired'])],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
@@ -447,10 +447,22 @@ class AdminController extends Controller
                     'trial_active' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('status', 'Trial')->whereDate('trial_end_at', '>', $trialExpiringDate)),
                     'trial_expiring' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('status', 'Trial')->whereBetween('trial_end_at', [$today, $trialExpiringDate])),
                     'trial_expired' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('status', 'Expired')->where('payment_status', '!=', 'Received')),
+                    'paid_scheduled' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('payment_status', 'Received')->whereNotNull('starts_at')->whereDate('starts_at', '>', $today)),
                     'paid_active' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('payment_status', 'Received')->where('status', 'Active')->whereDate('ends_at', '>', $paidExpiringDate)),
                     'paid_expiring' => $query->whereHas('subscription', fn ($subscription) => $subscription->where('payment_status', 'Received')->whereIn('status', ['Active', 'Expiring'])->whereBetween('ends_at', [$today, $paidExpiringDate])),
-                    'restricted' => $query->where(function ($inner) {
-                        $inner->doesntHave('subscription')->orWhereHas('subscription', fn ($subscription) => $subscription->whereIn('status', ['Pending', 'Expired', 'Suspended', 'Cancelled']));
+                    'restricted' => $query->where(function ($inner) use ($today) {
+                        $inner->doesntHave('subscription')->orWhereHas('subscription', function ($subscription) use ($today) {
+                            $subscription->whereIn('status', ['Expired', 'Suspended', 'Cancelled'])
+                                ->orWhere(function ($pending) use ($today) {
+                                    $pending->where('status', 'Pending')
+                                        ->where(function ($notFuturePaid) use ($today) {
+                                            $notFuturePaid->whereNull('payment_status')
+                                                ->orWhere('payment_status', '!=', 'Received')
+                                                ->orWhereNull('starts_at')
+                                                ->orWhereDate('starts_at', '<=', $today);
+                                        });
+                                });
+                        });
                     }),
                 };
             })
@@ -476,7 +488,7 @@ class AdminController extends Controller
                 'trial' => $summary->where('kind', 'trial_active')->count(),
                 'expiring' => $summary->where('kind', 'trial_expiring')->count(),
                 'expired' => $summary->where('kind', 'trial_expired')->count(),
-                'paid' => $summary->whereIn('kind', ['paid_active', 'paid_expiring'])->count(),
+                'paid' => $summary->whereIn('kind', ['paid_scheduled', 'paid_active', 'paid_expiring'])->count(),
                 'restricted' => $summary->whereIn('kind', ['trial_expired', 'restricted'])->count(),
             ],
         ]);
@@ -1030,6 +1042,119 @@ class AdminController extends Controller
         return back()->with('success', $actionLabel.'.');
     }
 
+    /**
+     * Start a fresh valid paid-access period for an expired or administratively
+     * restricted business. This is deliberately an access entitlement only:
+     * payments stay exclusively in Payments & Billing and no payment record is
+     * manufactured by this recovery action.
+     */
+    public function reactivatePaidAccess(Request $request, Subscription $subscription): RedirectResponse|JsonResponse
+    {
+        $today = now(config('app.timezone'))->startOfDay();
+        $data = $request->validate([
+            'starts_at' => ['required', 'date', 'after_or_equal:'.$today->toDateString()],
+            'paid_duration_days' => ['required', 'integer', 'min:1', 'max:3650'],
+            'extra_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        [$updated, $old, $new] = DB::transaction(function () use ($request, $subscription, $data, $today): array {
+            $locked = Subscription::query()
+                ->with('business.owner')
+                ->lockForUpdate()
+                ->findOrFail($subscription->id);
+            $lifecycle = app(SubscriptionLifecycleService::class);
+            $state = $lifecycle->state($locked);
+            $canReactivate = $locked->payment_status === 'Received'
+                && ! $state['can_access_business']
+                && ($state['is_expired'] || in_array($locked->status, ['Expired', 'Suspended'], true));
+            abort_unless($canReactivate, 422, 'Only an expired or restricted paid-access business can be reactivated.');
+
+            $start = Carbon::parse($data['starts_at'], config('app.timezone'))->startOfDay();
+            abort_if($start->lt($today), 422, 'New access cannot start in the past.');
+            $paidEnd = $start->copy()->addDays((int) $data['paid_duration_days']);
+            $old = [
+                'status' => $locked->status,
+                'paid_access_start' => $locked->starts_at?->toDateString(),
+                'paid_access_end' => $locked->ends_at?->toDateString(),
+                'paid_duration_days' => $locked->starts_at && $locked->ends_at
+                    ? $locked->starts_at->diffInDays($locked->ends_at)
+                    : 0,
+                'extra_access_days' => $locked->extraAccessDays(),
+                'effective_access_end' => $locked->effectivePaidAccessEnd()?->toDateString(),
+            ];
+
+            // The access record represents the current entitlement. Old cycle
+            // values are retained in the immutable audit entry below; no
+            // PlatformPayment is inserted or altered by manual reactivation.
+            $locked->update([
+                'starts_at' => $start,
+                'ends_at' => $paidEnd,
+                'access_ended_at' => null,
+                'status' => 'Active',
+                'note' => $data['note'] ?? $locked->note,
+                'renewed_at' => now(),
+                'cancellation_scheduled_at' => null,
+                'cancellation_reason' => null,
+            ]);
+
+            $extraDays = (int) ($data['extra_days'] ?? 0);
+            if ($extraDays > 0) {
+                SubscriptionAccessExtension::create([
+                    'subscription_id' => $locked->id,
+                    'business_id' => $locked->business_id,
+                    'paid_access_start_at' => $start,
+                    'paid_access_end_at' => $paidEnd,
+                    'days' => $extraDays,
+                    'kind' => 'manual_reactivation_extra',
+                    'note' => $data['note'] ?? 'Manual reactivation complimentary access.',
+                    'granted_by' => $request->user()?->id,
+                    'granted_at' => now(),
+                ]);
+            }
+
+            $updated = $lifecycle->synchronize($locked->fresh()->load('business.owner'));
+            $new = [
+                'status' => $updated->status,
+                'reactivation_type' => 'Manual Reactivation / Complimentary Access',
+                'paid_access_start' => $updated->starts_at?->toDateString(),
+                'paid_access_end' => $updated->ends_at?->toDateString(),
+                'paid_duration_days' => $updated->starts_at && $updated->ends_at
+                    ? $updated->starts_at->diffInDays($updated->ends_at)
+                    : 0,
+                'extra_access_days' => $updated->extraAccessDays(),
+                'effective_access_end' => $updated->effectivePaidAccessEnd()?->toDateString(),
+                'reactivated_by' => $request->user()?->id,
+                'reactivated_at' => now()->toIso8601String(),
+                'note' => $data['note'] ?? null,
+            ];
+
+            return [$updated, $old, $new];
+        });
+
+        app(RenewalInvoiceService::class)->generateDue();
+        $this->auditBusinessAccess($request, $updated->business, 'Business access reactivated', $updated, $old, $new);
+        $effectiveEnd = $updated->effectivePaidAccessEnd()?->format('n/j/Y') ?? 'the configured access end date';
+        $updated->business?->owner?->notify(new SubscriptionStatusNotification(
+            'Access reactivated',
+            'Your '.app(PlatformSettingsService::class)->name().' access has been reactivated until '.$effectiveEnd.'.',
+            $updated->business_id,
+        ));
+
+        $message = 'Business access reactivated successfully.';
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'status' => $updated->status,
+                'paid_access_start' => $updated->starts_at?->toDateString(),
+                'paid_access_end' => $updated->ends_at?->toDateString(),
+                'effective_access_end' => $updated->effectivePaidAccessEnd()?->toDateString(),
+            ]);
+        }
+
+        return back()->with('success', $message);
+    }
+
     /** @param array<string, mixed> $state */
     private function accessPresentation(Business $business, array $state): array
     {
@@ -1043,6 +1168,9 @@ class AdminController extends Controller
                 'trial_expiring' => 'Trial Expiring',
                 default => 'Trial Expired',
             };
+        } elseif ($subscription && $subscription->payment_status === 'Received' && $state['is_scheduled']) {
+            $kind = 'paid_scheduled';
+            $label = 'Paid Scheduled';
         } elseif ($subscription && $subscription->payment_status === 'Received' && ! $state['is_expired'] && $state['is_active_period']) {
             $kind = $state['is_expiring_soon'] ? 'paid_expiring' : 'paid_active';
             $label = $kind === 'paid_expiring' ? 'Paid Expiring' : 'Paid Active';
@@ -1080,6 +1208,13 @@ class AdminController extends Controller
             'remaining_label' => $daysLabel,
             'can_manage_trial' => (bool) $subscription && $subscription->payment_status !== 'Received',
             'can_manage_paid' => (bool) $subscription && $subscription->payment_status === 'Received',
+            'can_reactivate_paid' => (bool) $subscription
+                && $subscription->payment_status === 'Received'
+                && ! $state['can_access_business']
+                && ($state['is_expired'] || in_array($subscription->status, ['Expired', 'Suspended'], true)),
+            'reactivation_duration_days' => ($state['paid_duration_days'] ?? 0) > 0
+                ? (int) $state['paid_duration_days']
+                : max(1, (int) (app(PlatformSettingsService::class)->current()->default_paid_access_days ?: 30)),
             // Date management remains available for a historical/expired
             // trial so an administrator can restart it, but an already
             // expired trial has nothing left to end. Keep destructive end
@@ -1610,8 +1745,9 @@ class AdminController extends Controller
             ->latest()
             ->paginate(10, ['*'], 'renewal_page')
             ->withQueryString();
-        $renewalInvoices->getCollection()->each(function (RenewalInvoice $invoice): void {
-            $invoice->setAttribute('can_manage', in_array($invoice->status, ['Generated', 'Sent', 'Pending Payment', 'Overdue'], true));
+        $renewals = app(RenewalInvoiceService::class);
+        $renewalInvoices->getCollection()->each(function (RenewalInvoice $invoice) use ($renewals): void {
+            $invoice->setAttribute('can_manage', $renewals->canManage($invoice));
         });
         $recordRenewal = isset($filters['renewal_invoice_id'])
             ? RenewalInvoice::with(['business.owner', 'subscription'])->findOrFail($filters['renewal_invoice_id'])
@@ -1689,7 +1825,7 @@ class AdminController extends Controller
             $renewalInvoice = isset($data['renewal_invoice_id'])
                 ? RenewalInvoice::lockForUpdate()->findOrFail($data['renewal_invoice_id'])
                 : null;
-            if ($renewalInvoice && ($renewalInvoice->business_id !== $business->id || ! in_array($renewalInvoice->status, ['Generated', 'Sent', 'Pending Payment', 'Overdue'], true))) {
+            if ($renewalInvoice && ($renewalInvoice->business_id !== $business->id || ! app(RenewalInvoiceService::class)->canRecordPayment($renewalInvoice))) {
                 throw ValidationException::withMessages(['renewal_invoice_id' => 'This renewal invoice cannot be recorded against the selected business.']);
             }
             $subscription = $business->subscription;
@@ -1717,10 +1853,7 @@ class AdminController extends Controller
                 // Keep one source of truth for a renewal payment awaiting
                 // verification. This also lets attention counters treat the
                 // invoice and its pending payment as one work item.
-                $renewalInvoice->update([
-                    'platform_payment_id' => $payment->id,
-                    'status' => 'Pending Payment',
-                ]);
+                app(RenewalInvoiceService::class)->markPendingPayment($renewalInvoice, $payment);
             }
 
             return $payment;
@@ -1801,42 +1934,75 @@ class AdminController extends Controller
     {
         abort_unless($request->user()?->isSuperAdmin(), 403);
         $invoice->load(['business.owner', 'subscription']);
+        $platformSettings = app(PlatformSettingsService::class)->current();
+        $platformLogoDataUri = null;
+        $platformLogoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim((string) $platformSettings->logo, '/'));
+
+        // Dompdf renders local image data reliably without depending on a
+        // public URL, while unsupported/missing logo files retain the compact
+        // branded mark in the invoice view.
+        if (filled($platformLogoPath)) {
+            $publicDisk = Storage::disk('public');
+            if ($publicDisk->exists($platformLogoPath)) {
+                $mime = $publicDisk->mimeType($platformLogoPath);
+                $logoContents = $publicDisk->get($platformLogoPath);
+                if (in_array($mime, ['image/jpeg', 'image/png', 'image/gif'], true) && is_string($logoContents)) {
+                    $platformLogoDataUri = 'data:'.$mime.';base64,'.base64_encode($logoContents);
+                }
+            }
+        }
 
         return Pdf::loadView('super-admin.renewal-invoices.pdf', [
             'invoice' => $invoice,
             'business' => $invoice->business,
             'owner' => $invoice->business?->owner,
-            'platformName' => app(PlatformSettingsService::class)->name(),
+            'platformName' => $platformSettings->company_name ?: app(PlatformSettingsService::class)->name(),
+            'platformSettings' => $platformSettings,
+            'platformLogoDataUri' => $platformLogoDataUri,
         ])->setPaper('a4')->stream('renewal-invoice-'.$invoice->invoice_number.'.pdf');
     }
 
-    public function sendRenewalInvoiceEmail(Request $request, RenewalInvoice $invoice): RedirectResponse
+    public function sendRenewalInvoiceEmail(Request $request, RenewalInvoice $invoice): RedirectResponse|JsonResponse
     {
         abort_unless($request->user()?->isSuperAdmin(), 403);
         $invoice->load(['business.owner', 'subscription']);
-        abort_if(in_array($invoice->status, ['Paid', 'Cancelled', 'Superseded'], true), 422, 'This renewal invoice is closed.');
+        abort_if(! app(RenewalInvoiceService::class)->canManage($invoice), 422, 'This renewal invoice is closed.');
 
         $email = $invoice->business?->owner?->email;
         abort_unless(filter_var($email, FILTER_VALIDATE_EMAIL), 422, 'No business email is available.');
 
         $platformName = app(PlatformSettingsService::class)->name();
         $owner = $invoice->business?->owner?->name ?: 'there';
-        $subject = $platformName.' renewal invoice - '.$invoice->invoice_number;
-        $body = "Hello {$owner},\n\nYour {$platformName} paid access for {$invoice->business?->business_name} ends on {$invoice->access_ends_at->format('d M Y')}.\n\nRenewal Invoice: {$invoice->invoice_number}\nProposed Amount: Rs ".number_format((float) $invoice->amount, 2)."\nDue Date: {$invoice->due_date->format('d M Y')}\n\nPlease contact {$platformName} to renew your access.\n\nRegards,\n{$platformName}";
+        $subject = $platformName.' Renewal Invoice - '.$invoice->invoice_number;
+        $body = "Hello {$owner},\n\nYour {$platformName} access for {$invoice->business?->business_name} is due to expire on {$invoice->access_ends_at->format('n/j/Y')}.\n\nRenewal Invoice: {$invoice->invoice_number}\nCurrent Access End: {$invoice->access_ends_at->format('n/j/Y')}\nProposed Amount: Rs ".number_format((float) $invoice->amount, 2)."\nDue Date: {$invoice->due_date->format('n/j/Y')}\n\nPlease contact {$platformName} to renew your access.\n\nRegards,\n{$platformName}";
 
         // A mailto link only opens a draft; delivery remains a manual action
         // in the administrator's email application.
-        $invoice->update(['email_draft_opened_at' => now()]);
+        $invoice = app(RenewalInvoiceService::class)->markDraftOpened($invoice, 'email', $request->user()->id);
         $this->audit('Opened renewal invoice email draft for '.$invoice->invoice_number, $request, 'Renewal Invoices', $invoice->id);
 
-        return redirect()->away('mailto:'.$email.'?subject='.rawurlencode($subject).'&body='.rawurlencode($body));
+        // This is intentionally Gmail Web rather than a mailto link. A
+        // mailto redirect can land on a blank browser tab when no desktop
+        // email application is registered. http_build_query encodes line
+        // breaks, ampersands, currency punctuation, and names safely.
+        $redirect = 'https://mail.google.com/mail/?'.http_build_query([
+            'view' => 'cm',
+            'fs' => '1',
+            'to' => $email,
+            'su' => $subject,
+            'body' => $body,
+        ], '', '&', PHP_QUERY_RFC3986);
+
+        return $request->expectsJson()
+            ? response()->json(['redirect' => $redirect, 'status' => $invoice->status])
+            : redirect()->away($redirect);
     }
 
-    public function openRenewalInvoiceWhatsApp(Request $request, RenewalInvoice $invoice): RedirectResponse
+    public function openRenewalInvoiceWhatsApp(Request $request, RenewalInvoice $invoice): RedirectResponse|JsonResponse
     {
         abort_unless($request->user()?->isSuperAdmin(), 403);
         $invoice->load('business.owner');
-        abort_if(in_array($invoice->status, ['Paid', 'Cancelled', 'Superseded'], true), 422, 'This renewal invoice is closed.');
+        abort_if(! app(RenewalInvoiceService::class)->canManage($invoice), 422, 'This renewal invoice is closed.');
 
         $phone = $invoice->business?->phone ?: $invoice->business?->owner?->phone;
         $digits = app(PhoneNumberService::class)->whatsappDigits($phone);
@@ -1845,17 +2011,21 @@ class AdminController extends Controller
         $platformName = app(PlatformSettingsService::class)->name();
         $owner = $invoice->business?->owner?->name ?: 'there';
         $message = "Hi {$owner},\n\nYour {$platformName} access for {$invoice->business?->business_name} ends on {$invoice->access_ends_at->format('d M Y')}.\n\nRenewal Invoice: {$invoice->invoice_number}\nProposed Amount: Rs ".number_format((float) $invoice->amount, 2)."\nDue Date: {$invoice->due_date->format('d M Y')}\n\nPlease contact {$platformName} to renew your access.";
-        $invoice->update(['whatsapp_opened_at' => now()]);
+        $invoice = app(RenewalInvoiceService::class)->markDraftOpened($invoice, 'whatsapp', $request->user()->id);
         $this->audit('Opened WhatsApp renewal draft for '.$invoice->invoice_number, $request, 'Renewal Invoices', $invoice->id);
 
         // This records only the click-to-chat action, never a claimed delivery.
-        return redirect()->away('https://wa.me/'.$digits.'?text='.rawurlencode($message));
+        $redirect = 'https://wa.me/'.$digits.'?text='.rawurlencode($message);
+
+        return $request->expectsJson()
+            ? response()->json(['redirect' => $redirect, 'status' => $invoice->status])
+            : redirect()->away($redirect);
     }
 
     public function updateRenewalInvoiceAmount(Request $request, RenewalInvoice $invoice): RedirectResponse
     {
         abort_unless($request->user()?->isSuperAdmin(), 403);
-        abort_if(! in_array($invoice->status, ['Generated', 'Sent', 'Pending Payment', 'Overdue'], true), 422, 'A closed renewal invoice cannot be changed.');
+        abort_if(! app(RenewalInvoiceService::class)->canManage($invoice), 422, 'A closed renewal invoice cannot be changed.');
         $data = $request->validate(['amount' => ['required', 'numeric', 'min:1', 'max:999999999.99']]);
         $old = $invoice->amount;
         $invoice->update(['amount' => $data['amount']]);
@@ -1867,8 +2037,8 @@ class AdminController extends Controller
     public function cancelRenewalInvoice(Request $request, RenewalInvoice $invoice): RedirectResponse
     {
         abort_unless($request->user()?->isSuperAdmin(), 403);
-        abort_if(! in_array($invoice->status, ['Generated', 'Sent', 'Pending Payment', 'Overdue'], true), 422, 'This renewal invoice cannot be cancelled.');
-        $invoice->update(['status' => 'Cancelled', 'cancelled_at' => now()]);
+        abort_if(! app(RenewalInvoiceService::class)->canManage($invoice), 422, 'This renewal invoice cannot be cancelled.');
+        app(RenewalInvoiceService::class)->cancel($invoice);
         $this->audit('Cancelled renewal invoice '.$invoice->invoice_number, $request, 'Renewal Invoices', $invoice->id);
 
         return back()->with('success', 'Renewal invoice cancelled.');

@@ -136,10 +136,10 @@
                 <thead><tr><th>Invoice ID</th><th>Business</th><th>Amount</th><th>Current Access End</th><th>Renewal Due</th><th>Status</th><th>Sent Via</th><th>Created</th><th class="text-end tf-table-action-cell">Actions</th></tr></thead>
                 <tbody>@forelse($renewalInvoices as $invoice)
                     @php($tone = match($invoice->status) { 'Paid' => 'tf-badge-success', 'Cancelled', 'Superseded', 'Overdue' => 'tf-badge-danger', 'Pending Payment' => 'tf-badge-warning', default => 'tf-badge-info' })
-                    <tr>
+                    <tr data-renewal-invoice-row="{{ $invoice->id }}">
                         <td class="fw-semibold text-nowrap">{{ $invoice->invoice_number }}</td><td><strong>{{ $invoice->business?->business_name }}</strong><small class="d-block tf-muted">{{ $invoice->business?->owner?->name }}</small></td>
                         <td class="text-nowrap">Rs {{ number_format((float) $invoice->amount, 2) }}</td><td class="text-nowrap">{{ $invoice->access_ends_at->format('n/j/Y') }}</td><td class="text-nowrap">{{ $invoice->due_date->format('n/j/Y') }}</td>
-                        <td><span class="tf-badge {{ $tone }}">{{ $invoice->status }}</span></td><td>{{ $invoice->email_sent_at ? 'Email sent' : ($invoice->email_draft_opened_at ? 'Email draft opened' : ($invoice->whatsapp_opened_at ? 'WhatsApp draft opened' : 'Not sent')) }}</td><td class="text-nowrap">{{ $invoice->created_at->format('n/j/Y, g:i A') }}</td>
+                        <td data-renewal-status><span class="tf-badge {{ $tone }}">{{ $invoice->status }}</span></td><td data-renewal-delivery>{{ $invoice->email_sent_at ? 'Email sent' : ($invoice->email_draft_opened_at ? 'Email draft opened' : ($invoice->whatsapp_opened_at ? 'WhatsApp draft opened' : 'Not sent')) }}</td><td class="text-nowrap">{{ $invoice->created_at->format('n/j/Y, g:i A') }}</td>
                         <td class="text-end text-nowrap tf-table-action-cell"><div class="btn-group tf-table-action-group"><button class="btn btn-sm btn-outline-primary tf-billing-table-button" type="button" data-bs-toggle="modal" data-bs-target="#renewal{{ $invoice->id }}">View</button><button class="btn btn-sm btn-outline-secondary tf-billing-more-button dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-label="More renewal invoice actions"></button><ul class="dropdown-menu dropdown-menu-end tf-payment-actions">
                             <li><a class="dropdown-item" href="{{ route('admin.renewal-invoices.pdf', $invoice) }}" target="_blank" rel="noopener">Download PDF</a></li>
                             @if($invoice->can_manage)<li><form method="POST" action="{{ route('admin.renewal-invoices.email', $invoice) }}">@csrf<button class="dropdown-item" type="submit">Send by Email</button></form></li><li><a class="dropdown-item" href="{{ route('admin.renewal-invoices.whatsapp', $invoice) }}" target="_blank" rel="noopener">Send by WhatsApp</a></li><li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#amount{{ $invoice->id }}">Update Amount</button></li><li><a class="dropdown-item text-success" href="{{ route('admin.payments', ['record' => 1, 'renewal_invoice_id' => $invoice->id]) }}">Record Payment</a></li><li><hr class="dropdown-divider"></li><li><form method="POST" action="{{ route('admin.renewal-invoices.cancel', $invoice) }}">@csrf @method('PATCH')<button class="dropdown-item text-danger" type="submit">Cancel Invoice</button></form></li>@endif
@@ -319,9 +319,9 @@ document.querySelectorAll('[data-payment-delete-form]').forEach(function (form) 
 
         deliveryActionOpen = true;
         sourceModal = origin?.closest('.modal') || document.activeElement?.closest('.modal') || null;
-        title.textContent = isEmail ? 'Send renewal invoice by email?' : 'Send renewal invoice by WhatsApp?';
+        title.textContent = isEmail ? 'Open email draft?' : 'Send renewal invoice by WhatsApp?';
         message.textContent = isEmail
-            ? 'This will open your email app with the renewal invoice details prefilled as a draft.'
+            ? 'This will open a pre-filled renewal email draft for ' + recipient + '.'
             : 'This will open WhatsApp with a prefilled renewal message. You can review it before sending.';
         recipientLabel.textContent = isEmail ? 'Registration Email' : 'Phone / WhatsApp';
         setDetail('business', values.Business);
@@ -331,14 +331,14 @@ document.querySelectorAll('[data-payment-delete-form]').forEach(function (form) 
         setDetail('amount', values['Proposed amount']);
         appendDraftHistory(sourceModal, values['Email draft opened']);
         deliveryForm.action = source;
-        deliveryForm.target = 'renewal-invoice-draft-' + Date.now();
+        deliveryForm.target = '_blank';
         details.classList.toggle('d-none', !valid);
         error.classList.toggle('d-none', valid);
         error.textContent = valid ? '' : (isEmail ? 'No business email is available.' : 'No WhatsApp/phone number is available.');
         continueButton.classList.toggle('d-none', !valid);
         continueButton.classList.toggle('btn-tf-primary', isEmail);
         continueButton.classList.toggle('btn-success', !isEmail);
-        continueButton.textContent = isEmail ? 'Continue to Email' : 'Continue to WhatsApp';
+        continueButton.textContent = 'Continue';
 
         if (typeof window.openTradeFlowNestedModal === 'function') {
             window.openTradeFlowNestedModal(confirmModal, sourceModal);
@@ -361,6 +361,30 @@ document.querySelectorAll('[data-payment-delete-form]').forEach(function (form) 
         event.stopPropagation();
         showDelivery(link.href, 'whatsapp', link);
     });
+    function updateDraftState(source, channel, status) {
+        var match = new URL(source, window.location.origin).pathname.match(/\/renewals\/(\d+)\/(?:email|whatsapp)$/);
+        if (!match) return;
+
+        var row = document.querySelector('[data-renewal-invoice-row="' + match[1] + '"]');
+        var statusCell = row?.querySelector('[data-renewal-status]');
+        var deliveryCell = row?.querySelector('[data-renewal-delivery]');
+        if (statusCell) {
+            statusCell.replaceChildren();
+            var badge = document.createElement('span');
+            var nextStatus = status || 'Pending Payment';
+            badge.className = 'tf-badge ' + (nextStatus === 'Overdue' ? 'tf-badge-danger' : 'tf-badge-warning');
+            badge.textContent = nextStatus;
+            statusCell.appendChild(badge);
+        }
+        if (deliveryCell) deliveryCell.textContent = channel === 'email' ? 'Email draft opened' : 'WhatsApp draft opened';
+
+        var invoiceModal = document.getElementById('renewal' + match[1]);
+        var statusTerm = Array.from(invoiceModal?.querySelectorAll('dt') || []).find(function (term) {
+            return term.textContent.trim() === 'Status';
+        });
+        if (statusTerm?.nextElementSibling) statusTerm.nextElementSibling.textContent = status || 'Pending Payment';
+    }
+
     deliveryForm.addEventListener('submit', function (event) {
         if (deliverySubmitting) {
             event.preventDefault();
@@ -368,6 +392,11 @@ document.querySelectorAll('[data-payment-delete-form]').forEach(function (form) 
         }
 
         deliverySubmitting = true;
+        continueButton.disabled = true;
+        // Allow the confirmed form to submit normally into its target tab.
+        // The controller redirects that tab directly to Gmail/WhatsApp, so no
+        // empty window is opened first and the current Profit Point modal/tab
+        // stays intact.
         modalInstance.hide();
     });
     confirmModal.addEventListener('hidden.bs.modal', function () {
@@ -378,6 +407,7 @@ document.querySelectorAll('[data-payment-delete-form]').forEach(function (form) 
         window.setTimeout(function () {
             deliveryActionOpen = false;
             deliverySubmitting = false;
+            continueButton.disabled = false;
         }, 300);
         sourceModal = null;
     });

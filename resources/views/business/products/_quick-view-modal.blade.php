@@ -1,7 +1,5 @@
 @php
-    $imageUrl = $product->image
-        ? \Illuminate\Support\Facades\Storage::disk('public')->url($product->image)
-        : null;
+    $imageUrl = $product->image_url;
     $price = static fn ($value): string => $value === null ? '—' : 'Rs '.number_format((float) $value, 2);
     $quantity = static function ($value): string {
         $formatted = number_format((float) ($value ?? 0), 3, '.', ',');

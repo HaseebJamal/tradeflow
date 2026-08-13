@@ -4,6 +4,7 @@ namespace App\Http\Requests\Business;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Services\CompanyPermissionService;
 
 class StoreOrUpdateProductRequest extends FormRequest
 {
@@ -16,20 +17,23 @@ class StoreOrUpdateProductRequest extends FormRequest
     {
         $product = $this->route('product');
         $productId = is_object($product) ? $product->id : $product;
+        $permissions = app(CompanyPermissionService::class);
+        $canUseCategories = $permissions->allowsUser($this->user(), 'categories.view');
+        $canUseUnits = $permissions->allowsUser($this->user(), 'units.view');
 
         return [
             'product_name' => ['required_without:name', 'max:255'], 'name' => ['required_without:product_name', 'max:255'],
             'category' => ['nullable', 'max:255'],
-            'category_id' => [
+            'category_id' => $canUseCategories ? [
                 'required',
                 Rule::exists('categories', 'id')->where(fn ($query) => $query->where('business_id', $this->user()->business_id)->where('type', 'Product')->whereNull('deleted_at')),
-            ],
+            ] : ['prohibited'],
             'product_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'], 'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'batch_number' => ['nullable', 'max:100'], 'manufacturing_date' => ['nullable', 'date'], 'expiry_date' => ['nullable', 'date'], 'expiry_alert_days' => ['nullable', 'integer', 'min:0'],
-            'unit_id' => [
+            'unit_id' => $canUseUnits ? [
                 'required',
                 Rule::exists('units', 'id')->where(fn ($query) => $query->where('business_id', $this->user()->business_id)->whereNull('deleted_at')),
-            ],
+            ] : ['prohibited'],
             'status' => ['required', 'in:Active,Inactive'],
             'retail_price' => ['nullable', 'integer', 'min:0'],
             'wholesale_price' => ['nullable', 'integer', 'min:0'],

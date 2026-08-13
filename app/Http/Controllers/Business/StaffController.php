@@ -145,17 +145,41 @@ class StaffController extends Controller
     {
         $staff = $this->scopedStaff($staff);
         $data = $request->validated();
+        $companyPermissions = app(CompanyPermissionService::class);
+        $canManagePermissions = $companyPermissions->allowsUser(auth()->user(), 'staff.permissions');
         $this->guardAgainstSelfAdministration($staff, $data);
         $this->assertAssignableRole('custom_staff', 'staff.edit');
+
+        // Editing a staff member's contact details is separate from managing
+        // their role and permission set. A user without staff.permissions may
+        // keep the existing assignment intact, but cannot alter it through a
+        // crafted request.
+        if (! $canManagePermissions) {
+            if ($this->canonicalPermissions($data['permissions'] ?? []) !== $this->canonicalPermissions($staff->permissions ?? [])
+                || trim((string) ($data['role'] ?? '')) !== trim((string) ($staff->staffProfile?->custom_role_name ?? ''))) {
+                throw ValidationException::withMessages([
+                    'permissions' => 'You do not have permission to manage staff roles or permissions.',
+                ]);
+            }
+
+            $data['permissions'] = $staff->permissions ?? [];
+            $data['role'] = $staff->staffProfile?->custom_role_name ?? $data['role'];
+        }
+
         $this->assertCustomRoleName($data['role'], $staff);
-        $this->assertRequestedPermissionsAssignable($data['permissions'] ?? [], $staff);
+        if ($canManagePermissions) {
+            $this->assertRequestedPermissionsAssignable($data['permissions'] ?? [], $staff);
+        }
+        $permissionsForUpdate = $canManagePermissions
+            ? $this->normalisePermissions($data['permissions'] ?? [])
+            : ($staff->permissions ?? []);
         $oldImage = $staff->profile_image;
         $newImage = $request->hasFile('profile_image')
             ? $request->file('profile_image')->store('profile_images', 'public')
             : null;
 
         try {
-            DB::transaction(function () use ($staff, $data, $newImage) {
+            DB::transaction(function () use ($staff, $data, $newImage, $permissionsForUpdate) {
                 $oldValues = $staff->only(['name', 'email', 'phone', 'role', 'status', 'permissions']);
                 $userData = [
                     'name' => $data['name'],
@@ -163,7 +187,7 @@ class StaffController extends Controller
                     'phone' => $data['phone'],
                     'role' => 'custom_staff',
                     'status' => $data['status'],
-                    'permissions' => $this->normalisePermissions($data['permissions'] ?? []),
+                    'permissions' => $permissionsForUpdate,
                 ];
 
                 if (!empty($data['password'])) {

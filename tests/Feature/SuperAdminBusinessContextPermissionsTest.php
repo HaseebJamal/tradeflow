@@ -171,6 +171,16 @@ class SuperAdminBusinessContextPermissionsTest extends TestCase
         );
     }
 
+    public function test_purchase_capabilities_automatically_include_supplier_lookup_access(): void
+    {
+        $permissions = app(CompanyPermissionService::class);
+
+        $this->assertSame(
+            ['purchases.create', 'suppliers.view'],
+            $permissions->withRequiredPermissions(['purchases.create'])
+        );
+    }
+
     public function test_legacy_delivery_action_assignment_keeps_staff_access_scoped_to_delivery_view(): void
     {
         $business = new Business;

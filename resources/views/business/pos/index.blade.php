@@ -68,11 +68,11 @@
                             'unit' => $product->unit,
                             'price' => (int) ($product->retail_price ?: $product->wholesale_price ?: 0),
                             'stock' => (int) $product->stock_quantity,
-                            'image' => $product->image,
+                            'image_url' => $product->image_url,
                         ]);
                     @endphp
                     <button type="button" class="tf-pos-product-card" data-product="{{ $productConfig }}" tabindex="-1" role="option" aria-selected="false">
-                        <div class="tf-pos-product-image">@if($product->image)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($product->image) }}" alt="">@else<i class="bi bi-box-seam"></i>@endif</div>
+                        <div class="tf-pos-product-image">@if($product->image_url)<img src="{{ $product->image_url }}" alt="" data-pos-product-image>@else<i class="bi bi-box-seam"></i>@endif</div>
                         <strong>{{ $product->name }}</strong><small>{{ $product->barcode }}</small><span>Rs {{ number_format($product->retail_price ?: $product->wholesale_price ?: 0) }}</span><em><x-quantity :value="$product->stock_quantity" /> {{ $product->unit }}</em>
                     </button>
                 @endforeach
@@ -87,8 +87,10 @@
         <section class="tf-pos-panel tf-pos-checkout-panel">
             <div class="tf-pos-panel-head"><h2>Checkout</h2><small>Review payment and complete sale</small></div>
             <div class="tf-pos-checkout-scroll">
-                <label class="form-label">Customer</label><select class="form-select" data-pos-customer data-native-select><option value="">Walk-in Customer</option>@if($canCreateCustomer)<option value="__new__">Create New Customer</option>@endif @foreach($customers as $customer)<option value="{{ $customer->id }}">{{ $customer->name }}{{ $customer->phone ? ' - '.$customer->phone : '' }}</option>@endforeach</select>
-                @if($canCreateCustomer)
+                @if($canViewCustomers)
+                    <label class="form-label">Customer</label><select class="form-select" data-pos-customer data-native-select><option value="">Walk-in Customer</option>@if($canCreateCustomer)<option value="__new__">Create New Customer</option>@endif @foreach($customers as $customer)<option value="{{ $customer->id }}">{{ $customer->name }}{{ $customer->phone ? ' - '.$customer->phone : '' }}</option>@endforeach</select>
+                @endif
+                @if($canViewCustomers && $canCreateCustomer)
                     <div class="tf-pos-quick-customer d-none" data-pos-quick-customer>
                         <div class="row g-2 mt-1"><div class="col-12"><label class="form-label">Customer Name</label><input class="form-control" data-pos-customer-name maxlength="255" autocomplete="off"></div><div class="col-sm-6"><label class="form-label">Phone</label><div class="tf-phone-input" data-tf-phone-field><input type="tel" inputmode="numeric" pattern="[0-9]*" class="form-control" data-pos-customer-phone data-tf-phone-visible data-default-country="pk" autocomplete="tel-national"><input type="hidden" data-tf-phone-value><div class="invalid-feedback" data-tf-phone-feedback></div></div></div><div class="col-sm-6"><label class="form-label">City</label><input class="form-control" data-pos-customer-city maxlength="100" autocomplete="off"></div><div class="col-12"><label class="form-label">Address</label><input class="form-control" data-pos-customer-address maxlength="500" autocomplete="off"></div></div>
                     </div>

@@ -39,10 +39,15 @@ class CompanyPermissionController extends Controller
             $definitions = in_array($data['scope'], ['modules', 'all'], true)
                 ? app(CompanyPermissionService::class)->activeDefinitions()
                 : $scopeDefinitions;
-            if (in_array('deliveries.view', $selected, true) && !$definitions->contains('permission_key', 'deliveries.view')) {
-                $definitions = $definitions->push(
-                    app(CompanyPermissionService::class)->activeDefinitions()->firstWhere('permission_key', 'deliveries.view')
-                )->filter()->values();
+            $requiredDependencies = collect(['deliveries.view', 'suppliers.view'])
+                ->filter(fn (string $permission) => in_array($permission, $selected, true));
+            if ($requiredDependencies->isNotEmpty()) {
+                $dependencyDefinitions = app(CompanyPermissionService::class)->activeDefinitions()
+                    ->whereIn('permission_key', $requiredDependencies);
+                $definitions = $definitions
+                    ->concat($dependencyDefinitions)
+                    ->unique('permission_key')
+                    ->values();
             }
             $current = CompanyPermission::where('company_id', $company->id)->whereIn('permission_key', $definitions->pluck('permission_key'))->pluck('allowed', 'permission_key')->map(fn ($value) => (bool) $value)->all();
             $moduleDefinitions = $definitions->filter(fn (PermissionDefinition $definition) => $definition->permission_key === strtolower($definition->module).'.view');

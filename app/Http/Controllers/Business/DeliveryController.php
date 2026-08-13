@@ -45,6 +45,7 @@ class DeliveryController extends Controller
 
     public function index(Request $request)
     {
+        $canViewCustomers = $this->permissions->allowsUser($request->user(), 'customers.view');
         $filters = $request->validate([
             'order_number' => ['nullable', 'string', 'max:100'],
             'customer_id' => ['nullable', 'integer'],
@@ -69,7 +70,7 @@ class DeliveryController extends Controller
                 $delivery->whereHas('invoice', fn ($invoice) => $invoice->where('invoice_number', 'like', "%{$value}%"))
                     ->orWhereHas('order', fn ($order) => $order->where('order_number', 'like', "%{$value}%"));
             }))
-            ->when($filters['customer_id'] ?? null, fn ($q, $value) => $q->where('customer_id', $value))
+            ->when($canViewCustomers && ($filters['customer_id'] ?? null), fn ($q, $value) => $q->where('customer_id', $value))
             ->when($filters['delivery_staff_id'] ?? null, fn ($q, $value) => $q->where('delivery_staff_id', $value))
             ->when($filters['payment_status'] ?? null, fn ($q, $value) => $q->where('payment_status', $value))
             ->when($filters['status'] ?? null, fn ($q, $value) => $q->where('status', $value))
@@ -119,7 +120,10 @@ class DeliveryController extends Controller
                 'cash_to_collect' => $cashToCollect,
             ],
             'staff' => $this->posDeliveryAssignments->eligibleStaff($request->user()),
-            'customers' => \App\Models\Customer::where('business_id', auth()->user()->business_id)->orderBy('name')->get(),
+            'customers' => $canViewCustomers
+                ? \App\Models\Customer::where('business_id', auth()->user()->business_id)->orderBy('name')->get()
+                : collect(),
+            'canViewCustomers' => $canViewCustomers,
             'invoiceOptions' => $invoiceOptions,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,

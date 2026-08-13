@@ -31,11 +31,13 @@
                 @endforeach
             </select>
         </div>
+        @if($canUseCategories)
         <div class="col-md-2"><label class="form-label">Category</label><select name="category_id" class="form-select">
                 <option value="">All</option>@foreach($categories as $category)
                     <option value="{{ $category->id }}" @selected(request('category_id') == $category->id)>
                 {{ $category->name }}</option>@endforeach
             </select></div>
+        @endif
         <div class="col-md-2"><label class="form-label">Status</label><select name="status" class="form-select">
                 <option value="">All</option>
                 <option @selected(request('status') === 'Active')>Active</option>
@@ -77,7 +79,7 @@
     <tbody>
         @forelse($products ?? [] as $product)
         <tr>
-            <td>@if($product->image)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($product->image) }}" alt="{{ $product->name }}"
+            <td>@if($product->image_url)<img src="{{ $product->image_url }}" alt="{{ $product->name }}"
             class="rounded border" style="height:38px;width:38px;object-fit:cover">@else<span
                         class="tf-icon-tile bg-light text-primary" style="height:38px;width:38px"><i
                     class="bi bi-box-seam"></i></span>@endif</td>

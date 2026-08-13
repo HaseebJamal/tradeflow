@@ -65,9 +65,9 @@
                 </div>
                 <div class="col-sm-3 col-lg-2">
                     <label class="form-label" for="access-status">Status</label>
-                    <select id="access-status" class="form-select" name="status">
+                    <select id="access-status" class="form-select" name="status" data-tom-select-inline="true">
                         <option value="">All statuses</option>
-                        @foreach(['trial_active' => 'Trial active', 'trial_expiring' => 'Trial expiring', 'paid_active' => 'Paid active', 'paid_expiring' => 'Paid expiring', 'restricted' => 'Restricted'] as $value => $label)
+                        @foreach(['trial_active' => 'Trial active', 'trial_expiring' => 'Trial expiring', 'paid_scheduled' => 'Paid scheduled', 'paid_active' => 'Paid active', 'paid_expiring' => 'Paid expiring', 'restricted' => 'Restricted'] as $value => $label)
                             <option value="{{ $value }}" @selected($filters['access_status'] === $value)>{{ $label }}</option>
                         @endforeach
                     </select>
@@ -98,7 +98,7 @@
                         @php
                             $access = $accessStates[$business->id] ?? [];
                             $subscription = $access['subscription'] ?? null;
-                            $tone = in_array($access['kind'] ?? '', ['trial_active', 'paid_active'], true) ? 'success' : (in_array($access['kind'] ?? '', ['trial_expiring', 'paid_expiring'], true) ? 'warning' : 'danger');
+                            $tone = in_array($access['kind'] ?? '', ['trial_active', 'paid_active'], true) ? 'success' : (($access['kind'] ?? '') === 'paid_scheduled' ? 'primary' : (in_array($access['kind'] ?? '', ['trial_expiring', 'paid_expiring'], true) ? 'warning' : 'danger'));
                         @endphp
                         <tr data-access-business="{{ $business->id }}" tabindex="-1">
                             <td>
@@ -122,6 +122,11 @@
                                     <ul class="dropdown-menu dropdown-menu-end">
                                         <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#access-details-{{ $business->id }}">View access details</button></li>
                                         <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#access-details-{{ $business->id }}">Trial / access history</button></li>
+                                        @if(!empty($access['can_reactivate_paid']))
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><button class="dropdown-item text-success" type="button" data-bs-toggle="modal" data-bs-target="#reactivate-paid-access-{{ $business->id }}"><i class="bi bi-arrow-clockwise me-2"></i>Reactivate Access</button></li>
+                                            <li><a class="dropdown-item" href="{{ route('admin.payments', ['business_id' => $business->id]) }}"><i class="bi bi-credit-card me-2"></i>Record Payment</a></li>
+                                        @endif
                                         @if(!empty($access['can_end_trial']))
                                             <li><hr class="dropdown-divider"></li>
                                             <li><button class="dropdown-item text-danger" type="button" data-trial-end-trigger="{{ $business->id }}">End Trial Now</button></li>
@@ -176,6 +181,36 @@
             </div></div>
         </div>
 
+        @if(!empty($access['can_reactivate_paid']) && $subscription)
+            <div class="modal fade tf-access-modal" id="reactivate-paid-access-{{ $business->id }}" tabindex="-1" aria-hidden="true" aria-labelledby="reactivate-paid-access-title-{{ $business->id }}">
+                <div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+                    <form method="POST" action="{{ route('admin.subscriptions.paid-access.reactivate', $subscription) }}" data-access-confirm data-access-reactivate data-access-confirm="Reactivate this business with the new access period?" data-access-confirm-button="Reactivate Access">
+                        @csrf
+                        @method('PATCH')
+                        <div class="modal-header"><h5 class="modal-title" id="reactivate-paid-access-title-{{ $business->id }}">Reactivate Business Access</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                        <div class="modal-body">
+                            <dl class="row small mb-4">
+                                <dt class="col-6">Business</dt><dd class="col-6">{{ $business->business_name }}</dd>
+                                <dt class="col-6">Previous paid start</dt><dd class="col-6">{{ optional($access['paid_access_start'])->format('n/j/Y') ?: '—' }}</dd>
+                                <dt class="col-6">Previous paid end</dt><dd class="col-6">{{ optional($access['original_paid_access_end'])->format('n/j/Y') ?: '—' }}</dd>
+                                <dt class="col-6">Previous paid duration</dt><dd class="col-6">{{ $access['paid_duration_days'] ?? 0 }} days</dd>
+                                <dt class="col-6">Previous extra days</dt><dd class="col-6">+{{ $access['extra_access_days'] ?? 0 }} days</dd>
+                                <dt class="col-6">Expired at</dt><dd class="col-6">{{ optional($access['effective_access_end'] ?? $access['end_date'] ?? null)->format('n/j/Y') ?: '—' }}</dd>
+                            </dl>
+                            <div class="alert alert-info small">Manual reactivation restores access only. It does not create a payment transaction; use Record Payment for payment-based renewal.</div>
+                            <div class="row g-3">
+                                <div class="col-md-6"><label class="form-label" for="reactivate-start-{{ $business->id }}">New Access Start</label><input id="reactivate-start-{{ $business->id }}" class="form-control" type="date" name="starts_at" value="{{ now(config('app.timezone'))->toDateString() }}" min="{{ now(config('app.timezone'))->toDateString() }}" required></div>
+                                <div class="col-md-6"><label class="form-label" for="reactivate-duration-{{ $business->id }}">Paid Duration Days</label><input id="reactivate-duration-{{ $business->id }}" class="form-control" type="number" name="paid_duration_days" min="1" max="3650" value="{{ $access['reactivation_duration_days'] }}" required></div>
+                                <div class="col-md-6"><label class="form-label" for="reactivate-extra-{{ $business->id }}">Extra Days</label><input id="reactivate-extra-{{ $business->id }}" class="form-control" type="number" name="extra_days" min="0" max="3650" value="0"></div>
+                                <div class="col-12"><label class="form-label" for="reactivate-note-{{ $business->id }}">Admin Note <span class="text-muted">(optional)</span></label><textarea id="reactivate-note-{{ $business->id }}" class="form-control" name="note" rows="3" maxlength="2000"></textarea></div>
+                            </div>
+                        </div>
+                        <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-success" type="submit"><i class="bi bi-arrow-clockwise me-1"></i>Reactivate Access</button></div>
+                    </form>
+                </div></div>
+            </div>
+        @endif
+
         <div class="modal fade tf-access-modal" id="manage-access-{{ $business->id }}" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
                 <div class="modal-header"><h5 class="modal-title">Manage Trial &amp; Access</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -206,6 +241,9 @@
                             <div class="col-md-6"><form method="POST" action="{{ route('admin.subscriptions.trial.adjust', $subscription) }}" data-access-trial-confirm data-access-confirm="Reduce this trial?" data-access-current-end="{{ optional($access['trial_end'])->format('Y-m-d') }}">@csrf @method('PATCH')<input type="hidden" name="action" value="reduce"><label class="form-label small">Reduce by days</label><div class="input-group"><input class="form-control" type="number" name="days" min="1" max="365" required><button class="btn btn-outline-warning" type="submit">Reduce</button></div></form></div>
                             @if(!empty($access['can_end_trial']))<div class="col-12"><button class="btn btn-outline-danger" type="button" data-trial-end-trigger="{{ $business->id }}">End Trial Now</button></div>@endif
                         </div>
+                    @elseif($subscription && !empty($access['can_reactivate_paid']))
+                        <div class="alert alert-warning small">This paid access period has ended or is restricted. Reactivation creates a new valid access period and does not create a payment record.</div>
+                        <button class="btn btn-success" type="button" data-reactivate-launch="{{ $business->id }}"><i class="bi bi-arrow-clockwise me-1"></i>Reactivate Access</button>
                     @elseif($subscription && !empty($access['can_manage_paid']))
                         <h6>Paid Duration Controls</h6>
                         <div class="row g-2">
@@ -287,6 +325,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 form._accessReturnFocus = trigger;
                 form.requestSubmit();
             }
+        });
+    });
+    document.querySelectorAll('[data-reactivate-launch]').forEach(function (trigger) {
+        trigger.addEventListener('click', function () {
+            var parentModal = trigger.closest('.modal');
+            var target = document.getElementById('reactivate-paid-access-' + trigger.dataset.reactivateLaunch);
+            if (!parentModal || !target || !window.bootstrap?.Modal) return;
+            parentModal.addEventListener('hidden.bs.modal', function openReactivation() {
+                parentModal.removeEventListener('hidden.bs.modal', openReactivation);
+                window.bootstrap.Modal.getOrCreateInstance(target).show();
+            });
+            window.bootstrap.Modal.getOrCreateInstance(parentModal).hide();
         });
     });
 });
@@ -382,9 +432,10 @@ document.querySelectorAll('[data-access-confirm]').forEach(function (form) {
             }
         };
 
+        var isReactivation = form.hasAttribute('data-access-reactivate');
         Swal.fire({
             icon: 'warning',
-            title: action === 'end_now' ? 'End access?' : 'Confirm access change',
+            title: action === 'end_now' ? 'End access?' : (isReactivation ? 'Reactivate Business Access?' : 'Confirm access change'),
             html: preview + '<p class="mb-0 mt-3">' + form.dataset.accessConfirm + '</p>',
             showCancelButton: true,
             confirmButtonText: form.dataset.accessConfirmButton || 'Confirm',

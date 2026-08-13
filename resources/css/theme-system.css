@@ -232,6 +232,15 @@ textarea::placeholder,
     width: var(--ts-dropdown-width, auto);
     z-index: var(--tf-tom-select-modal-z-index) !important;
 }
+body > .ts-dropdown {
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    max-width: calc(100vw - 24px) !important;
+    /* Tom Select provides document-relative coordinates for body portals. */
+    position: absolute !important;
+    transform: none !important;
+    z-index: 1080 !important;
+}
 .modal .ts-wrapper { position: relative; }
 .modal .ts-wrapper > .ts-dropdown {
     pointer-events: auto;
@@ -272,6 +281,7 @@ textarea::placeholder,
     display: flex;
     font-family: var(--font-body) !important;
     font-size: 0.8125rem !important;
+    line-height: 1.2;
     min-height: 36px;
     padding: 0.5rem 0.7rem !important;
 }
