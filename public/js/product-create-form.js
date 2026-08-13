@@ -56,6 +56,7 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         errors?.classList.add('d-none');
         form.querySelectorAll('.is-invalid').forEach((field) => field.classList.remove('is-invalid'));
         form.querySelectorAll('.tomselect.is-invalid').forEach((control) => control.classList.remove('is-invalid'));
+        form.querySelectorAll('[data-product-price-error]').forEach((feedback) => feedback.classList.add('d-none'));
     };
     const syncTomSelectValues = () => {
         form.querySelectorAll('select').forEach((select) => {
@@ -118,6 +119,32 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         const fields = section.querySelector('[data-product-batch-fields]');
         if (toggle && fields) fields.classList.toggle('d-none', !toggle.checked);
     };
+    const validateProductPricing = (scope = form) => {
+        let firstInvalid = null;
+        const pricingSections = scope.matches?.('[data-product-pricing]')
+            ? [scope]
+            : [...(scope.querySelectorAll?.('[data-product-pricing]') || [])];
+
+        pricingSections.forEach((pricingSection) => {
+            const purchasePrice = Number.parseFloat(pricingSection.dataset.productPurchasePrice || '0') || 0;
+
+            pricingSection.querySelectorAll('[data-product-selling-price]').forEach((field) => {
+                const key = field.dataset.productSellingPrice;
+                const label = key === 'retail_price' ? 'Retail Selling Price' : 'Wholesale Selling Price';
+                const value = Number.parseFloat(field.value);
+                const invalid = !Number.isFinite(value) || value <= purchasePrice;
+                const feedback = pricingSection.querySelector(`[data-product-price-error="${key}"]`);
+
+                field.setCustomValidity(invalid ? `${label} must be greater than Purchase Price.` : '');
+                field.classList.toggle('is-invalid', invalid);
+                feedback?.classList.toggle('d-none', !invalid);
+                if (feedback && invalid) feedback.textContent = `${label} must be greater than Purchase Price.`;
+                if (invalid && !firstInvalid) firstInvalid = field;
+            });
+        });
+
+        return firstInvalid;
+    };
     const updateSections = () => {
         sections?.querySelectorAll('[data-product-section]').forEach((section, index) => {
             section.querySelector('[data-product-heading]').textContent = index === 0 ? 'Product' : `Product ${index + 1}`;
@@ -139,6 +166,9 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         syncBatchFields(section);
         syncCatalogs(section);
         window.initTradeFlowTomSelect?.(section);
+        if (section.querySelector('[data-product-pricing]')?.dataset.productPricingAttention === 'true') {
+            validateProductPricing(section);
+        }
     };
     const showValidationErrors = (payload) => {
         const messages = [];
@@ -240,8 +270,13 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         }
     });
 
-    sections?.addEventListener('change', (event) => {
+    form.addEventListener('change', (event) => {
         if (event.target.matches('[data-product-batch-toggle]')) syncBatchFields(event.target.closest('[data-product-section]'));
+        if (event.target.matches('[data-product-selling-price]')) validateProductPricing(event.target.closest('[data-product-master-fields]'));
+    });
+
+    form.addEventListener('input', (event) => {
+        if (event.target.matches('[data-product-selling-price]')) validateProductPricing(event.target.closest('[data-product-master-fields]'));
     });
 
     document.querySelectorAll('[data-inline-catalog-form]').forEach((modalForm) => {
@@ -304,6 +339,12 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
 
     form.addEventListener('submit', async (event) => {
         syncTomSelectValues();
+        const invalidPriceField = validateProductPricing();
+        if (invalidPriceField) {
+            event.preventDefault();
+            invalidPriceField.focus();
+            return;
+        }
         if (!isAsync) {
             if (!form.checkValidity()) {
                 event.preventDefault();

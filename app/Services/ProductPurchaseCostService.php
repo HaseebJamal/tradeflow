@@ -7,12 +7,15 @@ use App\Models\PurchaseItem;
 
 class ProductPurchaseCostService
 {
+    public function __construct(private readonly BusinessActivityService $activity) {}
+
     /**
      * Refresh the product's purchase-derived costs without altering any stock
      * or supplier/accounting records. Returned quantities are excluded.
      */
     public function refresh(Product $product): void
     {
+        $wasPricingAttention = $product->hasPricingAttention();
         $items = PurchaseItem::query()
             ->with([
                 'purchase:id,business_id,status,purchase_date,received_at,created_at',
@@ -52,5 +55,27 @@ class ProductPurchaseCostService
             // cost field aligned with the calculated weighted average.
             'purchase_cost' => $average,
         ]);
+
+        $product->refresh();
+
+        // Never overwrite prices when accepted purchase costs increase. Flag
+        // the first newly-invalid state and notify users who are allowed to
+        // see business notifications; the product edit form shows the same
+        // warning until both prices are corrected.
+        if (! $wasPricingAttention && $product->hasPricingAttention()) {
+            $this->activity->record(
+                $product->business_id,
+                'Products',
+                'Product pricing needs attention after a purchase cost update.',
+                $product->id,
+                null,
+                [
+                    'product' => $product->name,
+                    'purchase_price' => $product->currentPurchasePrice(),
+                    'retail_price' => $product->retail_price,
+                    'wholesale_price' => $product->wholesale_price,
+                ],
+            );
+        }
     }
 }

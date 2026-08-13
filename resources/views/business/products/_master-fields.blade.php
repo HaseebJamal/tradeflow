@@ -16,6 +16,9 @@
     $purchasePrice = data_get($values, 'latest_purchase_price')
         ?? data_get($values, 'average_purchase_price')
         ?? data_get($values, 'purchase_cost', 0);
+    $hasPricingAttention = (float) $purchasePrice > 0
+        && ((float) $fieldValue('retail_price', 0) <= (float) $purchasePrice
+            || (float) $fieldValue('wholesale_price', 0) <= (float) $purchasePrice);
     $productNameField = $nested ? 'product_name' : 'name';
     $productNameError = $nested ? $errorKey('product_name') : 'name';
     $productName = $nested
@@ -29,7 +32,7 @@
     $identityWidth = 'col-lg-5 col-md-6';
 @endphp
 
-<div class="row g-3" data-product-master-fields>
+<div class="row g-3" data-product-master-fields data-product-pricing data-product-purchase-price="{{ (float) $purchasePrice }}" data-product-pricing-attention="{{ $hasPricingAttention ? 'true' : 'false' }}">
     <div class="{{ $identityWidth }}">
         <label class="form-label" for="{{ $fieldId('product_name') }}">Product Name <span class="text-danger">*</span></label>
         <div class="tf-identity-input-wrap">
@@ -111,12 +114,14 @@
 
     <div class="col-md-4">
         <label class="form-label" for="{{ $fieldId('retail_price') }}">Retail Selling Price</label>
-        <input id="{{ $fieldId('retail_price') }}" name="{{ $fieldName('retail_price') }}" data-product-field="retail_price" type="number" min="0" step="1" class="form-control js-whole-number @error($errorKey('retail_price')) is-invalid @enderror" value="{{ $fieldValue('retail_price', 0) }}">
+        <input id="{{ $fieldId('retail_price') }}" name="{{ $fieldName('retail_price') }}" data-product-field="retail_price" data-product-selling-price="retail_price" type="number" min="0" step="1" class="form-control js-whole-number @error($errorKey('retail_price')) is-invalid @enderror" value="{{ $fieldValue('retail_price', 0) }}">
+        <div class="invalid-feedback d-none" data-product-price-error="retail_price" aria-live="polite"></div>
         @error($errorKey('retail_price'))<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
     <div class="col-md-4">
         <label class="form-label" for="{{ $fieldId('wholesale_price') }}">Wholesale Selling Price</label>
-        <input id="{{ $fieldId('wholesale_price') }}" name="{{ $fieldName('wholesale_price') }}" data-product-field="wholesale_price" type="number" min="0" step="1" class="form-control js-whole-number @error($errorKey('wholesale_price')) is-invalid @enderror" value="{{ $fieldValue('wholesale_price', 0) }}">
+        <input id="{{ $fieldId('wholesale_price') }}" name="{{ $fieldName('wholesale_price') }}" data-product-field="wholesale_price" data-product-selling-price="wholesale_price" type="number" min="0" step="1" class="form-control js-whole-number @error($errorKey('wholesale_price')) is-invalid @enderror" value="{{ $fieldValue('wholesale_price', 0) }}">
+        <div class="invalid-feedback d-none" data-product-price-error="wholesale_price" aria-live="polite"></div>
         @error($errorKey('wholesale_price'))<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
     <div class="col-md-4">
@@ -124,6 +129,13 @@
         <input id="{{ $fieldId('purchase_price') }}" data-product-display-field="purchase_price" type="text" class="form-control" value="Rs {{ number_format((float) $purchasePrice, 2) }}" readonly aria-describedby="{{ $fieldId('purchase_price') }}-help">
         <div id="{{ $fieldId('purchase_price') }}-help" class="form-text">Updated from accepted goods receipts only.</div>
     </div>
+    @if($hasPricingAttention)
+        <div class="col-12">
+            <div class="alert alert-warning py-2 px-3 mb-0 small" role="alert">
+                Pricing attention: update each selling price so it is greater than the current purchase price before saving this product.
+            </div>
+        </div>
+    @endif
 
     <div class="row g-3 mx-0 {{ $tracksBatches ? '' : 'd-none' }}" data-product-batch-fields>
         <div class="col-md-3">

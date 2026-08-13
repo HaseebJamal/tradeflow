@@ -39,6 +39,27 @@ class Product extends Model
         return $this->image ? Storage::disk('public')->url($this->image) : null;
     }
 
+    /**
+     * Selling prices are compared to the current receipt-derived purchase
+     * price, matching the read-only value shown on the product form.
+     */
+    public function currentPurchasePrice(): float
+    {
+        return (float) ($this->latest_purchase_price
+            ?? $this->average_purchase_price
+            ?? $this->purchase_cost
+            ?? 0);
+    }
+
+    public function hasPricingAttention(?float $purchasePrice = null): bool
+    {
+        $purchasePrice ??= $this->currentPurchasePrice();
+
+        return $purchasePrice > 0
+            && ((float) $this->retail_price <= $purchasePrice
+                || (float) $this->wholesale_price <= $purchasePrice);
+    }
+
     public function business() { return $this->belongsTo(Business::class); }
     public function category() { return $this->belongsTo(Category::class); }
     public function unitRecord() { return $this->belongsTo(Unit::class, 'unit_id'); }

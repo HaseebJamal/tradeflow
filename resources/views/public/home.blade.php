@@ -46,8 +46,8 @@
                 </div>
                 <div class="col-lg-6" data-reveal data-reveal-delay="120">
                     <div class="pp-hero-visual" aria-label="Profit Point dashboard preview">
-                        <div class="pp-floating-card pp-float-revenue"><span><i class="bi bi-graph-up-arrow"></i> Revenue
-                                today</span><strong>Rs 482,600</strong><em><i class="bi bi-arrow-up"></i> 18.4%</em></div>
+                        <div class="pp-floating-card pp-float-revenue"><span><i class="bi bi-calendar2-check"></i> Today’s
+                                sales</span><strong>Rs 482,600</strong><em><i class="bi bi-arrow-up"></i> 18.4%</em></div>
                         <div class="pp-floating-card pp-float-stock"><span class="pp-icon-warning"><i
                                     class="bi bi-box-seam"></i></span>
                             <div><small>Low stock alert</small><strong>12 items</strong></div>
@@ -61,18 +61,18 @@
                             </aside>
                             <div class="pp-dash-main">
                                 <div class="pp-dash-top">
-                                    <div><small>Thursday, 7 August</small><strong>Good morning, Ayesha
-                                            <span>✦</span></strong></div>
+                                    <div><small>DAILY OVERVIEW</small><strong>Good afternoon, Ayesha.</strong></div>
                                     <div class="pp-top-actions"><i class="bi bi-bell"></i><span>AM</span></div>
                                 </div>
                                 <div class="pp-dash-stat-grid">
-                                    <div><span>Net sales</span><strong>Rs 482K</strong><em class="is-up">+18.4%</em></div>
-                                    <div><span>Orders</span><strong>184</strong><em class="is-up">+12.8%</em></div>
-                                    <div><span>To collect</span><strong>Rs 91K</strong><em class="is-down">-4.2%</em></div>
+                                    <div><span>Today’s Sales</span><strong>Rs 482K</strong><em class="is-up">Completed sales</em></div>
+                                    <div><span>Receivables</span><strong>Rs 91K</strong><em class="is-up">Customer balances</em></div>
+                                    <div><span>Payables</span><strong>Rs 63K</strong><em class="is-down">Supplier balances</em></div>
+                                    <div><span>Profit / Loss</span><strong>Rs 128K</strong><em class="is-up">After costs</em></div>
                                 </div>
                                 <div class="pp-dash-chart">
                                     <div class="pp-chart-title">
-                                        <div><strong>Sales overview</strong><span>Last 7 days</span></div><button>Weekly <i
+                                        <div><strong>Sales &amp; Profit Overview</strong><span>Completed sales from the last 7 days</span></div><button>Weekly <i
                                                 class="bi bi-chevron-down"></i></button>
                                     </div>
                                     <div class="pp-bars"><i style="height:35%"></i><i style="height:52%"></i><i
@@ -82,6 +82,7 @@
                                         <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
                                     </div>
                                 </div>
+                                <div class="pp-dash-health" aria-label="Business health summary"><span><i class="bi bi-exclamation-triangle"></i> Low stock <b>12</b></span><span><i class="bi bi-truck"></i> Pending deliveries <b>8</b></span></div>
                             </div>
                         </div>
                     </div>
@@ -160,47 +161,39 @@
             <div class="pp-dashboard-showcase" data-reveal>
                 <div class="pp-ds-sidebar">
                     <div class="pp-ds-brand"><i class="bi bi-boxes"></i><span>Profit Point</span></div>
-                    <small>WORKSPACE</small><a class="active"><i class="bi bi-grid-1x2"></i> Overview</a><a><i
-                            class="bi bi-bag-check"></i> Orders <b>8</b></a><a><i class="bi bi-box"></i> Inventory</a><a><i
-                            class="bi bi-people"></i> Customers</a><small>MANAGE</small><a><i class="bi bi-truck"></i>
-                        Deliveries</a><a><i class="bi bi-journal-text"></i> Khata</a><a><i class="bi bi-bar-chart"></i>
-                        Reports</a>
+                    <small>WORKSPACE</small><a class="active"><i class="bi bi-grid-1x2"></i> Dashboard</a><a><i
+                            class="bi bi-box-seam"></i> Products</a><a><i class="bi bi-box"></i> Inventory</a><a><i
+                            class="bi bi-cart3"></i> Sales <b>8</b></a><a><i class="bi bi-people"></i> Customers</a><small>MANAGE</small><a><i class="bi bi-shop"></i>
+                        POS</a><a><i class="bi bi-truck"></i> Deliveries</a><a><i class="bi bi-bag-check"></i>
+                        Purchases</a><a><i class="bi bi-bar-chart"></i> Reports</a>
                     <div class="pp-ds-person"><span>AK</span>
                         <div><strong>Ahmad Khan</strong><small>Administrator</small></div><i class="bi bi-three-dots"></i>
                     </div>
                 </div>
                 <div class="pp-ds-content">
                     <header>
-                        <div><span>Overview</span>
-                            <h3>Welcome back, Ahmad <i>✦</i></h3>
+                        <div><span>DAILY OVERVIEW</span>
+                            <h3>Good afternoon, Ahmad.</h3>
                         </div>
                         <div><button class="pp-ds-search"><i class="bi bi-search"></i> Search anything</button><button
                                 class="pp-ds-bell"><i class="bi bi-bell"></i><b></b></button><button class="pp-ds-add"><i
                                     class="bi bi-plus-lg"></i> Create</button></div>
                     </header>
-                    <div class="pp-ds-date"><span><i class="bi bi-calendar3"></i> Aug 1 – Aug 7, 2026</span><button>Export
-                            <i class="bi bi-download"></i></button></div>
+                    <div class="pp-ds-date"><span>Here’s what’s happening across your business today.</span><button><i class="bi bi-plus-lg"></i> Add Product</button></div>
                     <div class="pp-metric-grid">
-                        <article><span class="pp-metric-icon blue"><i class="bi bi-currency-rupee"></i></span><small>Total
-                                revenue</small><strong>Rs 1,284,500</strong><em class="up"><i class="bi bi-arrow-up"></i>
-                                18.4% <b>vs last week</b></em></article>
-                        <article><span class="pp-metric-icon violet"><i class="bi bi-bag-check"></i></span><small>Total
-                                orders</small><strong>1,248</strong><em class="up"><i class="bi bi-arrow-up"></i> 12.8%
-                                <b>vs last week</b></em></article>
-                        <article><span class="pp-metric-icon amber"><i class="bi bi-box-seam"></i></span><small>Low
-                                stock</small><strong>12 <b>items</b></strong><em class="neutral"><i
-                                    class="bi bi-exclamation-circle"></i> Needs attention</em></article>
-                        <article><span class="pp-metric-icon green"><i class="bi bi-wallet2"></i></span><small>Khata
-                                balance</small><strong>Rs 91,240</strong><em class="down"><i class="bi bi-arrow-down"></i>
-                                4.2% <b>vs last week</b></em></article>
+                        <article><span class="pp-metric-icon blue"><i class="bi bi-calendar2-check"></i></span><small>Today’s
+                                Sales</small><strong>Rs 482,600</strong><em class="up">Completed sales today</em></article>
+                        <article><span class="pp-metric-icon amber"><i class="bi bi-wallet2"></i></span><small>Receivables</small><strong>Rs 91,240</strong><em class="up">Customer balances due</em></article>
+                        <article><span class="pp-metric-icon peach"><i class="bi bi-credit-card"></i></span><small>Payables</small><strong>Rs 63,420</strong><em class="up">Supplier balances due</em></article>
+                        <article><span class="pp-metric-icon green"><i class="bi bi-graph-up-arrow"></i></span><small>Monthly Profit / Loss</small><strong>Rs 128,400</strong><em class="up">This month after costs</em></article>
                     </div>
                     <div class="row g-3">
                         <div class="col-lg-8">
                             <article class="pp-panel pp-sales-panel">
                                 <div class="pp-panel-head">
                                     <div>
-                                        <h4>Revenue overview</h4><span>Performance across all sales channels</span>
-                                    </div><button>Revenue <i class="bi bi-chevron-down"></i></button>
+                                        <h4>Sales &amp; Profit Overview</h4><span>Completed sales from the last seven days</span>
+                                    </div><button>View sales <i class="bi bi-arrow-up-right"></i></button>
                                 </div>
                                 <div class="pp-line-chart">
                                     <div class="pp-chart-y">
@@ -226,17 +219,18 @@
                             </article>
                         </div>
                         <div class="col-lg-4">
-                            <article class="pp-panel pp-delivery-panel">
+                            <article class="pp-panel pp-delivery-panel pp-business-health">
                                 <div class="pp-panel-head">
                                     <div>
-                                        <h4>Delivery status</h4><span>This week</span>
-                                    </div><i class="bi bi-three-dots"></i>
+                                        <h4>Business Health</h4><span>Operational balances and open work</span>
+                                    </div>
                                 </div>
-                                <div class="pp-donut">
-                                    <div><strong>86%</strong><span>on time</span></div>
+                                <div class="pp-health-list">
+                                    <div><span class="red"><i class="bi bi-exclamation-triangle"></i></span><p><strong>Low Stock</strong><small>Products need attention</small></p><b>12</b></div>
+                                    <div><span class="blue"><i class="bi bi-truck"></i></span><p><strong>Pending Deliveries</strong><small>Orders awaiting completion</small></p><b>8</b></div>
+                                    <div><span class="amber"><i class="bi bi-wallet2"></i></span><p><strong>Receivables</strong><small>Customer balances due</small></p><b>Rs 91K</b></div>
+                                    <div><span class="peach"><i class="bi bi-credit-card"></i></span><p><strong>Payables</strong><small>Supplier balances due</small></p><b>Rs 63K</b></div>
                                 </div>
-                                <div class="pp-delivery-key"><span><i class="green"></i> Delivered <b>186</b></span><span><i
-                                            class="blue"></i> In transit <b>24</b></span></div>
                             </article>
                         </div>
                     </div>
@@ -245,7 +239,7 @@
                             <article class="pp-panel pp-activity">
                                 <div class="pp-panel-head">
                                     <div>
-                                        <h4>Recent activity</h4><span>Your latest business updates</span>
+                                        <h4>Recent Activity</h4><span>Your latest business updates</span>
                                     </div><a>View all</a>
                                 </div>
                                 <div class="pp-activity-item"><span class="blue"><i class="bi bi-bag-check"></i></span>
@@ -262,7 +256,7 @@
                             <article class="pp-panel pp-notifications">
                                 <div class="pp-panel-head">
                                     <div>
-                                        <h4>Needs your attention</h4><span>2 new notifications</span>
+                                        <h4>Needs Attention</h4><span>Operational priorities</span>
                                     </div>
                                 </div>
                                 <div><i class="bi bi-exclamation-triangle"></i>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Business;
 
+use App\Services\ProductSellingPricePolicy;
 use Illuminate\Foundation\Http\FormRequest;
 
 class BulkStoreProductRequest extends FormRequest
@@ -21,12 +22,12 @@ class BulkStoreProductRequest extends FormRequest
     {
         $validator->after(function ($validator) {
             foreach ($this->input('products', []) as $index => $product) {
-                if (!is_numeric($product['purchase_cost'] ?? null)) continue;
-                if (is_numeric($product['wholesale_price'] ?? null) && (float) $product['wholesale_price'] <= (float) $product['purchase_cost']) {
-                    $validator->errors()->add("products.$index.wholesale_price", 'Selling Price must be greater than Purchase Price.');
+                if (! is_numeric($product['purchase_cost'] ?? null)) {
+                    continue;
                 }
-                if (is_numeric($product['retail_price'] ?? null) && (float) $product['retail_price'] <= (float) $product['purchase_cost']) {
-                    $validator->errors()->add("products.$index.retail_price", 'Selling Price must be greater than Purchase Price.');
+
+                foreach (app(ProductSellingPricePolicy::class)->violations($product, (float) $product['purchase_cost']) as $field => $message) {
+                    $validator->errors()->add("products.{$index}.{$field}", $message);
                 }
             }
         });

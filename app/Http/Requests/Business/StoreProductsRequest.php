@@ -5,6 +5,7 @@ namespace App\Http\Requests\Business;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use App\Services\CompanyPermissionService;
+use App\Services\ProductSellingPricePolicy;
 
 class StoreProductsRequest extends FormRequest
 {
@@ -72,6 +73,13 @@ class StoreProductsRequest extends FormRequest
                 }
 
                 $names[$name] = $index;
+
+                // Product creation intentionally starts with no accepted
+                // purchase cost. The shared policy still requires positive
+                // selling prices (strictly greater than its zero cost).
+                foreach (app(ProductSellingPricePolicy::class)->violations($product, 0) as $field => $message) {
+                    $validator->errors()->add("products.{$index}.{$field}", $message);
+                }
             }
         });
     }

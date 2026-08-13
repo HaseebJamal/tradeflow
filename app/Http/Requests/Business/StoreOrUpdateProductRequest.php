@@ -5,6 +5,8 @@ namespace App\Http\Requests\Business;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use App\Services\CompanyPermissionService;
+use App\Services\ProductSellingPricePolicy;
+use App\Models\Product;
 
 class StoreOrUpdateProductRequest extends FormRequest
 {
@@ -39,6 +41,28 @@ class StoreOrUpdateProductRequest extends FormRequest
             'wholesale_price' => ['nullable', 'integer', 'min:0'],
             'description' => ['nullable', 'string'], 'brand' => ['nullable', 'max:100'], 'manufacturer' => ['nullable', 'max:100'], 'warehouse_location' => ['nullable', 'max:150'], 'has_batch_tracking' => ['nullable', 'boolean'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            $product = $this->route('product');
+            if (! $product instanceof Product && $product !== null) {
+                $product = Product::query()
+                    ->where('business_id', $this->user()?->business_id)
+                    ->find($product);
+            }
+
+            if (! $product instanceof Product || $product->business_id !== $this->user()?->business_id) {
+                return;
+            }
+
+            $pricing = app(ProductSellingPricePolicy::class);
+
+            foreach ($pricing->violations($this->only(['retail_price', 'wholesale_price']), $pricing->purchasePrice($product)) as $field => $message) {
+                $validator->errors()->add($field, $message);
+            }
+        });
     }
 
 }
