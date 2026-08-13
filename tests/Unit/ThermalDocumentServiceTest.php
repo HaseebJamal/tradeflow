@@ -139,7 +139,10 @@ class ThermalDocumentServiceTest extends TestCase
         $this->assertStringContainsString((string) now()->year, $html);
         $this->assertStringNotContainsString('+923001234567', $html);
         $this->assertStringNotContainsString('NTN-123', $html);
-        $this->assertStringContainsString('Powered by TradeFlow', $html);
+        $this->assertStringContainsString(
+            app(\App\Services\BusinessDocumentFooterService::class)->displayedPoweredByText($footer),
+            $html,
+        );
     }
 
     public function test_document_footer_does_not_render_the_real_business_name(): void

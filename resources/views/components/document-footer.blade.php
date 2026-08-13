@@ -38,5 +38,6 @@
     @foreach($additionalLines as $line)
         @if(filled($line))<div>{{ $line }}</div>@endif
     @endforeach
+    <div>&copy; {{ now()->year }}</div>
     <div>{{ $poweredByText }}</div>
 </footer>
