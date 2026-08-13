@@ -30,6 +30,7 @@
     let resumeLookupMessage = '';
     let currentHeldSale = null;
     let submitting = false;
+    let draftSyncTimer = null;
     let keyboardProductSelection = false;
     let finishCompletedSale = () => {};
 
@@ -472,7 +473,9 @@
             ? [...cart.values()].map(cartRow).join('')
             : '<tr data-pos-empty><td colspan="6" class="text-center text-muted py-5">Scan or select a product to start a sale.</td></tr>';
         window.initTradeFlowMoneyInputs?.(cartBody);
-        return updateTotals();
+        const values = updateTotals();
+        scheduleDraftSync();
+        return values;
     };
     const refreshEditedRow = (row, line) => {
         const lineTotalCell = $('[data-cart-line-total]', row);
@@ -617,6 +620,25 @@
             tax_rate: whole(line.tax),
         })),
     });
+    const syncServerDraft = async () => {
+        if (!config.registerId || !config.draftUrl) return;
+
+        await request(config.draftUrl, 'PUT', {
+            register_id: config.registerId,
+            cart: [...cart.values()],
+        });
+    };
+    const scheduleDraftSync = () => {
+        if (!config.registerId || !config.draftUrl) return;
+
+        window.clearTimeout(draftSyncTimer);
+        draftSyncTimer = window.setTimeout(() => {
+            syncServerDraft().catch(() => {
+                // Resume still has its server-side guard; a transient draft
+                // sync failure must not interrupt ordinary cart editing.
+            });
+        }, 80);
+    };
     const complete = async () => {
         if (!config.registerId) {
             flash('warning', 'Open register first', 'Open your register before completing a sale.');
@@ -726,10 +748,7 @@
         }
         resumingHeldSale = true;
         try {
-            const payload = await request(`${config.holdUrl.replace('/hold', '')}/resume/${id}`, 'POST', {
-                current_cart_item_count: cart.size,
-                has_active_sale: Boolean(currentHeldSale),
-            });
+            const payload = await request(`${config.holdUrl.replace('/hold', '')}/resume/${id}`, 'POST');
             const held = payload.held_sale;
             currentHeldSale = { id: held.id, holdNumber: held.hold_number };
             cart.clear();

@@ -12,12 +12,17 @@ use App\Models\PosRegister;
 use App\Models\Product;
 use App\Services\CompanyPermissionService;
 use App\Services\PosSaleService;
+use App\Services\PosDraftCartService;
 use App\Services\ThermalDocumentService;
 use Illuminate\Http\Request;
 
 class PosController extends Controller
 {
-    public function __construct(private PosSaleService $pos, private ThermalDocumentService $thermal) {}
+    public function __construct(
+        private PosSaleService $pos,
+        private ThermalDocumentService $thermal,
+        private PosDraftCartService $drafts,
+    ) {}
 
     public function index(Request $request)
     {
@@ -82,6 +87,8 @@ class PosController extends Controller
         abort_unless($register->business_id === $request->user()->business_id && $register->user_id === $request->user()->id, 403);
         $data = $request->validate(['closing_cash' => ['required', 'integer', 'min:0'], 'closing_note' => ['nullable', 'string', 'max:500']]);
         $register = $this->pos->closeRegister($register, $request->user()->business_id, $request->user()->id, $data);
+        $this->drafts->clear($request->session(), $request->user()->business_id, $request->user()->id, $register->id);
+
         return $this->respond($request, ['register' => $register], 'Register closed.');
     }
 
@@ -89,6 +96,16 @@ class PosController extends Controller
     {
         $order = $this->pos->complete($request->user()->business_id, $request->user()->id, $request->validated());
         $invoice = $this->receiptReference($order);
+        $register = PosRegister::query()
+            ->where('business_id', $request->user()->business_id)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'Open')
+            ->latest('opened_at')
+            ->first();
+
+        if ($register) {
+            $this->drafts->clear($request->session(), $request->user()->business_id, $request->user()->id, $register->id);
+        }
 
         return $this->respond($request, [
             'order' => $order,
@@ -110,7 +127,26 @@ class PosController extends Controller
         ]);
         $register = PosRegister::where('business_id', $request->user()->business_id)->where('user_id', $request->user()->id)->where('status', 'Open')->findOrFail($data['register_id']);
         $held = $this->pos->hold($register, $request->user()->business_id, $request->user()->id, $data['cart'], $data['checkout'] ?? [], $data['hold_number'] ?? null, $data['held_sale_id'] ?? null);
+        $this->drafts->clear($request->session(), $request->user()->business_id, $request->user()->id, $register->id);
         return $this->respond($request, ['held_sale' => $held], 'Sale held successfully.');
+    }
+
+    public function syncDraft(Request $request)
+    {
+        $data = $request->validate([
+            'register_id' => ['required', 'integer'],
+            'cart' => ['required', 'array'],
+        ]);
+
+        $register = PosRegister::query()
+            ->where('business_id', $request->user()->business_id)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'Open')
+            ->findOrFail($data['register_id']);
+
+        $this->drafts->sync($request->session(), $request->user()->business_id, $request->user()->id, $register->id, $data['cart']);
+
+        return response()->json(['item_count' => count($data['cart'])]);
     }
 
     public function searchHeldSales(Request $request)
@@ -176,17 +212,23 @@ class PosController extends Controller
 
     public function resume(Request $request, HeldPosSale $heldSale)
     {
-        $data = $request->validate([
-            'current_cart_item_count' => ['required', 'integer', 'min:0'],
-            'has_active_sale' => ['required', 'boolean'],
-        ]);
-        if ($data['current_cart_item_count'] > 0 || $data['has_active_sale']) {
+        $register = PosRegister::query()
+            ->where('business_id', $request->user()->business_id)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'Open')
+            ->latest('opened_at')
+            ->first();
+
+        if ($register && $this->drafts->hasItems($request->session(), $request->user()->business_id, $request->user()->id, $register->id)) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'current_sale' => 'Please hold or clear the current cart before resuming another sale.',
             ]);
         }
 
         $held = $this->pos->resume($heldSale->id, $request->user()->business_id);
+        if ($register) {
+            $this->drafts->sync($request->session(), $request->user()->business_id, $request->user()->id, $register->id, $held->cart_payload ?? []);
+        }
         return $this->respond($request, ['held_sale' => $held], 'Held sale resumed.');
     }
 

@@ -361,6 +361,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
         Route::get('/sales/{order}/receipt/pdf', [PosController::class, 'receiptPdf'])->name('receipt.pdf');
         Route::get('/sales/{order}/receipt', [PosController::class, 'receipt'])->name('receipt');
         Route::post('/hold', [PosController::class, 'hold'])->name('hold');
+        Route::put('/draft', [PosController::class, 'syncDraft'])->name('draft.sync');
         Route::post('/resume/{heldSale}', [PosController::class, 'resume'])->name('resume');
     });
     // New-sale creation is unavailable while sales remain a history and

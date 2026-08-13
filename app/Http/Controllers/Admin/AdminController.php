@@ -3033,7 +3033,7 @@ class AdminController extends Controller
             'id' => $log->id, 'occurred_at' => $this->auditLogDate($log), 'company' => $log->business?->business_name ?: 'Platform',
             'user' => $log->user_name ?: $log->user?->name ?: 'System', 'role' => $log->role ?: $log->actor_role ?: 'system',
             'module' => $log->module ?: 'General', 'action' => $log->action, 'description' => $log->description ?: $log->action,
-            'ip_address' => AuditIpResolver::display($log->ip_address, 'â€”'), 'route' => $log->route, 'record_type' => $log->record_type, 'record_id' => $log->record_id,
+            'ip_address' => AuditIpResolver::display($log->ip_address, '—'), 'route' => $log->route, 'record_type' => $log->record_type, 'record_id' => $log->record_id,
             'old_values' => $log->old_values, 'new_values' => $log->new_values, 'user_agent' => $log->user_agent,
         ];
     }
@@ -3042,7 +3042,7 @@ class AdminController extends Controller
     {
         $date = $log->occurred_at ?? $log->created_at;
 
-        return $date ? Carbon::parse($date)->timezone(config('app.timezone'))->format('n/j/Y, g:i A') : 'â€”';
+        return $date ? Carbon::parse($date)->timezone(config('app.timezone'))->format('n/j/Y, g:i A') : '—';
     }
 
     private function audit(string $action, Request $request, string $module = 'Admin', ?int $recordId = null, ?array $old = null, ?array $new = null): void

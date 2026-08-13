@@ -68,7 +68,7 @@ class AuditLogController extends Controller
                             ? Carbon::parse($log->occurred_at ?? $log->created_at)
                                 ->timezone(config('app.timezone'))
                                 ->format('d M, Y h:i A')
-                            : 'â€”',
+                            : '—',
                         $log->user_name ?: $log->user?->name ?: 'System',
                         $log->role ?: $log->actor_role,
                         $log->module,
@@ -215,10 +215,10 @@ class AuditLogController extends Controller
                 ? Carbon::parse($log->occurred_at ?? $log->created_at)
                     ->timezone(config('app.timezone'))
                     ->format('d M, Y h:i A')
-                : 'â€”',
+                : '—',
             'user' => $log->user_name ?: $log->user?->name ?: 'System', 'role' => $log->role ?: $log->actor_role ?: 'system',
             'module' => $log->module ?: 'General', 'action' => $log->action, 'description' => $log->description ?: $log->action,
-            'ip_address' => AuditIpResolver::display($log->ip_address, 'â€”'), 'has_details' => $includeDetails,
+            'ip_address' => AuditIpResolver::display($log->ip_address, '—'), 'has_details' => $includeDetails,
             'route' => $includeDetails ? $log->route : null, 'record_type' => $includeDetails ? $log->record_type : null, 'record_id' => $includeDetails ? $log->record_id : null,
             'old_values' => $includeDetails ? $log->old_values : null, 'new_values' => $includeDetails ? $log->new_values : null, 'user_agent' => $includeDetails ? $log->user_agent : null,
         ];

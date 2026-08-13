@@ -9,6 +9,7 @@
         'openRegisterUrl' => route('business.pos.register.open'),
         'saleUrl' => route('business.pos.sales.store'),
         'holdUrl' => route('business.pos.hold'),
+        'draftUrl' => route('business.pos.draft.sync'),
         'heldSearchUrl' => route('business.pos.held-sales.search'),
         'invoiceSearchUrl' => route('business.pos.invoices.search'),
         'registerId' => $register?->id,
