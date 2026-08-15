@@ -55,7 +55,7 @@
                 <div class="dropdown">
                     <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic">Actions</button>
                     <div class="dropdown-menu dropdown-menu-end shadow-sm">
-                        <a href="{{ route('business.sales.show', $order) }}" class="dropdown-item">View</a>
+                        <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#saleDetailsModal{{ $order->id }}">View</button>
                         @companyCan('sales.edit')<a href="{{ route('business.sales.edit', $order) }}" class="dropdown-item">Edit</a>@endcompanyCan
                         @if($order->invoice)<a href="{{ route('business.sales.invoices.show', $order) }}" class="dropdown-item">Invoice</a><a href="{{ route('business.sales.invoices.pdf', $order) }}" class="dropdown-item" target="_blank">Print</a>@endif
                         @companyCan('sales.returns')<a href="{{ route('business.sales.returns.process', $order) }}" class="dropdown-item">Return</a>@endcompanyCan
@@ -69,5 +69,17 @@
     @endforelse
     </tbody>
 </x-table>
+@foreach($orders ?? [] as $order)
+    <x-record-details-modal :id="'saleDetailsModal'.$order->id" :title="'Sale '.($order->order_number ?? '#'.$order->id)" :status="$order->status" :open-url="route('business.sales.show', $order)">
+        <div class="tf-record-details-grid mb-4">
+            <div><span>Customer</span><strong>{{ $order->customer?->display_name ?? 'Walk-in Customer' }}</strong></div>
+            <div><span>Sale date</span><strong><x-date-time :value="$order->order_date ?: $order->created_at" /></strong></div>
+            <div><span>Payment status</span><strong>{{ $order->payment_status ?? '-' }}</strong></div>
+            <div><span>Total</span><strong>Rs {{ number_format($order->grand_total ?: $order->total) }}</strong></div>
+        </div>
+        <h3 class="h6 mb-2">Products</h3>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Product</th><th class="text-end">Qty</th><th class="text-end">Total</th></tr></thead><tbody>@forelse($order->items as $item)<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name ?: 'Deleted product' }}</td><td class="text-end">{{ $item->quantity }}</td><td class="text-end">Rs {{ number_format($item->line_total ?: $item->total ?: 0) }}</td></tr>@empty<tr><td colspan="3" class="text-center tf-muted py-3">No products found.</td></tr>@endforelse</tbody></table></div>
+    </x-record-details-modal>
+@endforeach
 @if(isset($orders) && method_exists($orders, 'links'))<div class="mt-3"><x-table-result-summary :paginator="$orders" />{{ $orders->links('pagination::bootstrap-5') }}</div>@endif
 @endsection

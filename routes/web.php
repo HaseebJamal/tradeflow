@@ -114,7 +114,6 @@ Route::middleware('auth')->group(function () {
         return app(BusinessNotificationController::class)->index($request);
     })->name('notifications.index');
     Route::patch('/notifications/{notification}/read', [BusinessNotificationController::class, 'markRead'])->name('notifications.read');
-    Route::patch('/notifications/{notification}/unread', [BusinessNotificationController::class, 'markUnread'])->name('notifications.unread');
     Route::delete('/notifications/{notification}', [BusinessNotificationController::class, 'destroy'])->name('notifications.destroy');
     Route::patch('/notifications/read-all', [BusinessNotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::prefix('business')->name('business.')->middleware(['super_admin.context', 'role:super_admin,business_owner,custom_staff', 'business.approved', 'track.activity'])->group(function () {
@@ -339,6 +338,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::get('/goods-receipts/{goodsReceipt}', [\App\Http\Controllers\Business\GoodsReceiptController::class, 'show'])->name('goods-receipts.show')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/receive', [\App\Http\Controllers\Business\PurchaseController::class, 'receive'])->name('purchases.receive')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/payments', [\App\Http\Controllers\Business\PurchaseController::class, 'pay'])->name('purchases.pay')->middleware('business.permission:Purchases');
+    Route::post('/purchases/{purchase}/refund-settlements', [\App\Http\Controllers\Business\PurchaseController::class, 'settleReceiptRefund'])->name('purchases.refund-settlements.store')->middleware('business.permission:Purchases');
     Route::post('/purchases/{purchase}/returns', [\App\Http\Controllers\Business\PurchaseController::class, 'processReturn'])->name('purchases.return')->middleware('business.permission:Purchases');
     // Sales is the consolidated home for orders, customer payments, and sales invoices.
     Route::get('/sales', [OrderController::class, 'index'])->name('sales.index')->middleware('business.permission:Sales');
@@ -362,6 +362,7 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
         Route::get('/sales/{order}/receipt', [PosController::class, 'receipt'])->name('receipt');
         Route::post('/hold', [PosController::class, 'hold'])->name('hold');
         Route::put('/draft', [PosController::class, 'syncDraft'])->name('draft.sync');
+        Route::post('/draft/clear', [PosController::class, 'clearDraft'])->name('draft.clear');
         Route::post('/resume/{heldSale}', [PosController::class, 'resume'])->name('resume');
     });
     // New-sale creation is unavailable while sales remain a history and

@@ -67,7 +67,12 @@
             <div class="modal-header"><h2 class="modal-title h5" id="inventoryProductCreateModalTitle">Add Products</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
             <div class="modal-body"><div class="alert alert-danger d-none" data-product-create-errors role="alert"></div>
                 @php($draftProducts = [[]])
-                @include('business.products._multi-create-fields', ['hideProductFormActions' => true])
+                @include('business.products._multi-create-fields', [
+                    'categories' => $categories,
+                    'units' => $units,
+                    'hideProductFormActions' => true,
+                    'compactCatalogDropdowns' => true,
+                ])
             </div>
             <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-primary" data-add-product-section>+ Add Product</button><button type="submit" class="btn btn-tf-primary" data-save-products>Save Products</button></div></div>
         </form>

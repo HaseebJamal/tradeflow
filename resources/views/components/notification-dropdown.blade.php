@@ -20,8 +20,13 @@
     $notificationIndexRoute = $isPlatformSuperAdmin
         ? route('admin.notifications.index')
         : ($notificationContextBusiness ? route('business.context.notifications') : route('notifications.index'));
-    $latestNotifications = $canUseNotifications ? $notificationUser?->notifications()->latest()->take(4)->get() : collect();
-    $unreadNotificationCount = $canUseNotifications ? $notificationUser?->unreadNotifications()->count() : 0;
+    $notificationVisibility = app(\App\Services\NotificationVisibilityService::class);
+    $latestNotifications = $canUseNotifications
+        ? $notificationVisibility->withoutInlineProductPricingAlert($notificationUser?->notifications())->latest()->take(4)->get()
+        : collect();
+    $unreadNotificationCount = $canUseNotifications
+        ? $notificationVisibility->withoutInlineProductPricingAlert($notificationUser?->unreadNotifications())->count()
+        : 0;
 @endphp
 
 @if($canUseNotifications)

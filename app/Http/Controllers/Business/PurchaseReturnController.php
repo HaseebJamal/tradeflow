@@ -21,7 +21,7 @@ class PurchaseReturnController extends Controller
         $filters['date_from'] ??= now(config('app.timezone'))->toDateString();
         $filters['date_to'] ??= now(config('app.timezone'))->toDateString();
 
-        $returns = PurchaseReturn::with(['items', 'purchase', 'supplier'])
+        $returns = PurchaseReturn::with(['items.product', 'purchase', 'supplier'])
             ->where('business_id', $businessId)
             ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($inner) => $inner
                 ->where('return_number', 'like', "%{$value}%")

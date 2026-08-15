@@ -135,7 +135,7 @@ window.togglePassword = togglePassword;
 
 // Verification controls can appear in the Company Details modal. Moving their
 // child modals to the document body avoids nested-modal clipping and stale state.
-document.querySelectorAll('[data-tf-document-modal]').forEach((modal) => {
+document.querySelectorAll('[data-tf-document-modal], [data-tf-record-details-modal]').forEach((modal) => {
     document.body.append(modal);
 });
 
@@ -195,6 +195,10 @@ function positionTradeFlowTomSelectDropdown(control, force = false) {
     const rect = control.control.getBoundingClientRect();
     const viewportPadding = 12;
     const maxDropdownHeight = 260;
+    const configuredOptionListHeight = Number.parseInt(control.input.dataset.tomSelectOptionListHeight || '', 10);
+    const optionListMaxHeight = Number.isFinite(configuredOptionListHeight) && configuredOptionListHeight > 0
+        ? configuredOptionListHeight
+        : 220;
     let spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
     const containingModal = control.wrapper?.closest('.modal') || control.input?.closest('.modal');
     if (containingModal) {
@@ -211,7 +215,7 @@ function positionTradeFlowTomSelectDropdown(control, force = false) {
     const dropdownContent = control.dropdown.querySelector('.ts-dropdown-content');
     const dropdownSearch = control.dropdown.querySelector('.dropdown-input-wrap');
     const searchHeight = dropdownSearch?.offsetHeight || 0;
-    const naturalOptionsHeight = Math.min(220, Math.max(40, dropdownContent?.scrollHeight || 40));
+    const naturalOptionsHeight = Math.min(optionListMaxHeight, Math.max(40, dropdownContent?.scrollHeight || 40));
     const preferredHeight = Math.min(maxDropdownHeight, searchHeight + naturalOptionsHeight);
     // The Business/Staff workspace always opens enhanced selects below their
     // trigger. A compact, scrollable result list is preferable to a menu that
@@ -223,7 +227,7 @@ function positionTradeFlowTomSelectDropdown(control, force = false) {
     const availableHeight = containingModal
         ? Math.min(maxDropdownHeight, Math.max(searchHeight + 40, Math.min(spaceBelow, preferredHeight)))
         : preferredHeight;
-    const optionListHeight = Math.max(40, Math.min(220, availableHeight - searchHeight));
+    const optionListHeight = Math.max(40, Math.min(optionListMaxHeight, availableHeight - searchHeight));
 
     Object.assign(control.dropdown.style, {
         maxHeight: `${availableHeight}px`,
@@ -243,6 +247,24 @@ function positionTradeFlowTomSelectDropdown(control, force = false) {
             ['left', '0'],
             ['top', 'calc(100% + 4px)'],
             ['width', '100%'],
+        ].forEach(([property, value]) => control.dropdown.style.setProperty(property, value, 'important'));
+        return;
+    }
+
+    const modalContent = containingModal?.querySelector('.modal-content');
+    if (modalContent && control.dropdown.parentElement === modalContent) {
+        const contentRect = modalContent.getBoundingClientRect();
+        const width = Math.min(rect.width, Math.max(0, contentRect.right - rect.left - viewportPadding));
+
+        [
+            ['bottom', 'auto'],
+            ['left', `${Math.max(0, rect.left - contentRect.left)}px`],
+            ['min-width', `${Math.max(0, width)}px`],
+            ['position', 'absolute'],
+            ['top', `${Math.max(0, rect.bottom - contentRect.top + 4)}px`],
+            ['transform', 'none'],
+            ['width', `${Math.max(0, width)}px`],
+            ['z-index', '10'],
         ].forEach(([property, value]) => control.dropdown.style.setProperty(property, value, 'important'));
         return;
     }
@@ -360,7 +382,11 @@ window.initTradeFlowTomSelect = function initTradeFlowTomSelect(root = document,
         // Use the actual body element as a portal target. This guarantees
         // page menus are outside cards, responsive tables, and any ancestor
         // that intentionally clips its own content.
-        const dropdownParent = containingModal ? null : document.body;
+        const dropdownParent = element.dataset.tomSelectDropdownParent === 'modal-content'
+            ? containingModal?.querySelector('.modal-content') || null
+            : (element.dataset.tomSelectDropdownParent === 'body'
+                ? document.body
+                : (containingModal ? null : document.body));
 
         const control = new window.TomSelect(element, {
             create: false,

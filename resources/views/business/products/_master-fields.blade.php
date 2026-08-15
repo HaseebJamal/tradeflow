@@ -13,10 +13,14 @@
         return $value instanceof \DateTimeInterface ? $value->format('Y-m-d') : (string) ($value ?? '');
     };
     $tracksBatches = (bool) $fieldValue('has_batch_tracking', false);
-    $purchasePrice = data_get($values, 'latest_purchase_price')
-        ?? data_get($values, 'average_purchase_price')
-        ?? data_get($values, 'purchase_cost', 0);
-    $hasPricingAttention = (float) $purchasePrice > 0
+    $hasAcceptedPurchase = $values instanceof \App\Models\Product
+        && $values->hasAcceptedPurchase();
+    $purchasePrice = $hasAcceptedPurchase
+        ? (data_get($values, 'latest_purchase_price')
+            ?? data_get($values, 'average_purchase_price')
+            ?? data_get($values, 'purchase_cost', 0))
+        : 0;
+    $hasPricingAttention = $hasAcceptedPurchase
         && ((float) $fieldValue('retail_price', 0) <= (float) $purchasePrice
             || (float) $fieldValue('wholesale_price', 0) <= (float) $purchasePrice);
     $productNameField = $nested ? 'product_name' : 'name';
@@ -24,15 +28,20 @@
     $productName = $nested
         ? old($productNameError, data_get($values, 'product_name', ''))
         : ($isEdit ? data_get($values, 'name', '') : old('name', data_get($values, 'name', '')));
+    $submissionToken = $nested
+        ? old($errorKey('submission_token'), data_get($values, 'submission_token', (string) \Illuminate\Support\Str::uuid()))
+        : null;
     $canUseCategories = $canUseCategories ?? app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'categories.view');
     $canUseUnits = $canUseUnits ?? app(\App\Services\CompanyPermissionService::class)->allowsUser(auth()->user(), 'units.view');
+    $compactCatalogDropdowns = (bool) ($compactCatalogDropdowns ?? false);
     // Keep a normal desktop input width even when permission-dependent
     // catalogue fields are unavailable. Fields become full-width naturally on
     // mobile through Bootstrap's default column behaviour.
     $identityWidth = 'col-lg-5 col-md-6';
 @endphp
 
-<div class="row g-3" data-product-master-fields data-product-pricing data-product-purchase-price="{{ (float) $purchasePrice }}" data-product-pricing-attention="{{ $hasPricingAttention ? 'true' : 'false' }}">
+<div class="row g-3" data-product-master-fields data-product-pricing data-product-purchase-price="{{ (float) $purchasePrice }}" data-product-has-accepted-purchase="{{ $hasAcceptedPurchase ? 'true' : 'false' }}" data-product-pricing-attention="{{ $hasPricingAttention ? 'true' : 'false' }}">
+    @if($nested)<input type="hidden" name="{{ $fieldName('submission_token') }}" value="{{ $submissionToken }}" data-product-field="submission_token" data-product-submission-token>@endif
     <div class="{{ $identityWidth }}">
         <label class="form-label" for="{{ $fieldId('product_name') }}">Product Name <span class="text-danger">*</span></label>
         <div class="tf-identity-input-wrap">
@@ -46,7 +55,7 @@
     <div class="col-lg-4 col-md-6">
         <label class="form-label" for="{{ $fieldId('category_id') }}">Category <span class="text-danger">*</span></label>
         <div class="d-flex gap-2" data-product-select-control>
-            <select id="{{ $fieldId('category_id') }}" name="{{ $fieldName('category_id') }}" data-product-field="category_id" class="form-select @error($errorKey('category_id')) is-invalid @enderror" required @disabled(($categories ?? collect())->isEmpty())>
+            <select id="{{ $fieldId('category_id') }}" name="{{ $fieldName('category_id') }}" data-product-field="category_id" @if($compactCatalogDropdowns) data-tom-select-option-list-height="144" data-tom-select-dropdown-parent="modal-content" @endif class="form-select @error($errorKey('category_id')) is-invalid @enderror" required @disabled(($categories ?? collect())->isEmpty())>
                 <option value="">Select category</option>
                 @foreach(($categories ?? collect()) as $category)
                     <option value="{{ $category->id }}" @selected((string) $fieldValue('category_id') === (string) $category->id)>{{ $category->name }}</option>
@@ -62,7 +71,7 @@
     <div class="col-lg-3 col-md-6">
         <label class="form-label" for="{{ $fieldId('unit_id') }}">Unit <span class="text-danger">*</span></label>
         <div class="d-flex gap-2" data-product-select-control>
-            <select id="{{ $fieldId('unit_id') }}" name="{{ $fieldName('unit_id') }}" data-product-field="unit_id" class="form-select @error($errorKey('unit_id')) is-invalid @enderror" required @disabled(($units ?? collect())->isEmpty())>
+            <select id="{{ $fieldId('unit_id') }}" name="{{ $fieldName('unit_id') }}" data-product-field="unit_id" @if($compactCatalogDropdowns) data-tom-select-option-list-height="144" data-tom-select-dropdown-parent="modal-content" @endif class="form-select @error($errorKey('unit_id')) is-invalid @enderror" required @disabled(($units ?? collect())->isEmpty())>
                 <option value="">Select unit</option>
                 @foreach(($units ?? collect()) as $unit)
                     <option value="{{ $unit->id }}" @selected((string) $fieldValue('unit_id') === (string) $unit->id)>{{ $unit->unit_name }}</option>

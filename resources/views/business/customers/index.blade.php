@@ -39,7 +39,7 @@
         <div class="col-12 col-md-4 col-xl-2"><label class="form-label" for="customer-filter-type">Type</label><select id="customer-filter-type" name="customer_type" class="form-select"><option value="">All types</option>@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option value="{{ $type }}" @selected(request('customer_type') === $type)>{{ $type }}</option>@endforeach</select></div>
         <div class="col-12 col-md-4 col-xl-2"><label class="form-label" for="customer-filter-city">City</label><input id="customer-filter-city" name="city" value="{{ request('city') }}" class="form-control" placeholder="Any city"></div>
         <div class="col-12 col-md-4 col-xl-2"><label class="form-label" for="customer-filter-status">Status</label><select id="customer-filter-status" name="status" class="form-select"><option value="">All statuses</option>@foreach(['Active', 'Inactive', 'Blocked', 'Archived'] as $status)<option value="{{ $status }}" @selected(request('status') === $status)>{{ $status }}</option>@endforeach</select></div>
-        <div class="col-12 col-xl-2 d-flex gap-2"><button class="btn btn-tf-primary flex-grow-1">Filter</button><a class="btn btn-outline-secondary" href="{{ route('business.customers.index') }}">Clear Filters</a></div>
+        <div class="col-12 col-xl-2 d-flex gap-2"><button class="btn btn-tf-primary flex-grow-1">Filter</button><a class="btn btn-outline-secondary" href="{{ route('business.customers.index') }}">Clear </a></div>
     </form>
 </section>
 
@@ -74,12 +74,12 @@
                     @if($customer->trashed())
                         @companyCan('customers.restore')<form class="d-inline" method="POST" action="{{ route('business.customers.restore', $customer->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-success">Restore</button></form>@endcompanyCan
                     @else
-                        <a class="btn btn-sm btn-outline-primary" href="{{ route('business.customers.show', $customer) }}">View</a>
+                        <button type="button" class="btn btn-sm btn-outline-primary tf-table-view-action" data-bs-toggle="modal" data-bs-target="#customerDetailsModal{{ $customer->id }}">View</button>
                         <div class="dropdown d-inline-block ms-1">
                             <button class="btn btn-sm btn-outline-secondary tf-table-more-action" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-label="Customer actions for {{ $customer->display_name }}"><i class="bi bi-three-dots"></i></button>
                             <div class="dropdown-menu dropdown-menu-end shadow-sm">
                                 @companyCan('customers.edit')<a class="dropdown-item" href="{{ route('business.customers.show', $customer) }}#update-customer"><i class="bi bi-pencil me-2"></i>Edit Customer</a>@endcompanyCan
-                                <a class="dropdown-item" href="{{ route('business.customers.statement', $customer) }}"><i class="bi bi-receipt me-2"></i>View Statement</a>
+                                <a class="dropdown-item" href="{{ route('business.customers.statement', $customer) }}"><i class="bi bi-receipt me-2"></i>Download Excel</a>
                                 <div class="dropdown-divider"></div>
                                 @companyCan('customers.archive')<form method="POST" action="{{ route('business.customers.archive', $customer) }}" data-tf-confirm-message="Archive {{ $customer->display_name }}? Its history will be retained." data-tf-confirm-title="Archive customer" data-tf-confirm-button="Archive Customer" data-tf-confirm-color="#f59e0b">@csrf @method('PATCH')<button class="dropdown-item text-warning"><i class="bi bi-archive me-2"></i>Archive</button></form>@endcompanyCan
                                 @companyCan('customers.archive')<form method="POST" action="{{ route('business.customers.destroy', $customer) }}" data-tf-confirm-message="Delete {{ $customer->display_name }}? Customers with history will be archived instead." data-tf-confirm-title="Delete customer" data-tf-confirm-button="Delete Customer" data-tf-confirm-color="#ef4444">@csrf @method('DELETE')<button class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Delete</button></form>@endcompanyCan
@@ -93,6 +93,16 @@
         @endforelse
         </tbody>
     </x-table>
+    @foreach($customers as $customer)
+        <x-record-details-modal :id="'customerDetailsModal'.$customer->id" :title="$customer->display_name" :status="$customer->trashed() ? 'Archived' : $customer->status" :open-url="route('business.customers.show', $customer)" open-label="Open customer profile">
+            <div class="tf-record-details-grid">
+                <div><span>Customer type</span><strong>{{ $customer->customer_type }}</strong></div><div><span>Current balance</span><strong>Rs {{ number_format($customer->current_balance) }}</strong></div>
+                <div><span>Credit limit</span><strong>Rs {{ number_format($customer->credit_limit) }}</strong></div><div><span>City</span><strong>{{ $customer->city ?: 'Not provided' }}</strong></div>
+                <div><span>Phone</span><strong>{{ $customer->phone ?: 'Not provided' }}</strong></div><div><span>Email</span><strong>{{ $customer->email ?: 'Not provided' }}</strong></div>
+                <div class="tf-record-details-wide"><span>Address</span><strong>{{ $customer->address ?: 'Not provided' }}</strong></div>
+            </div>
+        </x-record-details-modal>
+    @endforeach
     <div class="tf-customers-pagination px-3 py-3">@if($customers->count())<x-table-result-summary :paginator="$customers" />@endif{{ $customers->links('pagination::bootstrap-5') }}</div>
 </section>
 @endsection

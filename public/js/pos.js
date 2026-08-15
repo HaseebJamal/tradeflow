@@ -31,6 +31,11 @@
     let currentHeldSale = null;
     let submitting = false;
     let draftSyncTimer = null;
+    let draftGeneration = Number(config.draftGeneration || 0);
+    let draftSyncController = null;
+    let pendingDraftClear = null;
+    let draftClearError = null;
+    let clearingCart = false;
     let keyboardProductSelection = false;
     let finishCompletedSale = () => {};
 
@@ -57,6 +62,7 @@
     const changeReturn = $('[data-pos-change]');
     const reference = $('[data-pos-reference]');
     const completeButton = $('[data-pos-complete]');
+    const clearButton = $('[data-pos-clear]');
     const checkoutPanel = $('.tf-pos-checkout-panel');
     const registerStatus = $('[data-pos-register-status]');
     const registerLabel = $('[data-pos-register-label]');
@@ -221,7 +227,7 @@
 
         if (result.isConfirmed) finishCompletedSale();
     };
-    const request = async (url, method = 'GET', body = null) => {
+    const request = async (url, method = 'GET', body = null, options = {}) => {
         const token = currentCsrfToken();
         const headers = {
             Accept: 'application/json',
@@ -238,6 +244,7 @@
             headers,
             body: body ? JSON.stringify(body) : null,
             credentials: 'same-origin',
+            signal: options.signal,
         });
         const payload = await response.json().catch(() => ({}));
         if (response.status === 419) {
@@ -464,7 +471,7 @@
         </tr>`;
     };
     const numberWithCommas = (value) => whole(value).toLocaleString();
-    const renderCart = () => {
+    const renderCart = ({ syncDraft = true } = {}) => {
         totals();
         if (selectedCartId !== null && !cart.has(selectedCartId)) selectedCartId = null;
         if (editingId !== null && !cart.has(editingId)) editingId = null;
@@ -474,7 +481,7 @@
             : '<tr data-pos-empty><td colspan="6" class="text-center text-muted py-5">Scan or select a product to start a sale.</td></tr>';
         window.initTradeFlowMoneyInputs?.(cartBody);
         const values = updateTotals();
-        scheduleDraftSync();
+        if (syncDraft) scheduleDraftSync();
         return values;
     };
     const refreshEditedRow = (row, line) => {
@@ -561,17 +568,48 @@
 
         flash('warning', 'Product not found', 'Select a matching product before adding it.');
     };
-    const clearCart = () => {
+    const clearCart = async ({ reportFailure = true } = {}) => {
+        if (clearingCart) return pendingDraftClear || Promise.resolve();
+
+        clearingCart = true;
         cart.clear();
         editingId = null;
         selectedCartId = null;
-        renderCart();
+        renderCart({ syncDraft: false });
         search.value = '';
         barcode.value = '';
         focusElement(search);
+
+        if (!config.registerId || !config.draftUrl) {
+            clearingCart = false;
+            return;
+        }
+
+        window.clearTimeout(draftSyncTimer);
+        draftSyncTimer = null;
+        draftSyncController?.abort();
+        const clearGeneration = ++draftGeneration;
+        const clearRequest = clearServerDraft(clearGeneration);
+        pendingDraftClear = clearRequest;
+        draftClearError = null;
+        if (clearButton) clearButton.disabled = true;
+
+        try {
+            await clearRequest;
+        } catch (error) {
+            draftClearError = error;
+            if (reportFailure) {
+                await flash('error', 'Unable to clear the current sale', 'Please try again.');
+            }
+            throw error;
+        } finally {
+            if (pendingDraftClear === clearRequest) pendingDraftClear = null;
+            clearingCart = false;
+            if (clearButton) clearButton.disabled = false;
+        }
     };
     finishCompletedSale = () => {
-        clearCart();
+        clearCart({ reportFailure: false }).catch(() => {});
         currentHeldSale = null;
         customer.value = '';
         quickCustomerName && (quickCustomerName.value = '');
@@ -620,20 +658,54 @@
             tax_rate: whole(line.tax),
         })),
     });
-    const syncServerDraft = async () => {
+    const syncServerDraft = async (cartSnapshot = [...cart.values()], generation = draftGeneration) => {
         if (!config.registerId || !config.draftUrl) return;
 
-        await request(config.draftUrl, 'PUT', {
-            register_id: config.registerId,
-            cart: [...cart.values()],
-        });
+        const controller = new AbortController();
+        draftSyncController = controller;
+
+        try {
+            const payload = await request(config.draftUrl, 'PUT', {
+                register_id: config.registerId,
+                cart: cartSnapshot,
+                draft_generation: generation,
+            }, { signal: controller.signal });
+            if (!cartSnapshot.length && Number(payload.item_count) !== 0) {
+                throw new Error('The current sale could not be cleared.');
+            }
+        } finally {
+            if (draftSyncController === controller) draftSyncController = null;
+        }
+    };
+    const clearServerDraft = async (generation) => {
+        if (!config.registerId || !config.draftClearUrl) return;
+
+        const controller = new AbortController();
+        draftSyncController = controller;
+
+        try {
+            const payload = await request(config.draftClearUrl, 'POST', {
+                register_id: config.registerId,
+                draft_generation: generation,
+            }, { signal: controller.signal });
+            draftGeneration = Math.max(draftGeneration, Number(payload.generation || 0));
+            if (Number(payload.item_count) !== 0) {
+                throw new Error('The current sale could not be cleared.');
+            }
+        } finally {
+            if (draftSyncController === controller) draftSyncController = null;
+        }
     };
     const scheduleDraftSync = () => {
         if (!config.registerId || !config.draftUrl) return;
 
+        const cartSnapshot = [...cart.values()];
+        const generation = ++draftGeneration;
+        draftClearError = null;
         window.clearTimeout(draftSyncTimer);
         draftSyncTimer = window.setTimeout(() => {
-            syncServerDraft().catch(() => {
+            syncServerDraft(cartSnapshot, generation).catch((error) => {
+                if (error.name === 'AbortError') return;
                 // Resume still has its server-side guard; a transient draft
                 // sync failure must not interrupt ordinary cart editing.
             });
@@ -717,7 +789,7 @@
             if (holdInput) holdInput.value = payload.held_sale.hold_number;
             flash('success', reholding ? 'Sale held again successfully' : 'Sale held successfully', `Hold No: ${payload.held_sale.hold_number}`);
             currentHeldSale = null;
-            clearCart();
+            await clearCart({ reportFailure: false }).catch(() => {});
         } catch (error) {
             const holdError = error.payload?.errors?.hold_number?.[0] || '';
             const duplicate = holdError.includes('already in use') || holdError.includes('belongs to another held sale');
@@ -739,15 +811,33 @@
             }
         }
     };
+    const canResumeAfterDraftClear = async () => {
+        const pendingClear = pendingDraftClear;
+
+        if (pendingClear) {
+            try {
+                await pendingClear;
+            } catch (_) {
+                return false;
+            }
+        }
+
+        return !draftClearError;
+    };
     const resume = async (id) => {
         if (resumingHeldSale) return;
-        if (cart.size || currentHeldSale) {
-            await flash('warning', 'Current sale in progress', 'Please hold or clear the current cart before resuming another sale.');
-            focusElement(resumeInput, true);
-            return;
-        }
         resumingHeldSale = true;
         try {
+            if (!await canResumeAfterDraftClear()) {
+                await flash('error', 'Unable to clear the current sale', 'Please try again.');
+                focusElement(resumeInput, true);
+                return;
+            }
+            if (cart.size || currentHeldSale) {
+                await flash('warning', 'Current sale in progress', 'Please hold or clear the current cart before resuming another sale.');
+                focusElement(resumeInput, true);
+                return;
+            }
             const payload = await request(`${config.holdUrl.replace('/hold', '')}/resume/${id}`, 'POST');
             const held = payload.held_sale;
             currentHeldSale = { id: held.id, holdNumber: held.hold_number };
@@ -1291,7 +1381,7 @@
         $$('[data-category]').forEach((item) => item.classList.toggle('active', item === button));
         searchProducts();
     });
-    $('[data-pos-clear]').addEventListener('click', clearCart);
+    clearButton?.addEventListener('click', () => clearCart().catch(() => {}));
     completeButton.addEventListener('click', complete);
     holdInput?.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter' || event.isComposing || event.repeat) return;

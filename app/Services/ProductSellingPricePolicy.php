@@ -13,8 +13,12 @@ class ProductSellingPricePolicy
     /**
      * The same purchase-price precedence used by the product form.
      */
-    public function purchasePrice(Product $product): float
+    public function purchasePrice(Product $product): ?float
     {
+        if (! $product->hasAcceptedPurchase()) {
+            return null;
+        }
+
         return $product->currentPurchasePrice();
     }
 
@@ -22,8 +26,14 @@ class ProductSellingPricePolicy
      * @param  array<string, mixed>  $prices
      * @return array<string, string>
      */
-    public function violations(array $prices, float $purchasePrice): array
+    public function violations(array $prices, ?float $purchasePrice): array
     {
+        // A default/legacy zero is not purchase evidence. Comparisons begin
+        // only after an accepted goods receipt establishes a real cost source.
+        if ($purchasePrice === null) {
+            return [];
+        }
+
         $messages = [];
 
         foreach ([

@@ -2,10 +2,9 @@
 
 namespace App\Http\Requests\Business;
 
+use App\Services\CompanyPermissionService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use App\Services\CompanyPermissionService;
-use App\Services\ProductSellingPricePolicy;
 
 class StoreProductsRequest extends FormRequest
 {
@@ -23,6 +22,7 @@ class StoreProductsRequest extends FormRequest
 
         return [
             'products' => ['required', 'array', 'min:1', 'max:25'],
+            'products.*.submission_token' => ['required', 'uuid', 'distinct'],
             'products.*.product_name' => ['required', 'string', 'max:255'],
             'products.*.category_id' => $canUseCategories ? [
                 'required',
@@ -69,17 +69,14 @@ class StoreProductsRequest extends FormRequest
                 if (isset($names[$name])) {
                     $validator->errors()->add("products.{$index}.product_name", 'Duplicate product names cannot be saved in the same submission.');
                     $validator->errors()->add("products.{$names[$name]}.product_name", 'Duplicate product names cannot be saved in the same submission.');
+
                     continue;
                 }
 
                 $names[$name] = $index;
 
-                // Product creation intentionally starts with no accepted
-                // purchase cost. The shared policy still requires positive
-                // selling prices (strictly greater than its zero cost).
-                foreach (app(ProductSellingPricePolicy::class)->violations($product, 0) as $field => $message) {
-                    $validator->errors()->add("products.{$index}.{$field}", $message);
-                }
+                // New rows have no accepted goods receipt yet, so selling
+                // prices must not be compared to their default zero cost.
             }
         });
     }

@@ -17,6 +17,7 @@ use App\Models\Unit;
 use App\Services\BarcodeService;
 use App\Services\SubscriptionLimitService;
 use App\Services\CompanyPermissionService;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -109,23 +110,38 @@ class ProductController extends Controller
     public function store(StoreProductsRequest $request)
     {
         $businessId = (int) $request->user()->business_id;
-        app(SubscriptionLimitService::class)->assertCanCreateProducts($businessId, count($request->validated('products')));
+        $rows = $request->validated('products');
+        $existingTokens = Product::query()
+            ->where('business_id', $businessId)
+            ->whereIn('submission_token', collect($rows)->pluck('submission_token')->all())
+            ->pluck('submission_token')
+            ->all();
+        $newProductCount = collect($rows)
+            ->whereNotIn('submission_token', $existingTokens)
+            ->count();
+        app(SubscriptionLimitService::class)->assertCanCreateProducts($businessId, $newProductCount);
         $storedImages = [];
 
         try {
-            $products = DB::transaction(function () use ($request, $businessId, &$storedImages) {
-                return collect($request->validated('products'))
+            $products = DB::transaction(function () use ($request, $rows, $businessId, &$storedImages) {
+                return collect($rows)
                     ->map(function (array $data, $index) use ($request, $businessId, &$storedImages) {
+                        $existing = Product::query()
+                            ->where('business_id', $businessId)
+                            ->where('submission_token', $data['submission_token'])
+                            ->first();
+                        if ($existing) {
+                            return $existing;
+                        }
+
                         $unit = isset($data['unit_id'])
                             ? Unit::where('business_id', $businessId)->findOrFail($data['unit_id'])
                             : null;
                         $image = $request->file("products.{$index}.product_image");
                         $imagePath = $image?->store('products', 'public');
-                        if ($imagePath) {
-                            $storedImages[] = $imagePath;
-                        }
-                        $product = Product::create([
+                        $productAttributes = [
                             'business_id' => $businessId,
+                            'submission_token' => $data['submission_token'],
                             'category_id' => $data['category_id'] ?? null,
                             'unit_id' => $unit?->id,
                             'name' => $data['product_name'],
@@ -153,7 +169,39 @@ class ProductController extends Controller
                             'low_stock_alert_qty' => 10,
                             'created_by' => $request->user()->id,
                             'added_date' => now(),
-                        ]);
+                        ];
+
+                        try {
+                            $product = Product::firstOrCreate([
+                                'business_id' => $businessId,
+                                'submission_token' => $data['submission_token'],
+                            ], $productAttributes);
+                        } catch (QueryException $exception) {
+                            // A concurrent identical request can lose the
+                            // unique-token race. Treat it as the same save,
+                            // not as a server error or a second product.
+                            $product = Product::query()
+                                ->where('business_id', $businessId)
+                                ->where('submission_token', $data['submission_token'])
+                                ->lockForUpdate()
+                                ->first();
+
+                            if (! $product) {
+                                throw $exception;
+                            }
+                        }
+
+                        if (! $product->wasRecentlyCreated) {
+                            if ($imagePath) {
+                                Storage::disk('public')->delete($imagePath);
+                            }
+
+                            return $product;
+                        }
+
+                        if ($imagePath) {
+                            $storedImages[] = $imagePath;
+                        }
 
                         $product = $this->barcodes->assign($product);
                         Inventory::create([

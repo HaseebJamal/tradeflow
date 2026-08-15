@@ -9,6 +9,7 @@ use App\Models\JournalEntryLine;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\CustomerFinancialFieldService;
+use App\Services\CustomerBalanceAdjustmentService;
 use App\Services\CustomerOpeningBalanceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -83,7 +84,7 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function update(Request $request, Customer $customer, CustomerFinancialFieldService $financialFields)
+    public function update(Request $request, Customer $customer, CustomerFinancialFieldService $financialFields, CustomerBalanceAdjustmentService $balanceAdjustments)
     {
         abort_unless($customer->business_id === auth()->user()->business_id, 403);
         $financialFields->normalizeRequest($request);
@@ -99,7 +100,7 @@ class CustomerController extends Controller
             'customer_type' => ['nullable', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
             'credit_limit' => $request->has('credit_limit') ? $financialFields->wholeNumberRules() : ['sometimes'],
             'opening_balance' => $request->has('opening_balance') ? $financialFields->wholeNumberRules() : ['sometimes'],
-            'current_balance' => ['nullable', 'integer', 'min:0'],
+            'current_balance' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'status' => ['required', 'in:Active,Blocked,Inactive'],
         ]);
         // Customer identity is fixed after creation. Ignore modified request
@@ -108,13 +109,26 @@ class CustomerController extends Controller
         $data['business_name'] = $customer->business_name;
         unset($data['shop_name']);
 
-        // A customer balance is maintained by the sales/payment ledger. A blank
-        // form value must never overwrite that accounting value with NULL.
-        if (($data['current_balance'] ?? null) === null) {
-            unset($data['current_balance']);
-        }
+        // The balance column is the live receivable used by sales and payment
+        // workflows. A direct edit therefore needs an auditable adjustment,
+        // not a silent model update that leaves Khata and journals behind.
+        $requestedBalance = array_key_exists('current_balance', $data) && $data['current_balance'] !== null
+            ? (float) $data['current_balance']
+            : null;
+        unset($data['current_balance']);
 
-        $customer->update($data);
+        DB::transaction(function () use ($customer, $data, $requestedBalance, $balanceAdjustments, $request): void {
+            $locked = Customer::query()
+                ->where('business_id', $customer->business_id)
+                ->lockForUpdate()
+                ->findOrFail($customer->id);
+            $locked->update($data);
+
+            if ($requestedBalance !== null) {
+                $balanceAdjustments->set($locked, $requestedBalance, $request->user());
+            }
+        });
+
         return back()->with('success', 'Customer updated.');
     }
 

@@ -43,6 +43,12 @@
         $paymentMethod = $purchase->payment_method ?: $purchase->latestPayment?->method;
         $paymentMethodLabel = $paymentMethod ?: ((float) $purchase->paid_amount > 0 ? 'Payment recorded' : 'Not paid');
         $receiptState = $purchase->receipt_state;
+        $refundSummary = $purchase->refund_summary;
+        $refundBadgeClass = match($refundSummary['status'] ?? null) {
+            'Refunded / Fully Adjusted' => 'tf-badge-success',
+            'Partially Refunded' => 'tf-badge-primary',
+            default => 'tf-badge-warning',
+        };
         $canReceive = $receiptState['can_receive'];
         $canPay = in_array($purchase->status, ['Confirmed', 'Received', 'Ordered'], true) && (float) $purchase->balance > 0;
         $canReturn = $receivedQuantity > $returnedQuantity;
@@ -51,6 +57,9 @@
     @endphp
     <tr><td><strong>{{ $purchase->purchase_number }}</strong><small class="d-block tf-muted">{{ $purchase->supplier_invoice_number ?: 'No supplier invoice' }} · <x-quantity :value="$purchase->items_sum_quantity" /> units</small><small class="d-block mt-1"><span class="tf-badge {{ in_array($purchase->status, ['Confirmed','Received','Closed'], true) ? 'tf-badge-success' : ($purchase->status === 'Cancelled' ? 'tf-badge-danger' : 'tf-badge-warning') }}">{{ $purchase->status }}</span></small></td><td>{{ $purchase->supplier?->supplier_name }}</td><td>Rs {{ number_format($purchase->grand_total, 2) }}</td><td>Rs {{ number_format($purchase->paid_amount, 2) }}<small class="d-block tf-muted">Due Rs {{ number_format($purchase->balance, 2) }}</small></td><td>{{ $paymentMethodLabel }}<small class="d-block mt-1"><span class="tf-badge {{ $purchase->payment_status === 'Paid' ? 'tf-badge-success' : 'tf-badge-warning' }}">{{ $purchase->payment_status }}</span></small></td><td><x-date-time :value="$purchase->purchase_date" /></td><td>{{ $purchase->creator?->name ?? 'System' }}</td><td>
         <div class="d-flex justify-content-end align-items-center gap-1">
+            @if($refundSummary['status'] ?? null)
+                <span class="tf-badge {{ $refundBadgeClass }}" title="Rejected/damaged refund or credit status">{{ $refundSummary['status'] }}</span>
+            @endif
             <button class="btn btn-sm btn-outline-primary tf-table-view-action" type="button" data-bs-toggle="modal" data-bs-target="#purchaseDetailsModal{{ $purchase->id }}">View</button>
             <div class="dropdown">
             <button class="btn btn-sm btn-outline-primary tf-table-more-action" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false" aria-label="More actions for {{ $purchase->purchase_number }}"><i class="bi bi-three-dots"></i></button>

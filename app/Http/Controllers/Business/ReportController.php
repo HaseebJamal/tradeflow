@@ -103,28 +103,74 @@ class ReportController extends Controller
 
     public function pdf(Request $request, string $type)
     {
-        abort_unless(in_array($type, ['sales', 'inventory', 'expense', 'profit-loss'], true), 404);
+        abort_unless(in_array($type, ['sales', 'inventory', 'expense', 'profit-loss', 'supplier-payables', 'complete'], true), 404);
 
         $businessId = (int) $request->user()->business_id;
         $filters = $this->resolveFilters($request);
         $orders = $this->orderQuery($businessId, $filters);
         $validOrders = (clone $orders)->whereNotIn('status', ['Cancelled', 'Void']);
+        $returns = $this->returnQuery($businessId, $filters);
         $expenses = $this->expenseQuery($businessId, $filters);
+        $products = Product::query()
+            ->where('business_id', $businessId)
+            ->when($filters['product_id'], fn ($query) => $query->whereKey($filters['product_id']))
+            ->with(['category', 'unitRecord'])
+            ->orderBy('name')
+            ->get();
+        $payables = Purchase::query()
+            ->where('business_id', $businessId)
+            ->where('balance', '>', 0)
+            ->whereNotIn('status', ['Draft', 'Cancelled'])
+            ->whereBetween('purchase_date', [$filters['from']->copy()->startOfDay(), $filters['to']->copy()->endOfDay()])
+            ->with('supplier')
+            ->orderBy('due_date')
+            ->orderBy('purchase_date')
+            ->get();
+
+        $grossSales = round((float) (clone $validOrders)->sum('subtotal'), 2);
+        $salesDiscounts = round((float) (clone $validOrders)->sum('discount_amount'), 2);
+        $salesReturns = round((float) (clone $returns)->sum('refund_amount'), 2);
+        $netSales = round($grossSales - $salesDiscounts - $salesReturns, 2);
+        $soldCost = round((float) $this->cogsQuery($businessId, $filters)->sum(DB::raw('order_items.quantity * COALESCE(order_items.purchase_cost_snapshot, 0)')), 2);
+        $returnedCost = round((float) $this->returnedCogsQuery($businessId, $filters)->sum(DB::raw('sales_return_items.quantity * COALESCE(order_items.purchase_cost_snapshot, 0)')), 2);
+        $cogs = round(max(0, $soldCost - $returnedCost), 2);
+        $grossProfit = round($netSales - $cogs, 2);
+        $operatingExpenses = round((float) (clone $expenses)->sum('amount'), 2);
+        $netProfit = round($grossProfit - $operatingExpenses, 2);
+        $today = now(config('app.timezone'))->startOfDay();
 
         $data = [
             'type' => $type,
             'business' => $request->user()->business?->load(['documentFooter', 'owner:id,email']),
-            'orders' => (clone $orders)->with('customer')->latest()->get(),
+            'filters' => $filters,
+            'generatedAt' => now(config('app.timezone')),
+            // Keep the transaction detail aligned with the existing sales totals:
+            // cancelled and void orders are excluded from both the summary and PDF.
+            'orders' => (clone $validOrders)->with(['customer', 'items.product'])->latest()->get(),
             'summary' => [
-                'subtotal' => (clone $validOrders)->sum('subtotal'),
-                'discount_amount' => (clone $validOrders)->sum('discount_amount'),
+                'subtotal' => $grossSales,
+                'discount_amount' => $salesDiscounts,
+                'sales_returns' => $salesReturns,
+                'net_sales' => $netSales,
                 'grand_total' => (clone $validOrders)->sum('grand_total'),
                 'paid_amount' => $this->paymentQuery($businessId, $filters)->sum('amount'),
                 'balance' => (clone $validOrders)->sum('balance'),
+                'cogs' => $cogs,
+                'gross_profit' => $grossProfit,
+                'expenses' => $operatingExpenses,
+                'net_profit' => $netProfit,
+                'stock_value' => round((float) $products->sum(fn (Product $product) => (float) $product->stock_quantity * (float) ($product->purchase_cost ?: $product->wholesale_price)), 2),
+                'low_stock_count' => $products->filter(fn (Product $product) => (float) $product->stock_quantity > 0 && (float) $product->stock_quantity <= (float) $product->low_stock_alert_qty)->count(),
+                'out_of_stock_count' => $products->filter(fn (Product $product) => (float) $product->stock_quantity <= 0)->count(),
+                'supplier_payables' => round((float) $payables->sum('balance'), 2),
+                'due_today' => round((float) $payables->filter(fn (Purchase $purchase) => $purchase->due_date?->isSameDay($today))->sum('balance'), 2),
+                'due_soon' => round((float) $payables->filter(fn (Purchase $purchase) => $purchase->due_date && $purchase->due_date->betweenIncluded($today->copy()->addDay(), $today->copy()->addDays(7)))->sum('balance'), 2),
+                'overdue' => round((float) $payables->filter(fn (Purchase $purchase) => $purchase->due_date?->lt($today))->sum('balance'), 2),
             ],
-            'products' => Product::where('business_id', $businessId)->when($filters['product_id'], fn ($query) => $query->whereKey($filters['product_id']))->get(),
+            'products' => $products,
             'customers' => Customer::where('business_id', $businessId)->when($filters['customer_id'], fn ($query) => $query->whereKey($filters['customer_id']))->get(),
             'expenses' => (clone $expenses)->latest()->get(),
+            'payables' => $payables,
         ];
 
         return Pdf::loadView('business.reports.pdf', $data)->stream('tradeflow-'.$type.'-report.pdf');

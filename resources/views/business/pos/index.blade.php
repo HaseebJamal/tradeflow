@@ -10,9 +10,11 @@
         'saleUrl' => route('business.pos.sales.store'),
         'holdUrl' => route('business.pos.hold'),
         'draftUrl' => route('business.pos.draft.sync'),
+        'draftClearUrl' => route('business.pos.draft.clear'),
         'heldSearchUrl' => route('business.pos.held-sales.search'),
         'invoiceSearchUrl' => route('business.pos.invoices.search'),
         'registerId' => $register?->id,
+        'draftGeneration' => $draftGeneration,
         'canUseCustomPrice' => $canUseCustomPrice,
         'canCreateCustomer' => $canCreateCustomer,
     ]);

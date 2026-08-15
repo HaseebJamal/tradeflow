@@ -13,6 +13,7 @@ use App\Models\Purchase;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseReturn;
 use App\Models\PurchaseReturnItem;
+use App\Models\PurchaseRefundSettlement;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\SupplierPayment;
@@ -24,6 +25,7 @@ use App\Services\DocumentNumberService;
 use App\Services\CompanyPermissionService;
 use App\Services\PurchaseReceivingService;
 use App\Services\PurchaseFinancialSummaryService;
+use App\Services\PurchaseRefundStatusService;
 use App\Services\ThermalDocumentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -40,6 +42,7 @@ class PurchaseController extends Controller
         private DocumentNumberService $numbers,
         private PurchaseReceivingService $receiving,
         private PurchaseFinancialSummaryService $financialSummary,
+        private PurchaseRefundStatusService $refundStatus,
     ) {}
 
     public function index(Request $request)
@@ -76,6 +79,7 @@ class PurchaseController extends Controller
             ]),
             'items:id,purchase_id,product_id,product_name_snapshot,unit_snapshot,quantity,received_quantity,damaged_quantity,rejected_quantity,unit_cost,line_total',
             'returns.items:id,purchase_return_id,quantity',
+            'refundSettlements:id,purchase_id,amount',
             'goodsReceipts:id,purchase_id,grn_number,received_at,created_by',
             'goodsReceipts.items:id,goods_receipt_id,accepted_quantity,damaged_quantity,rejected_quantity',
             'goodsReceipts.creator:id,name',
@@ -104,6 +108,7 @@ class PurchaseController extends Controller
 
         $purchases->getCollection()->each(function (Purchase $purchase): void {
             $purchase->setAttribute('receipt_state', $this->receiving->state($purchase));
+            $purchase->setAttribute('refund_summary', $this->refundStatus->summary($purchase, $this->financialSummary->summary($purchase)));
         });
 
         return view('business.purchases.index', [
@@ -206,13 +211,14 @@ class PurchaseController extends Controller
 
     public function show(Request $request, Purchase $purchase)
     {
-        $purchase = $this->scoped($purchase)->load(['supplier', 'items.product', 'invoice', 'payments.creator', 'payments.account', 'latestPayment', 'returns.items', 'goodsReceipts.items.product', 'goodsReceipts.creator', 'creator', 'updater', 'confirmer']);
+        $purchase = $this->scoped($purchase)->load(['supplier', 'items.product', 'invoice', 'payments.creator', 'payments.account', 'latestPayment', 'returns.items', 'refundSettlements.creator', 'goodsReceipts.items.product', 'goodsReceipts.creator', 'creator', 'updater', 'confirmer']);
         $receiptState = $this->receiving->state($purchase);
         $paymentSummary = $this->financialSummary->summary($purchase);
+        $refundSummary = $this->refundStatus->summary($purchase, $paymentSummary);
         $document = $request->validate(['document' => ['nullable', Rule::in(['print', 'pdf'])]])['document'] ?? null;
 
         if (! $document) {
-            return view('business.purchases.show', compact('purchase', 'receiptState', 'paymentSummary'));
+            return view('business.purchases.show', compact('purchase', 'receiptState', 'paymentSummary', 'refundSummary'));
         }
 
         $payload = $this->purchaseDocumentPayload($purchase);
@@ -658,6 +664,63 @@ class PurchaseController extends Controller
             'balance' => $purchase->balance,
         ]);
         return back()->with('success', 'Supplier payment recorded and posted to accounting.');
+    }
+
+    public function settleReceiptRefund(Request $request, Purchase $purchase)
+    {
+        $purchase = $this->scoped($purchase);
+        $this->ensureActionPermission('purchase_returns.process');
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01', 'decimal:0,2'],
+            'method' => ['required', Rule::in(['Cash', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque', 'Other'])],
+            'reference_number' => ['nullable', 'string', 'max:120'],
+            'settled_at' => ['required', 'date'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $settlement = DB::transaction(function () use ($purchase, $data): PurchaseRefundSettlement {
+            $locked = Purchase::query()
+                ->where('business_id', $purchase->business_id)
+                ->lockForUpdate()
+                ->findOrFail($purchase->id);
+            $financial = $this->financialSummary->summary($locked);
+            $refund = $this->refundStatus->summary($locked, $financial);
+            if ($refund['remaining_amount'] <= 0.009) {
+                throw ValidationException::withMessages(['amount' => 'This purchase has no refund or credit amount left to settle.']);
+            }
+            if ((float) $data['amount'] > $refund['remaining_amount'] + 0.009) {
+                throw ValidationException::withMessages(['amount' => 'Refund amount cannot exceed the remaining refund/credit of Rs '.number_format($refund['remaining_amount'], 2).'.']);
+            }
+
+            $settlement = PurchaseRefundSettlement::create([
+                'business_id' => $locked->business_id,
+                'purchase_id' => $locked->id,
+                'supplier_id' => $locked->supplier_id,
+                'created_by' => auth()->id(),
+                'amount' => $data['amount'],
+                'method' => $data['method'],
+                'reference_number' => $data['reference_number'] ?? null,
+                'settled_at' => $data['settled_at'],
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            $refundAccount = in_array($data['method'], ['Bank Transfer', 'Cheque'], true) ? 'Bank' : 'Cash';
+            $this->post($locked, (float) $settlement->amount, 'supplier_refund', $settlement->id, [
+                [$refundAccount, (float) $settlement->amount, 0],
+                ['Accounts Payable', 0, (float) $settlement->amount],
+            ]);
+            $this->financialSummary->sync($locked);
+
+            return $settlement;
+        });
+
+        $this->activity->record($purchase->business_id, 'Purchases', 'Supplier refund/credit settled for '.$purchase->purchase_number, $purchase->id, null, [
+            'settlement_id' => $settlement->id,
+            'amount' => $settlement->amount,
+            'method' => $settlement->method,
+        ]);
+
+        return back()->with('success', 'Supplier refund/credit settlement recorded.');
     }
 
     private function normalizePaymentTender(mixed $value): string

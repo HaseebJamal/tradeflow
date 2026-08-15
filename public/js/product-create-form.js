@@ -12,6 +12,7 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
     const isAsync = form.dataset.productCreateAsync === 'true';
     let submissionConfirmed = false;
     let submissionConfirming = false;
+    let isSaving = false;
     const isProductEdit = form.querySelector('input[name="_method"]')?.value?.toUpperCase() === 'PUT';
     const fieldFor = (kind) => kind === 'category' ? 'category_id' : 'unit_id';
     const catalogs = {
@@ -20,6 +21,56 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
     };
     let originSelect = null;
     let originTrigger = null;
+
+    const newSubmissionToken = () => {
+        if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+            const random = Math.floor(Math.random() * 16);
+
+            return (character === 'x' ? random : ((random & 0x3) | 0x8)).toString(16);
+        });
+    };
+    const refreshSubmissionTokens = (scope = form) => {
+        scope.querySelectorAll?.('[data-product-submission-token]').forEach((field) => {
+            field.value = newSubmissionToken();
+        });
+    };
+    const suspendModalForConfirmation = () => {
+        const modal = isAsync ? form.closest('.modal') : null;
+        const content = modal?.querySelector('.modal-content');
+        if (!modal || !content) return () => {};
+
+        modal.querySelectorAll('select.tomselected').forEach((select) => select.tomselect?.close());
+        const body = modal.querySelector('.modal-body');
+        const focused = document.activeElement instanceof HTMLElement && content.contains(document.activeElement)
+            ? document.activeElement
+            : form.querySelector('[data-save-products]');
+        const state = {
+            ariaHidden: content.getAttribute('aria-hidden'),
+            inert: content.inert,
+            scrollTop: body?.scrollTop ?? 0,
+        };
+        const instance = window.bootstrap?.Modal?.getInstance(modal);
+
+        instance?._focustrap?.deactivate();
+        content.dataset.tfConfirmationSuspended = 'true';
+        content.inert = true;
+        content.setAttribute('aria-hidden', 'true');
+
+        return () => {
+            content.inert = state.inert;
+            delete content.dataset.tfConfirmationSuspended;
+            if (state.ariaHidden === null) content.removeAttribute('aria-hidden');
+            else content.setAttribute('aria-hidden', state.ariaHidden);
+
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (body) body.scrollTop = state.scrollTop;
+                instance?._focustrap?.activate();
+                if (!document.querySelector('.swal2-container') && focused?.isConnected && !focused.disabled) focused.focus();
+            }));
+        };
+    };
 
     const hasOption = (select, value) => [...select.options].some((option) => String(option.value) === String(value));
     const catalogModalIsValid = (modalForm) => {
@@ -126,13 +177,14 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
             : [...(scope.querySelectorAll?.('[data-product-pricing]') || [])];
 
         pricingSections.forEach((pricingSection) => {
+            const hasAcceptedPurchase = pricingSection.dataset.productHasAcceptedPurchase === 'true';
             const purchasePrice = Number.parseFloat(pricingSection.dataset.productPurchasePrice || '0') || 0;
 
             pricingSection.querySelectorAll('[data-product-selling-price]').forEach((field) => {
                 const key = field.dataset.productSellingPrice;
                 const label = key === 'retail_price' ? 'Retail Selling Price' : 'Wholesale Selling Price';
                 const value = Number.parseFloat(field.value);
-                const invalid = !Number.isFinite(value) || value <= purchasePrice;
+                const invalid = hasAcceptedPurchase && (!Number.isFinite(value) || value <= purchasePrice);
                 const feedback = pricingSection.querySelector(`[data-product-price-error="${key}"]`);
 
                 field.setCustomValidity(invalid ? `${label} must be greater than Purchase Price.` : '');
@@ -196,6 +248,7 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
             }
         });
         form.reset();
+        refreshSubmissionTokens();
         form.querySelectorAll('select').forEach((select) => {
             const control = window.getTradeFlowTomSelect?.(select);
             control?.clear(true);
@@ -211,19 +264,32 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         const isSingleProductEdit = isProductEdit && count === 1;
 
         if (window.Swal?.fire) {
-            const result = await window.Swal.fire({
-                cancelButtonText: isSingleProductEdit ? 'Cancel' : 'Review details',
-                confirmButtonText: isSingleProductEdit ? 'Save Product' : 'Yes, save',
-                icon: 'question',
-                reverseButtons: true,
-                showCancelButton: true,
-                text: isSingleProductEdit
-                    ? 'Confirm that you want to save these product changes.'
-                    : `You are about to save ${productLabel}.`,
-                title: isSingleProductEdit ? 'Save product changes?' : 'Save product details?',
-            });
+            const resumeModal = suspendModalForConfirmation();
 
-            return result.isConfirmed;
+            try {
+                const result = await window.Swal.fire({
+                    allowEnterKey: true,
+                    allowEscapeKey: true,
+                    allowOutsideClick: false,
+                    cancelButtonText: isSingleProductEdit ? 'Cancel' : 'Review details',
+                    confirmButtonText: isSingleProductEdit ? 'Save Product' : 'Yes, save',
+                    focusCancel: !isSingleProductEdit,
+                    icon: 'question',
+                    reverseButtons: true,
+                    returnFocus: false,
+                    showCancelButton: true,
+                    showLoaderOnConfirm: true,
+                    stopKeydownPropagation: true,
+                    text: isSingleProductEdit
+                        ? 'Confirm that you want to save these product changes.'
+                        : `You are about to save ${productLabel}.`,
+                    title: isSingleProductEdit ? 'Save product changes?' : 'Save product details?',
+                });
+
+                return result.isConfirmed;
+            } finally {
+                resumeModal();
+            }
         }
 
         return window.confirm(`Save ${productLabel}?`);
@@ -256,6 +322,7 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
             const section = fragment.querySelector('[data-product-section]');
             sections.appendChild(fragment);
             updateSections();
+            refreshSubmissionTokens(section);
             initializeSection(section);
             section.querySelector('[data-product-field="product_name"]')?.focus();
             return;
@@ -338,6 +405,11 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
     });
 
     form.addEventListener('submit', async (event) => {
+        if (isAsync && (submissionConfirming || isSaving)) {
+            event.preventDefault();
+            return;
+        }
+
         syncTomSelectValues();
         const invalidPriceField = validateProductPricing();
         if (invalidPriceField) {
@@ -384,22 +456,47 @@ window.initTradeFlowProductCreateForm = function initTradeFlowProductCreateForm(
         event.preventDefault();
         clearErrors();
         if (!form.checkValidity()) { form.reportValidity(); return; }
-        if (!await confirmProductSave()) return;
+        let confirmed = false;
+        submissionConfirming = true;
+        try {
+            confirmed = await confirmProductSave();
+        } finally {
+            submissionConfirming = false;
+        }
+        if (!confirmed || isSaving) return;
         const submit = form.querySelector('[data-save-products]');
         if (submit?.dataset.submitting === 'true') return;
+        isSaving = true;
         submit.dataset.submitting = 'true';
         submit.disabled = true;
         const originalLabel = submit.textContent;
-        submit.textContent = 'Saving Products...';
+        submit.textContent = 'Saving...';
         try {
-            const response = await fetch(form.action, { method: 'POST', headers: { Accept: 'application/json', 'X-CSRF-TOKEN': form.querySelector('[name="_token"]')?.value || '' }, body: new FormData(form) });
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': form.querySelector('[name="_token"]')?.value || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new FormData(form),
+                credentials: 'same-origin',
+            });
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw payload;
+            if (!response.ok) throw { ...payload, status: response.status };
             window.dispatchEvent(new CustomEvent('tradeflow:products-created', { detail: payload.products || [] }));
             window.bootstrap.Modal.getInstance(form.closest('.modal'))?.hide();
             window.Swal?.fire({ icon: 'success', title: payload.message || 'Product(s) created successfully.', timer: 1600, showConfirmButton: false });
-        } catch (payload) { showValidationErrors(payload); }
-        finally { submit.dataset.submitting = 'false'; submit.disabled = false; submit.textContent = originalLabel; }
+        } catch (payload) {
+            showValidationErrors(payload.status === 419
+                ? { message: 'Your session expired. Refresh the page and try again.' }
+                : payload);
+        } finally {
+            isSaving = false;
+            submit.dataset.submitting = 'false';
+            submit.disabled = false;
+            submit.textContent = originalLabel;
+        }
     });
 
     updateSections();

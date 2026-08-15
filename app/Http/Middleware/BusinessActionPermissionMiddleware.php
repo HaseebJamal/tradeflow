@@ -111,7 +111,7 @@ class BusinessActionPermissionMiddleware
             'business.pos.register.open' => 'pos.open_register',
             'business.pos.register.close' => 'pos.close_register',
             'business.pos.sales.store' => 'pos.create_sale',
-            'business.pos.hold' => 'pos.hold_sale', 'business.pos.draft.sync' => 'pos.create_sale', 'business.pos.resume' => 'pos.resume_sale',
+            'business.pos.hold' => 'pos.hold_sale', 'business.pos.draft.sync' => 'pos.create_sale', 'business.pos.draft.clear' => 'pos.create_sale', 'business.pos.resume' => 'pos.resume_sale',
             'business.pos.history' => 'pos.view_history', 'business.pos.receipt', 'business.pos.receipt.pdf' => 'pos.print_receipt',
             'business.sales.payments.index', 'business.payments' => 'sales.payments', 'business.sales.payments.store', 'business.payments.store' => 'sales.payments',
             'business.khata' => 'accounting.view', 'business.khata.journal.store' => 'accounting.create_journal',

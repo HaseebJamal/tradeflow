@@ -30,9 +30,17 @@ class PosController extends Controller
         $permissions = app(CompanyPermissionService::class);
         $canViewCustomers = $permissions->allowsUser($request->user(), 'customers.view');
         $canViewCategories = $permissions->allowsUser($request->user(), 'categories.view');
+        $register = PosRegister::where('business_id', $businessId)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'Open')
+            ->latest('opened_at')
+            ->first();
 
         return view('business.pos.index', [
-            'register' => PosRegister::where('business_id', $businessId)->where('user_id', $request->user()->id)->where('status', 'Open')->latest('opened_at')->first(),
+            'register' => $register,
+            'draftGeneration' => $register
+                ? $this->drafts->generation($request->session(), $businessId, $request->user()->id, $register->id)
+                : 0,
             'products' => $this->availableProducts($businessId)->take(60)->get(),
             'categories' => $canViewCategories
                 ? Category::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(['id', 'name'])
@@ -136,6 +144,9 @@ class PosController extends Controller
         $data = $request->validate([
             'register_id' => ['required', 'integer'],
             'cart' => ['required', 'array'],
+            // Keep a cached POS page from turning a cart clear into a 422.
+            // Current clients always send this and receive ordered syncs.
+            'draft_generation' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $register = PosRegister::query()
@@ -144,9 +155,46 @@ class PosController extends Controller
             ->where('status', 'Open')
             ->findOrFail($data['register_id']);
 
-        $this->drafts->sync($request->session(), $request->user()->business_id, $request->user()->id, $register->id, $data['cart']);
+        $accepted = $this->drafts->sync(
+            $request->session(),
+            $request->user()->business_id,
+            $request->user()->id,
+            $register->id,
+            $data['cart'],
+            $data['draft_generation'] ?? null,
+        );
 
-        return response()->json(['item_count' => count($data['cart'])]);
+        return response()->json([
+            'item_count' => $this->drafts->itemCount($request->session(), $request->user()->business_id, $request->user()->id, $register->id),
+            'accepted' => $accepted,
+        ]);
+    }
+
+    public function clearDraft(Request $request)
+    {
+        $data = $request->validate([
+            'register_id' => ['required', 'integer'],
+            'draft_generation' => ['required', 'integer', 'min:0'],
+        ]);
+        $register = PosRegister::query()
+            ->where('business_id', $request->user()->business_id)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'Open')
+            ->findOrFail($data['register_id']);
+
+        $accepted = $this->drafts->clear(
+            $request->session(),
+            $request->user()->business_id,
+            $request->user()->id,
+            $register->id,
+            $data['draft_generation'],
+        );
+
+        return response()->json([
+            'accepted' => $accepted,
+            'item_count' => $this->drafts->itemCount($request->session(), $request->user()->business_id, $request->user()->id, $register->id),
+            'generation' => $this->drafts->generation($request->session(), $request->user()->business_id, $request->user()->id, $register->id),
+        ]);
     }
 
     public function searchHeldSales(Request $request)

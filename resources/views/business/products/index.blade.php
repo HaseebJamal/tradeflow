@@ -108,7 +108,7 @@
                         data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">Actions</button>
                     <div class="dropdown-menu dropdown-menu-end shadow-sm">
                         <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#product-details-{{ $product->id }}"><i
-                                class="bi bi-eye me-2"></i>View Details</button>
+                                class="bi bi-eye me-2"></i>View</button>
                         @companyCan('products.restore')
                         <form method="POST" action="{{ route('business.products.restore', $product->id) }}">@csrf
                             @method('PATCH')<button class="dropdown-item text-success" type="submit"><i
@@ -126,7 +126,7 @@
                         data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">Actions</button>
                     <div class="dropdown-menu dropdown-menu-end shadow-sm">
                         <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#product-details-{{ $product->id }}"><i
-                                class="bi bi-eye me-2"></i>View Details</button>
+                                class="bi bi-eye me-2"></i>View</button>
                         @companyCan('products.edit')
                         <a class="dropdown-item" href="{{ route('business.products.edit', $product) }}"><i
                                 class="bi bi-pencil me-2"></i>Edit</a>

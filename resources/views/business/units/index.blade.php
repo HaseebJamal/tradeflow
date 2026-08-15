@@ -29,7 +29,7 @@
                     <div class="dropdown">
                         <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" data-bs-boundary="viewport">Actions</button>
                         <div class="dropdown-menu dropdown-menu-end shadow-sm">
-                            <a class="dropdown-item" href="{{ route('business.units.show', $unit->id) }}"><i class="bi bi-eye me-2"></i>View</a>
+                            <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#unitDetailsModal{{ $unit->id }}"><i class="bi bi-eye me-2"></i>View</button>
                             @if(!$unit->trashed())
                                 @companyCan('units.edit')<a class="dropdown-item" href="{{ route('business.units.edit', $unit) }}"><i class="bi bi-pencil me-2"></i>Edit</a>@endcompanyCan
                                 @companyCan('units.archive')<form method="POST" action="{{ route('business.units.archive', $unit) }}">@csrf @method('PATCH')<button class="dropdown-item text-warning" type="submit"><i class="bi bi-archive me-2"></i>Archive</button></form>@endcompanyCan
@@ -47,6 +47,11 @@
         @endforelse
     </tbody>
 </x-table>
+@foreach($units as $unit)
+    <x-record-details-modal :id="'unitDetailsModal'.$unit->id" :title="$unit->unit_name" :status="$unit->trashed() ? 'Archived' : $unit->status" :open-url="route('business.units.show', $unit)" open-label="Open unit record">
+        <div class="tf-record-details-grid"><div><span>Short code</span><strong>{{ $unit->short_code }}</strong></div><div><span>Unit type</span><strong>{{ $unit->unit_type }}</strong></div><div><span>Created</span><strong><x-date-time :value="$unit->created_at" /></strong></div><div><span>Status</span><strong>{{ $unit->trashed() ? 'Archived' : $unit->status }}</strong></div><div class="tf-record-details-wide"><span>Description</span><strong>{{ $unit->description ?: 'Not provided' }}</strong></div></div>
+    </x-record-details-modal>
+@endforeach
 
 @endsection
 @push('scripts')

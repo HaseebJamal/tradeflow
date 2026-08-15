@@ -14,6 +14,7 @@ class Purchase extends Model
     public function payments() { return $this->hasMany(SupplierPayment::class); }
     public function latestPayment() { return $this->hasOne(SupplierPayment::class)->latestOfMany(); }
     public function returns() { return $this->hasMany(PurchaseReturn::class); }
+    public function refundSettlements() { return $this->hasMany(PurchaseRefundSettlement::class); }
     public function goodsReceipts() { return $this->hasMany(GoodsReceipt::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
     public function updater() { return $this->belongsTo(User::class, 'updated_by'); }

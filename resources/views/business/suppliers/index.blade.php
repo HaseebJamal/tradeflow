@@ -51,7 +51,7 @@
                 <td>{{ $supplier->creator?->name ?? '-' }}</td>
                 <td class="text-end text-nowrap">
                     <div class="d-flex justify-content-end align-items-center gap-1">
-                    <a href="{{ route('business.suppliers.show', $supplier) }}" class="btn btn-sm btn-outline-primary tf-table-view-action">View</a>
+                    <button type="button" class="btn btn-sm btn-outline-primary tf-table-view-action" data-bs-toggle="modal" data-bs-target="#supplierDetailsModal{{ $supplier->id }}">View</button>
                     <div class="dropdown">
                         <button class="btn btn-sm btn-outline-primary tf-table-more-action" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false" aria-label="More actions for {{ $supplier->supplier_name }}"><i class="bi bi-three-dots"></i></button>
                         <div class="dropdown-menu dropdown-menu-end shadow-sm">
@@ -73,5 +73,18 @@
         @endforelse
     </tbody>
 </x-table>
+@foreach($suppliers as $supplier)
+    <x-record-details-modal :id="'supplierDetailsModal'.$supplier->id" :title="$supplier->supplier_name" :status="$supplier->trashed() ? 'Archived' : $supplier->status" :open-url="route('business.suppliers.show', $supplier)" open-label="Open supplier profile">
+        <div class="tf-record-details-grid">
+            <div><span>Company</span><strong>{{ $supplier->company_name ?: 'Independent supplier' }}</strong></div>
+            <div><span>Opening balance</span><strong>Rs {{ number_format($supplier->opening_balance) }}</strong></div>
+            <div><span>Phone</span><strong>{{ $supplier->phone ?: 'Not provided' }}</strong></div>
+            <div><span>Email</span><strong>{{ $supplier->email ?: 'Not provided' }}</strong></div>
+            <div><span>City</span><strong>{{ $supplier->city ?: 'Not provided' }}</strong></div>
+            <div><span>Created by</span><strong>{{ $supplier->creator?->name ?? '-' }}</strong></div>
+            <div class="tf-record-details-wide"><span>Address</span><strong>{{ $supplier->address ?: 'Not provided' }}</strong></div>
+        </div>
+    </x-record-details-modal>
+@endforeach
 <div class="mt-3"><x-table-result-summary :paginator="$suppliers" />{{ $suppliers->links('pagination::bootstrap-5') }}</div>
 @endsection

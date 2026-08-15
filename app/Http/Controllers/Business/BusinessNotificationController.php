@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\EmailChangeRequest;
 use App\Models\UserDetailChangeRequest;
 use App\Services\CompanyPermissionService;
+use App\Services\NotificationVisibilityService;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
 
@@ -25,7 +26,7 @@ class BusinessNotificationController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
         ]);
 
-        $query = $user->notifications()
+        $query = app(NotificationVisibilityService::class)->withoutInlineProductPricingAlert($user->notifications())
             ->when($filters['search'] ?? null, fn ($query, $search) => $query->where('data', 'like', '%'.$search.'%'))
             ->when($filters['category'] ?? null, fn ($query, $category) => $query->whereJsonContains('data->category', $category))
             ->when(($filters['status'] ?? null) === 'read', fn ($query) => $query->whereNotNull('read_at'))
@@ -67,7 +68,11 @@ class BusinessNotificationController extends Controller
                 ->keyBy('id');
         }
 
-        return view('auth.notifications', compact('notifications', 'profileRequests', 'emailChangeRequests', 'canApproveEmailChanges', 'filters'));
+        $unreadNotificationCount = app(NotificationVisibilityService::class)
+            ->withoutInlineProductPricingAlert($user->unreadNotifications())
+            ->count();
+
+        return view('auth.notifications', compact('notifications', 'profileRequests', 'emailChangeRequests', 'canApproveEmailChanges', 'filters', 'unreadNotificationCount'));
     }
 
     public function markRead(Request $request, string $notification)
@@ -79,17 +84,6 @@ class BusinessNotificationController extends Controller
         }
 
         return back()->with('success', 'Notification marked as read.');
-    }
-
-    public function markUnread(Request $request, string $notification)
-    {
-        $item = $this->notificationForUser($request, $notification);
-        if ($item->read_at) {
-            $item->update(['read_at' => null]);
-            $this->audit($request, 'notification_marked_unread', $item, 'Notification marked as unread.');
-        }
-
-        return back()->with('success', 'Notification marked as unread.');
     }
 
     public function destroy(Request $request, string $notification)

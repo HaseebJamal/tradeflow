@@ -46,6 +46,9 @@ class InventoryController extends Controller
             'month' => ['nullable', 'integer', 'between:1,12'],
             'year' => ['nullable', 'integer', 'between:2000,2100'],
         ]);
+        $today = now(config('app.timezone'))->toDateString();
+        $filters['date_from'] ??= $today;
+        $filters['date_to'] ??= $today;
 
         $movementQuery = InventoryMovement::query()
             ->with(['product', 'creator'])

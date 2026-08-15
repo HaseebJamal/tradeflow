@@ -6,6 +6,7 @@ use App\Models\Purchase;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseItem;
 use App\Models\PurchaseReturnItem;
+use App\Models\PurchaseRefundSettlement;
 use App\Models\SupplierPayment;
 
 /**
@@ -80,13 +81,17 @@ class PurchaseFinancialSummaryService
             ->where('business_id', $purchase->business_id)
             ->where('purchase_id', $purchase->id)
             ->sum('amount'));
+        $refundSettled = $this->money(PurchaseRefundSettlement::query()
+            ->where('business_id', $purchase->business_id)
+            ->where('purchase_id', $purchase->id)
+            ->sum('amount'));
 
         if (in_array($purchase->status, ['Draft', 'Cancelled'], true)) {
             $netLiability = 0.0;
         }
 
         $balance = max(0, $this->money($netLiability - $paid));
-        $status = $this->paymentStatus($purchase, $netLiability, $paid, $balance);
+        $status = $this->paymentStatus($purchase, $netLiability, $paid, $refundSettled, $balance);
 
         return [
             'gross_total' => $gross,
@@ -94,12 +99,13 @@ class PurchaseFinancialSummaryService
             'return_adjustments' => $returnAdjustments,
             'net_liability' => $netLiability,
             'paid_amount' => $paid,
+            'refund_settled' => $refundSettled,
             'balance' => $balance,
             'payment_status' => $status,
         ];
     }
 
-    private function paymentStatus(Purchase $purchase, float $netLiability, float $paid, float $balance): string
+    private function paymentStatus(Purchase $purchase, float $netLiability, float $paid, float $refundSettled, float $balance): string
     {
         if ($purchase->status === 'Cancelled') {
             return $paid > 0 ? 'Refund Due' : 'Unpaid';
@@ -109,7 +115,7 @@ class PurchaseFinancialSummaryService
             return 'Unpaid';
         }
 
-        if ($paid > $netLiability + 0.009) {
+        if ($paid > $netLiability + $refundSettled + 0.009) {
             return 'Refund Due';
         }
 

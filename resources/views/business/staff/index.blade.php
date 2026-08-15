@@ -49,7 +49,7 @@
             <td>
                 @companyCan('staff.edit')
                 <div class="d-flex justify-content-end align-items-center gap-1">
-                    <a href="{{ route('business.staff.show', $member) }}" class="btn btn-sm btn-outline-primary tf-table-view-action">View</a>
+                    <button type="button" class="btn btn-sm btn-outline-primary tf-table-view-action" data-bs-toggle="modal" data-bs-target="#staffDetailsModal{{ $member->id }}">View</button>
                     <div class="dropdown">
                     <button class="btn btn-sm btn-outline-secondary tf-table-more-action" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-display="dynamic" aria-expanded="false" aria-label="More actions for {{ $member->name }}"><i class="bi bi-three-dots"></i></button>
                     <div class="dropdown-menu dropdown-menu-end">
@@ -88,6 +88,16 @@
     @endforelse
     </tbody>
 </x-table>
+@foreach($staff as $member)
+    <x-record-details-modal :id="'staffDetailsModal'.$member->id" :title="$member->name" :status="ucfirst($member->status)" :open-url="route('business.staff.show', $member)" open-label="Open staff profile">
+        <div class="tf-record-details-grid">
+            <div><span>Role</span><strong>{{ $member->role === 'custom_staff' ? ($member->staffProfile?->custom_role_name ?: 'Custom Staff') : ($roles[$member->role] ?? $member->role) }}</strong></div>
+            <div><span>Joining date</span><strong>{{ $member->staffProfile?->joining_date?->format('n/j/Y') ?? '-' }}</strong></div>
+            <div><span>Phone</span><strong>{{ $member->phone ?: 'Not provided' }}</strong></div>
+            <div><span>Email</span><strong>{{ $member->email ?: 'Not provided' }}</strong></div>
+        </div>
+    </x-record-details-modal>
+@endforeach
 {{ $staff->links() }}
 </section>
 @endsection

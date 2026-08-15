@@ -1927,6 +1927,13 @@ body.sidebar-collapsed .tf-dashboard-shell > .tf-dashboard-main {
     overflow: hidden;
 }
 
+/* SweetAlert is the active dialog while a product-save confirmation is open.
+   Inert handles keyboard focus; this is the matching pointer fallback. */
+#inventoryProductCreateModal .modal-content[data-tf-confirmation-suspended="true"] {
+    pointer-events: none;
+    user-select: none;
+}
+
 #inventoryProductCreateModal .tf-inventory-product-create-form {
     display: flex;
     flex: 1 1 auto;

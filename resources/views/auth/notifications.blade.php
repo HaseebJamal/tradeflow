@@ -9,6 +9,7 @@
     $canApproveEmailChanges = $canApproveEmailChanges ?? false;
     $readOnlyNotifications = $readOnlyNotifications ?? false;
     $filters = $filters ?? [];
+    $unreadNotificationCount = $unreadNotificationCount ?? auth()->user()?->unreadNotifications()->count();
 @endphp
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
@@ -16,7 +17,7 @@
 <div class="tf-card p-3 mb-3">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
         <div><h2 class="h5 mb-1">Notification centre</h2><p class="tf-muted mb-0">{{ $isBusinessOwner ? 'Review staff requests and manage updates for your business.' : 'Manage your account and business updates.' }}</p></div>
-        @if(!$readOnlyNotifications && auth()->user()->unreadNotifications()->count())
+        @if(!$readOnlyNotifications && $unreadNotificationCount)
             <form method="POST" action="{{ route('notifications.read-all') }}" data-tf-confirm-message="Mark all notifications as read?">@csrf @method('PATCH')<button class="btn btn-outline-primary"><i class="bi bi-check2-all me-1"></i>Mark All as Read</button></form>
         @endif
     </div>
@@ -54,7 +55,8 @@
                 <td>{{ $notification->created_at?->format('n/j/Y') }}</td>
                 <td>{{ $notification->created_at?->format('h:i A') }}</td>
                 <td class="text-nowrap">
-                    @if($profileRequest || $emailChangeRequest)<details class="d-inline-block"><summary class="btn btn-sm btn-outline-primary">View</summary><div class="tf-notification-table-detail text-start">
+                    <button type="button" class="btn btn-sm btn-outline-primary tf-table-view-action" data-bs-toggle="modal" data-bs-target="#notificationDetailsModal{{ $notification->id }}">View</button>
+                    @if($profileRequest || $emailChangeRequest)<details class="d-inline-block"><summary class="btn btn-sm btn-outline-secondary">Review request</summary><div class="tf-notification-table-detail text-start">
                         @if($profileRequest)
                             <div class="row g-2 small mb-2">@foreach(['Name' => 'name', 'Email' => 'email', 'Phone' => 'phone'] as $label => $field)<div class="col-md-4"><strong>{{ $label }}:</strong> {{ data_get($profileRequest->old_values, $field) ?: '--' }} <span class="tf-muted">to</span> {{ data_get($profileRequest->requested_values, $field) ?: '--' }}</div>@endforeach<div class="col-12"><strong>Reason:</strong> {{ $profileRequest->reason }}</div></div>
                             @if($isBusinessOwner && $profileRequest->status === 'Pending')
@@ -68,7 +70,7 @@
                         @endif
                     </div></details>@endif
                     @if(!$readOnlyNotifications)
-                        @if(!$notification->read_at)<form class="d-inline" method="POST" action="{{ route('notifications.read', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Read</button></form>@else<form class="d-inline" method="POST" action="{{ route('notifications.unread', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Unread</button></form>@endif
+                        @if(!$notification->read_at)<form class="d-inline" method="POST" action="{{ route('notifications.read', $notification->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-secondary">Read</button></form>@endif
                         <form class="d-inline" method="POST" action="{{ route('notifications.destroy', $notification->id) }}" data-tf-confirm-message="Delete this notification?">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" title="Delete notification" aria-label="Delete notification"><i class="bi bi-trash"></i></button></form>
                     @endif
                 </td>
@@ -79,5 +81,14 @@
         </tbody>
     </x-table>
 </div>
+@foreach($notifications as $notification)
+    <x-record-details-modal :id="'notificationDetailsModal'.$notification->id" :title="data_get($notification->data, 'title', $platformSettings->company_name.' Notification')" :status="$notification->read_at ? 'Read' : 'Unread'">
+        <div class="tf-record-details-grid">
+            <div><span>Category</span><strong>{{ str(data_get($notification->data, 'category', 'general'))->headline() }}</strong></div>
+            <div><span>Received</span><strong><x-date-time :value="$notification->created_at" /></strong></div>
+            <div class="tf-record-details-wide"><span>Message</span><strong>{{ data_get($notification->data, 'message', 'No additional details are available.') }}</strong></div>
+        </div>
+    </x-record-details-modal>
+@endforeach
 @if($notifications->total())<div class="mt-3">{{ $notifications->links('pagination::bootstrap-5') }}</div>@endif
 @endsection

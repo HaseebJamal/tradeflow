@@ -28,3 +28,11 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+<IfModule mod_headers.c>
+    # POS draft synchronization changes must reach an already-open register
+    # promptly; do not let a browser reuse an older pos.js bundle.
+    <FilesMatch "^pos\.js$">
+        Header set Cache-Control "no-store, max-age=0, must-revalidate"
+    </FilesMatch>
+</IfModule>

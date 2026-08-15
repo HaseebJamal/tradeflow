@@ -68,6 +68,18 @@ class PosResumeDraftGuardTest extends TestCase
         $this->assertSame('Held', $held->fresh()->status);
     }
 
+    public function test_newer_empty_draft_sync_wins_over_an_older_in_flight_cart_sync(): void
+    {
+        [$user, $register] = $this->posContext();
+        $session = $this->app['session']->driver();
+        $drafts = app(PosDraftCartService::class);
+
+        $this->assertTrue($drafts->sync($session, $user->business_id, $user->id, $register->id, [['id' => 99]], 4));
+        $this->assertTrue($drafts->sync($session, $user->business_id, $user->id, $register->id, [], 5));
+        $this->assertFalse($drafts->sync($session, $user->business_id, $user->id, $register->id, [['id' => 99]], 4));
+        $this->assertFalse($drafts->hasItems($session, $user->business_id, $user->id, $register->id));
+    }
+
     public function test_another_tenants_hold_cannot_be_resumed(): void
     {
         [$user] = $this->posContext();
