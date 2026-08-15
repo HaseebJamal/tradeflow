@@ -73,6 +73,7 @@ class BusinessActionPermissionMiddleware
             'business.products.index', 'business.products.show' => 'products.view',
             'business.products.create', 'business.products.store' => 'products.create',
             'business.products.edit', 'business.products.update' => 'products.edit',
+            'business.products.bulk-pricing', 'business.products.bulk-pricing.update' => 'products.edit',
             'business.products.destroy' => 'products.delete',
             'business.products.archive' => 'products.archive', 'business.products.restore' => 'products.restore',
             'business.products.bulk', 'business.products.bulk.store' => 'products.bulk_import',

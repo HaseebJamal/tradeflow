@@ -17,6 +17,7 @@ use App\Models\Unit;
 use App\Services\BarcodeService;
 use App\Services\SubscriptionLimitService;
 use App\Services\CompanyPermissionService;
+use App\Services\ProductSellingPricePolicy;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,7 @@ use Throwable;
 
 class ProductController extends Controller
 {
-    public function __construct(private BarcodeService $barcodes)
+    public function __construct(private BarcodeService $barcodes, private ProductSellingPricePolicy $pricing)
     {
     }
 
@@ -78,6 +79,90 @@ class ProductController extends Controller
                 ->orderBy('name')
                 ->get(),
         ]);
+    }
+
+    public function bulkPricing(Request $request)
+    {
+        abort_unless(app(CompanyPermissionService::class)->allowsUser($request->user(), 'products.edit'), 403);
+
+        $businessId = (int) $request->user()->business_id;
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:120'],
+            'category_id' => ['nullable', 'integer'],
+            'unit_id' => ['nullable', 'integer'],
+            'pricing_status' => ['nullable', 'in:valid,needs,attention'],
+            'per_page' => ['nullable', 'integer', 'in:10,25,50,100'],
+        ]);
+        $cost = 'COALESCE(latest_purchase_price, average_purchase_price, purchase_cost, 0)';
+        $query = Product::with(['category', 'unitRecord', 'acceptedGoodsReceiptItems:id,product_id'])
+            ->where('business_id', $businessId)
+            ->whereNull('deleted_at')
+            ->when($filters['search'] ?? null, fn ($q, $value) => $q->where('name', 'like', "%{$value}%"))
+            ->when($filters['category_id'] ?? null, fn ($q, $value) => $q->where('category_id', $value))
+            ->when($filters['unit_id'] ?? null, fn ($q, $value) => $q->where('unit_id', $value));
+
+        match ($filters['pricing_status'] ?? null) {
+            'needs' => $query->where(fn ($q) => $q->where('retail_price', '<=', 0)->orWhere('wholesale_price', '<=', 0)),
+            'attention' => $query->whereRaw("{$cost} > 0")->whereRaw("(retail_price <= {$cost} OR wholesale_price <= {$cost})"),
+            'valid' => $query->whereRaw("{$cost} > 0")->whereRaw("retail_price > {$cost} AND wholesale_price > {$cost}"),
+            default => null,
+        };
+
+        return view('business.products.bulk-pricing', [
+            'products' => $query->orderBy('name')->paginate($filters['per_page'] ?? 10)->withQueryString(),
+            'categories' => Category::where('business_id', $businessId)->where('type', 'Product')->orderBy('name')->get(),
+            'units' => Unit::where('business_id', $businessId)->orderBy('unit_name')->get(),
+            'filters' => $filters,
+        ]);
+    }
+
+    public function updateBulkPricing(Request $request)
+    {
+        abort_unless(app(CompanyPermissionService::class)->allowsUser($request->user(), 'products.edit'), 403);
+        $data = $request->validate([
+            'rows' => ['required', 'array'],
+            'rows.*.id' => ['required', 'integer'],
+            'rows.*.retail_price' => ['nullable', 'numeric', 'min:0'],
+            'rows.*.wholesale_price' => ['nullable', 'numeric', 'min:0'],
+        ]);
+        $businessId = (int) $request->user()->business_id;
+
+        DB::transaction(function () use ($data, $businessId, $request) {
+            $products = Product::with(['acceptedGoodsReceiptItems:id,product_id'])
+                ->where('business_id', $businessId)->whereIn('id', collect($data['rows'])->pluck('id'))
+                ->lockForUpdate()->get()->keyBy('id');
+            if ($products->count() !== count($data['rows'])) abort(403);
+
+            foreach ($data['rows'] as $row) {
+                $product = $products->get((int) $row['id']);
+                $updates = [];
+                if (array_key_exists('retail_price', $row) && $row['retail_price'] !== null) $updates['retail_price'] = round((float) $row['retail_price'], 2);
+                if (array_key_exists('wholesale_price', $row) && $row['wholesale_price'] !== null) $updates['wholesale_price'] = round((float) $row['wholesale_price'], 2);
+                $updates = array_filter($updates, fn ($value, $field) => $value !== (float) $product->{$field}, ARRAY_FILTER_USE_BOTH);
+                if (! $updates) continue;
+
+                $newRetail = $updates['retail_price'] ?? (float) $product->retail_price;
+                $newWholesale = $updates['wholesale_price'] ?? (float) $product->wholesale_price;
+
+                $violations = $this->pricing->violations(['retail_price' => $newRetail, 'wholesale_price' => $newWholesale], $this->pricing->purchasePrice($product));
+                if ($violations) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'pricing.'.$product->id => $product->name.': '.implode(' ', $violations),
+                    ]);
+                }
+                $old = ['retail_price' => (float) $product->retail_price, 'wholesale_price' => (float) $product->wholesale_price];
+                $product->update($updates);
+                AuditLog::create([
+                    'business_id' => $businessId, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name,
+                    'role' => $request->user()->role, 'module' => 'Products', 'action' => 'bulk_pricing_updated',
+                    'description' => 'Bulk pricing updated for '.$product->name, 'record_type' => Product::class,
+                    'record_id' => $product->id, 'old_values' => $old,
+                    'new_values' => ['retail_price' => $newRetail, 'wholesale_price' => $newWholesale], 'occurred_at' => now(),
+                ]);
+            }
+        });
+
+        return redirect()->route('business.products.bulk-pricing', $request->query())->with('success', 'Product pricing updated successfully.');
     }
 
     /** Resolve an exact scanner lookup within the active business only. */

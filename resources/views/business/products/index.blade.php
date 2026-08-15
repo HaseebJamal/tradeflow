@@ -9,9 +9,10 @@
         <h2 class="h5 mb-1">Product Directory</h2>
         <p class="tf-muted mb-0">Search, filter, and manage your product master data.</p>
     </div>
-    @companyCan('products.create')
-    <a class="btn btn-tf-primary" href="{{ route('business.products.create') }}">+ Add Product</a>
-    @endcompanyCan
+    <div class="d-flex flex-wrap gap-2">
+        @companyCan('products.edit')<a class="btn btn-outline-primary" href="{{ route('business.products.bulk-pricing') }}"><i class="bi bi-tags me-1"></i>Bulk Pricing</a>@endcompanyCan
+        @companyCan('products.create')<a class="btn btn-tf-primary" href="{{ route('business.products.create') }}">+ Add Product</a>@endcompanyCan
+    </div>
 </div>
 <form class="tf-card p-4 mb-3" data-code-lookup-form data-code-lookup-url="{{ route('business.products.lookup') }}">
     <div class="row g-2 align-items-end">

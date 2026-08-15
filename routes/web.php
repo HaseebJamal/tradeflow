@@ -294,6 +294,8 @@ Route::prefix('business')->name('business.')->middleware(['auth', 'super_admin.c
     Route::post('/products-bulk', [ProductController::class, 'bulkStore'])->name('products.bulk.store')->middleware('business.permission:Products');
     Route::get('/products-template.csv', [ProductController::class, 'csvTemplate'])->name('products.template')->middleware('business.permission:Products');
     Route::get('/products-export.csv', [ProductController::class, 'export'])->name('products.export')->middleware('business.permission:Products');
+    Route::get('/products/bulk-pricing', [ProductController::class, 'bulkPricing'])->name('products.bulk-pricing')->middleware('business.permission:Products');
+    Route::patch('/products/bulk-pricing', [ProductController::class, 'updateBulkPricing'])->name('products.bulk-pricing.update')->middleware('business.permission:Products');
     Route::get('/products/lookup', [ProductController::class, 'lookup'])->name('products.lookup')->middleware('business.permission:Products');
     Route::patch('/products/{product}/archive', [ProductController::class, 'archive'])->name('products.archive')->middleware('business.permission:Products');
     Route::patch('/products/{product}/restore', [ProductController::class, 'restore'])->name('products.restore')->middleware('business.permission:Products');
