@@ -34,19 +34,19 @@
     <div class="col-md-2"><label class="form-label">IP Address</label><input name="ip_address" value="{{ request('ip_address') }}" class="form-control" placeholder="IPv4 or IPv6"></div>
     <div class="col-md-2 d-flex gap-2"><button class="btn btn-outline-primary flex-fill">Filter</button><a href="{{ route('business.audit-logs.index') }}" class="btn btn-outline-secondary">Clear</a></div>
 </form></div>
-<x-table class="tf-business-data-table tf-audit-data-table"><thead><tr><th>Date &amp; Time</th><th>Actor</th><th>Action</th><th>Module</th><th>Target</th><th>Description</th><th>IP Address</th><th>View</th></tr></thead><tbody>
+<x-table class="tf-business-data-table tf-audit-data-table"><thead><tr><th>Date &amp; Time</th><th>Actor</th><th>Action</th><th>Module</th><th>Target</th><th>Description</th><th>IP Address</th>@if($canViewDetails)<th>View</th>@endif</tr></thead><tbody>
 @forelse($logs as $log)
     @php($auditTarget = $log->record_type ? class_basename($log->record_type).($log->record_id ? ' #'.$log->record_id : '') : '—')
-    <tr><td><x-date-time :value="$log->occurred_at ?? $log->created_at" /></td><td><strong>{{ $log->user_name ?: $log->user?->name ?: 'System' }}</strong><small class="d-block tf-muted">{{ $log->role ?: $log->actor_role ?: 'system' }}</small></td><td><x-activity-label :activity="$log" /></td><td><x-activity-label :activity="$log" field="module" /></td><td>{{ $auditTarget }}</td><td title="{{ $log->description }}">{{ str($log->description ?: $log->action)->limit(64) }}</td><td>{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</td><td><button type="button" class="btn btn-sm btn-outline-primary tf-table-view-action" data-bs-toggle="modal" data-bs-target="#auditDetailsModal{{ $log->id }}">View</button></td></tr>
+    <tr><td><x-date-time :value="$log->occurred_at ?? $log->created_at" /></td><td><strong>{{ $log->user_name ?: $log->user?->name ?: 'System' }}</strong><small class="d-block tf-muted">{{ $log->role ?: $log->actor_role ?: 'system' }}</small></td><td><x-activity-label :activity="$log" /></td><td><x-activity-label :activity="$log" field="module" /></td><td>{{ $auditTarget }}</td><td title="{{ $log->description }}">{{ str($log->description ?: $log->action)->limit(64) }}</td><td>{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</td>@if($canViewDetails)<td><button type="button" class="btn btn-sm btn-outline-primary tf-table-view-action" data-bs-toggle="modal" data-bs-target="#auditDetailsModal{{ $log->id }}">View</button></td>@endif</tr>
 @empty
-    <tr><td colspan="8" class="text-center tf-muted py-4">No audit activity has been recorded yet.</td></tr>
+    <tr><td colspan="{{ $canViewDetails ? 8 : 7 }}" class="text-center tf-muted py-4">No audit activity has been recorded yet.</td></tr>
 @endforelse
 </tbody></x-table>
-@foreach($logs as $log)
+@if($canViewDetails)@foreach($logs as $log)
     @php($valueChanges = \App\Services\AuditDescriptionService::valueChanges($log->old_values, $log->new_values))
     @php($auditTarget = $log->record_type ? class_basename($log->record_type).($log->record_id ? ' #'.$log->record_id : '') : '—')
     <div class="modal fade" id="auditDetailsModal{{ $log->id }}" tabindex="-1" aria-labelledby="auditDetailsModalLabel{{ $log->id }}" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5" id="auditDetailsModalLabel{{ $log->id }}">Audit log details</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><dl class="row mb-0 small"><dt class="col-sm-4">Date &amp; time</dt><dd class="col-sm-8"><x-date-time :value="$log->occurred_at ?? $log->created_at" /></dd><dt class="col-sm-4">Actor</dt><dd class="col-sm-8">{{ $log->user_name ?: $log->user?->name ?: 'System' }}</dd><dt class="col-sm-4">Role</dt><dd class="col-sm-8">{{ $log->role ?: $log->actor_role ?: 'system' }}</dd><dt class="col-sm-4">Module</dt><dd class="col-sm-8"><x-activity-label :activity="$log" field="module" /></dd><dt class="col-sm-4">Action</dt><dd class="col-sm-8"><x-activity-label :activity="$log" /></dd><dt class="col-sm-4">Target</dt><dd class="col-sm-8">{{ $auditTarget }}</dd><dt class="col-sm-4">Description</dt><dd class="col-sm-8 text-break">{{ $log->description ?: '—' }}</dd><dt class="col-sm-4">Route</dt><dd class="col-sm-8 text-break">{{ $log->route ?: '—' }}</dd><dt class="col-sm-4">IP address</dt><dd class="col-sm-8">{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</dd></dl></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div></div></div></div>
-@endforeach
+@endforeach@endif
 <div class="mt-3 audit-log-pagination"><x-table-result-summary :paginator="$logs" />{{ $logs->links('pagination::bootstrap-5') }}</div>
 @endsection
 @push('scripts')

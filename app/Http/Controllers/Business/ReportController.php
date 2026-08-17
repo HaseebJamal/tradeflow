@@ -14,6 +14,7 @@ use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
 use App\Models\Supplier;
 use App\Services\ProfitabilityBreakdownService;
+use App\Services\CompanyPermissionService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -23,7 +24,10 @@ use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
-    public function __construct(private ProfitabilityBreakdownService $profitability) {}
+    public function __construct(
+        private ProfitabilityBreakdownService $profitability,
+        private CompanyPermissionService $permissions,
+    ) {}
 
     public function index(Request $request)
     {
@@ -107,6 +111,7 @@ class ReportController extends Controller
     public function pdf(Request $request, string $type)
     {
         abort_unless(in_array($type, ['sales', 'inventory', 'expense', 'profit-loss', 'supplier-payables', 'complete'], true), 404);
+        $this->authorizeExport($request, $type);
 
         $businessId = (int) $request->user()->business_id;
         $filters = $this->resolveFilters($request);
@@ -225,6 +230,24 @@ class ReportController extends Controller
         }
 
         return [$from, $to, 'Custom range'];
+    }
+
+    private function authorizeExport(Request $request, string $type): void
+    {
+        $user = $request->user();
+        abort_unless(
+            $this->permissions->allowsUser($user, 'reports.view')
+            && $this->permissions->allowsUser($user, 'reports.export'),
+            403
+        );
+
+        $feature = match ($type) {
+            'sales' => 'reports.sales_analytics',
+            'inventory' => 'reports.inventory_analytics',
+            default => 'reports.finance_reports',
+        };
+
+        abort_unless($this->permissions->allowsUser($user, $feature), 403);
     }
 
     private function orderQuery(int $businessId, array $filters)

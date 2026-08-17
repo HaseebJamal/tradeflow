@@ -16,10 +16,13 @@
         'invoiceSearchUrl' => route('business.pos.invoices.search'),
         'registerId' => $register?->id,
         'draftGeneration' => $draftGeneration,
+        'canOpenRegister' => $canOpenRegister,
+        'canApplyDiscount' => $canApplyDiscount,
         'canUseCustomPrice' => $canUseCustomPrice,
         'canUseSplitPayment' => $canUseSplitPayment,
         'canCreateCustomer' => $canCreateCustomer,
         'canRecordCashMovement' => $canRecordCashMovement,
+        'canCloseRegister' => $canCloseRegister,
         'paymentMethods' => $paymentMethods,
         'splitPaymentMethods' => $splitPaymentMethods,
     ]);
@@ -52,9 +55,9 @@
             @if($canRecordCashMovement)<span class="tf-pos-cash-actions" data-pos-cash-actions @if(! $register) hidden @endif><button type="button" class="btn btn-outline-success" data-pos-cash-in><i class="bi bi-plus-circle"></i><span>Cash In</span></button><button type="button" class="btn btn-outline-warning" data-pos-cash-out><i class="bi bi-dash-circle"></i><span>Cash Out</span></button></span>@endif
             <span data-pos-register-action>
                 @if($register)
-                    <button type="button" class="btn btn-outline-danger" data-pos-close-register><i class="bi bi-lock"></i><span>Close Register</span></button>
+                    @if($canCloseRegister)<button type="button" class="btn btn-outline-danger" data-pos-close-register><i class="bi bi-lock"></i><span>Close Register</span></button>@endif
                 @else
-                    <button type="button" class="btn btn-tf-primary" data-pos-open-register><i class="bi bi-unlock"></i><span>Open Register</span></button>
+                    @if($canOpenRegister)<button type="button" class="btn btn-tf-primary" data-pos-open-register><i class="bi bi-unlock"></i><span>Open Register</span></button>@endif
                 @endif
             </span>
         </div>
@@ -111,7 +114,7 @@
                     <small class="text-muted">Yes sends the completed sale to the Delivery queue.</small>
                 </div>
                 <div class="tf-pos-delivery-details d-none" data-pos-delivery-details><label class="form-label" for="posDeliveryAddress">Delivery Address</label><textarea id="posDeliveryAddress" class="form-control" data-pos-delivery-address rows="2" maxlength="1000" placeholder="Enter the delivery address"></textarea><small class="text-muted">A customer and delivery address are required for delivery.</small></div>
-                <div class="row g-2 mt-1"><div class="col-6"><label class="form-label">Discount %</label><input class="form-control js-whole-number" data-pos-discount type="number" min="0" max="100" step="1" value="0"></div><div class="col-6"><label class="form-label">Tax %</label><input class="form-control js-whole-number" data-pos-tax type="number" min="0" max="100" step="1" value="0"></div></div>
+                <div class="row g-2 mt-1"><div class="col-6"><label class="form-label">Discount %</label><input class="form-control js-whole-number" data-pos-discount type="number" min="0" max="100" step="1" value="0" @unless($canApplyDiscount) readonly aria-readonly="true" tabindex="-1" title="You do not have permission to apply POS discounts." @endunless></div><div class="col-6"><label class="form-label">Tax %</label><input class="form-control js-whole-number" data-pos-tax type="number" min="0" max="100" step="1" value="0"></div></div>
                 <input type="hidden" data-pos-payment-type value="Cash">
                 <div class="small text-muted border-top pt-2 mt-2" data-pos-summary>
                     <div class="d-flex justify-content-between"><span>Gross subtotal</span><span data-total="gross">Rs 0</span></div>

@@ -2299,6 +2299,26 @@ function initPermissionHierarchy(form) {
     if (!form || form.dataset.permissionHierarchyReady === '1') return;
     form.dataset.permissionHierarchyReady = '1';
 
+    const restoreInitialSelection = () => {
+        const rawSelection = form.dataset.permissionInitialSelection;
+        if (rawSelection === undefined) return;
+
+        try {
+            const selected = new Set(JSON.parse(rawSelection));
+            form.querySelectorAll('[data-permission-child]').forEach((child) => {
+                child.checked = selected.has(child.value);
+            });
+        } catch (_) {
+            // The HTML-rendered checkboxes remain the safe fallback if an
+            // older cached page contains an invalid initial-selection value.
+        }
+    };
+
+    // A browser can restore checkbox values from a prior visit even when the
+    // page was rendered with no selected permissions. Reapply the server's
+    // explicit initial values before the hierarchy calculates its state.
+    restoreInitialSelection();
+
     const master = form.querySelector('[data-permission-master]');
     const groups = [...form.querySelectorAll('[data-permission-group]')];
 
@@ -2372,6 +2392,7 @@ function initPermissionHierarchy(form) {
     form.querySelectorAll('[data-permission-child]').forEach((child) => child.addEventListener('change', syncAll));
 
     syncAll();
+    form.tradeFlowSyncPermissionHierarchy = syncAll;
 }
 
 function initPermissionHierarchies(root = document) {
@@ -2387,6 +2408,21 @@ function initPermissionHierarchies(root = document) {
 window.TradeFlowPermissions = { init: initPermissionHierarchies };
 initPermissionHierarchies();
 document.addEventListener('shown.bs.modal', (event) => initPermissionHierarchies(event.target));
+window.addEventListener('pageshow', (event) => {
+    if (!event.persisted) return;
+
+    document.querySelectorAll('[data-company-permission-form][data-permission-initial-selection]').forEach((form) => {
+        try {
+            const selected = new Set(JSON.parse(form.dataset.permissionInitialSelection));
+            form.querySelectorAll('[data-permission-child]').forEach((child) => {
+                child.checked = selected.has(child.value);
+            });
+            form.tradeFlowSyncPermissionHierarchy?.();
+        } catch (_) {
+            // Cached markup without a valid server selection is left intact.
+        }
+    });
+});
 
 function initCompanyCreateForm(form) {
     if (!form || form.dataset.companyCreateReady === '1') return;

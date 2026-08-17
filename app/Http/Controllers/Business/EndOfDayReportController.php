@@ -73,6 +73,7 @@ class EndOfDayReportController extends Controller
         $user = $request->user();
         abort_unless(
             $this->permissions->allowsUser($user, 'reports.view')
+            && $this->permissions->allowsUser($user, 'reports.finance_reports')
             && $this->permissions->allowsUser($user, 'accounting.view')
             && $this->permissions->allowsUser($user, 'sales.view')
             && $this->permissions->allowsUser($user, 'expenses.view'),

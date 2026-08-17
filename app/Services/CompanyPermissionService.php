@@ -11,6 +11,17 @@ use Illuminate\Support\Collection;
 
 class CompanyPermissionService
 {
+    /**
+     * These legacy definitions remain in the database so historical company
+     * and staff assignments can still be read, but are not assignable while
+     * their dependent workflow is not available in this single-location app.
+     *
+     * @var array<int, string>
+     */
+    private const NON_ASSIGNABLE_PERMISSION_KEYS = [
+        'inventory.stock_transfer',
+    ];
+
     public function allows(?User $user, string $permission, ?Business $business = null): bool
     {
         if (!$user) {
@@ -98,6 +109,7 @@ class CompanyPermissionService
             ->orderBy('label')
             ->get()
             ->filter(fn (PermissionDefinition $definition) => $this->normalise($definition->permission_key) === strtolower($definition->permission_key))
+            ->reject(fn (PermissionDefinition $definition) => in_array(strtolower($definition->permission_key), self::NON_ASSIGNABLE_PERMISSION_KEYS, true))
             ->values();
     }
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\AuditIpResolver;
+use App\Services\CompanyPermissionService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -33,6 +34,7 @@ class AuditLogController extends Controller
             'modules' => $metadata['modules'],
             'actions' => $metadata['actions'],
             'filters' => $filters,
+            'canViewDetails' => app(CompanyPermissionService::class)->allowsUser($request->user(), 'audit_logs.view_details'),
         ]);
     }
 

@@ -112,7 +112,12 @@ class StockMovementAnalyticsController extends Controller
 
     private function authorize(Request $request, bool $export = false): void
     {
-        abort_unless($this->permissions->allowsUser($request->user(), 'reports.view') && $this->permissions->allowsUser($request->user(), 'inventory.view'), 403);
+        abort_unless(
+            $this->permissions->allowsUser($request->user(), 'reports.view')
+            && $this->permissions->allowsUser($request->user(), 'inventory.view')
+            && $this->permissions->allowsUser($request->user(), 'reports.inventory_analytics'),
+            403
+        );
         if ($export) abort_unless($this->permissions->allowsUser($request->user(), 'reports.export'), 403);
     }
 }

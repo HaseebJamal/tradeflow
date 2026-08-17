@@ -17,6 +17,7 @@ class ContactController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'email' => ['required', 'email', 'max:255'],
+            'inquiry_type' => ['nullable', 'string', 'in:Sales Inquiry,Product Demo,Support,Partnership,Other'],
             'message' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
 
@@ -30,7 +31,7 @@ class ContactController extends Controller
             return back()->withInput()->withErrors(['contact' => 'We could not send your message right now. Please try again.']);
         }
 
-        $fingerprint = 'public-contact:'.hash('sha256', strtolower($data['email']).'|'.$data['phone'].'|'.trim($data['message']));
+        $fingerprint = 'public-contact:'.hash('sha256', strtolower($data['email']).'|'.$data['phone'].'|'.($data['inquiry_type'] ?? '').'|'.trim($data['message']));
         if (! Cache::add($fingerprint, true, now()->addMinutes(2))) {
             return back()->withInput()->withErrors(['message' => 'This message was recently sent. Please wait before sending it again.']);
         }
@@ -39,6 +40,7 @@ class ContactController extends Controller
             'name' => trim($data['name']),
             'phone' => $data['phone'],
             'email' => strtolower(trim($data['email'])),
+            'inquiry_type' => $data['inquiry_type'] ?? null,
             'message' => trim($data['message']),
             'submitted_at' => now(config('app.timezone'))->format('n/j/Y, g:i A'),
         ];

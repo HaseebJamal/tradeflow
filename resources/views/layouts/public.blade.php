@@ -34,6 +34,9 @@
     @if(request()->routeIs('public.home'))
         @vite('resources/css/public-landing.css')
     @endif
+    @if(request()->routeIs('public.contact'))
+        @vite('resources/css/public-contact.css')
+    @endif
     @vite('resources/css/theme-system.css')
     <script>if (window.location.hash) document.documentElement.classList.add('tf-initial-anchor');</script>
 </head>

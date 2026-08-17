@@ -4,9 +4,15 @@
     $existingVerificationDocuments = $editing
         ? $company->documents()->whereNotNull('file_path')->latest('id')->get()->keyBy('document_type')
         : collect();
+    // Browsers can restore checkbox state when returning to this page. Keep a
+    // server-defined source of truth so an untouched create form never picks
+    // up a permission from a previous visit, while retaining selections after
+    // an actual validation failure.
+    $oldPermissions = old('permissions', []);
+    $initialPermissions = ! $editing && is_array($oldPermissions) ? array_values($oldPermissions) : [];
 @endphp
 
-<form method="POST" action="{{ $editing ? route('admin.companies.update', $company) : route('admin.companies.store') }}" enctype="multipart/form-data" class="row g-3" @if(!$editing) data-company-create-form data-company-permission-form @endif>
+<form method="POST" action="{{ $editing ? route('admin.companies.update', $company) : route('admin.companies.store') }}" enctype="multipart/form-data" class="row g-3" @if(!$editing) data-company-create-form data-company-permission-form data-permission-initial-selection="{{ json_encode($initialPermissions) }}" autocomplete="off" @endif>
     @csrf
     @if($editing) @method('PUT') @endif
 
@@ -66,10 +72,10 @@
         <div class="col-md-4"><label class="form-label">Initial Status</label><div class="form-control bg-light">Approved</div><small class="tf-muted">Companies created by Super Admin are approved automatically.</small></div>
         <div class="col-12"><label class="form-label" for="companyNotes">Notes <span class="tf-muted">Optional</span></label><textarea id="companyNotes" name="notes" class="form-control" rows="2" placeholder="Internal creation notes">{{ old('notes') }}</textarea></div>
         <div class="col-12 mt-3"><div class="d-flex flex-wrap justify-content-between align-items-center gap-2"><div><h2 class="h5 mb-1">Company Panel Permissions</h2><p class="tf-muted mb-0">Enable a module, then select the features and actions available to this new company.</p></div><label class="form-check border rounded px-3 py-2 mb-0"><input class="form-check-input me-2" type="checkbox" data-permission-master> Select All <span class="tf-muted" data-permission-total-selected></span></label></div></div>
-        <div class="col-12"><div class="row g-3">@foreach(($definitions ?? collect())->groupBy('module') as $module => $permissions)<div class="col-md-6 col-xl-4"><x-admin.permission-group :module="$module" :label="ucwords(str_replace('_', ' ', $module))" :permissions="$permissions" :selected-permissions="old('permissions', [])" /></div>@endforeach</div></div>
+        <div class="col-12"><div class="row g-3">@foreach(($definitions ?? collect())->groupBy('module') as $module => $permissions)<div class="col-md-6 col-xl-4"><x-admin.permission-group :module="$module" :label="ucwords(str_replace('_', ' ', $module))" :permissions="$permissions" :selected-permissions="$initialPermissions" /></div>@endforeach</div></div>
     @endif
 
-    <div class="col-12"><button class="btn btn-tf-primary" type="submit" @if(!$editing) data-company-create-submit disabled @endif>{{ $editing ? 'Save Company Changes' : 'Create Company' }}</button><a href="{{ $editing ? route('admin.companies.show', $company) : route('admin.companies.index') }}" class="btn btn-outline-secondary">Cancel</a>@if(!$editing)<div class="small text-danger mt-2 d-none" data-company-create-status></div>@endif</div>
+    <div class="col-12"><button class="btn btn-tf-primary" type="submit" @if(!$editing) data-company-create-submit disabled @endif>{{ $editing ? 'Save Company Changes' : 'Create Company' }}</button><a href="{{ $editing ? route('admin.companies.show', $company) : route('admin.companies.index') }}" class="btn btn-outline-secondary ms-2">Cancel</a>@if(!$editing)<div class="small text-danger mt-2 d-none" data-company-create-status></div>@endif</div>
 </form>
 
 @push('scripts')

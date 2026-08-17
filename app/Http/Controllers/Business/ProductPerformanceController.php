@@ -163,7 +163,13 @@ class ProductPerformanceController extends Controller
 
     private function authorize(Request $request, bool $export = false): void
     {
-        abort_unless($this->permissions->allowsUser($request->user(), 'reports.view') && $this->permissions->allowsUser($request->user(), 'sales.view'), 403);
+        abort_unless(
+            $this->permissions->allowsUser($request->user(), 'reports.view')
+            && $this->permissions->allowsUser($request->user(), 'sales.view')
+            && $this->permissions->allowsUser($request->user(), 'reports.sales_analytics')
+            && $this->permissions->allowsUser($request->user(), 'reports.finance_reports'),
+            403
+        );
         if ($export) abort_unless($this->permissions->allowsUser($request->user(), 'reports.export'), 403);
     }
 }

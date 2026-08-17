@@ -50,6 +50,8 @@ class PosController extends Controller
                 ? Customer::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(['id', 'name', 'phone'])
                 : collect(),
             'canViewCustomers' => $canViewCustomers,
+            'canOpenRegister' => $permissions->allowsUser($request->user(), 'pos.open_register'),
+            'canApplyDiscount' => $permissions->allowsUser($request->user(), 'pos.apply_discount'),
             'canUseCustomPrice' => $permissions->allowsUser($request->user(), 'pos.override_price'),
             'canUseSplitPayment' => $permissions->allowsUser($request->user(), 'pos.split_payment'),
             'canCreateCustomer' => $permissions->allowsUser($request->user(), 'customers.create'),
@@ -156,11 +158,14 @@ class PosController extends Controller
             $this->drafts->clear($request->session(), $request->user()->business_id, $request->user()->id, $register->id);
         }
 
+        $canPrintReceipt = app(CompanyPermissionService::class)->allowsUser($request->user(), 'pos.print_receipt');
+
         return $this->respond($request, [
             'order' => $order,
-            'receipt_url' => route('business.pos.receipt.view', ['invoice' => $invoice]),
-            'receipt_download_url' => route('business.pos.receipt.download', ['invoice' => $invoice]),
-            'receipt_print_url' => route('business.pos.receipt.print', ['invoice' => $invoice]),
+            'can_print_receipt' => $canPrintReceipt,
+            'receipt_url' => $canPrintReceipt ? route('business.pos.receipt.view', ['invoice' => $invoice]) : null,
+            'receipt_download_url' => $canPrintReceipt ? route('business.pos.receipt.download', ['invoice' => $invoice]) : null,
+            'receipt_print_url' => $canPrintReceipt ? route('business.pos.receipt.print', ['invoice' => $invoice]) : null,
             'history_url' => route('business.pos.history'),
         ], 'Sale completed successfully.');
     }
@@ -288,13 +293,15 @@ class PosController extends Controller
             ->limit(7)
             ->get(['id', 'order_number', 'customer_id', 'grand_total', 'total']);
 
-        return response()->json(['invoices' => $orders->map(function (Order $order) {
+        $canPrintReceipt = app(CompanyPermissionService::class)->allowsUser($request->user(), 'pos.print_receipt');
+
+        return response()->json(['invoices' => $orders->map(function (Order $order) use ($canPrintReceipt) {
             $number = $this->receiptReference($order);
             return [
                 'number' => $number,
                 'customer_name' => $order->customer?->display_name ?? 'Walk-in Customer',
                 'amount' => (int) ($order->grand_total ?: $order->total),
-                'url' => route('business.pos.receipt.view', ['invoice' => $number]),
+                'url' => $canPrintReceipt ? route('business.pos.receipt.view', ['invoice' => $number]) : null,
             ];
         })->values()]);
     }

@@ -92,8 +92,6 @@
             $companyStatus = strtolower((string) $company->status);
             $staffCount = $company->users->where('role', '!=', 'business_owner')->count();
             $rolesCount = $company->users->pluck('role')->filter()->unique()->count();
-            $verificationDocuments = $company->documents->keyBy('document_type');
-            $documentLabels = ['cnic_image' => 'CNIC', 'business_document' => 'Business Document', 'shop_image' => 'Shop Image'];
         @endphp
         <div class="modal fade tf-company-details-modal" id="company-details-{{ $company->id }}" tabindex="-1" aria-labelledby="company-details-title-{{ $company->id }}" aria-hidden="true">
             <div class="modal-dialog modal-dialog-scrollable">
@@ -133,15 +131,6 @@
                             <div class="row g-3">
                                 @foreach(['Staff Count' => $staffCount, 'Roles Count' => $rolesCount, 'Products' => $company->products_count, 'Customers' => $company->customers_count, 'Suppliers' => $company->suppliers_count, 'Sales' => $company->orders_count, 'Purchases' => $company->purchases_count] as $label => $value)
                                     <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block">{{ $label }}</small><strong>{{ number_format($value ?? 0) }}</strong></div></div>
-                                @endforeach
-                            </div>
-                        </section>
-                        <section>
-                            <h3 class="h6 mb-3">Verification</h3>
-                            <div class="row g-3">
-                                @foreach($documentLabels as $documentType => $label)
-                                    @php($document = $verificationDocuments->get($documentType))
-                                    <div class="col-md-4"><div class="border rounded p-3 h-100"><small class="tf-muted d-block mb-2">{{ $label }}</small><x-admin-document-verification :company="$company" :document="$document" :label="$label" /></div></div>
                                 @endforeach
                             </div>
                         </section>

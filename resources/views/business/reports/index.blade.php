@@ -14,6 +14,10 @@
     $salesChartMax = max(1, (float) $chartRows->max('net_sales'));
     $comparisonChartMax = max(1, (float) $chartRows->flatMap(fn ($row) => [$row['net_sales'], $row['expenses']])->max());
     $profitChartMax = max(1, (float) $chartRows->flatMap(fn ($row) => [abs($row['gross_profit']), abs($row['net_profit'])])->max());
+    $permissionService = app(\App\Services\CompanyPermissionService::class);
+    $canViewFinanceReports = $permissionService->allowsUser(auth()->user(), 'reports.finance_reports');
+    $canViewSalesAnalytics = $permissionService->allowsUser(auth()->user(), 'reports.sales_analytics');
+    $canViewInventoryAnalytics = $permissionService->allowsUser(auth()->user(), 'reports.inventory_analytics');
     $primaryMetrics = [
         ['Net Sales', $money($netSales), 'After discounts and returns', 'bi-receipt', 'blue'],
         ['Gross Profit', $money($grossProfit), 'Net sales less COGS', 'bi-graph-up-arrow', $grossProfit < 0 ? 'red' : 'green'],
@@ -47,6 +51,10 @@
             ['Overdue', $money($overduePayables), 'Past due date', 'bi-exclamation-circle', 'red'],
         ]],
     ];
+    if (! $canViewFinanceReports) {
+        $primaryMetrics = array_values(array_filter($primaryMetrics, fn (array $metric) => ! in_array($metric[0], ['Gross Profit', 'Net Profit', 'Net Loss'], true)));
+        $metricGroups = array_values(array_filter($metricGroups, fn (array $group) => ! in_array($group[0], ['Profitability', 'Supplier Exposure'], true)));
+    }
 @endphp
 
 @if($errors->any())
@@ -54,17 +62,29 @@
 @endif
 
 <div class="d-flex flex-wrap gap-2 justify-content-end mb-3">
-    @companyCan('accounting.view')
-        @companyCan('sales.view')
-            @companyCan('expenses.view')
-                <a href="{{ route('business.reports.end-of-day') }}" class="btn btn-sm btn-tf-primary"><i class="bi bi-calendar2-check me-1"></i>End of Day</a>
+    @companyCan('reports.finance_reports')
+        @companyCan('accounting.view')
+            @companyCan('sales.view')
+                @companyCan('expenses.view')
+                    <a href="{{ route('business.reports.end-of-day') }}" class="btn btn-sm btn-tf-primary"><i class="bi bi-calendar2-check me-1"></i>End of Day</a>
+                @endcompanyCan
             @endcompanyCan
         @endcompanyCan
     @endcompanyCan
     @companyCan('customers.view')<a href="{{ route('business.reports.customer-aging') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-people me-1"></i>Customer Aging</a>@endcompanyCan
     @companyCan('suppliers.view')<a href="{{ route('business.reports.supplier-aging') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-building me-1"></i>Supplier Aging</a>@endcompanyCan
-    @companyCan('inventory.view')<a href="{{ route('business.reports.stock-movement-analytics') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-graph-up-arrow me-1"></i>Stock Movement Analytics</a>@endcompanyCan
-    @companyCan('sales.view')<a href="{{ route('business.reports.product-performance') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-bar-chart-line me-1"></i>Product Performance</a>@endcompanyCan
+    @companyCan('inventory.view')
+        @companyCan('reports.inventory_analytics')
+            <a href="{{ route('business.reports.stock-movement-analytics') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-graph-up-arrow me-1"></i>Stock Movement Analytics</a>
+        @endcompanyCan
+    @endcompanyCan
+    @companyCan('sales.view')
+        @companyCan('reports.sales_analytics')
+            @companyCan('reports.finance_reports')
+                <a href="{{ route('business.reports.product-performance') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-bar-chart-line me-1"></i>Product Performance</a>
+            @endcompanyCan
+        @endcompanyCan
+    @endcompanyCan
 </div>
 
 <section class="tf-report-filter-bar" aria-label="Report filters">
@@ -144,6 +164,7 @@
     @endforeach
 </section>
 
+@if($canViewFinanceReports)
 <div class="modal fade" id="profitabilityBreakdownModal" tabindex="-1" aria-labelledby="profitabilityBreakdownTitle" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
         <div class="modal-header"><div><h2 class="modal-title h5 mb-1" id="profitabilityBreakdownTitle">Profitability breakdown</h2><p class="tf-muted small mb-0">{{ $filters['from']->format('n/j/Y') }} – {{ $filters['to']->format('n/j/Y') }}</p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
@@ -156,6 +177,7 @@
         </div><div class="modal-footer"><button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Close</button></div>
     </div></div>
 </div>
+@endif
 
 <section class="tf-report-analytics" aria-labelledby="reportAnalyticsHeading">
     <div class="tf-report-section-title"><div><span>Analytics</span><h2 id="reportAnalyticsHeading">Performance trends</h2></div><p>Filtered activity over time.</p></div>
@@ -167,6 +189,7 @@
                 <div class="tf-report-empty"><i class="bi bi-bar-chart"></i><span>No sales data for this period.</span></div>
             @endif
         </article>
+        @if($canViewFinanceReports && $canViewSalesAnalytics)
         <article class="tf-report-chart-card"><header><div><h3>Sales vs Expenses</h3><p>Net sales compared with expenses</p></div><span class="tf-report-legend"><i class="is-blue"></i>Sales <i class="is-amber"></i>Expenses</span></header>
             @if($chartRows->isNotEmpty())
                 <div class="tf-report-bars">@foreach($chartRows as $row)<div class="tf-report-bar-column"><span title="{{ $row['label'] }} sales: {{ $money($row['net_sales']) }}" class="tf-report-bar is-blue" style="--tf-bar-height: {{ max(2, round(($row['net_sales'] / $comparisonChartMax) * 100)) }}%"></span><span title="{{ $row['label'] }} expenses: {{ $money($row['expenses']) }}" class="tf-report-bar is-amber" style="--tf-bar-height: {{ max(2, round(($row['expenses'] / $comparisonChartMax) * 100)) }}%"></span><small>{{ $row['label'] }}</small></div>@endforeach</div>
@@ -174,6 +197,8 @@
                 <div class="tf-report-empty"><i class="bi bi-bar-chart"></i><span>No comparison data for this period.</span></div>
             @endif
         </article>
+        @endif
+        @if($canViewFinanceReports && $canViewSalesAnalytics)
         <article class="tf-report-chart-card"><header><div><h3>Profit Trend</h3><p>Gross and net profit</p></div><span class="tf-report-legend"><i class="is-green"></i>Gross <i class="is-blue"></i>Net</span></header>
             @if($chartRows->isNotEmpty())
                 <div class="tf-report-bars">@foreach($chartRows as $row)<div class="tf-report-bar-column"><span title="{{ $row['label'] }} gross profit: {{ $money($row['gross_profit']) }}" class="tf-report-bar {{ $row['gross_profit'] < 0 ? 'is-red' : 'is-green' }}" style="--tf-bar-height: {{ max(2, round((abs($row['gross_profit']) / $profitChartMax) * 100)) }}%"></span><span title="{{ $row['label'] }} net profit: {{ $money($row['net_profit']) }}" class="tf-report-bar {{ $row['net_profit'] < 0 ? 'is-red' : 'is-blue' }}" style="--tf-bar-height: {{ max(2, round((abs($row['net_profit']) / $profitChartMax) * 100)) }}%"></span><small>{{ $row['label'] }}</small></div>@endforeach</div>
@@ -181,6 +206,7 @@
                 <div class="tf-report-empty"><i class="bi bi-pie-chart"></i><span>No profit data for this period.</span></div>
             @endif
         </article>
+        @endif
     </div>
 </section>
 
@@ -195,15 +221,17 @@
 </section>
 
 @companyCan('reports.export')
+    @if($canViewSalesAnalytics || $canViewInventoryAnalytics || $canViewFinanceReports)
     <section class="tf-report-export" aria-label="Export reports">
         <div><span class="tf-dashboard-eyebrow">Export</span><h2>Export Report</h2><p>Generate a print-ready report for {{ $filters['from']->format('n/j/Y') }} &ndash; {{ $filters['to']->format('n/j/Y') }}.</p></div>
         <form method="GET" class="tf-report-export-form" data-report-export data-export-base="{{ url('/business/reports') }}">
             @foreach($exportFilters as $key => $value)<input type="hidden" name="{{ $key }}" value="{{ $value }}">@endforeach
-            <label>Report Type<select id="reportExportType" name="type" class="form-select"><option value="sales">Sales</option><option value="inventory">Inventory</option><option value="profit-loss">Profitability</option><option value="supplier-payables">Supplier Payables</option><option value="complete">Complete Business Report</option><option value="expense">Expenses</option></select></label>
+            <label>Report Type<select id="reportExportType" name="type" class="form-select">@if($canViewSalesAnalytics)<option value="sales">Sales</option>@endif @if($canViewInventoryAnalytics)<option value="inventory">Inventory</option>@endif @if($canViewFinanceReports)<option value="profit-loss">Profitability</option><option value="supplier-payables">Supplier Payables</option><option value="complete">Complete Business Report</option><option value="expense">Expenses</option>@endif</select></label>
             <label>Format<select id="reportExportFormat" name="format" class="form-select"><option value="pdf">PDF</option></select></label>
             <button class="btn btn-tf-primary" type="submit"><i class="bi bi-filetype-pdf"></i>Export Report</button>
         </form>
     </section>
+    @endif
 @endcompanyCan
 @endsection
 

@@ -20,6 +20,7 @@ class PublicContactEmailTest extends TestCase
             'name' => 'Haseeb Jamal',
             'phone' => '+923001234567',
             'email' => 'visitor@example.test',
+            'inquiry_type' => 'Product Demo',
             'message' => 'I would like to learn more about Profit Point.',
         ]);
 
@@ -28,6 +29,7 @@ class PublicContactEmailTest extends TestCase
             $this->assertTrue($mail->hasTo('support@example.test'));
             $this->assertSame('New Profit Point Contact Inquiry - Haseeb Jamal', $mail->envelope()->subject);
             $this->assertSame('visitor@example.test', $mail->envelope()->replyTo[0]->address);
+            $this->assertSame('Product Demo', $mail->inquiry['inquiry_type']);
 
             return true;
         });

@@ -7,6 +7,7 @@
         <tr><td style="padding:3px 16px 3px 0;color:#64748b;">Name</td><td style="padding:3px 0;">{{ $inquiry['name'] }}</td></tr>
         <tr><td style="padding:3px 16px 3px 0;color:#64748b;">Phone</td><td style="padding:3px 0;">{{ $inquiry['phone'] }}</td></tr>
         <tr><td style="padding:3px 16px 3px 0;color:#64748b;">Email</td><td style="padding:3px 0;"><a href="mailto:{{ $inquiry['email'] }}">{{ $inquiry['email'] }}</a></td></tr>
+        @if(filled($inquiry['inquiry_type'] ?? null))<tr><td style="padding:3px 16px 3px 0;color:#64748b;">Inquiry type</td><td style="padding:3px 0;">{{ $inquiry['inquiry_type'] }}</td></tr>@endif
         <tr><td style="padding:3px 16px 3px 0;color:#64748b;">Submitted</td><td style="padding:3px 0;">{{ $inquiry['submitted_at'] }}</td></tr>
         <tr><td style="padding:3px 16px 3px 0;color:#64748b;">Source</td><td style="padding:3px 0;">Public Contact Form</td></tr>
     </table>

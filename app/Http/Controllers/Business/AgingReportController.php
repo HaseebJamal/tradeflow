@@ -47,7 +47,7 @@ class AgingReportController extends Controller
 
     public function customerPdf(Request $request)
     {
-        $this->authorize($request, 'customers.view');
+        $this->authorize($request, 'customers.view', true);
         $filters = $this->filters($request);
         $report = $this->aging->customerReport((int) $request->user()->business_id, $filters);
 
@@ -82,7 +82,7 @@ class AgingReportController extends Controller
 
     public function supplierPdf(Request $request)
     {
-        $this->authorize($request, 'suppliers.view');
+        $this->authorize($request, 'suppliers.view', true);
         $filters = $this->filters($request);
         $report = $this->aging->supplierReport((int) $request->user()->business_id, $filters);
 
@@ -123,12 +123,16 @@ class AgingReportController extends Controller
         return $data;
     }
 
-    private function authorize(Request $request, string $partyPermission): void
+    private function authorize(Request $request, string $partyPermission, bool $export = false): void
     {
         abort_unless(
             $this->permissions->allowsUser($request->user(), 'reports.view')
             && $this->permissions->allowsUser($request->user(), $partyPermission),
             403
         );
+
+        if ($export) {
+            abort_unless($this->permissions->allowsUser($request->user(), 'reports.export'), 403);
+        }
     }
 }

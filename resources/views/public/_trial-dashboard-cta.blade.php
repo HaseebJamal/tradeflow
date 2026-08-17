@@ -5,11 +5,15 @@
 @endphp
 
 @if($isLoggedIn)
-    <a href="{{ route('dashboard.redirect') }}" class="{{ $ctaClass }}" aria-label="{{ $ctaLabel }}" @if($isFloating) data-tooltip="{{ $ctaLabel }}" @endif>
-        @if($isFloating)<i class="bi bi-rocket-takeoff-fill" aria-hidden="true"></i><span class="pp-demo-float__label" aria-hidden="true">Dashboard</span><span class="visually-hidden">{{ $ctaLabel }}</span>@else{{ $ctaLabel }} <i class="bi bi-arrow-up-right" aria-hidden="true"></i>@endif
+    <a href="{{ route('dashboard.redirect') }}" class="{{ $ctaClass }}" aria-label="{{ $ctaLabel }}" @if($isFloating) data-floating-trial-cta aria-hidden="true" tabindex="-1" @endif>
+        @if($isFloating)<i class="bi bi-rocket-takeoff-fill" aria-hidden="true"></i><span class="pp-demo-float__label" aria-hidden="true">{{ $ctaLabel }}</span>@else{{ $ctaLabel }} <i class="bi bi-arrow-up-right" aria-hidden="true"></i>@endif
     </a>
-@else
-    <button type="button" class="{{ $ctaClass }}" aria-label="{{ $ctaLabel }}" data-bs-toggle="modal" data-bs-target="#profitPointTrialModal" @if($isFloating) data-tooltip="{{ $ctaLabel }}" @endif>
-        @if($isFloating)<i class="bi bi-rocket-takeoff-fill" aria-hidden="true"></i><span class="pp-demo-float__label" aria-hidden="true">Free Trial</span><span class="visually-hidden">{{ $ctaLabel }}</span>@else{{ $ctaLabel }} <i class="bi bi-arrow-up-right" aria-hidden="true"></i>@endif
+@elseif($isFloating)
+    <button type="button" class="{{ $ctaClass }}" aria-label="{{ $ctaLabel }}" data-bs-toggle="modal" data-bs-target="#profitPointTrialModal" @if($isFloating) data-floating-trial-cta aria-hidden="true" tabindex="-1" @endif>
+        @if($isFloating)<i class="bi bi-rocket-takeoff-fill" aria-hidden="true"></i><span class="pp-demo-float__label" aria-hidden="true">{{ $ctaLabel }}</span>@else{{ $ctaLabel }} <i class="bi bi-arrow-up-right" aria-hidden="true"></i>@endif
     </button>
+@else
+    <a href="{{ route('register.business') }}" class="{{ $ctaClass }}" aria-label="{{ $ctaLabel }}">
+        {{ $ctaLabel }} <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+    </a>
 @endif

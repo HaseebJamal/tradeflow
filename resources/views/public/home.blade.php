@@ -582,17 +582,38 @@
             const nav = document.querySelector('.pp-nav');
             const syncNav = () => nav?.classList.toggle('is-scrolled', scrollY > 12);
             syncNav(); window.addEventListener('scroll', syncNav, { passive: true });
+            const floatingTrial = document.querySelector('[data-floating-trial-cta]');
+            const hero = document.querySelector('#hero');
+            const footer = document.querySelector('.pp-footer');
+            if (floatingTrial && hero) {
+                let heroMostlyVisible = true;
+                let footerVisible = false;
+                const syncFloatingTrial = () => {
+                    const visible = !heroMostlyVisible && !footerVisible;
+                    floatingTrial.classList.toggle('is-visible', visible);
+                    floatingTrial.setAttribute('aria-hidden', visible ? 'false' : 'true');
+                    floatingTrial.tabIndex = visible ? 0 : -1;
+                };
+                new IntersectionObserver(([entry]) => {
+                    // The hero CTA remains the clear primary action until most
+                    // of the hero has passed out of the viewport.
+                    heroMostlyVisible = entry.isIntersecting && entry.intersectionRatio >= .35;
+                    syncFloatingTrial();
+                }, { threshold: [0, .35] }).observe(hero);
+                if (footer) {
+                    new IntersectionObserver(([entry]) => {
+                        footerVisible = entry.isIntersecting;
+                        syncFloatingTrial();
+                    }, { threshold: 0, rootMargin: '0px 0px 72px 0px' }).observe(footer);
+                }
+                syncFloatingTrial();
+            }
             const navLinks = [...document.querySelectorAll('.pp-nav-links a[href*="#"]')];
             const navSections = navLinks.map(link => [link, document.querySelector(new URL(link.href).hash)]).filter(([, section]) => section);
             const navObserver = new IntersectionObserver(entries => entries.forEach(entry => { if (!entry.isIntersecting) return; navLinks.forEach(link => link.classList.toggle('is-active', link.getAttribute('href').endsWith(`#${entry.target.id}`))); }), { rootMargin: '-35% 0px -58% 0px', threshold: 0 });
             navSections.forEach(([, section]) => navObserver.observe(section));
             document.querySelectorAll('.pp-btn-primary, .pp-btn-secondary, .pp-btn-white, .pp-btn-ghost, .pp-nav-cta').forEach(button => button.addEventListener('click', event => { const ripple = document.createElement('span'), rect = button.getBoundingClientRect(); ripple.className = 'pp-ripple'; ripple.style.left = `${event.clientX - rect.left}px`; ripple.style.top = `${event.clientY - rect.top}px`; button.append(ripple); ripple.addEventListener('animationend', () => ripple.remove()); }));
             const demoModal = document.getElementById('profitPointDemoModal');
-            const trialModal = document.getElementById('profitPointTrialModal');
-            document.addEventListener('click', event => {
-                if (!event.target.closest('[data-bs-target="#profitPointTrialModal"]') || !demoModal?.classList.contains('show')) return;
-                bootstrap.Modal.getInstance(demoModal)?.hide();
-            });
             const demoPlayer = demoModal?.querySelector('[data-demo-player]');
             const stopDemo = () => {
                 if (!demoPlayer) return;

@@ -548,6 +548,12 @@ a:hover {
     padding: 0.5rem !important;
 }
 
+/* The verification summary has three columns; the default 500px Bootstrap
+   dialog made those cards unnecessarily cramped on desktop. */
+.tf-company-details-modal .modal-dialog {
+    max-width: min(760px, calc(100% - 2rem));
+}
+
 .tf-company-details-modal .modal-body section .border > strong {
     font-weight: 400;
 }
@@ -4258,13 +4264,12 @@ body > .dropdown-menu.tf-action-dropdown-portal.tf-payment-actions {
 .pp-floating-cta { isolation:isolate;will-change:translate;animation:pp-float-breathe 6s ease-in-out infinite; }
 .pp-floating-cta::before { border:2px solid currentColor;border-radius:inherit;content:"";inset:-5px;opacity:0;pointer-events:none;position:absolute;z-index:0;animation:pp-float-pulse 6s ease-out infinite; }
 .pp-floating-cta>i,.pp-floating-cta>span { position:relative;z-index:1; }
-.pp-demo-float { position:fixed;left:24px;bottom:24px;z-index:1035;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-width:154px;height:56px;padding:0 1.1rem;border:0;border-radius:999px;background:linear-gradient(135deg,#2563eb,#3b5ee8);color:#fff!important;font-size:.95rem;font-weight:800;text-decoration:none;box-shadow:0 12px 28px rgba(37,99,235,.3);transition:transform .24s ease,box-shadow .24s ease,background .24s ease;animation-delay:0s; }
+.pp-demo-float { position:fixed;left:24px;bottom:24px;z-index:1035;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;width:56px;min-width:56px;height:56px;padding:0;border:0;border-radius:999px;overflow:hidden;background:linear-gradient(135deg,#2563eb,#3b5ee8);color:#fff!important;font-size:.95rem;font-weight:800;text-decoration:none;box-shadow:0 12px 28px rgba(37,99,235,.3);opacity:0;pointer-events:none;transform:translateY(12px);visibility:hidden;transition:width .26s ease,padding .26s ease,transform .24s ease,box-shadow .24s ease,background .24s ease,opacity .22s ease,visibility 0s linear .26s;animation-delay:0s; }
 .pp-demo-float::before { color:#a5b4fc;animation-delay:0s; }
-.pp-demo-float::after { content:attr(data-tooltip);position:absolute;left:calc(100% + 12px);top:50%;width:max-content;transform:translateY(-50%) translateX(-4px);padding:8px 10px;border-radius:8px;background:#0f172a;color:#fff;font:600 .75rem/1.2 Inter,sans-serif;opacity:0;pointer-events:none;transition:opacity .24s ease,transform .24s ease; }
-.pp-demo-float:hover,.pp-demo-float:focus-visible { background:linear-gradient(135deg,#1d4ed8,#4f46e5);color:#fff!important;transform:scale(1.05);box-shadow:0 16px 32px rgba(79,70,229,.36); }
-.pp-demo-float:hover::after,.pp-demo-float:focus-visible::after { opacity:1;transform:translateY(-50%) translateX(0); }
+.pp-demo-float.is-visible { opacity:1;pointer-events:auto;transform:translateY(0);visibility:visible;transition:width .26s ease,padding .26s ease,transform .24s ease,box-shadow .24s ease,background .24s ease,opacity .22s ease,visibility 0s; }
+.pp-demo-float__label { display:block;max-width:0;opacity:0;overflow:hidden;transition:max-width .26s ease,opacity .16s ease;white-space:nowrap; }
+@media (hover:hover) and (min-width:768px) { .pp-demo-float:hover,.pp-demo-float:focus-visible { width:212px;padding:0 1rem;background:linear-gradient(135deg,#1d4ed8,#4f46e5);color:#fff!important;transform:translateY(-3px) scale(1.02);box-shadow:0 16px 32px rgba(79,70,229,.36); }.pp-demo-float:hover .pp-demo-float__label,.pp-demo-float:focus-visible .pp-demo-float__label { max-width:142px;opacity:1; } }
 .pp-demo-float:focus-visible { outline:3px solid rgba(37,99,235,.35);outline-offset:3px; }
-.pp-demo-float__label { white-space:nowrap; }
 .pp-trial-modal .modal-dialog { width:min(94vw,1040px);max-width:1040px;margin:1rem auto; }
 .pp-trial-modal .modal-content { border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 24px 70px rgba(15,23,42,.2);max-height:90vh;overflow:hidden; }
 .pp-trial-modal .modal-header { background:#fff;border-bottom:1px solid #e2e8f0;padding:1.15rem 1.35rem; }
@@ -4285,7 +4290,7 @@ body > .dropdown-menu.tf-action-dropdown-portal.tf-payment-actions {
 .tf-settings-feature-icon.is-blue { color:#2563eb;background:#dbeafe; }.tf-settings-feature-icon.is-green { color:#059669;background:#d1fae5; }
 .tf-settings-poster-preview { display:flex;align-items:center;gap:10px;color:#64748b;font-size:.8rem; }.tf-settings-poster-preview img { width:56px;height:36px;object-fit:cover;border:1px solid #e2e8f0;border-radius:7px; }
 .tf-setting-current-file { display:flex;align-items:center;gap:.45rem;padding:.65rem .75rem;border-radius:9px;background:#f0fdf4;color:#047857;font-size:.82rem; }.tf-setting-current-file i { color:#10b981; }
-@media (max-width:767.98px) { .tf-demo-contact-grid { grid-template-columns:1fr; }.pp-whatsapp-float { right:16px;bottom:16px;width:54px;height:54px; }.pp-demo-float { left:16px;bottom:16px;min-width:136px;height:54px;padding:0 .95rem;font-size:.86rem; }.pp-trial-modal .modal-dialog { width:96vw;margin:.75rem auto; }.pp-trial-modal .pp-registration-shell { padding:1rem 0 1.5rem; }.pp-whatsapp-float::after,.pp-demo-float::after { display:none; } }
+@media (max-width:767.98px) { .tf-demo-contact-grid { grid-template-columns:1fr; }.pp-whatsapp-float { right:16px;bottom:16px;width:54px;height:54px; }.pp-demo-float { left:16px;bottom:16px;width:54px;min-width:54px;height:54px;font-size:.9rem; }.pp-trial-modal .modal-dialog { width:96vw;margin:.75rem auto; }.pp-trial-modal .pp-registration-shell { padding:1rem 0 1.5rem; }.pp-whatsapp-float::after { display:none; } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important;scroll-behavior:auto!important;transition-duration:.01ms!important; }[data-reveal] { opacity:1;transform:none; } }
 
 /* Small interaction refinements for the marketing shell. */

@@ -33,6 +33,9 @@
                 <li class="nav-item">
                     <a class="nav-link" href="{{ $landingAnchorBase }}#faq" data-tf-smooth>FAQ</a>
                 </li>
+                <li class="nav-item">
+                    <a @class(['nav-link', 'is-active' => request()->routeIs('public.contact')]) href="{{ route('public.contact') }}" @if(request()->routeIs('public.contact')) aria-current="page" @endif>Contact</a>
+                </li>
             </ul>
 
             <div class="pp-nav-actions">

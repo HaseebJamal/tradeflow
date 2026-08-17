@@ -13,7 +13,7 @@ class PublicContactInquiryMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    /** @param array{name: string, phone: string, email: string, message: string, submitted_at: string} $inquiry */
+    /** @param array{name: string, phone: string, email: string, inquiry_type: ?string, message: string, submitted_at: string} $inquiry */
     public function __construct(
         public readonly array $inquiry,
         public readonly string $platformName,

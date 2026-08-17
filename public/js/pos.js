@@ -190,11 +190,11 @@
             icon: 'success',
             title: 'Sale completed',
             text: payload.order?.order_number || 'Your POS sale has been completed.',
-            html: `<div class="tf-pos-receipt-actions">
+            html: payload.can_print_receipt ? `<div class="tf-pos-receipt-actions">
                 <button type="button" class="btn btn-outline-primary" data-pos-receipt-view><i class="bi bi-eye"></i>View Receipt</button>
                 <button type="button" class="btn btn-outline-secondary" data-pos-receipt-print><i class="bi bi-printer"></i>Print Receipt</button>
                 <a class="btn btn-outline-success" href="${escapeHtml(payload.receipt_download_url || '#')}" data-pos-receipt-download><i class="bi bi-download"></i>Download PDF</a>
-            </div>`,
+            </div>` : '',
             showCancelButton: false,
             showConfirmButton: true,
             confirmButtonText: 'Done',
@@ -1147,7 +1147,9 @@
             cashActions?.removeAttribute('hidden');
 
             if (registerAction) {
-                registerAction.innerHTML = '<button type="button" class="btn btn-outline-danger" data-pos-close-register><i class="bi bi-lock"></i><span>Close Register</span></button>';
+                registerAction.innerHTML = config.canCloseRegister
+                    ? '<button type="button" class="btn btn-outline-danger" data-pos-close-register><i class="bi bi-lock"></i><span>Close Register</span></button>'
+                    : '';
                 $('[data-pos-close-register]', registerAction)?.addEventListener('click', closeRegister);
             }
 

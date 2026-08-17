@@ -126,7 +126,8 @@ class BusinessActionPermissionMiddleware
             'business.pos.register.cash-movements.store' => 'pos.cash_movement',
             'business.pos.sales.store' => 'pos.create_sale',
             'business.pos.hold' => 'pos.hold_sale', 'business.pos.draft.sync' => 'pos.create_sale', 'business.pos.draft.clear' => 'pos.create_sale', 'business.pos.resume' => 'pos.resume_sale',
-            'business.pos.history' => 'pos.view_history', 'business.pos.receipt', 'business.pos.receipt.pdf' => 'pos.print_receipt',
+            'business.pos.history' => 'pos.view_history',
+            'business.pos.receipt', 'business.pos.receipt.pdf', 'business.pos.receipt.view', 'business.pos.receipt.print', 'business.pos.receipt.download' => 'pos.print_receipt',
             'business.sales.payments.index', 'business.payments' => 'sales.payments', 'business.sales.payments.store', 'business.payments.store' => 'sales.payments',
             'business.khata' => 'accounting.view', 'business.khata.journal.store' => 'accounting.create_journal',
             'business.pos.delivery.assign' => 'deliveries.assign',
@@ -183,6 +184,24 @@ class BusinessActionPermissionMiddleware
             $required[] = 'deliveries.upload_proof';
         }
 
-        return $required;
+        $reportRequirements = [
+            'business.reports.end-of-day' => ['reports.finance_reports'],
+            'business.reports.end-of-day.pdf' => ['reports.finance_reports'],
+            'business.reports.customer-aging' => ['customers.view'],
+            'business.reports.customer-aging.show' => ['customers.view'],
+            'business.reports.customer-aging.pdf' => ['customers.view', 'reports.export'],
+            'business.reports.supplier-aging' => ['suppliers.view'],
+            'business.reports.supplier-aging.show' => ['suppliers.view'],
+            'business.reports.supplier-aging.pdf' => ['suppliers.view', 'reports.export'],
+            'business.reports.stock-movement-analytics' => ['inventory.view', 'reports.inventory_analytics'],
+            'business.reports.stock-movement-analytics.pdf' => ['inventory.view', 'reports.inventory_analytics'],
+            'business.reports.product-performance' => ['sales.view', 'reports.sales_analytics', 'reports.finance_reports'],
+            'business.reports.product-performance.show' => ['sales.view', 'reports.sales_analytics', 'reports.finance_reports'],
+            'business.reports.product-performance.pdf' => ['sales.view', 'reports.sales_analytics', 'reports.finance_reports'],
+        ];
+
+        $required = [...$required, ...($reportRequirements[$route] ?? [])];
+
+        return array_values(array_unique($required));
     }
 }
