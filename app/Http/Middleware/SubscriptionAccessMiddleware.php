@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Business;
+use App\Services\BusinessAccessInitializationService;
 use App\Services\SubscriptionLifecycleService;
 use Closure;
 use Illuminate\Http\Request;
@@ -22,6 +23,8 @@ class SubscriptionAccessMiddleware
             return $next($request);
         }
 
+        app(BusinessAccessInitializationService::class)->recoverNewApprovedBusiness($business);
+        $business->refresh();
         $state = app(SubscriptionLifecycleService::class)->forBusiness($business);
         if ($state['can_access_business']) {
             return $next($request);

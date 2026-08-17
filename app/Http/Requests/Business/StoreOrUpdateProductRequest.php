@@ -19,27 +19,39 @@ class StoreOrUpdateProductRequest extends FormRequest
     {
         $product = $this->route('product');
         $productId = is_object($product) ? $product->id : $product;
+        $existingProduct = $product instanceof Product ? $product : Product::query()
+            ->where('business_id', $this->user()?->business_id)
+            ->find($productId);
         $permissions = app(CompanyPermissionService::class);
         $canUseCategories = $permissions->allowsUser($this->user(), 'categories.view');
         $canUseUnits = $permissions->allowsUser($this->user(), 'units.view');
 
         return [
-            'product_name' => ['required_without:name', 'max:255'], 'name' => ['required_without:product_name', 'max:255'],
+            'product_name' => ['required_without:name', 'string', 'max:255'], 'name' => ['required_without:product_name', 'string', 'max:255'],
             'category' => ['nullable', 'max:255'],
             'category_id' => $canUseCategories ? [
                 'required',
-                Rule::exists('categories', 'id')->where(fn ($query) => $query->where('business_id', $this->user()->business_id)->where('type', 'Product')->whereNull('deleted_at')),
+                Rule::exists('categories', 'id')->where(fn ($query) => $query
+                    ->where('business_id', $this->user()->business_id)
+                    ->where('type', 'Product')
+                    ->whereNull('deleted_at')
+                    ->where(fn ($status) => $status->where('status', 'Active')->orWhere('id', $existingProduct?->category_id))),
             ] : ['prohibited'],
             'product_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'], 'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'batch_number' => ['nullable', 'max:100'], 'manufacturing_date' => ['nullable', 'date'], 'expiry_date' => ['nullable', 'date'], 'expiry_alert_days' => ['nullable', 'integer', 'min:0'],
+            'batch_number' => ['nullable', 'string', 'max:100'], 'manufacturing_date' => ['nullable', 'date', 'before_or_equal:expiry_date'], 'expiry_date' => ['nullable', 'date', 'after_or_equal:manufacturing_date'], 'expiry_alert_days' => ['nullable', 'integer', 'min:0'],
             'unit_id' => $canUseUnits ? [
                 'required',
-                Rule::exists('units', 'id')->where(fn ($query) => $query->where('business_id', $this->user()->business_id)->whereNull('deleted_at')),
+                Rule::exists('units', 'id')->where(fn ($query) => $query
+                    ->where('business_id', $this->user()->business_id)
+                    ->whereNull('deleted_at')
+                    ->where(fn ($status) => $status->where('status', 'Active')->orWhere('id', $existingProduct?->unit_id))),
             ] : ['prohibited'],
             'status' => ['required', 'in:Active,Inactive'],
+            // Keep product prices compatible with the existing whole-rupee
+            // POS/payment calculation convention.
             'retail_price' => ['nullable', 'integer', 'min:0'],
             'wholesale_price' => ['nullable', 'integer', 'min:0'],
-            'description' => ['nullable', 'string'], 'brand' => ['nullable', 'max:100'], 'manufacturer' => ['nullable', 'max:100'], 'warehouse_location' => ['nullable', 'max:150'], 'has_batch_tracking' => ['nullable', 'boolean'],
+            'description' => ['nullable', 'string', 'max:5000'], 'brand' => ['nullable', 'string', 'max:100'], 'manufacturer' => ['nullable', 'string', 'max:100'], 'warehouse_location' => ['nullable', 'string', 'max:150'], 'has_batch_tracking' => ['nullable', 'boolean'],
         ];
     }
 

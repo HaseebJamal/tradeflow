@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\AuditLog;
 use App\Models\Business;
+use App\Models\BalanceAdjustment;
 use App\Models\GoodsReceiptItem;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
@@ -122,6 +123,17 @@ class SupplierController extends Controller
             ->get();
 
         $payableLines = $lines->filter(fn (JournalEntryLine $line) => $line->account?->name === 'Accounts Payable');
+        // The profile total is a ledger position, not the date-filtered
+        // statement subset shown below it.
+        $currentPayable = (float) JournalEntryLine::query()
+            ->where('supplier_id', $supplier->id)
+            ->whereHas('journalEntry', fn ($query) => $query->where('business_id', $supplier->business_id)->where('status', 'posted'))
+            ->whereHas('account', fn ($query) => $query->where('name', 'Accounts Payable'))
+            ->sum('credit') - (float) JournalEntryLine::query()
+                ->where('supplier_id', $supplier->id)
+                ->whereHas('journalEntry', fn ($query) => $query->where('business_id', $supplier->business_id)->where('status', 'posted'))
+                ->whereHas('account', fn ($query) => $query->where('name', 'Accounts Payable'))
+                ->sum('debit');
         $totalPurchases = (float) $payableLines->sum('credit');
         $totalPayments = (float) $payableLines->sum('debit');
         $receivedValue = (float) GoodsReceiptItem::whereHas('goodsReceipt', fn ($receipt) => $receipt->where('business_id', $supplier->business_id)->where('supplier_id', $supplier->id))->sum('line_total');
@@ -135,12 +147,15 @@ class SupplierController extends Controller
             'lines' => $lines,
             'totalPurchases' => $totalPurchases,
             'totalPayments' => $totalPayments,
-            'remainingPayable' => (float) $lines->sum('credit') - (float) $lines->sum('debit'),
+            'remainingPayable' => round($currentPayable, 2),
             'receivedValue' => $receivedValue,
             'returnsValue' => $returns,
             'availableAdvances' => $availableAdvances,
             'overduePayable' => $overduePayable,
             'filters' => $filters,
+            'adjustments' => BalanceAdjustment::with(['creator', 'reversal'])
+                ->where('business_id', $supplier->business_id)->where('party_type', 'supplier')->where('party_id', $supplier->id)
+                ->latest()->get(),
         ]);
     }
 
@@ -161,8 +176,11 @@ class SupplierController extends Controller
         DB::transaction(function () use ($supplier, $validated) {
             Business::query()->lockForUpdate()->findOrFail($supplier->business_id);
             $this->ensureUniqueSupplier($supplier->business_id, $validated, $supplier->id);
-            $supplier->update(array_merge($validated, ['opening_balance' => $validated['opening_balance'] ?? 0]));
-            $this->syncOpeningBalance($supplier->fresh());
+            // Opening payable is posted once at creation. A profile save must
+            // never rewrite that journal after activity exists; use an ADJ
+            // entry for any later correction.
+            unset($validated['opening_balance']);
+            $supplier->update($validated);
         });
 
         return redirect()->route('business.suppliers.show', $supplier)->with('success', 'Supplier updated.');
@@ -216,7 +234,6 @@ class SupplierController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string'],
             'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
-            'opening_balance' => ['nullable', 'integer', 'min:0'],
             'status' => ['required', Rule::in(['Active', 'Inactive'])],
         ]);
     }

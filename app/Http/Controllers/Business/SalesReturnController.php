@@ -8,6 +8,7 @@ use App\Models\Inventory;
 use App\Models\InventoryMovement;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PosRegister;
 use App\Models\Product;
 use App\Models\SalesReturn;
 use App\Models\StockMovement;
@@ -15,6 +16,7 @@ use App\Services\AccountingService;
 use App\Services\BusinessActivityService;
 use App\Services\CompanyPermissionService;
 use App\Services\DocumentNumberService;
+use App\Services\ProductBatchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +29,7 @@ class SalesReturnController extends Controller
         private BusinessActivityService $activity,
         private CompanyPermissionService $permissions,
         private DocumentNumberService $numbers,
+        private ProductBatchService $batches,
     ) {}
 
     public function index(Request $request)
@@ -111,8 +114,8 @@ class SalesReturnController extends Controller
         $data = $request->validate([
             'refund_method' => ['required', 'in:Cash,Store Credit,Bank Transfer'],
             'reason' => ['required', 'string', 'max:1000'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.order_item_id' => ['required', 'integer', 'exists:order_items,id'],
+            'items' => ['required', 'array', 'min:1', 'max:100'],
+            'items.*.order_item_id' => ['required', 'integer', 'distinct', 'exists:order_items,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
         ]);
 
@@ -120,12 +123,23 @@ class SalesReturnController extends Controller
             abort(403);
         }
 
+        // Cash returns are associated with the cashier's active shift. Other
+        // refund methods retain the association for traceability but do not
+        // change that shift's expected cash.
+        $registerId = PosRegister::query()
+            ->where('business_id', $order->business_id)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'Open')
+            ->latest('opened_at')
+            ->value('id');
+
         try {
-            $salesReturn = DB::transaction(function () use ($order, $data) {
+            $salesReturn = DB::transaction(function () use ($order, $data, $registerId) {
                 $return = SalesReturn::create([
                     'business_id' => $order->business_id,
                     'return_number' => $this->numbers->next((int) $order->business_id, 'sales_return'),
                     'order_id' => $order->id,
+                    'pos_register_id' => $registerId,
                     'customer_id' => $order->customer_id,
                     'processed_by' => auth()->id(),
                     'refund_method' => $data['refund_method'],
@@ -160,6 +174,7 @@ class SalesReturnController extends Controller
                         ->lockForUpdate()
                         ->find($item->product_id);
                     if ($product) {
+                        $this->batches->restoreSaleReturn($item, (float) $quantity);
                         $previousStock = (int) $product->stock_quantity;
                         $newStock = $previousStock + $quantity;
                         $product->update(['stock_quantity' => $newStock, 'current_stock' => $newStock]);

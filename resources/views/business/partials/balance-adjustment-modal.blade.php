@@ -1,0 +1,24 @@
+@php
+    $isCustomerAdjustment = $partyType === 'customer';
+    $adjustmentId = $isCustomerAdjustment ? 'customer-balance-adjustment' : 'supplier-balance-adjustment';
+    $storeRoute = $isCustomerAdjustment ? route('business.customers.balance-adjustments.store', $party) : route('business.suppliers.balance-adjustments.store', $party);
+@endphp
+<div class="modal fade" id="{{ $adjustmentId }}" tabindex="-1" aria-labelledby="{{ $adjustmentId }}-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+        <div class="modal-header"><div><h2 id="{{ $adjustmentId }}-title" class="modal-title h5 mb-1">Adjust {{ $isCustomerAdjustment ? 'Customer Balance' : 'Supplier Payable' }}</h2><p class="tf-muted small mb-0">Use Payments for money received/paid. Use this only for corrections or reconciliation.</p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <form method="POST" action="{{ $storeRoute }}" data-tf-confirm-message="Post this ledger-backed balance adjustment?" data-tf-confirm-title="Confirm balance adjustment" data-tf-confirm-button="Confirm Adjustment" data-tf-confirm-color="#2563eb">
+            @csrf <input type="hidden" name="submission_token" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+            <div class="modal-body"><div class="tf-card border p-3 mb-3"><div class="row g-2 small"><div class="col-sm-4"><span class="tf-muted d-block">Current {{ $isCustomerAdjustment ? 'receivable' : 'payable' }}</span><strong>Rs {{ number_format($currentBalance, 2) }}</strong></div><div class="col-sm-4"><span class="tf-muted d-block">Adjustment</span><strong data-adjustment-preview>Rs 0.00</strong></div><div class="col-sm-4"><span class="tf-muted d-block">New balance</span><strong data-new-balance-preview>Rs {{ number_format($currentBalance, 2) }}</strong></div></div></div><div class="row g-3"><div class="col-md-6"><label class="form-label">Adjustment type <span class="text-danger">*</span></label><select class="form-select" name="adjustment_type" data-adjustment-type required>@if($isCustomerAdjustment)<option value="increase_receivable">Increase Receivable</option><option value="decrease_receivable">Decrease Receivable</option>@else<option value="increase_payable">Increase Payable</option><option value="decrease_payable">Decrease Payable</option>@endif</select></div><div class="col-md-6"><label class="form-label">Adjustment amount <span class="text-danger">*</span></label><div class="input-group"><span class="input-group-text">Rs</span><input name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" class="form-control" data-adjustment-amount required></div></div><div class="col-md-6"><label class="form-label">Reason <span class="text-danger">*</span></label><select name="reason" class="form-select" data-adjustment-reason required><option value="">Select reason</option>@foreach(\App\Services\BalanceAdjustmentService::REASONS as $reason)<option value="{{ $reason }}">{{ $reason }}</option>@endforeach</select></div><div class="col-md-6"><label class="form-label">Reference <span class="tf-muted">(optional)</span></label><input name="external_reference" class="form-control" maxlength="255"></div><div class="col-12"><label class="form-label">Notes <span class="tf-muted">(required for Other)</span></label><textarea name="notes" rows="2" maxlength="2000" class="form-control" data-adjustment-notes></textarea></div></div></div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-tf-primary">Confirm Adjustment</button></div>
+        </form>
+    </div></div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById(@json($adjustmentId)); if (!modal) return;
+    const base = {{ (float) $currentBalance }}, type = modal.querySelector('[data-adjustment-type]'), amount = modal.querySelector('[data-adjustment-amount]'), adjustment = modal.querySelector('[data-adjustment-preview]'), next = modal.querySelector('[data-new-balance-preview]'), reason = modal.querySelector('[data-adjustment-reason]'), notes = modal.querySelector('[data-adjustment-notes]');
+    const format = value => 'Rs ' + (Number.isFinite(value) ? value : 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const preview = () => { const value = Math.max(0, Number(amount.value) || 0), increase = type.value.indexOf('increase_') === 0, delta = increase ? value : -value; adjustment.textContent = (delta < 0 ? '−' : '+') + format(Math.abs(delta)); next.textContent = format(Math.max(0, base + delta)); };
+    [type, amount].forEach(el => el.addEventListener('input', preview)); reason.addEventListener('change', () => notes.required = reason.value === 'Other'); preview();
+});
+</script>

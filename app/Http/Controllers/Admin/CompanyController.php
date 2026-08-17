@@ -33,6 +33,7 @@ use App\Notifications\BusinessDocumentVerificationNotification;
 use App\Services\AccountingService;
 use App\Services\BusinessWorkspaceAccessService;
 use App\Services\BusinessDocumentFooterService;
+use App\Services\BusinessAccessInitializationService;
 use App\Services\CompanyOnboardingAccessService;
 use App\Services\PermanentlyDeleteBusinessService;
 use Illuminate\Http\Request;
@@ -209,11 +210,12 @@ class CompanyController extends Controller
                 app(AccountingService::class)->ensureDefaultAccounts($company->id);
                 $this->applyInitialPermissions($company, $data['permissions'] ?? []);
                 $this->recordApprovalLog($company, null, 'Approved', 'Company created and approved by Super Admin');
+                $subscription = app(BusinessAccessInitializationService::class)->initializeApprovedBusiness($company);
 
                 User::where('role', 'super_admin')->where('status', 'active')->get()
                     ->each(fn (User $admin) => $admin->notify(new CompanyRegistrationNotification($company)));
 
-                return compact('company', 'owner');
+                return compact('company', 'owner', 'subscription');
             });
         } catch (Throwable $exception) {
             if ($ownerImage) {
@@ -238,10 +240,16 @@ class CompanyController extends Controller
 
         $company = $created['company'];
         $owner = $created['owner'];
+        $subscription = $created['subscription'];
 
         $this->audit($request, 'company created', $company, null, $company->only(['business_name', 'status']));
         $this->audit($request, 'footer settings created', $company, null, ['changed_fields' => ['default_footer']]);
         $this->audit($request, 'company permissions assigned', $company, null, ['permissions' => $data['permissions'] ?? []]);
+        $this->audit($request, 'free trial initialized', $company, null, [
+            'subscription_id' => $subscription?->id,
+            'trial_start' => $subscription?->trial_start_at?->toDateString(),
+            'trial_end' => $subscription?->trial_end_at?->toDateString(),
+        ]);
         app(CompanyOnboardingAccessService::class)->remember($request, $company, $owner, $data['temporary_password']);
 
         return redirect()->route('admin.companies.onboarding', $company)
@@ -1003,34 +1011,7 @@ class CompanyController extends Controller
 
     private function startPendingSubscriptionTrial(Business $company): void
     {
-        $subscription = Subscription::with('plan')->where('business_id', $company->id)->lockForUpdate()->first();
-        if (! $subscription || $subscription->status !== 'Pending') {
-            return;
-        }
-
-        $trialDays = max(0, (int) ($company->requested_trial_days ?? $subscription->plan?->trial_days ?? 14));
-        if (! $company->trial_eligible || $trialDays === 0) {
-            $subscription->update([
-                'status' => 'Pending',
-                'starts_at' => now()->toDateString(),
-                'ends_at' => now()->addMonth()->toDateString(),
-                'payment_status' => 'Pending',
-            ]);
-            $company->update(['subscription_request_status' => 'Approved']);
-            $company->owner?->notify(new SubscriptionStatusNotification('Payment Required', 'Your registration is approved. Payment confirmation is required before subscription activation.', $company->id));
-            return;
-        }
-
-        $subscription->update([
-            'status' => 'Trial',
-            'starts_at' => now()->toDateString(),
-            'trial_start_at' => now()->toDateString(),
-            'trial_end_at' => now()->addDays($trialDays)->toDateString(),
-            'ends_at' => now()->addDays($trialDays)->toDateString(),
-            'payment_status' => 'Pending',
-        ]);
-        $company->update(['subscription_request_status' => 'Activated']);
-        $company->owner?->notify(new SubscriptionStatusNotification('Trial Activated', 'Your '.$subscription->plan?->name.' trial is active until '.$subscription->trial_end_at?->format('d M, Y').'.', $company->id));
+        app(BusinessAccessInitializationService::class)->initializeApprovedBusiness($company);
     }
 
     public function updateRegistrationPlan(Request $request, Business $company)

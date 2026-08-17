@@ -13,7 +13,7 @@ class Product extends Model
     protected $fillable = [
         'business_id', 'category_id', 'unit_id', 'name', 'image', 'barcode', 'batch_number', 'manufacturing_date',
         'expiry_date', 'expiry_alert_days', 'retail_price', 'wholesale_price', 'purchase_cost', 'latest_purchase_price', 'average_purchase_price', 'opening_stock',
-        'current_stock', 'minimum_order_quantity', 'stock_quantity', 'low_stock_alert_qty', 'unit', 'description',
+        'current_stock', 'minimum_order_quantity', 'stock_quantity', 'low_stock_alert_qty', 'target_stock_level', 'unit', 'description',
         'brand', 'manufacturer', 'warehouse_location', 'has_batch_tracking', 'submission_token', 'created_by', 'added_date', 'status',
     ];
 
@@ -24,6 +24,7 @@ class Product extends Model
         'added_date' => 'datetime',
         'latest_purchase_price' => 'decimal:2',
         'average_purchase_price' => 'decimal:2',
+        'target_stock_level' => 'decimal:3',
     ];
 
     /**
@@ -67,6 +68,7 @@ class Product extends Model
     public function movements() { return $this->hasMany(StockMovement::class); }
     public function inventoryMovements() { return $this->hasMany(InventoryMovement::class); }
     public function purchaseItems() { return $this->hasMany(PurchaseItem::class); }
+    public function batches() { return $this->hasMany(ProductBatch::class); }
 
     /**
      * Accepted goods receipt lines are the source of truth for a product

@@ -15,9 +15,9 @@
             return [$locale => ['label' => $label, 'title' => $platformSettings->getAttribute($prefix.'title') ?: ($locale === 'en' ? 'See Profit Point in action' : 'پرافٹ پوائنٹ دیکھیں'), 'subtitle' => $platformSettings->getAttribute($prefix.'subtitle'), 'url' => $uploaded ? \Illuminate\Support\Facades\Storage::disk('public')->url($path) : $value, 'poster' => filled($posterPath) && \Illuminate\Support\Facades\Storage::disk('public')->exists($posterPath) ? \Illuminate\Support\Facades\Storage::disk('public')->url($posterPath) : null]];
         });
         $hasPublicDemo = $publicDemos->isNotEmpty();
-        $whatsAppDigits = preg_replace('/\D+/', '', (string) ($platformSettings->whatsapp_number ?? ''));
-        $hasPublicWhatsApp = (bool) $platformSettings->whatsapp_is_active && preg_match('/^[1-9]\d{7,14}$/', $whatsAppDigits);
-        $whatsAppUrl = $hasPublicWhatsApp ? 'https://wa.me/' . $whatsAppDigits . (filled($platformSettings->whatsapp_message) ? '?text=' . rawurlencode($platformSettings->whatsapp_message) : '') : null;
+        $whatsAppUrl = app(\App\Services\PlatformSettingsService::class)->whatsAppUrl($platformSettings->whatsapp_message);
+        $isLoggedIn = auth()->check();
+        $trialDays = (int) $platformSettings->trial_days;
     @endphp
     <section class="pp-hero" id="hero" data-parallax-root>
         <div class="pp-orb pp-orb-one" data-parallax="0.12"></div>
@@ -31,8 +31,7 @@
                     <p class="pp-hero-lead">Profit Point gives wholesale businesses a calmer way to run inventory, orders,
                         payments, deliveries, and customer credit—all from one beautifully simple workspace.</p>
                     <div class="d-flex flex-wrap gap-3 pp-hero-actions">
-                        <a href="{{ route('register.business') }}" class="btn pp-btn-primary btn-lg">Start free trial <i
-                                class="bi bi-arrow-up-right"></i></a>
+                        @include('public._trial-dashboard-cta', ['classes' => 'btn pp-btn-primary btn-lg'])
                         <!-- <a href="#platform" data-tf-smooth class="btn pp-btn-secondary btn-lg"><i class="bi bi-play-circle"></i> Explore platform</a> -->
                         @if($hasPublicDemo)<button type="button" class="btn pp-btn-secondary pp-btn-demo btn-lg"
                             data-bs-toggle="modal" data-bs-target="#profitPointDemoModal"><i class="bi bi-play-fill"></i>
@@ -464,11 +463,9 @@
         <div class="container">
             <div class="pp-section-heading text-center" data-reveal><span class="pp-eyebrow pp-eyebrow-blue">START WITH
                     CONFIDENCE</span>
-                <h2>Try the complete<br>workspace for free.</h2>
-                <p>Start immediately with a full trial. When you are ready to continue, our team will create a subscription
-                    tailored to your business.</p>
-                <div class="d-flex justify-content-center flex-wrap gap-3 mt-4"><a href="{{ route('register.business') }}"
-                        class="btn pp-btn-primary">Start Free Trial <i class="bi bi-arrow-up-right"></i></a><a
+                <h2>{!! $isLoggedIn ? 'Continue to your<br>workspace.' : 'Try the complete<br>workspace for free.' !!}</h2>
+                <p>{{ $isLoggedIn ? 'Your Profit Point workspace is ready when you are.' : 'Start immediately with a full trial. When you are ready to continue, our team will create a subscription tailored to your business.' }}</p>
+                <div class="d-flex justify-content-center flex-wrap gap-3 mt-4">@include('public._trial-dashboard-cta', ['classes' => 'btn pp-btn-primary'])<a
                         href="{{ route('public.contact') }}" class="btn pp-btn-secondary">Contact Sales</a></div>
             </div>
             <p class="pp-pricing-note" data-reveal><i class="bi bi-shield-check"></i> No credit card required &nbsp;·&nbsp;
@@ -509,8 +506,7 @@
                 <div class="pp-final-orb"></div><span class="pp-eyebrow">YOUR NEXT CLEARER DAY STARTS HERE</span>
                 <h2>Run your wholesale<br>business with <span>confidence.</span></h2>
                 <p>Join the businesses replacing daily chaos with a smarter, simpler way to grow.</p>
-                <div class="d-flex justify-content-center flex-wrap gap-3"><a href="{{ route('register.business') }}"
-                        class="btn pp-btn-white btn-lg">Start free trial <i class="bi bi-arrow-up-right"></i></a><a
+                <div class="d-flex justify-content-center flex-wrap gap-3">@include('public._trial-dashboard-cta', ['classes' => 'btn pp-btn-white btn-lg'])<a
                         href="{{ route('public.contact') }}" class="btn pp-btn-ghost btn-lg">Talk to sales</a></div><small
                     class="pp-final-trust"><span><i class="bi bi-check-circle-fill"></i> No credit card
                         required</span><span><i class="bi bi-check-circle-fill"></i> Set up in minutes</span></small>
@@ -544,7 +540,7 @@
                         <div class="pp-demo-player"><video controls autoplay muted preload="metadata" playsinline data-demo-player data-demo-url="{{ $initialDemo['url'] }}" data-demo-poster="{{ $initialDemo['poster'] }}">Your browser does not support video playback.</video></div>
                     </div>
                     <div class="modal-footer pp-demo-modal__footer">
-                        <a href="{{ route('register.business') }}" class="btn pp-btn-primary btn-sm">Start free trial <i class="bi bi-arrow-up-right"></i></a>
+                        @include('public._trial-dashboard-cta', ['classes' => 'btn pp-btn-primary btn-sm'])
                         <a href="{{ route('public.contact') }}" class="btn pp-btn-secondary btn-sm">Contact us</a>
                     </div>
                 </div>
@@ -552,16 +548,31 @@
         </div>
     @endif
 
-    @if($hasPublicWhatsApp)
-        <a class="pp-whatsapp-float" href="{{ $whatsAppUrl }}" target="_blank" rel="noopener noreferrer"
-            aria-label="{{ $platformSettings->whatsapp_tooltip ?: 'Chat with us on WhatsApp' }}"
-            data-tooltip="{{ $platformSettings->whatsapp_tooltip ?: 'Chat with us on WhatsApp' }}"><i class="bi bi-whatsapp"
-                aria-hidden="true"></i><span
-                class="visually-hidden">{{ $platformSettings->whatsapp_tooltip ?: 'Chat with us on WhatsApp' }}</span></a>
+    @include('public._trial-dashboard-cta', ['classes' => 'pp-demo-float pp-floating-cta', 'floating' => true])
+    @unless($isLoggedIn)
+        <div class="modal fade pp-trial-modal" id="profitPointTrialModal" tabindex="-1" aria-labelledby="profitPointTrialModalTitle" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title h4 mb-0" id="profitPointTrialModalTitle">Start your free trial</h2>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close free trial form"></button>
+                    </div>
+                    <div class="modal-body">
+                        @include('onboarding._register-business-form')
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endunless
+
+    @if($whatsAppUrl)
+        <a class="pp-whatsapp-float pp-floating-cta" href="{{ $whatsAppUrl }}" target="_blank" rel="noopener noreferrer"
+            aria-label="Contact Now" data-tooltip="Contact Now"><i class="bi bi-whatsapp" aria-hidden="true"></i><span class="visually-hidden">Contact Now</span></a>
     @endif
 @endsection
 
 @push('scripts')
+    <script src="{{ asset('js/register-business.js') }}?v={{ filemtime(public_path('js/register-business.js')) }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const reveal = document.querySelectorAll('[data-reveal]');
@@ -577,6 +588,11 @@
             navSections.forEach(([, section]) => navObserver.observe(section));
             document.querySelectorAll('.pp-btn-primary, .pp-btn-secondary, .pp-btn-white, .pp-btn-ghost, .pp-nav-cta').forEach(button => button.addEventListener('click', event => { const ripple = document.createElement('span'), rect = button.getBoundingClientRect(); ripple.className = 'pp-ripple'; ripple.style.left = `${event.clientX - rect.left}px`; ripple.style.top = `${event.clientY - rect.top}px`; button.append(ripple); ripple.addEventListener('animationend', () => ripple.remove()); }));
             const demoModal = document.getElementById('profitPointDemoModal');
+            const trialModal = document.getElementById('profitPointTrialModal');
+            document.addEventListener('click', event => {
+                if (!event.target.closest('[data-bs-target="#profitPointTrialModal"]') || !demoModal?.classList.contains('show')) return;
+                bootstrap.Modal.getInstance(demoModal)?.hide();
+            });
             const demoPlayer = demoModal?.querySelector('[data-demo-player]');
             const stopDemo = () => {
                 if (!demoPlayer) return;

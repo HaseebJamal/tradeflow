@@ -9,8 +9,10 @@ use App\Models\JournalEntryLine;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\CustomerFinancialFieldService;
-use App\Services\CustomerBalanceAdjustmentService;
 use App\Services\CustomerOpeningBalanceService;
+use App\Models\BalanceAdjustment;
+use App\Models\Business;
+use App\Services\CustomerIdentityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -35,13 +37,13 @@ class CustomerController extends Controller
         return view('business.customers.index', ['customers' => $query->latest()->paginate(10)->withQueryString()]);
     }
 
-    public function store(Request $request, CustomerFinancialFieldService $financialFields, CustomerOpeningBalanceService $openingBalances)
+    public function store(Request $request, CustomerFinancialFieldService $financialFields, CustomerOpeningBalanceService $openingBalances, CustomerIdentityService $identity)
     {
         $financialFields->normalizeRequest($request, true);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'shop_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'email' => ['nullable', 'email', 'max:255'],
-            'address' => ['nullable'], 'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'province' => ['nullable', 'max:100'], 'customer_type' => ['required', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
+            'address' => ['nullable', 'string', 'max:1000'], 'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'], 'province' => ['nullable', 'string', 'max:100'], 'customer_type' => ['required', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
             'credit_limit' => $financialFields->wholeNumberRules(),
             'opening_balance' => $financialFields->wholeNumberRules(),
             'status' => ['required', 'in:Active,Blocked'],
@@ -52,7 +54,11 @@ class CustomerController extends Controller
         $data['created_by'] = auth()->id();
         $data['current_balance'] = (int) $data['opening_balance'];
 
-        DB::transaction(function () use ($data, $openingBalances): void {
+        DB::transaction(function () use ($data, $openingBalances, $identity): void {
+            // Serialise identity checks inside this tenant so two concurrent
+            // submits cannot create the same phone/email contact.
+            Business::query()->lockForUpdate()->findOrFail($data['business_id']);
+            $identity->assertAvailable((int) $data['business_id'], $data);
             $customer = Customer::create($data);
             $openingBalances->recordFor($customer);
         });
@@ -81,10 +87,13 @@ class CustomerController extends Controller
                 ->latest()
                 ->paginate(10, ['*'], 'ledger_page')
                 ->withQueryString(),
+            'adjustments' => BalanceAdjustment::with(['creator', 'reversal'])
+                ->where('business_id', $customer->business_id)->where('party_type', 'customer')->where('party_id', $customer->id)
+                ->latest()->get(),
         ]);
     }
 
-    public function update(Request $request, Customer $customer, CustomerFinancialFieldService $financialFields, CustomerBalanceAdjustmentService $balanceAdjustments)
+    public function update(Request $request, Customer $customer, CustomerFinancialFieldService $financialFields, CustomerIdentityService $identity)
     {
         abort_unless($customer->business_id === auth()->user()->business_id, 403);
         $financialFields->normalizeRequest($request);
@@ -94,13 +103,11 @@ class CustomerController extends Controller
             'business_name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'phone' => ['nullable', 'regex:/^\\+[1-9]\\d{7,14}$/'],
             'email' => ['nullable', 'email', 'max:255'],
-            'address' => ['nullable'],
+            'address' => ['nullable', 'string', 'max:1000'],
             'city' => ['nullable', 'string', 'max:100', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
             'province' => ['nullable', 'max:100'],
             'customer_type' => ['nullable', 'in:Retailer,Dealer,Distributor,Walk-in Customer,Other,Wholesaler'],
             'credit_limit' => $request->has('credit_limit') ? $financialFields->wholeNumberRules() : ['sometimes'],
-            'opening_balance' => $request->has('opening_balance') ? $financialFields->wholeNumberRules() : ['sometimes'],
-            'current_balance' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'status' => ['required', 'in:Active,Blocked,Inactive'],
         ]);
         // Customer identity is fixed after creation. Ignore modified request
@@ -109,24 +116,17 @@ class CustomerController extends Controller
         $data['business_name'] = $customer->business_name;
         unset($data['shop_name']);
 
-        // The balance column is the live receivable used by sales and payment
-        // workflows. A direct edit therefore needs an auditable adjustment,
-        // not a silent model update that leaves Khata and journals behind.
-        $requestedBalance = array_key_exists('current_balance', $data) && $data['current_balance'] !== null
-            ? (float) $data['current_balance']
-            : null;
-        unset($data['current_balance']);
-
-        DB::transaction(function () use ($customer, $data, $requestedBalance, $balanceAdjustments, $request): void {
+        // Opening and current balances are intentionally absent from profile
+        // updates. Once created they remain ledger-backed; corrections use the
+        // dedicated, permission-protected adjustment workflow.
+        DB::transaction(function () use ($customer, $data, $identity): void {
+            Business::query()->lockForUpdate()->findOrFail($customer->business_id);
+            $identity->assertAvailable((int) $customer->business_id, $data, (int) $customer->id);
             $locked = Customer::query()
                 ->where('business_id', $customer->business_id)
                 ->lockForUpdate()
                 ->findOrFail($customer->id);
             $locked->update($data);
-
-            if ($requestedBalance !== null) {
-                $balanceAdjustments->set($locked, $requestedBalance, $request->user());
-            }
         });
 
         return back()->with('success', 'Customer updated.');

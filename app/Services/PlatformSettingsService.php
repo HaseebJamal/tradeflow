@@ -58,4 +58,27 @@ class PlatformSettingsService
     {
         return $this->current()->company_name ?: $this->defaultBranding()['company_name'];
     }
+
+    /**
+     * Build the single public click-to-chat URL from the configured Floating
+     * WhatsApp setting. Consumers receive null when that contact is inactive
+     * or invalid, rather than exposing a broken link.
+     */
+    public function whatsAppUrl(?string $message = null): ?string
+    {
+        $settings = $this->current();
+        if (! $settings->whatsapp_is_active) {
+            return null;
+        }
+
+        $number = filled($settings->whatsapp_number)
+            ? '+'.ltrim((string) $settings->whatsapp_number, '+')
+            : null;
+        $digits = app(PhoneNumberService::class)->whatsappDigits($number);
+        if (! $digits) {
+            return null;
+        }
+
+        return 'https://wa.me/'.$digits.(filled($message) ? '?text='.rawurlencode($message) : '');
+    }
 }

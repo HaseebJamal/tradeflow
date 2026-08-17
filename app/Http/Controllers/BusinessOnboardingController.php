@@ -12,6 +12,7 @@ use App\Models\PlatformSetting;
 use App\Notifications\CompanyRegistrationNotification;
 use App\Notifications\SubscriptionStatusNotification;
 use App\Services\CompanyPermissionService;
+use App\Services\BusinessAccessInitializationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -100,18 +101,7 @@ class BusinessOnboardingController extends Controller
             $business->update([
                 'selected_plan_snapshot' => ['access_model' => 'automatic_trial', 'trial_days' => $trialDays],
             ]);
-            $subscription = Subscription::create([
-                'business_id' => $business->id,
-                'subscription_plan_id' => $plan->id,
-                'billing_cycle' => 'Custom',
-                'amount' => 0,
-                'starts_at' => $trialStart->toDateString(),
-                'ends_at' => $trialEnd->toDateString(),
-                'trial_start_at' => $trialStart->toDateString(),
-                'trial_end_at' => $trialEnd->toDateString(),
-                'status' => 'Trial',
-                'payment_status' => 'Pending',
-            ]);
+            $subscription = app(BusinessAccessInitializationService::class)->initializeApprovedBusiness($business);
 
         });
         } catch (Throwable $exception) {

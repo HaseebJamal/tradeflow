@@ -78,7 +78,9 @@
         <section class="tf-card tf-settings-feature-card tf-platform-whatsapp-card p-4">
             <div class="d-flex align-items-start justify-content-between gap-3 mb-4">
                 <div><span class="tf-settings-feature-icon is-green"><i class="bi bi-whatsapp"></i></span><h3 class="h5 mt-3 mb-1">Floating WhatsApp</h3><p class="tf-muted small mb-0">Offer a direct, pre-filled conversation from the landing page.</p></div>
-                @php($isWhatsAppActive = (bool) old('whatsapp_is_active', $settings->whatsapp_is_active))
+                @php
+                    $isWhatsAppActive = (bool) old('whatsapp_is_active', $settings->whatsapp_is_active);
+                @endphp
                 <div class="d-inline-flex flex-column align-items-end gap-1"><input type="hidden" name="whatsapp_is_active" value="0"><input class="visually-hidden" type="checkbox" id="whatsAppIsActive" name="whatsapp_is_active" value="1" @checked($isWhatsAppActive) data-whatsapp-active-input><button type="button" class="tf-inline-status-switch {{ $isWhatsAppActive ? 'is-active' : 'is-inactive' }}" role="switch" aria-checked="{{ $isWhatsAppActive ? 'true' : 'false' }}" aria-label="{{ $isWhatsAppActive ? 'Deactivate' : 'Activate' }} Floating WhatsApp" data-whatsapp-active-switch><span class="tf-inline-status-track" aria-hidden="true"><span class="tf-inline-status-thumb"></span></span><span class="tf-inline-status-text" data-whatsapp-active-label>{{ $isWhatsAppActive ? 'Active' : 'Inactive' }}</span></button><small class="tf-muted" data-whatsapp-active-help @if(filled($settings->whatsapp_number)) hidden @endif>Enter a WhatsApp number before enabling it.</small></div>
             </div>
             <div class="row g-3">
@@ -97,9 +99,16 @@
         <div class="tf-platform-demo-card__header-copy"><span class="tf-settings-feature-icon is-blue"><i class="bi bi-translate"></i></span><h2 class="h5 mt-3 mb-1">Landing page demo videos</h2><p class="tf-muted small mb-0">Manage English and Urdu demos independently. Large video uploads are supported; server upload limits remain infrastructure settings.</p></div>
         <div class="tf-platform-demo-card__status d-inline-flex flex-column align-items-end gap-1" data-demo-header-switches>
             @foreach(['en' => 'English', 'ur' => 'Urdu'] as $locale => $languageName)
-                @php($prefix = 'demo_'.$locale.'_')
-                @php($isDemoActive = (bool) old($prefix.'is_active', $settings->getAttribute($prefix.'is_active')))
-                @php($hasStoredDemoVideo = filled($settings->getAttribute($prefix.'video_url')))
+                @php
+                    $prefix = 'demo_'.$locale.'_';
+                    $headerVideo = trim((string) $settings->getAttribute($prefix.'video_url'));
+                    $headerVideoType = (string) $settings->getAttribute($prefix.'video_type');
+                    $headerVideoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim($headerVideo, '/'));
+                    $hasStoredDemoVideo = $headerVideoType === 'upload'
+                        ? filled($headerVideoPath) && \Illuminate\Support\Facades\Storage::disk('public')->exists($headerVideoPath)
+                        : $headerVideoType === 'external' && str_starts_with($headerVideo, 'https://');
+                    $isDemoActive = (bool) old($prefix.'is_active', $settings->getAttribute($prefix.'is_active'));
+                @endphp
                 <button type="button" class="tf-inline-status-switch {{ $isDemoActive ? 'is-active' : 'is-inactive' }} {{ $locale === 'en' ? '' : 'd-none' }}" role="switch" aria-checked="{{ $isDemoActive ? 'true' : 'false' }}" aria-label="{{ $isDemoActive ? 'Deactivate' : 'Activate' }} {{ $languageName }} demo" data-demo-header-switch data-demo-language="{{ $locale }}" data-demo-configured="{{ $hasStoredDemoVideo ? 'true' : 'false' }}" data-toggle-endpoint="{{ route('admin.settings.demo-video.active') }}"><span class="tf-inline-status-track" aria-hidden="true"><span class="tf-inline-status-thumb"></span></span><span class="tf-inline-status-text" data-demo-active-label>{{ $isDemoActive ? 'Active' : 'Inactive' }}</span></button>
             @endforeach
             <small class="tf-muted" data-demo-header-help></small>
@@ -108,27 +117,53 @@
     <ul class="nav nav-pills gap-2 mb-4" role="tablist"><li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#demo-language-en" type="button">English</button></li><li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#demo-language-ur" type="button" lang="ur" dir="rtl">اردو</button></li></ul>
     <div class="tab-content">
     @foreach(['en' => ['English', 'English'], 'ur' => ['Urdu', 'اردو']] as $locale => [$languageName, $languageLabel])
-        @php($prefix = 'demo_'.$locale.'_')
-        @php($storedVideo = (string) $settings->getAttribute($prefix.'video_url'))
-        @php($storedVideoType = (string) $settings->getAttribute($prefix.'video_type'))
-        @php($storedPoster = (string) $settings->getAttribute($prefix.'poster'))
-        @php($posterPath = preg_replace('#^(?:public/|storage/)#', '', ltrim($storedPoster, '/')))
+        @php
+            $prefix = 'demo_'.$locale.'_';
+            $storedVideo = trim((string) $settings->getAttribute($prefix.'video_url'));
+            $storedVideoType = (string) $settings->getAttribute($prefix.'video_type');
+            $storedVideoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim($storedVideo, '/'));
+            $hasStoredVideo = $storedVideoType === 'upload'
+                ? filled($storedVideoPath) && \Illuminate\Support\Facades\Storage::disk('public')->exists($storedVideoPath)
+                : $storedVideoType === 'external' && str_starts_with($storedVideo, 'https://');
+            $storedVideoUrl = $hasStoredVideo
+                ? ($storedVideoType === 'upload' ? \Illuminate\Support\Facades\Storage::disk('public')->url($storedVideoPath) : $storedVideo)
+                : null;
+            $storedVideoName = $storedVideoType === 'upload' ? basename($storedVideoPath) : $storedVideo;
+            $storedPoster = (string) $settings->getAttribute($prefix.'poster');
+            $posterPath = preg_replace('#^(?:public/|storage/)#', '', ltrim($storedPoster, '/'));
+            $hasStoredPoster = filled($posterPath) && \Illuminate\Support\Facades\Storage::disk('public')->exists($posterPath);
+            $storedPosterUrl = $hasStoredPoster ? \Illuminate\Support\Facades\Storage::disk('public')->url($posterPath) : null;
+            $isDemoActive = (bool) old($prefix.'is_active', $settings->getAttribute($prefix.'is_active'));
+        @endphp
         <div class="tab-pane fade {{ $locale === 'en' ? 'show active' : '' }}" id="demo-language-{{ $locale }}">
             <form id="demoLanguageForm-{{ $locale }}" method="POST" action="{{ route('admin.settings.demo-video.update') }}" enctype="multipart/form-data" class="row g-3" data-demo-language-form data-demo-stored-video="{{ filled($storedVideo) ? 'true' : 'false' }}" data-demo-stored-video-type="{{ $storedVideoType }}">
                 @csrf @method('PUT')<input type="hidden" name="demo_language" value="{{ $locale }}">
-                @php($isDemoActive = (bool) old($prefix.'is_active', $settings->getAttribute($prefix.'is_active')))
                 <input type="hidden" name="{{ $prefix }}is_active" value="0"><input class="visually-hidden" type="checkbox" id="{{ $prefix }}active" name="{{ $prefix }}is_active" value="1" @checked($isDemoActive) data-demo-active-input>
                 <div class="col-12"><h3 class="h6 mb-0">{{ $languageName }} demo <span lang="{{ $locale === 'ur' ? 'ur' : 'en' }}" @if($locale === 'ur') dir="rtl" @endif>({{ $languageLabel }})</span></h3></div>
                 <div class="col-md-6"><label class="form-label">Title</label><input name="{{ $prefix }}title" class="form-control" maxlength="120" value="{{ old($prefix.'title', $settings->getAttribute($prefix.'title')) }}"></div>
                 <div class="col-md-6"><label class="form-label">Supporting text</label><input name="{{ $prefix }}subtitle" class="form-control" maxlength="500" value="{{ old($prefix.'subtitle', $settings->getAttribute($prefix.'subtitle')) }}"></div>
                 <div class="col-md-4"><label class="form-label">Video source</label><select name="{{ $prefix }}video_type" class="form-select" data-demo-language-source><option value="external" @selected(old($prefix.'video_type', $settings->getAttribute($prefix.'video_type') ?: 'external') === 'external')>Secure video URL</option><option value="upload" @selected(old($prefix.'video_type', $settings->getAttribute($prefix.'video_type')) === 'upload')>Upload video</option></select></div>
                 <div class="col-md-8" data-demo-language-panel="external"><label class="form-label">Direct HTTPS video URL</label><input name="{{ $prefix }}video_url" type="url" class="form-control" placeholder="https://example.com/demo.mp4" value="{{ old($prefix.'video_url', $settings->getAttribute($prefix.'video_type') === 'external' ? $storedVideo : '') }}"><small class="tf-muted">MP4 or WebM supported.</small></div>
-                <div class="col-md-8 d-none" data-demo-language-panel="upload"><label class="form-label">Upload {{ $languageName }} video</label><input name="{{ $prefix }}video_file" type="file" class="form-control" accept="video/mp4,video/webm,video/ogg,.mp4,.webm,.ogv" data-demo-upload-limit-bytes="536870912"><small class="tf-muted">MP4 or WebM supported. Videos up to 512 MB are supported.</small></div>
-                <div class="col-md-6"><label class="form-label">Poster image (optional)</label><input name="{{ $prefix }}poster_file" type="file" class="form-control" accept=".jpg,.jpeg,.png,.webp">@if(filled($posterPath) && \Illuminate\Support\Facades\Storage::disk('public')->exists($posterPath))<label class="form-check mt-2"><input class="form-check-input" type="checkbox" name="{{ $prefix }}remove_poster" value="1"> Remove current poster</label>@endif</div>
+                <div class="col-md-8 d-none" data-demo-language-panel="upload"><label class="form-label">Replace {{ $languageName }} video</label><input name="{{ $prefix }}video_file" type="file" class="form-control" accept="video/mp4,video/webm,video/ogg,.mp4,.webm,.ogv" data-demo-upload-limit-bytes="536870912"><small class="tf-muted">MP4 or WebM supported. Maximum upload size depends on server configuration.</small></div>
+                @if($hasStoredVideo)
+                    <div class="col-12"><div class="tf-setting-current-file justify-content-between flex-wrap gap-2"><span><i class="bi bi-check-circle-fill"></i> <strong>Current video:</strong> {{ $storedVideoName }} <span class="badge text-bg-success ms-1">Configured</span></span><button class="btn btn-sm btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#demoPreview-{{ $locale }}"><i class="bi bi-play-circle me-1"></i>Preview</button></div></div>
+                @elseif(filled($storedVideo))
+                    <div class="col-12"><div class="alert alert-warning py-2 mb-0 small">A saved {{ $languageName }} video source could not be reached. Upload a replacement before enabling this demo.</div></div>
+                @endif
+                <div class="col-md-6"><label class="form-label">Poster image (optional)</label><input name="{{ $prefix }}poster_file" type="file" class="form-control" accept=".jpg,.jpeg,.png,.webp">@if($hasStoredPoster)<div class="d-flex align-items-center gap-2 mt-2"><img src="{{ $storedPosterUrl }}" alt="Current {{ $languageName }} demo poster" class="rounded border" width="52" height="36" style="object-fit:cover"><span class="small text-muted">Current poster: {{ basename($posterPath) }}</span></div><label class="form-check mt-2"><input class="form-check-input" type="checkbox" name="{{ $prefix }}remove_poster" value="1"> Remove current poster</label>@endif</div>
                 <div class="col-12 d-flex flex-wrap align-items-center gap-2 border-top pt-3"><button class="btn btn-sm btn-tf-primary" type="submit" data-demo-language-save>Save</button>@if(filled($storedVideo) || filled($storedPoster))<button class="btn btn-sm btn-outline-danger" type="submit" form="removeDemoLanguage-{{ $locale }}">Delete</button>@endif</div>
                 <div class="col-12 d-none small tf-muted" data-demo-upload-progress aria-live="polite"></div>
             </form>
             @if(filled($storedVideo) || filled($storedPoster))<form id="removeDemoLanguage-{{ $locale }}" method="POST" action="{{ route('admin.settings.demo-video.destroy') }}" class="d-none" data-tf-confirm-message="This removes only the {{ $languageName }} demo." data-tf-confirm-title="Remove {{ $languageName }} demo?" data-tf-confirm-button="Remove demo" data-tf-confirm-color="#dc3545">@csrf @method('DELETE')<input type="hidden" name="demo_language" value="{{ $locale }}"></form>@endif
+            @if($hasStoredVideo)
+                <div class="modal fade tf-demo-preview-modal" id="demoPreview-{{ $locale }}" tabindex="-1" aria-hidden="true" aria-labelledby="demoPreviewTitle-{{ $locale }}" data-demo-preview-modal>
+                    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+                        <div class="modal-header"><h2 class="modal-title fs-5" id="demoPreviewTitle-{{ $locale }}">{{ $languageName }} demo preview</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                        <div class="modal-body"><div class="tf-demo-preview-media"><video controls playsinline preload="metadata" @if($storedPosterUrl) poster="{{ $storedPosterUrl }}" @endif><source src="{{ $storedVideoUrl }}">Your browser does not support video playback.</video></div><div class="tf-demo-preview-status" aria-live="polite"><span class="tf-demo-preview-state" data-demo-preview-state>Ready to play</span></div></div>
+                        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div>
+                    </div></div>
+                </div>
+            @endif
         </div>
     @endforeach
     </div>
@@ -302,6 +337,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             xhr.send(new FormData(form));
+        });
+    });
+    document.querySelectorAll('[data-demo-preview-modal]').forEach(modal => {
+        // Bootstrap modals must be direct body children. Keeping this overlay
+        // inside a fading settings tab makes its fixed positioning relative to
+        // the tab/card, which causes clipping and repeated layout repainting.
+        document.body.append(modal);
+        const video = modal.querySelector('video');
+        if (!video) return;
+        const surface = modal.querySelector('.tf-demo-preview-media');
+        const state = modal.querySelector('[data-demo-preview-state]');
+        const syncPreviewState = () => {
+            const isPlaying = !video.paused && !video.ended;
+            surface?.classList.toggle('is-playing', isPlaying);
+            if (state) {
+                state.classList.toggle('is-playing', isPlaying);
+                state.textContent = isPlaying ? 'Playing' : (video.ended ? 'Playback complete' : 'Paused — use the video controls');
+            }
+        };
+
+        ['play', 'pause', 'ended'].forEach(eventName => {
+            video.addEventListener(eventName, syncPreviewState);
+        });
+        syncPreviewState();
+
+        // Sources are rendered once from the canonical saved setting. Closing
+        // only stops playback; it never reassigns or reloads the source.
+        modal.addEventListener('hidden.bs.modal', () => {
+            video.pause();
+            if (Number.isFinite(video.duration)) video.currentTime = 0;
+            syncPreviewState();
         });
     });
 });

@@ -12,6 +12,7 @@ use App\Models\PosRegister;
 use App\Models\Product;
 use App\Services\CompanyPermissionService;
 use App\Services\PosSaleService;
+use App\Services\PosPaymentBreakdown;
 use App\Services\PosDraftCartService;
 use App\Services\ThermalDocumentService;
 use Illuminate\Http\Request;
@@ -49,8 +50,13 @@ class PosController extends Controller
                 ? Customer::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(['id', 'name', 'phone'])
                 : collect(),
             'canViewCustomers' => $canViewCustomers,
-            'canUseCustomPrice' => $permissions->allowsUser($request->user(), 'pos.custom_price'),
+            'canUseCustomPrice' => $permissions->allowsUser($request->user(), 'pos.override_price'),
+            'canUseSplitPayment' => $permissions->allowsUser($request->user(), 'pos.split_payment'),
             'canCreateCustomer' => $permissions->allowsUser($request->user(), 'customers.create'),
+            'canRecordCashMovement' => $permissions->allowsUser($request->user(), 'pos.cash_movement'),
+            'canCloseRegister' => $permissions->allowsUser($request->user(), 'pos.close_register'),
+            'paymentMethods' => PosPaymentBreakdown::SINGLE_METHODS,
+            'splitPaymentMethods' => PosPaymentBreakdown::SPLIT_METHODS,
         ]);
     }
 
@@ -98,6 +104,41 @@ class PosController extends Controller
         $this->drafts->clear($request->session(), $request->user()->business_id, $request->user()->id, $register->id);
 
         return $this->respond($request, ['register' => $register], 'Register closed.');
+    }
+
+    public function reconciliation(Request $request, PosRegister $register)
+    {
+        abort_unless($register->business_id === $request->user()->business_id && $register->user_id === $request->user()->id, 403);
+
+        return response()->json([
+            'reconciliation' => $this->pos->reconciliation($register, $request->user()->business_id, $request->user()->id),
+        ]);
+    }
+
+    public function recordCashMovement(Request $request, PosRegister $register)
+    {
+        abort_unless($register->business_id === $request->user()->business_id && $register->user_id === $request->user()->id, 403);
+        $data = $request->validate([
+            'type' => ['required', 'in:Cash In,Cash Out'],
+            'amount' => ['required', 'integer', 'min:1'],
+            'reason' => ['required', 'string', 'max:500'],
+            'reference' => ['nullable', 'string', 'max:120'],
+        ]);
+        $movement = $this->pos->recordCashMovement($register, $request->user()->business_id, $request->user()->id, $data);
+
+        return $this->respond($request, ['movement' => $movement], $data['type'].' recorded.');
+    }
+
+    public function registerHistory(Request $request)
+    {
+        $registers = PosRegister::query()
+            ->with('user:id,name')
+            ->where('business_id', $request->user()->business_id)
+            ->latest('opened_at')
+            ->paginate(15)
+            ->withQueryString();
+
+        return view('business.pos.register-history', compact('registers'));
     }
 
     public function store(StorePosSaleRequest $request)
@@ -360,6 +401,10 @@ class PosController extends Controller
     {
         $order = Order::query()
             ->with(['business.documentFooter', 'business.owner:id,email', 'customer', 'creator', 'items.product', 'payments', 'invoice'])
+            // Invoice/order numbers restart for each business. Scope before
+            // resolving the reference so another business' INV-000001 cannot
+            // be selected and then rejected as a foreign receipt.
+            ->where('business_id', $request->user()->business_id)
             ->where('sale_channel', 'pos')
             ->where(function ($query) use ($invoice) {
                 $query->where('order_number', $invoice)

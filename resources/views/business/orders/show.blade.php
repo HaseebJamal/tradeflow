@@ -54,7 +54,14 @@
     </div>
 </div>
 
-<x-table><thead><tr><th>Item</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>@forelse($order->items as $item)<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td>{{ $item->unit ?: $item->product?->unit }}</td><td><x-quantity :value="$item->quantity" /></td><td>Rs {{ number_format($item->unit_price ?: $item->price) }}</td><td>Rs {{ number_format($item->line_total ?: $item->total) }}</td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No order items.</td></tr>@endforelse</tbody></x-table>
+@if($order->payments->isNotEmpty())
+<div class="tf-card p-4 mb-4">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-3"><div><h2 class="h5 mb-1">Payments</h2><p class="tf-muted small mb-0">{{ $order->payment_type === 'Split' ? 'Split payment breakdown' : 'Recorded payment' }}</p></div><span class="badge text-bg-light">{{ $order->payments->count() }} {{ str('payment')->plural($order->payments->count()) }}</span></div>
+    <x-table><thead><tr><th>Method</th><th>Reference</th><th>Date</th><th class="text-end">Applied</th></tr></thead><tbody>@foreach($order->payments as $payment)<tr><td>{{ $payment->method }}</td><td>{{ $payment->transaction_reference ?: '—' }}</td><td>{{ $payment->payment_date?->format('n/j/Y') ?: $payment->created_at?->format('n/j/Y, g:i A') }}</td><td class="text-end">Rs {{ number_format($payment->amount) }}</td></tr>@endforeach</tbody></x-table>
+</div>
+@endif
+
+<x-table><thead><tr><th>Item</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>@forelse($order->items as $item)<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name }}</td><td>{{ $item->unit ?: $item->product?->unit }}</td><td><x-quantity :value="$item->quantity" /></td><td>Rs {{ number_format($item->unit_price ?: $item->price) }}@if($item->is_price_overridden)<small class="d-block tf-muted mt-1">Standard: Rs {{ number_format($item->standard_unit_price) }}@if($item->price_override_reason) · Override: {{ $item->price_override_reason }}@endif</small>@endif</td><td>Rs {{ number_format($item->line_total ?: $item->total) }}</td></tr>@empty<tr><td colspan="5" class="text-center tf-muted py-4">No order items.</td></tr>@endforelse</tbody></x-table>
 
 @if(($journalEntries ?? collect())->isNotEmpty())
 <div class="tf-card p-4 mt-4">

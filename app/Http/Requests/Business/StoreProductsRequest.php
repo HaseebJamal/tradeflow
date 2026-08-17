@@ -45,13 +45,15 @@ class StoreProductsRequest extends FormRequest
             'products.*.warehouse_location' => ['nullable', 'string', 'max:150'],
             'products.*.has_batch_tracking' => ['nullable', 'boolean'],
             'products.*.batch_number' => ['nullable', 'string', 'max:100'],
-            'products.*.manufacturing_date' => ['nullable', 'date'],
-            'products.*.expiry_date' => ['nullable', 'date'],
+            'products.*.manufacturing_date' => ['nullable', 'date', 'before_or_equal:products.*.expiry_date'],
+            'products.*.expiry_date' => ['nullable', 'date', 'after_or_equal:products.*.manufacturing_date'],
             'products.*.expiry_alert_days' => ['nullable', 'integer', 'min:0'],
             'products.*.status' => ['required', Rule::in(['Active', 'Inactive'])],
+            // POS and the existing cash/payment flows use whole rupees.
+            // Keep the master-price boundary on that same canonical scale.
             'products.*.retail_price' => ['nullable', 'integer', 'min:0'],
             'products.*.wholesale_price' => ['nullable', 'integer', 'min:0'],
-            'products.*.description' => ['nullable', 'string'],
+            'products.*.description' => ['nullable', 'string', 'max:5000'],
         ];
     }
 

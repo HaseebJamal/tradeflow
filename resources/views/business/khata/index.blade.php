@@ -81,10 +81,27 @@
     </div>
 
     <div class="tab-pane fade {{ $activeLedgerTab === 'profit' ? 'show active' : '' }}" id="tab-profit">
-        <div class="row g-3">
-            <div class="col-md-4"><div class="tf-card p-4"><div class="tf-muted">Sales Revenue</div><div class="h3">Rs {{ number_format($totalSales) }}</div></div></div>
-            <div class="col-md-4"><div class="tf-card p-4"><div class="tf-muted">Expenses</div><div class="h3">Rs {{ number_format($totalExpenses) }}</div></div></div>
-            <div class="col-md-4"><div class="tf-card p-4"><div class="tf-muted">Net Profit</div><div class="h3">Rs {{ number_format($netProfit) }}</div></div></div>
+        <div class="tf-card p-4">
+            <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
+                <div><h2 class="h5 mb-1">Profit &amp; Loss</h2><p class="tf-muted small mb-0">Uses the same recorded sales, returns, COGS snapshots, and expenses as Business Reports.</p></div>
+                <form class="d-flex flex-wrap align-items-end gap-2" method="GET">
+                    <input type="hidden" name="tab" value="profit">
+                    <label class="small">Date From<input type="date" name="date_from" class="form-control form-control-sm" value="{{ $profitFrom->toDateString() }}"></label>
+                    <label class="small">Date To<input type="date" name="date_to" class="form-control form-control-sm" value="{{ $profitTo->toDateString() }}"></label>
+                    <button class="btn btn-sm btn-outline-primary">Apply</button>
+                </form>
+            </div>
+            <div class="tf-profitability-waterfall" aria-label="Profit and loss calculation">
+                <div class="tf-profitability-waterfall__row"><span>Gross Sales</span><strong>Rs {{ number_format($profitability['gross_sales']) }}</strong></div>
+                <div class="tf-profitability-waterfall__row is-deduction"><span>Sales Returns</span><strong>-Rs {{ number_format($profitability['sales_returns']) }}</strong></div>
+                <div class="tf-profitability-waterfall__row is-deduction"><span>Invoice Discounts</span><strong>-Rs {{ number_format($profitability['invoice_discounts']) }}</strong></div>
+                <div class="tf-profitability-waterfall__row is-total"><span>Net Sales</span><strong>Rs {{ number_format($profitability['net_sales']) }}</strong></div>
+                <div class="tf-profitability-waterfall__row is-deduction"><span>Cost of Goods Sold</span><strong>-Rs {{ number_format($profitability['cogs']) }}</strong></div>
+                <div class="tf-profitability-waterfall__row is-total"><span>Gross Profit</span><strong class="{{ $profitability['gross_profit'] < 0 ? 'text-danger' : 'text-success' }}">Rs {{ number_format($profitability['gross_profit']) }}</strong></div>
+                <div class="tf-profitability-waterfall__row is-deduction"><span>Operating Expenses</span><strong>-Rs {{ number_format($profitability['expenses']) }}</strong></div>
+                <div class="tf-profitability-waterfall__row is-result {{ $profitability['net_profit'] < 0 ? 'is-loss' : '' }}"><span>{{ $profitability['net_profit'] < 0 ? 'Net Loss' : 'Net Profit' }}</span><strong>Rs {{ number_format($profitability['net_profit']) }}</strong></div>
+            </div>
+            <p class="tf-muted small mt-3 mb-0">Period: {{ $profitFrom->format('n/j/Y') }} &ndash; {{ $profitTo->format('n/j/Y') }}. Line discounts are already included in saved sales totals and are not deducted twice.</p>
         </div>
     </div>
 

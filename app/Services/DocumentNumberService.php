@@ -18,6 +18,8 @@ class DocumentNumberService
         'payment' => ['scope' => 'payment_receipt', 'prefix' => 'RCPT', 'sources' => [['payments', 'reference_number']]],
         'credit_note' => ['scope' => 'credit_note', 'prefix' => 'CN', 'sources' => [['credit_notes', 'credit_note_number']]],
         'debit_note' => ['scope' => 'debit_note', 'prefix' => 'DN'],
+        'stock_count' => ['scope' => 'stock_count', 'prefix' => 'STK', 'sources' => [['stock_counts', 'reference']]],
+        'balance_adjustment' => ['scope' => 'balance_adjustment', 'prefix' => 'ADJ', 'sources' => [['balance_adjustments', 'reference']]],
     ];
 
     /**

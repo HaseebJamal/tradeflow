@@ -146,6 +146,7 @@ class BusinessNotificationController extends Controller
             'new_values' => [
                 'notification_id' => (string) $notification->id,
                 'category' => data_get($notification->data, 'category'),
+                'title' => data_get($notification->data, 'title'),
             ],
         ]);
     }

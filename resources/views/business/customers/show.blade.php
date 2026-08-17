@@ -30,7 +30,7 @@
         </section>
 
         <section class="mb-4" aria-labelledby="customer-financial-title">
-            <div class="d-flex justify-content-between align-items-center mb-3"><div><span class="tf-dashboard-eyebrow">Financial summary</span><h2 id="customer-financial-title" class="h5 mb-0">Account position</h2></div></div>
+            <div class="d-flex justify-content-between align-items-center gap-3 mb-3"><div><span class="tf-dashboard-eyebrow">Financial summary</span><h2 id="customer-financial-title" class="h5 mb-0">Account position</h2></div>@companyCan('customers.adjust_balance')<button type="button" class="btn btn-sm btn-tf-primary" data-bs-toggle="modal" data-bs-target="#customer-balance-adjustment"><i class="bi bi-sliders me-1"></i>Adjust Balance</button>@endcompanyCan</div>
             <div class="row g-3">
                 @foreach([
                     ['Outstanding Receivable', 'Rs '.number_format($outstanding), $outstanding > 0 ? 'warning' : 'success'],
@@ -45,6 +45,41 @@
                     <div class="col-6 col-xl-3"><article class="tf-customer-kpi is-{{ $tone }}"><small>{{ $label }}</small><strong>{{ $value }}</strong></article></div>
                 @endforeach
             </div>
+        </section>
+
+        <section class="tf-card tf-customer-ledger-card mt-4" aria-labelledby="customer-adjustments-title">
+            <div class="tf-customer-ledger-heading"><div><span class="tf-dashboard-eyebrow">Adjustment history</span><h2 id="customer-adjustments-title" class="h5 mb-1">Balance Adjustments</h2><p class="tf-muted small mb-0">Posted corrections are immutable; reverse an entry instead of editing it.</p></div></div>
+            <x-table>
+                <thead><tr><th>Reference</th><th>Date</th><th class="text-end">Previous</th><th class="text-end">Adjustment</th><th class="text-end">New</th><th>Reason</th><th>User</th><th></th></tr></thead>
+                <tbody>
+                    @forelse($adjustments as $adjustment)
+                        <tr>
+                            <td class="fw-semibold">{{ $adjustment->reference }}</td>
+                            <td>{{ $adjustment->created_at?->format('n/j/Y, g:i A') }}</td>
+                            <td class="text-end">Rs {{ number_format($adjustment->previous_balance, 2) }}</td>
+                            <td class="text-end {{ str_starts_with($adjustment->adjustment_type, 'increase') ? 'text-success' : 'text-danger' }}">{{ str_starts_with($adjustment->adjustment_type, 'increase') ? '+' : '−' }}Rs {{ number_format($adjustment->amount, 2) }}</td>
+                            <td class="text-end">Rs {{ number_format($adjustment->new_balance, 2) }}</td>
+                            <td>{{ $adjustment->reason }}</td>
+                            <td>{{ $adjustment->creator?->name ?: '—' }}</td>
+                            <td>
+                                @companyCan('customers.adjust_balance')
+                                    @if(! $adjustment->reversed_at && ! $adjustment->reversal)
+                                        <form method="POST" action="{{ route('business.customers.balance-adjustments.reverse', [$customer, $adjustment]) }}" data-tf-confirm-message="Reverse {{ $adjustment->reference }}? A new opposite ledger entry will be posted." data-tf-confirm-title="Reverse balance adjustment" data-tf-confirm-button="Reverse Adjustment" data-tf-confirm-color="#dc3545">
+                                            @csrf
+                                            <input type="hidden" name="submission_token" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+                                            <button class="btn btn-sm btn-outline-danger">Reverse</button>
+                                        </form>
+                                    @else
+                                        <span class="tf-badge tf-badge-secondary">Reversed</span>
+                                    @endif
+                                @endcompanyCan
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="8" class="text-center tf-muted py-4">No balance adjustments recorded.</td></tr>
+                    @endforelse
+                </tbody>
+            </x-table>
         </section>
 
         <section class="tf-card tf-customer-ledger-card" aria-labelledby="customer-ledger-title">
@@ -80,7 +115,7 @@
                 <div class="col-12 col-md-6"><label class="form-label" for="update-customer-province">Province / Location</label><input id="update-customer-province" name="province" value="{{ old('province', $customer->province) }}" class="form-control"></div>
                 <div class="col-12 col-md-4"><label class="form-label" for="update-customer-type">Type</label><select id="update-customer-type" name="customer_type" class="form-select">@foreach(['Retailer','Dealer','Distributor','Walk-in Customer','Other','Wholesaler'] as $type)<option value="{{ $type }}" @selected(old('customer_type', $customer->customer_type) === $type)>{{ $type }}</option>@endforeach</select></div>
                 <div class="col-12 col-md-4"><label class="form-label" for="update-customer-credit-limit">Credit Limit</label><div class="input-group"><span class="input-group-text">Rs</span><input id="update-customer-credit-limit" name="credit_limit" type="number" min="0" step="1" value="{{ old('credit_limit', (int) $customer->credit_limit) }}" class="form-control js-whole-number"></div><small class="tf-muted">Defaults to Rs 0.</small></div>
-                <div class="col-12 col-md-4"><label class="form-label" for="update-customer-balance">Current Balance</label><div class="input-group"><span class="input-group-text">Rs</span><input id="update-customer-balance" name="current_balance" type="number" min="0" step="0.01" value="{{ old('current_balance', number_format((float) $customer->current_balance, 2, '.', '')) }}" class="form-control"></div><small class="tf-muted">Saving creates an auditable balance adjustment.</small></div>
+                <div class="col-12 col-md-4"><label class="form-label">Current Balance</label><div class="form-control bg-body-secondary">Rs {{ number_format((float) $customer->current_balance, 2) }}</div><small class="tf-muted">Calculated from the customer ledger. Use Adjust Balance for corrections.</small></div>
                 <div class="col-12"><label class="form-label" for="update-customer-address">Address</label><input id="update-customer-address" name="address" value="{{ old('address', $customer->address) }}" class="form-control"></div>
                 <div class="col-12 d-flex justify-content-end"><button class="btn btn-tf-primary px-4">Save Changes</button></div>
             </form>
@@ -103,4 +138,7 @@
         </section>
     </aside>
 </div>
+@companyCan('customers.adjust_balance')
+    @include('business.partials.balance-adjustment-modal', ['party' => $customer, 'partyType' => 'customer', 'currentBalance' => (float) $customer->current_balance])
+@endcompanyCan
 @endsection

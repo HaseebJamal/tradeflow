@@ -7,6 +7,7 @@
         'productsUrl' => route('business.pos.products'),
         'barcodeUrl' => route('business.pos.barcode'),
         'openRegisterUrl' => route('business.pos.register.open'),
+        'registerBaseUrl' => url('/business/pos/register'),
         'saleUrl' => route('business.pos.sales.store'),
         'holdUrl' => route('business.pos.hold'),
         'draftUrl' => route('business.pos.draft.sync'),
@@ -16,7 +17,11 @@
         'registerId' => $register?->id,
         'draftGeneration' => $draftGeneration,
         'canUseCustomPrice' => $canUseCustomPrice,
+        'canUseSplitPayment' => $canUseSplitPayment,
         'canCreateCustomer' => $canCreateCustomer,
+        'canRecordCashMovement' => $canRecordCashMovement,
+        'paymentMethods' => $paymentMethods,
+        'splitPaymentMethods' => $splitPaymentMethods,
     ]);
 @endphp
 <div class="tf-pos" data-pos-root data-pos-initialized="0" data-pos-config="{{ $posConfig }}">
@@ -25,6 +30,7 @@
             <span class="tf-pos-status {{ $register ? 'is-open' : '' }}" data-pos-register-status><i class="bi bi-circle-fill"></i><span data-pos-register-label>{{ $register ? 'Register Open' : 'Register Closed' }}</span></span>
             <span>Opening cash <strong data-pos-opening-cash>Rs {{ number_format($register?->opening_cash ?? 0) }}</strong></span>
             <span>Current invoice <strong data-pos-invoice>New sale</strong></span>
+            @if($canCloseRegister)<a class="btn btn-sm btn-outline-secondary" href="{{ route('business.pos.register.history') }}"><i class="bi bi-clock-history"></i><span>Shift History</span></a>@endif
         </div>
         <div class="tf-pos-top-inputs" aria-label="POS actions">
             <div class="tf-pos-top-input">
@@ -43,6 +49,7 @@
                 <div id="posHistorySuggestions" class="tf-pos-top-suggestions d-none" data-pos-history-suggestions role="listbox" aria-label="Matching invoices"></div>
                 <small class="text-danger" data-pos-history-error aria-live="polite" hidden></small>
             </div>
+            @if($canRecordCashMovement)<span class="tf-pos-cash-actions" data-pos-cash-actions @if(! $register) hidden @endif><button type="button" class="btn btn-outline-success" data-pos-cash-in><i class="bi bi-plus-circle"></i><span>Cash In</span></button><button type="button" class="btn btn-outline-warning" data-pos-cash-out><i class="bi bi-dash-circle"></i><span>Cash Out</span></button></span>@endif
             <span data-pos-register-action>
                 @if($register)
                     <button type="button" class="btn btn-outline-danger" data-pos-close-register><i class="bi bi-lock"></i><span>Close Register</span></button>
@@ -106,11 +113,30 @@
                 <div class="tf-pos-delivery-details d-none" data-pos-delivery-details><label class="form-label" for="posDeliveryAddress">Delivery Address</label><textarea id="posDeliveryAddress" class="form-control" data-pos-delivery-address rows="2" maxlength="1000" placeholder="Enter the delivery address"></textarea><small class="text-muted">A customer and delivery address are required for delivery.</small></div>
                 <div class="row g-2 mt-1"><div class="col-6"><label class="form-label">Discount %</label><input class="form-control js-whole-number" data-pos-discount type="number" min="0" max="100" step="1" value="0"></div><div class="col-6"><label class="form-label">Tax %</label><input class="form-control js-whole-number" data-pos-tax type="number" min="0" max="100" step="1" value="0"></div></div>
                 <input type="hidden" data-pos-payment-type value="Cash">
+                <div class="small text-muted border-top pt-2 mt-2" data-pos-summary>
+                    <div class="d-flex justify-content-between"><span>Gross subtotal</span><span data-total="gross">Rs 0</span></div>
+                    <div class="d-flex justify-content-between"><span>Line discounts</span><span data-total="line-discounts">- Rs 0</span></div>
+                    <div class="d-flex justify-content-between"><span>After line discounts</span><span data-total="net-subtotal">Rs 0</span></div>
+                    <div class="d-flex justify-content-between"><span>Invoice discount</span><span data-total="invoice-discount">- Rs 0</span></div>
+                    <div class="d-flex justify-content-between"><span>Tax</span><span data-total="tax">Rs 0</span></div>
+                </div>
                 <div class="tf-pos-payable" aria-live="polite"><span>Payable Amount</span><strong data-total="grand">Rs 0</strong></div>
-                <label class="form-label mt-2" data-pos-tender-label>Cash Received</label><input class="form-control tf-pos-cash-input js-whole-number" data-pos-cash type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="">
-                <div class="mt-2" data-pos-change-row><label class="form-label">Change Return</label><input class="form-control" data-pos-change type="text" value="Rs 0" readonly tabindex="-1"></div>
-                <label class="form-label mt-2">Payment Method</label><select class="form-select" data-pos-payment-method data-native-select><option>Cash</option><option>Bank Transfer</option><option>Jazz Cash</option><option>Easypaisa</option><option>Cheque</option></select>
-                <label class="form-label mt-2">Reference</label><input class="form-control" data-pos-reference maxlength="255" autocomplete="off">
+                <label class="form-label mt-2">Payment Mode</label><select class="form-select" data-pos-payment-mode data-native-select><option value="single">Single Payment</option>@if($canUseSplitPayment)<option value="split">Split Payment</option>@endif</select>
+                <div data-pos-single-payment>
+                    <label class="form-label mt-2" data-pos-tender-label>Cash Received</label><input class="form-control tf-pos-cash-input js-whole-number" data-pos-cash type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="">
+                    <div class="mt-2" data-pos-change-row><label class="form-label">Change Return</label><input class="form-control" data-pos-change type="text" value="Rs 0" readonly tabindex="-1"></div>
+                    <label class="form-label mt-2">Payment Method</label><select class="form-select" data-pos-payment-method data-native-select>@foreach($paymentMethods as $method)<option>{{ $method }}</option>@endforeach</select>
+                    <label class="form-label mt-2">Reference</label><input class="form-control" data-pos-reference maxlength="255" autocomplete="off">
+                </div>
+                <div class="d-none" data-pos-split-payment>
+                    <div class="d-flex align-items-center justify-content-between gap-2 mt-2"><label class="form-label mb-0">Payment methods</label><button type="button" class="btn btn-sm btn-outline-primary" data-pos-add-split-payment><i class="bi bi-plus-lg me-1"></i>Add payment</button></div>
+                    <div class="mt-2" data-pos-split-payment-rows></div>
+                    <div class="small border-top pt-2 mt-2" data-pos-split-summary>
+                        <div class="d-flex justify-content-between"><span>Entered payments</span><strong data-pos-split-entered>Rs 0</strong></div>
+                        <div class="d-flex justify-content-between"><span>Remaining</span><strong data-pos-split-remaining>Rs 0</strong></div>
+                        <div class="d-flex justify-content-between d-none" data-pos-split-change-row><span>Cash change</span><strong data-pos-split-change>Rs 0</strong></div>
+                    </div>
+                </div>
             </div>
             <div class="tf-pos-complete">
                 <small class="d-block text-muted mb-2 {{ $register ? 'd-none' : '' }}" data-pos-register-required>Open the register to enable checkout.</small>

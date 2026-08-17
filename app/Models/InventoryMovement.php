@@ -16,7 +16,7 @@ class InventoryMovement extends Model
         'note',
         'created_by',
         'movement_date',
-        'goods_receipt_id',
+        'goods_receipt_id', 'stock_count_id', 'product_batch_id',
     ];
 
     protected $casts = [
@@ -26,4 +26,5 @@ class InventoryMovement extends Model
     public function business() { return $this->belongsTo(Business::class); }
     public function product() { return $this->belongsTo(Product::class)->withTrashed(); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function batch() { return $this->belongsTo(ProductBatch::class, 'product_batch_id'); }
 }

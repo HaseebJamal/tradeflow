@@ -42,9 +42,9 @@
             @forelse($companies as $company)
                 @php
                     $companyStatus = strtolower((string) $company->status);
-                    $companyDisplayStatus = $companyStatus === 'approved' && strtolower((string) $company->subscription?->status) === 'trial'
-                        ? 'Trial Active'
-                        : $company->status;
+                    // This column is the company approval status. Trial and
+                    // paid access belong exclusively to Trial & Access.
+                    $companyDisplayStatus = $company->status;
                     $companyLogoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim((string) $company->logo, '/'));
                     $hasCompanyLogo = filled($companyLogoPath) && \Illuminate\Support\Facades\Storage::disk('public')->exists($companyLogoPath);
                     $companyInitials = str($company->business_name)->trim()->explode(' ')->filter()->take(2)->map(fn ($part) => str($part)->substr(0, 1)->upper())->implode('');
@@ -53,7 +53,7 @@
                     <td><div class="tf-company-cell">@if($hasCompanyLogo)<img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($companyLogoPath) }}" alt="{{ $company->business_name }} logo">@else<span>{{ $companyInitials ?: 'B' }}</span>@endif<div><strong>{{ $company->business_name }}</strong><small>{{ $company->display_business_type ?: 'Business' }}</small></div></div></td>
                     <td><div class="tf-table-person"><strong>{{ $company->owner?->name ?: 'Owner not assigned' }}</strong><small>{{ $company->owner?->email ?: 'No email provided' }}</small></div></td>
                     <td><span class="tf-table-contact">{{ $company->phone ?: 'Not provided' }}</span></td>
-                    <td><span class="tf-badge {{ $companyDisplayStatus === 'Trial Active' ? 'tf-badge-info' : ($companyStatus === 'approved' ? 'tf-badge-success' : ($companyStatus === 'pending' ? 'tf-badge-warning' : ($companyStatus === 'archived' ? 'tf-badge-info' : 'tf-badge-danger'))) }}">{{ $companyDisplayStatus }}</span></td>
+                    <td><span class="tf-badge {{ $companyStatus === 'approved' ? 'tf-badge-success' : ($companyStatus === 'pending' ? 'tf-badge-warning' : ($companyStatus === 'archived' ? 'tf-badge-info' : 'tf-badge-danger')) }}">{{ $companyDisplayStatus }}</span></td>
                     <td><span class="tf-table-date"><x-date-time :value="$company->created_at" /></span></td>
                     <td class="text-end">
                         <div class="d-inline-flex align-items-center gap-2 tf-company-actions"><a href="{{ route('admin.companies.show', $company) }}" class="btn btn-sm btn-outline-primary tf-table-view-action">Review</a><div class="dropdown">

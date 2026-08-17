@@ -139,6 +139,36 @@ document.querySelectorAll('[data-tf-document-modal], [data-tf-record-details-mod
     document.body.append(modal);
 });
 
+// Bootstrap owns the modal focus trap. This small layer supplies predictable
+// entry and return focus for views, forms, and dynamically rendered details
+// without changing any modal markup or business workflow.
+const tradeFlowModalTriggers = new WeakMap();
+
+document.addEventListener('show.bs.modal', (event) => {
+    const modal = event.target;
+    const trigger = event.relatedTarget instanceof HTMLElement
+        ? event.relatedTarget
+        : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+
+    if (trigger && !modal.contains(trigger)) tradeFlowModalTriggers.set(modal, trigger);
+});
+
+document.addEventListener('shown.bs.modal', (event) => {
+    const modal = event.target;
+    const preferred = modal.querySelector('[data-tf-modal-focus], [autofocus], input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])');
+
+    preferred?.focus({ preventScroll: true });
+});
+
+document.addEventListener('hidden.bs.modal', (event) => {
+    const modal = event.target;
+    const anotherModalIsOpen = [...document.querySelectorAll('.modal.show')].some((candidate) => candidate !== modal);
+    const trigger = tradeFlowModalTriggers.get(modal);
+
+    if (!anotherModalIsOpen && trigger?.isConnected) trigger.focus({ preventScroll: true });
+    tradeFlowModalTriggers.delete(modal);
+});
+
 // A secondary confirmation must not hide and recreate the modal it belongs to.
 // Keep the parent stable, then layer a single non-Bootstrap backdrop beneath the
 // child modal. This prevents focus/backdrop churn when an action is confirmed.
@@ -295,7 +325,7 @@ function positionTradeFlowTomSelectDropdown(control, force = false) {
         ['top', `${top}px`],
         ['transform', 'none'],
         ['width', safeWidth],
-        ['z-index', '1080'],
+        ['z-index', '1030'],
     ].forEach(([property, value]) => control.dropdown.style.setProperty(property, value, 'important'));
 }
 
@@ -782,7 +812,9 @@ function portalTradeFlowActionMenu(toggle) {
     menu.style.setProperty('right', 'auto', 'important');
     menu.style.setProperty('bottom', 'auto', 'important');
     menu.style.setProperty('transform', 'none', 'important');
-    menu.style.setProperty('z-index', '1080', 'important');
+    // A page menu stays below modal backdrops. A menu triggered from inside a
+    // modal remains one layer above that modal, but still below SweetAlert.
+    menu.style.setProperty('z-index', toggle.closest('.modal') ? '1056' : '1030', 'important');
     menu.style.setProperty('visibility', 'hidden', 'important');
 }
 
@@ -1327,10 +1359,9 @@ document.addEventListener('submit', (event) => {
     }).then((result) => { if (result.isConfirmed) proceed(); });
 }, true);
 
-// A save confirmation is required whenever an existing record is being
-// updated. Keep this delegated so it also protects forms rendered in modals
-// or injected after the initial page load. Purpose-built confirmations (for
-// example archive/delete/status actions) retain their more specific copy.
+// Standard updates should submit directly. Consequential actions keep their
+// explicit data-tf-confirm-message confirmation above; routine Save/Create/
+// Update actions use a compact busy state instead of a second dialog.
 function tradeFlowEffectiveFormMethod(form) {
     const spoofedMethod = form.querySelector('input[name="_method"]')?.value;
     return (spoofedMethod || form.method || 'GET').toUpperCase();
@@ -1341,61 +1372,32 @@ function tradeFlowSaveSubmitter(form, submitter) {
     return form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
 }
 
-function requiresTradeFlowSaveConfirmation(form, submitter) {
-    if (!form || form.dataset.tfSaveConfirmApproved === '1') return false;
-
-    // These controls either do not save record details or already use a
-    // tailored confirmation flow. Never layer a generic prompt on top.
-    if (form.matches('[data-tf-confirm-message], [data-tf-company-delete], [data-tf-status-switch-form], [data-access-trial-confirm], [data-footer-newsletter], [data-footer-newsletter-legacy], [data-inline-products-form]')) return false;
-
-    const method = tradeFlowEffectiveFormMethod(form);
-    if (!['PUT', 'PATCH'].includes(method)) return false;
-
-    const button = tradeFlowSaveSubmitter(form, submitter);
-    const label = (button?.textContent || button?.value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const nonSaveAction = /\b(activate|deactivate|suspend|archive|restore|delete|remove|destroy|approve|reject|cancel|void|issue|reissue|reopen|start|deliver|fail|read|unread|mark|extend|renew)\b/;
-
-    return !nonSaveAction.test(label);
-}
-
 document.addEventListener('submit', (event) => {
     const form = event.target.closest?.('form');
-    if (!requiresTradeFlowSaveConfirmation(form, event.submitter)) return;
+    if (!form || event.defaultPrevented || form.dataset.tfSubmitting === '1') return;
+    // A new-tab submission leaves this page in place, so its submitter must
+    // remain usable instead of being left permanently in a busy state.
+    if (form.matches('[data-tf-no-saving-state], [data-inline-products-form], [data-inline-catalog-form]') || form.target === '_blank') return;
 
-    event.preventDefault();
-    if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-    }
+    const method = tradeFlowEffectiveFormMethod(form);
+    if (method === 'GET' || !form.checkValidity()) return;
 
     const submitter = tradeFlowSaveSubmitter(form, event.submitter);
-    const submitLabel = (submitter?.textContent || submitter?.value || 'Save Changes').replace(/\s+/g, ' ').trim();
-    const proceed = () => {
-        form.dataset.tfSaveConfirmApproved = '1';
-        if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
-            submitter.disabled = true;
-            submitter.dataset.tfOriginalLabel = submitter.textContent || submitter.value || submitLabel;
-            if (submitter instanceof HTMLInputElement) submitter.value = 'Saving...';
-            else submitter.textContent = 'Saving...';
-        }
-        form.requestSubmit(submitter || undefined);
-    };
+    if (!(submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement)) return;
+    if (submitter.disabled) return;
 
-    // Every dashboard layout loads SweetAlert. If a custom/minimal layout
-    // intentionally omits it, allow the server-side update rather than
-    // leaving the form blocked with no available dialog.
-    if (!window.Swal) {
-        proceed();
-        return;
+    form.dataset.tfSubmitting = '1';
+    submitter.disabled = true;
+    submitter.setAttribute('aria-busy', 'true');
+    submitter.classList.add('is-loading');
+    submitter.dataset.tfOriginalLabel = submitter instanceof HTMLInputElement ? submitter.value : submitter.innerHTML;
+
+    if (submitter instanceof HTMLInputElement) {
+        submitter.value = form.dataset.tfSavingText || 'Saving...';
+    } else {
+        submitter.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>' + (form.dataset.tfSavingText || 'Saving...') + '</span>';
     }
-
-    askTradeFlowConfirmation({
-        title: 'Save changes?',
-        text: 'Please confirm that you want to save these changes.',
-        confirmButtonText: submitLabel,
-        confirmButtonColor: '#2563eb',
-    }, proceed);
-}, true);
+});
 
 scanTradeFlowAlerts();
 initSweetAlertConfirmations();

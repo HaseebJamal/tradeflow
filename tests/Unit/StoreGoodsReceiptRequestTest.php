@@ -21,6 +21,24 @@ class StoreGoodsReceiptRequestTest extends TestCase
         $this->assertTrue($negative->fails());
     }
 
+    public function test_a_purchase_line_cannot_be_processed_twice_in_one_receipt(): void
+    {
+        $rules = (new StoreGoodsReceiptRequest())->rules();
+        $payload = $this->payload(['accepted_quantity' => '1', 'damaged_quantity' => '0', 'rejected_quantity' => '0']);
+        $payload['items'][] = [
+            'purchase_item_id' => 1,
+            'accepted_quantity' => '1',
+            'damaged_quantity' => '0',
+            'rejected_quantity' => '0',
+        ];
+
+        $validator = Validator::make($payload, $rules);
+
+        $this->assertTrue($validator->fails());
+        $this->assertTrue($validator->errors()->has('items.0.purchase_item_id'));
+        $this->assertTrue($validator->errors()->has('items.1.purchase_item_id'));
+    }
+
     private function payload(array $quantities): array
     {
         return [

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Business;
 
+use App\Services\PosPaymentBreakdown;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -29,10 +30,19 @@ class StorePosSaleRequest extends FormRequest
                     continue;
                 }
 
-                foreach (['unit_price', 'discount_rate', 'tax_rate'] as $field) {
+                foreach (['unit_price', 'discount_rate', 'discount_value', 'tax_rate'] as $field) {
                     if (array_key_exists($field, $item)) {
                         $items[$index][$field] = $normalizeMoney($item[$field]);
                     }
+                }
+            }
+        }
+
+        $splitPayments = $this->input('split_payments');
+        if (is_array($splitPayments)) {
+            foreach ($splitPayments as $index => $payment) {
+                if (is_array($payment) && array_key_exists('amount', $payment)) {
+                    $splitPayments[$index]['amount'] = $normalizeMoney($payment['amount']);
                 }
             }
         }
@@ -42,6 +52,7 @@ class StorePosSaleRequest extends FormRequest
             'discount' => $normalizeMoney($this->input('discount')),
             'tax_rate' => $normalizeMoney($this->input('tax_rate')),
             'items' => $items,
+            'split_payments' => $splitPayments,
         ]);
     }
 
@@ -51,10 +62,14 @@ class StorePosSaleRequest extends FormRequest
             'customer_id' => ['nullable', 'integer'],
             'discount' => ['nullable', 'integer', 'min:0', 'max:100'],
             'tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
-            'payment_type' => ['required', Rule::in(['Cash', 'Credit', 'Split', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque'])],
-            'payment_method' => ['required', Rule::in(['Cash', 'Credit', 'Split', 'Bank Transfer', 'Jazz Cash', 'Easypaisa', 'Cheque'])],
+            'payment_type' => ['required', Rule::in([...PosPaymentBreakdown::SINGLE_METHODS, 'Split'])],
+            'payment_method' => ['required', Rule::in([...PosPaymentBreakdown::SINGLE_METHODS, 'Split'])],
             'cash_received' => ['nullable', 'integer', 'min:0'],
             'reference' => ['nullable', 'string', 'max:255'],
+            'split_payments' => ['nullable', 'array', 'max:'.count(PosPaymentBreakdown::SPLIT_METHODS)],
+            'split_payments.*.method' => ['required_with:split_payments', Rule::in(PosPaymentBreakdown::SPLIT_METHODS)],
+            'split_payments.*.amount' => ['required_with:split_payments', 'integer', 'min:1'],
+            'split_payments.*.reference' => ['nullable', 'string', 'max:255'],
             'held_sale_id' => ['nullable', 'integer'],
             'quick_customer' => ['nullable', 'array'],
             'quick_customer.name' => ['nullable', 'string', 'max:255', 'regex:/^[\pL]+(?:[ \t][\pL]+)*$/u'],
@@ -67,6 +82,9 @@ class StorePosSaleRequest extends FormRequest
             'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.unit_price' => ['nullable', 'integer', 'min:0'],
+            'items.*.price_override_reason' => ['nullable', 'string', 'max:500'],
+            'items.*.discount_type' => ['nullable', Rule::in(['none', 'percentage', 'fixed'])],
+            'items.*.discount_value' => ['nullable', 'numeric', 'min:0'],
             'items.*.discount_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
             'items.*.tax_rate' => ['nullable', 'integer', 'min:0', 'max:100'],
         ];

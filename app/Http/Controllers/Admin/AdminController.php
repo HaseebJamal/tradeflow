@@ -388,6 +388,7 @@ class AdminController extends Controller
     public function subscriptions(Request $request)
     {
         $this->expireDueSubscriptions($request);
+        app(\App\Services\BusinessAccessInitializationService::class)->recoverTodaysMissingApprovedBusinesses();
 
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
@@ -471,8 +472,19 @@ class AdminController extends Controller
             ->withQueryString();
 
         $lifecycle = app(SubscriptionLifecycleService::class);
-        $accessStates = $businesses->getCollection()->mapWithKeys(function (Business $business) use ($lifecycle) {
-            return [$business->id => $this->accessPresentation($business, $lifecycle->forBusiness($business))];
+        $accessHistory = AuditLog::query()
+            ->with('actor:id,name')
+            ->whereIn('business_id', $businesses->getCollection()->pluck('id'))
+            ->where('module', 'Trial & Access')
+            ->orderBy('occurred_at')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('business_id');
+        $accessStates = $businesses->getCollection()->mapWithKeys(function (Business $business) use ($lifecycle, $accessHistory) {
+            $presentation = $this->accessPresentation($business, $lifecycle->forBusiness($business));
+            $presentation['history'] = $accessHistory->get($business->id, collect());
+
+            return [$business->id => $presentation];
         })->all();
 
         $summary = Business::with('subscription')->get()->map(function (Business $business) use ($lifecycle) {
@@ -1155,10 +1167,154 @@ class AdminController extends Controller
         return back()->with('success', $message);
     }
 
+    /**
+     * Restore an access-restricted workspace. A company with a prior received
+     * paid entitlement is restored to that paid plan; otherwise a trial is
+     * restored. This never creates a new payment transaction.
+     */
+    public function restoreRestrictedAccess(Request $request, Business $business): RedirectResponse|JsonResponse
+    {
+        $today = now(config('app.timezone'))->startOfDay();
+        $data = $request->validate([
+            'starts_at' => ['required', 'date', 'after_or_equal:'.$today->toDateString()],
+            'access_duration_days' => ['required', 'integer', 'min:1', 'max:3650'],
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        [$updated, $old, $new] = DB::transaction(function () use ($request, $business, $data, $today): array {
+            $lockedBusiness = Business::query()
+                ->with('owner')
+                ->lockForUpdate()
+                ->findOrFail($business->id);
+            $locked = Subscription::query()
+                ->where('business_id', $lockedBusiness->id)
+                ->lockForUpdate()
+                ->first();
+            $priorPaidPayment = PlatformPayment::query()
+                ->where('business_id', $lockedBusiness->id)
+                ->where('status', 'Received')
+                ->whereNotNull('subscription_plan_id')
+                ->whereNotNull('period_starts_at')
+                ->whereNotNull('period_ends_at')
+                ->lockForUpdate()
+                ->orderByDesc('period_ends_at')
+                ->orderByDesc('id')
+                ->first();
+            $lifecycle = app(SubscriptionLifecycleService::class);
+            $state = $lifecycle->state($locked);
+
+            abort_if($state['can_access_business'], 422, 'This business already has active access.');
+            $restorePaidAccess = $locked?->payment_status === 'Received' || (bool) $priorPaidPayment;
+            abort_if(! $restorePaidAccess && (int) $data['access_duration_days'] > 365, 422, 'Trial access cannot exceed 365 days.');
+
+            $start = Carbon::parse($data['starts_at'], config('app.timezone'))->startOfDay();
+            abort_if($start->lt($today), 422, 'Restored access cannot start in the past.');
+            $end = $start->copy()->addDays((int) $data['access_duration_days']);
+            $planId = $locked?->subscription_plan_id
+                ?? $priorPaidPayment?->subscription_plan_id
+                ?? $lockedBusiness->selected_plan_id
+                ?? app(PlatformSettingsService::class)->current()->default_plan_id
+                ?? SubscriptionPlan::query()->orderBy('id')->value('id');
+            abort_unless($planId && SubscriptionPlan::query()->whereKey($planId)->exists(), 422, 'Choose a subscription plan before restoring access.');
+
+            $old = [
+                'status' => $locked?->status,
+                'subscription_plan_id' => $locked?->subscription_plan_id,
+                'payment_status' => $locked?->payment_status,
+                'starts_at' => $locked?->starts_at?->toDateString(),
+                'ends_at' => $locked?->ends_at?->toDateString(),
+                'trial_start_at' => $locked?->trial_start_at?->toDateString(),
+                'trial_end_at' => $locked?->trial_end_at?->toDateString(),
+                'access_record_existed' => (bool) $locked,
+            ];
+            $values = [
+                'subscription_plan_id' => $planId,
+                'billing_cycle' => $locked?->billing_cycle ?? $priorPaidPayment?->billing_cycle ?? 'Custom',
+                'amount' => $locked?->amount ?? $priorPaidPayment?->amount ?? 0,
+                'payment_method' => $locked?->payment_method ?? $priorPaidPayment?->method,
+                'payment_status' => $restorePaidAccess ? 'Received' : 'Pending',
+                'payment_reference' => $locked?->payment_reference ?? $priorPaidPayment?->transaction_reference ?? $priorPaidPayment?->reference_number,
+                'starts_at' => $start,
+                'ends_at' => $end,
+                'trial_start_at' => $restorePaidAccess ? $locked?->trial_start_at : $start,
+                'trial_end_at' => $restorePaidAccess ? $locked?->trial_end_at : $end,
+                'access_ended_at' => null,
+                'status' => 'Trial',
+                'note' => $data['note'] ?? $locked?->note,
+                'renewed_at' => now(),
+                'cancelled_at' => null,
+                'cancellation_scheduled_at' => null,
+                'cancellation_reason' => null,
+            ];
+
+            $updated = $locked
+                ? tap($locked, fn (Subscription $subscription) => $subscription->update($values))
+                : Subscription::create(['business_id' => $lockedBusiness->id] + $values);
+            $updated = $lifecycle->synchronize($updated->fresh()->load('business.owner'));
+
+            $new = [
+                'status' => $updated->status,
+                'restoration_type' => $restorePaidAccess ? 'Manual Paid Access Restore' : 'Manual Trial Access Restore',
+                'subscription_plan_id' => $updated->subscription_plan_id,
+                'payment_status' => $updated->payment_status,
+                'access_start' => $updated->starts_at?->toDateString(),
+                'access_end' => $updated->ends_at?->toDateString(),
+                'access_duration_days' => (int) $data['access_duration_days'],
+                'restored_by' => $request->user()?->id,
+                'restored_at' => now()->toIso8601String(),
+                'note' => $data['note'] ?? null,
+            ];
+
+            return [$updated, $old, $new, $restorePaidAccess];
+        });
+
+        if ($new['restoration_type'] === 'Manual Paid Access Restore') {
+            app(RenewalInvoiceService::class)->generateDue();
+        }
+        $this->auditBusinessAccess($request, $updated->business, 'Business access restored', $updated, $old, $new);
+        $end = ($updated->payment_status === 'Received'
+            ? $updated->effectivePaidAccessEnd()
+            : $updated->trial_end_at)?->format('n/j/Y') ?? 'the configured access end date';
+        $updated->business?->owner?->notify(new SubscriptionStatusNotification(
+            'Access restored',
+            'Your '.app(PlatformSettingsService::class)->name().' '.($updated->payment_status === 'Received' ? 'paid' : 'trial').' access has been restored until '.$end.'.',
+            $updated->business_id,
+        ));
+
+        $message = 'Business access restored successfully.';
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'status' => $updated->status,
+                'access_type' => $updated->payment_status === 'Received' ? 'paid' : 'trial',
+                'access_start' => $updated->starts_at?->toDateString(),
+                'access_end' => $updated->ends_at?->toDateString(),
+            ]);
+        }
+
+        return back()->with('success', $message);
+    }
+
     /** @param array<string, mixed> $state */
     private function accessPresentation(Business $business, array $state): array
     {
         $subscription = $state['subscription'];
+        $renewalSecured = (bool) ($state['has_secured_upcoming_paid_renewal'] ?? false);
+        $upcomingPaidCycle = $renewalSecured && $subscription
+            ? app(SubscriptionLifecycleService::class)->upcomingPaidCycle($subscription)
+            : null;
+        $priorPaidPayment = ! $state['can_access_business'] && $subscription?->payment_status !== 'Received'
+            ? PlatformPayment::query()
+                ->where('business_id', $business->id)
+                ->where('status', 'Received')
+                ->whereNotNull('subscription_plan_id')
+                ->whereNotNull('period_starts_at')
+                ->whereNotNull('period_ends_at')
+                ->orderByDesc('period_ends_at')
+                ->orderByDesc('id')
+                ->first()
+            : null;
+        $restorePaidAccess = (bool) $priorPaidPayment;
         $kind = 'restricted';
         $label = 'Access Restricted';
         if ($state['is_trial']) {
@@ -1197,6 +1353,8 @@ class AdminController extends Controller
             'original_paid_access_end' => $state['paid_access_end'],
             'paid_duration_days' => $state['paid_duration_days'],
             'paid_remaining_label' => $paidRemainingLabel,
+            'renewal_secured' => $renewalSecured,
+            'upcoming_paid_cycle' => $upcomingPaidCycle,
             'extra_access_days' => $extraAccessDays,
             'extended_days_label' => $extraAccessDays > 0 ? '+'.$extraAccessDays.' day'.($extraAccessDays === 1 ? '' : 's') : '—',
             'effective_access_end' => $state['effective_access_end'],
@@ -1212,8 +1370,16 @@ class AdminController extends Controller
                 && $subscription->payment_status === 'Received'
                 && ! $state['can_access_business']
                 && ($state['is_expired'] || in_array($subscription->status, ['Expired', 'Suspended'], true)),
+            'can_restore_restricted' => ! $state['can_access_business']
+                && $subscription?->payment_status !== 'Received',
+            'restore_paid_access' => $restorePaidAccess,
+            'restore_plan_name' => $restorePaidAccess ? $priorPaidPayment?->plan?->name : null,
             'reactivation_duration_days' => ($state['paid_duration_days'] ?? 0) > 0
                 ? (int) $state['paid_duration_days']
+                : max(1, (int) (app(PlatformSettingsService::class)->current()->default_paid_access_days ?: 30)),
+            'restore_duration_days' => max(1, (int) (app(PlatformSettingsService::class)->current()->trial_days ?: 14)),
+            'restore_paid_duration_days' => $priorPaidPayment?->period_starts_at && $priorPaidPayment?->period_ends_at
+                ? max(1, $priorPaidPayment->period_starts_at->diffInDays($priorPaidPayment->period_ends_at))
                 : max(1, (int) (app(PlatformSettingsService::class)->current()->default_paid_access_days ?: 30)),
             // Date management remains available for a historical/expired
             // trial so an administrator can restart it, but an already
@@ -1382,6 +1548,14 @@ class AdminController extends Controller
                 $start = $changeRequest->effective_at ?? $changeRequest->starts_at ?? now();
                 $end = $changeRequest->ends_at ?? ($changeRequest->billing_cycle === 'Yearly' ? Carbon::parse($start)->addYear() : Carbon::parse($start)->addMonth());
                 $trial = $type === 'New Subscription' && $data['decision'] === 'Approved' && $changeRequest->trial_eligible && (int) $changeRequest->trial_days > 0;
+                if (! $trial && $data['decision'] === 'Activate' && $subscription->exists && $subscription->payment_status !== 'Received') {
+                    app(\App\Services\SubscriptionAccessHistoryService::class)->recordTrialConvertedToPaid(
+                        $subscription,
+                        null,
+                        $request->user(),
+                        'Subscription request #'.$changeRequest->id,
+                    );
+                }
                 $subscription->fill([
                     'subscription_plan_id' => $plan->id,
                     'billing_cycle' => $changeRequest->billing_cycle,
@@ -1389,8 +1563,8 @@ class AdminController extends Controller
                     'payment_method' => $changeRequest->payment_method,
                     'starts_at' => Carbon::parse($start)->toDateString(),
                     'ends_at' => $trial ? Carbon::parse($start)->addDays((int) $changeRequest->trial_days)->toDateString() : Carbon::parse($end)->toDateString(),
-                    'trial_start_at' => $trial ? Carbon::parse($start)->toDateString() : null,
-                    'trial_end_at' => $trial ? Carbon::parse($start)->addDays((int) $changeRequest->trial_days)->toDateString() : null,
+                    'trial_start_at' => $trial ? Carbon::parse($start)->toDateString() : $subscription->trial_start_at,
+                    'trial_end_at' => $trial ? Carbon::parse($start)->addDays((int) $changeRequest->trial_days)->toDateString() : $subscription->trial_end_at,
                     // An Approved request is the business decision that applies
                     // this plan. Keeping the request as Approved while leaving
                     // the actual subscription Pending creates two conflicting
@@ -1863,13 +2037,17 @@ class AdminController extends Controller
             $payment->update(['reference_number' => 'PP-'.now()->format('Ymd').'-'.str_pad((string) $payment->id, 6, '0', STR_PAD_LEFT)]);
 
             if ($data['status'] === 'Received' && ! $isEarlyRenewal) {
-                $old = $subscription->only(['status', 'amount', 'starts_at', 'ends_at', 'payment_status']);
+                if ($subscription->payment_status !== 'Received') {
+                    app(\App\Services\SubscriptionAccessHistoryService::class)
+                        ->recordTrialConvertedToPaid($subscription, $payment, $request->user());
+                }
+                $old = $subscription->only(['status', 'amount', 'starts_at', 'ends_at', 'trial_start_at', 'trial_end_at', 'payment_status']);
                 $subscription->update(['billing_cycle' => 'Custom', 'amount' => $data['amount'], 'payment_method' => $data['method'], 'payment_status' => 'Received', 'payment_reference' => $data['transaction_reference'] ?? $payment->reference_number, 'starts_at' => $data['period_starts_at'], 'ends_at' => $data['period_ends_at'], 'access_ended_at' => null, 'note' => $data['notes'] ?? null, 'status' => 'Active', 'renewed_at' => now()]);
                 $payment->update(['verified_at' => now(), 'verified_by' => $request->user()->id]);
                 if ($renewalInvoice) {
                     app(RenewalInvoiceService::class)->markPaid($renewalInvoice, $payment);
                 }
-                $this->auditBusinessAccess($request, $business, 'Paid access activated', $subscription->fresh(), $old, $subscription->fresh()->only(['status', 'amount', 'starts_at', 'ends_at', 'payment_status']));
+                $this->auditBusinessAccess($request, $business, 'Paid access activated', $subscription->fresh(), $old, $subscription->fresh()->only(['status', 'amount', 'starts_at', 'ends_at', 'trial_start_at', 'trial_end_at', 'payment_status']));
                 $business->owner?->notify(new SubscriptionStatusNotification('Paid access activated', 'Your workspace access is active until '.Carbon::parse($data['period_ends_at'])->format('d M, Y').'.', $business->id, $payment->id));
             } elseif ($data['status'] === 'Received') {
                 // Keep the currently active paid cycle unchanged.  This
@@ -1878,6 +2056,9 @@ class AdminController extends Controller
                 $payment->update(['verified_at' => now(), 'verified_by' => $request->user()->id]);
                 if ($renewalInvoice) {
                     app(RenewalInvoiceService::class)->markPaid($renewalInvoice, $payment);
+                }
+                if ($lifecycle->hasSecuredUpcomingPaidRenewal($subscription)) {
+                    $lifecycle->resolveSecuredPaidRenewalNotifications($subscription);
                 }
                 $currentEnd = $subscription->effectivePaidAccessEnd()?->format('d M, Y');
                 $nextStart = Carbon::parse($data['period_starts_at'], config('app.timezone'))->format('d M, Y');
@@ -1977,7 +2158,16 @@ class AdminController extends Controller
     public function renewalInvoicePdf(Request $request, RenewalInvoice $invoice)
     {
         abort_unless($request->user()?->isSuperAdmin(), 403);
-        $invoice->load(['business.owner', 'subscription']);
+        $invoice->load(['business.owner', 'subscription', 'payment']);
+        $lifecycle = app(SubscriptionLifecycleService::class);
+        $upcomingPaidCycle = $invoice->subscription
+            ? $lifecycle->upcomingPaidCycle($invoice->subscription)
+            : null;
+        $renewalSecured = $invoice->status === RenewalInvoice::STATUS_PAID
+            && $invoice->payment?->status === 'Received'
+            && $upcomingPaidCycle?->id === $invoice->payment?->id
+            && $invoice->subscription
+            && $lifecycle->hasSecuredUpcomingPaidRenewal($invoice->subscription);
         $platformSettings = app(PlatformSettingsService::class)->current();
         $platformLogoDataUri = null;
         $platformLogoPath = preg_replace('#^(?:public/|storage/)#', '', ltrim((string) $platformSettings->logo, '/'));
@@ -2003,6 +2193,8 @@ class AdminController extends Controller
             'platformName' => $platformSettings->company_name ?: app(PlatformSettingsService::class)->name(),
             'platformSettings' => $platformSettings,
             'platformLogoDataUri' => $platformLogoDataUri,
+            'renewalSecured' => $renewalSecured,
+            'upcomingPaidCycle' => $renewalSecured ? $upcomingPaidCycle : null,
         ])->setPaper('a4')->stream('renewal-invoice-'.$invoice->invoice_number.'.pdf');
     }
 
@@ -2415,7 +2607,10 @@ class AdminController extends Controller
         $settings = $settingsService->current();
         $isActive = $request->boolean('is_active');
 
-        if ($isActive && ! filled($settings->getAttribute($prefix.'video_url'))) {
+        if ($isActive && ! $this->hasUsableDemoVideo(
+            $settings->getAttribute($prefix.'video_type'),
+            $settings->getAttribute($prefix.'video_url'),
+        )) {
             throw ValidationException::withMessages([
                 $prefix.'video_url' => 'Demo video is not configured yet.',
             ]);
@@ -2511,7 +2706,7 @@ class AdminController extends Controller
             if ($request->hasFile($posterField)) {
                 $newPoster = $request->file($posterField)->store('platform/demo-posters/'.$locale, 'public');
             }
-            if ($request->boolean($prefix.'is_active') && ! filled($videoUrl)) {
+            if ($request->boolean($prefix.'is_active') && ! $this->hasUsableDemoVideo($data[$prefix.'video_type'], $videoUrl)) {
                 throw ValidationException::withMessages([$prefix.'video_url' => 'Provide a valid demo video before enabling it.']);
             }
             $settings->update([
@@ -2565,6 +2760,32 @@ class AdminController extends Controller
         $this->audit('Public WhatsApp contact removed', $request, 'Settings', $settings->id);
 
         return back()->with('success', 'WhatsApp contact removed from the landing page.');
+    }
+
+    /**
+     * Use the same persisted-source rules as the landing page before allowing
+     * a localized demo to become public.
+     */
+    private function hasUsableDemoVideo(?string $type, ?string $value): bool
+    {
+        $value = trim((string) $value);
+        if ($type === 'upload') {
+            $path = preg_replace('#^(?:public/|storage/)#', '', ltrim($value, '/'));
+
+            return filled($path) && Storage::disk('public')->exists($path);
+        }
+
+        if ($type !== 'external') {
+            return false;
+        }
+
+        $parts = parse_url($value) ?: [];
+        $extension = strtolower(pathinfo((string) ($parts['path'] ?? ''), PATHINFO_EXTENSION));
+
+        return filter_var($value, FILTER_VALIDATE_URL)
+            && ($parts['scheme'] ?? null) === 'https'
+            && filled($parts['host'] ?? null)
+            && in_array($extension, ['mp4', 'webm', 'ogv'], true);
     }
 
     private function validatedDemoVideoUrl(?string $url): string

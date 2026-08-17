@@ -19,7 +19,7 @@
         ['Gross Profit', $money($grossProfit), 'Net sales less COGS', 'bi-graph-up-arrow', $grossProfit < 0 ? 'red' : 'green'],
         ['Outstanding Receivables', $money($outstandingReceivables), 'Open sales balance', 'bi-wallet2', 'amber'],
         ['Supplier Payables', $money($totalPayables), 'Open purchases in period', 'bi-building-exclamation', 'orange'],
-        ['Net Profit / Loss', $money($netProfit), 'After operating expenses', 'bi-pie-chart', $netProfit < 0 ? 'red' : 'green'],
+        [$netProfit < 0 ? 'Net Loss' : 'Net Profit', $money($netProfit), 'After operating expenses', 'bi-pie-chart', $netProfit < 0 ? 'red' : 'green'],
     ];
     $metricGroups = [
         ['Sales Performance', 'Live sales activity for the selected period', [
@@ -38,7 +38,7 @@
             ['COGS', $money($cogs), 'Cost of goods sold', 'bi-box-arrow-down', 'slate'],
             ['Gross Profit', $money($grossProfit), 'Net sales less COGS', 'bi-graph-up', $grossProfit < 0 ? 'red' : 'green'],
             ['Expenses', $money($expenses), 'Operating expenses', 'bi-receipt-cutoff', 'orange'],
-            ['Net Profit / Loss', $money($netProfit), 'Gross profit less expenses', 'bi-pie-chart', $netProfit < 0 ? 'red' : 'green'],
+            [$netProfit < 0 ? 'Net Loss' : 'Net Profit', $money($netProfit), 'Gross profit less expenses', 'bi-pie-chart', $netProfit < 0 ? 'red' : 'green'],
         ]],
         ['Supplier Exposure', 'Open supplier commitments', [
             ['Supplier Payables', $money($totalPayables), 'Open purchases in period', 'bi-building-exclamation', 'orange'],
@@ -52,6 +52,20 @@
 @if($errors->any())
     <div class="alert alert-danger">{{ $errors->first() }}</div>
 @endif
+
+<div class="d-flex flex-wrap gap-2 justify-content-end mb-3">
+    @companyCan('accounting.view')
+        @companyCan('sales.view')
+            @companyCan('expenses.view')
+                <a href="{{ route('business.reports.end-of-day') }}" class="btn btn-sm btn-tf-primary"><i class="bi bi-calendar2-check me-1"></i>End of Day</a>
+            @endcompanyCan
+        @endcompanyCan
+    @endcompanyCan
+    @companyCan('customers.view')<a href="{{ route('business.reports.customer-aging') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-people me-1"></i>Customer Aging</a>@endcompanyCan
+    @companyCan('suppliers.view')<a href="{{ route('business.reports.supplier-aging') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-building me-1"></i>Supplier Aging</a>@endcompanyCan
+    @companyCan('inventory.view')<a href="{{ route('business.reports.stock-movement-analytics') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-graph-up-arrow me-1"></i>Stock Movement Analytics</a>@endcompanyCan
+    @companyCan('sales.view')<a href="{{ route('business.reports.product-performance') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-bar-chart-line me-1"></i>Product Performance</a>@endcompanyCan
+</div>
 
 <section class="tf-report-filter-bar" aria-label="Report filters">
     <form method="GET" id="reportFilters" class="tf-report-filter-form">
@@ -104,15 +118,44 @@
 <section class="tf-report-metric-groups" aria-label="Report metric groups">
     @foreach($metricGroups as [$title, $description, $metrics])
         <article class="tf-report-metric-group">
-            <header><div><h2>{{ $title }}</h2><p>{{ $description }}</p></div></header>
-            <div class="tf-report-mini-grid tf-report-mini-grid--{{ count($metrics) }}">
-                @foreach($metrics as [$label, $value, $meta, $icon, $tone])
-                    <div class="tf-report-mini-card"><span class="tf-report-mini-card__icon is-{{ $tone }}"><i class="bi {{ $icon }}"></i></span><div><span>{{ $label }}</span><strong>{{ $value }}</strong><small>{{ $meta }}</small></div></div>
-                @endforeach
-            </div>
+            <header><div><h2>{{ $title }}</h2><p>{{ $description }}</p></div>@if($title === 'Profitability')<button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#profitabilityBreakdownModal"><i class="bi bi-list-columns-reverse me-1"></i>View Breakdown</button>@endif</header>
+            @if($title === 'Profitability')
+                <div class="tf-profitability-waterfall" aria-label="Profitability calculation">
+                    <div class="tf-profitability-waterfall__row"><span>Gross Sales</span><strong>{{ $money($profitability['gross_sales']) }}</strong></div>
+                    <div class="tf-profitability-waterfall__row is-deduction"><span>Sales Returns</span><strong>-{{ $money($profitability['sales_returns']) }}</strong></div>
+                    <div class="tf-profitability-waterfall__row is-deduction"><span>Invoice Discounts</span><strong>-{{ $money($profitability['invoice_discounts']) }}</strong></div>
+                    <div class="tf-profitability-waterfall__row is-total"><span>Net Sales</span><strong>{{ $money($profitability['net_sales']) }}</strong></div>
+                    <div class="tf-profitability-waterfall__row is-deduction"><span>Cost of Goods Sold</span><strong>-{{ $money($profitability['cogs']) }}</strong></div>
+                    <div class="tf-profitability-waterfall__row is-total"><span>Gross Profit</span><strong class="{{ $profitability['gross_profit'] < 0 ? 'text-danger' : 'text-success' }}">{{ $money($profitability['gross_profit']) }}</strong></div>
+                    <div class="tf-profitability-waterfall__row is-deduction"><span>Operating Expenses</span><strong>-{{ $money($profitability['expenses']) }}</strong></div>
+                    <div class="tf-profitability-waterfall__row is-result {{ $profitability['net_profit'] < 0 ? 'is-loss' : '' }}"><span>{{ $profitability['net_profit'] < 0 ? 'Net Loss' : 'Net Profit' }}</span><strong>{{ $money($profitability['net_profit']) }}</strong></div>
+                </div>
+                @if($profitability['line_discounts_included'] > 0)
+                    <p class="tf-profitability-waterfall__note mb-0">Includes {{ $money($profitability['line_discounts_included']) }} in line discounts already reflected in saved sales totals.</p>
+                @endif
+            @else
+                <div class="tf-report-mini-grid tf-report-mini-grid--{{ count($metrics) }}">
+                    @foreach($metrics as [$label, $value, $meta, $icon, $tone])
+                        <div class="tf-report-mini-card"><span class="tf-report-mini-card__icon is-{{ $tone }}"><i class="bi {{ $icon }}"></i></span><div><span>{{ $label }}</span><strong>{{ $value }}</strong><small>{{ $meta }}</small></div></div>
+                    @endforeach
+                </div>
+            @endif
         </article>
     @endforeach
 </section>
+
+<div class="modal fade" id="profitabilityBreakdownModal" tabindex="-1" aria-labelledby="profitabilityBreakdownTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header"><div><h2 class="modal-title h5 mb-1" id="profitabilityBreakdownTitle">Profitability breakdown</h2><p class="tf-muted small mb-0">{{ $filters['from']->format('n/j/Y') }} – {{ $filters['to']->format('n/j/Y') }}</p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <div class="modal-body"><div class="alert alert-light border small"><i class="bi bi-info-circle me-1"></i>Line discounts of <strong>{{ $money($profitability['line_discounts_included']) }}</strong> are already reflected in saved sales subtotals and are not deducted again.</div>
+            <section class="mb-4"><span class="tf-dashboard-eyebrow">Net sales</span><div class="list-group list-group-flush border rounded"><div class="list-group-item d-flex justify-content-between"><span>Gross Sales</span><strong>{{ $money($profitability['gross_sales']) }}</strong></div><div class="list-group-item d-flex justify-content-between text-muted"><span>Sales Returns</span><strong>-{{ $money($profitability['sales_returns']) }}</strong></div><div class="list-group-item d-flex justify-content-between text-muted"><span>Invoice Discounts</span><strong>-{{ $money($profitability['invoice_discounts']) }}</strong></div><div class="list-group-item d-flex justify-content-between"><strong>Net Sales</strong><strong>{{ $money($profitability['net_sales']) }}</strong></div></div><div class="d-flex gap-2 mt-2">@companyCan('sales.view')<a class="btn btn-sm btn-outline-primary" href="{{ route('business.sales.index') }}">View Sales</a>@endcompanyCan @companyCan('sales_returns.view')<a class="btn btn-sm btn-outline-primary" href="{{ route('business.sales.returns.index') }}">View Returns</a>@endcompanyCan</div></section>
+            <section class="mb-4"><span class="tf-dashboard-eyebrow">Gross profit</span><div class="list-group list-group-flush border rounded"><div class="list-group-item d-flex justify-content-between"><span>Net Sales</span><strong>{{ $money($profitability['net_sales']) }}</strong></div><div class="list-group-item d-flex justify-content-between text-muted"><span>COGS</span><strong>-{{ $money($profitability['cogs']) }}</strong></div><div class="list-group-item d-flex justify-content-between"><strong>Gross Profit</strong><strong class="{{ $profitability['gross_profit'] < 0 ? 'text-danger' : 'text-success' }}">{{ $money($profitability['gross_profit']) }}</strong></div><div class="list-group-item d-flex justify-content-between"><span>Gross Margin</span><strong>{{ $profitability['gross_margin'] === null ? '—' : number_format($profitability['gross_margin'], 2).'%' }}</strong></div></div><a class="btn btn-sm btn-outline-primary mt-2" href="{{ route('business.reports.product-performance') }}">View Product Performance</a></section>
+            <section class="mb-4"><span class="tf-dashboard-eyebrow">Highest COGS products</span><div class="table-responsive border rounded"><table class="table table-sm align-middle mb-0"><thead><tr><th>Product</th><th class="text-end">Qty</th><th class="text-end">COGS</th><th class="text-end">Share</th></tr></thead><tbody>@forelse($profitability['top_cogs_products'] as $product)<tr><td>{{ $product->name }}</td><td class="text-end">{{ $quantity($product->quantity) }}</td><td class="text-end">{{ $money($product->cogs) }}</td><td class="text-end">{{ number_format($product->share, 2) }}%</td></tr>@empty<tr><td colspan="4" class="text-center tf-muted py-3">No COGS for this period.</td></tr>@endforelse</tbody></table></div></section>
+            <section><span class="tf-dashboard-eyebrow">Operating expenses</span><div class="list-group list-group-flush border rounded">@forelse($profitability['expense_categories'] as $expense)<div class="list-group-item d-flex justify-content-between"><span>{{ $expense->category }}</span><strong>{{ $money($expense->amount) }}</strong></div>@empty<div class="list-group-item tf-muted">No operating expenses for this period.</div>@endforelse<div class="list-group-item d-flex justify-content-between"><strong>Total Expenses</strong><strong>{{ $money($profitability['expenses']) }}</strong></div></div></section>
+            <section class="mt-4"><span class="tf-dashboard-eyebrow">Net profit / loss</span><div class="list-group list-group-flush border rounded"><div class="list-group-item d-flex justify-content-between"><span>Gross Profit</span><strong>{{ $money($profitability['gross_profit']) }}</strong></div><div class="list-group-item d-flex justify-content-between text-muted"><span>Operating Expenses</span><strong>-{{ $money($profitability['expenses']) }}</strong></div><div class="list-group-item d-flex justify-content-between"><strong>{{ $profitability['net_profit'] < 0 ? 'Net Loss' : 'Net Profit' }}</strong><strong class="{{ $profitability['net_profit'] < 0 ? 'text-danger' : 'text-success' }}">{{ $money($profitability['net_profit']) }}</strong></div></div></section>
+        </div><div class="modal-footer"><button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Close</button></div>
+    </div></div>
+</div>
 
 <section class="tf-report-analytics" aria-labelledby="reportAnalyticsHeading">
     <div class="tf-report-section-title"><div><span>Analytics</span><h2 id="reportAnalyticsHeading">Performance trends</h2></div><p>Filtered activity over time.</p></div>

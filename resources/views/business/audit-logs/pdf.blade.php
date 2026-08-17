@@ -1,36 +1,18 @@
-<!doctype html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <style>
-        body { font-family: DejaVu Sans, sans-serif; font-size: 10px; color: #111827; }
-        h1 { color: #0B1F3A; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #e5e7eb; padding: 6px; text-align: left; vertical-align: top; }
-        th { background: #f8fafc; }
-    </style>
-</head>
-<body>
-    <h1>TradeFlow Business Audit Logs</h1>
-    <p>Generated {{ now()->timezone(config('app.timezone'))->format('n/j/Y, g:i A') }}</p>
-
-    <table>
-        <thead>
-            <tr><th>When</th><th>User</th><th>Role</th><th>Module</th><th>Action</th><th>IP</th></tr>
-        </thead>
-        <tbody>
-        @foreach($logs as $log)
+<x-a4-document :business="$business" :footer="$business?->documentFooter" title="Business Audit Logs" :reference="number_format($logs->count()).' records'" :date="now()->timezone(config('app.timezone'))->format('n/j/Y, g:i A')" subtitle="Business activity recorded for the selected period.">
+    <table class="tf-a4-document__table"><thead><tr>
+        <th style="width:18%">When</th><th style="width:16%">User</th><th style="width:12%">Role</th><th style="width:14%">Module</th><th style="width:28%">Action</th><th style="width:12%">IP</th>
+    </tr></thead><tbody>
+        @forelse($logs as $log)
             <tr>
                 <td>{{ ($log->occurred_at ?? $log->created_at) ? \Carbon\Carbon::parse($log->occurred_at ?? $log->created_at)->timezone(config('app.timezone'))->format('n/j/Y, g:i A') : '—' }}</td>
                 <td>{{ $log->user_name ?: $log->user?->name ?: 'System' }}</td>
-                <td>{{ $log->role ?: $log->actor_role }}</td>
+                <td>{{ $log->role ?: $log->actor_role ?: '—' }}</td>
                 <td><x-activity-label :activity="$log" field="module" /></td>
                 <td><x-activity-label :activity="$log" /></td>
                 <td>{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</td>
             </tr>
-        @endforeach
-        </tbody>
-    </table>
-    @if($business)<x-document-footer :business="$business" :footer="$business->documentFooter" />@endif
-</body>
-</html>
+        @empty
+            <tr><td class="tf-a4-document__empty" colspan="6">No audit activity is available for the selected period.</td></tr>
+        @endforelse
+    </tbody></table>
+</x-a4-document>

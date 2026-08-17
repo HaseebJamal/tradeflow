@@ -30,16 +30,18 @@
         <tbody>
         @forelse($movements as $move)
             @php($isReturn = in_array($move->type, ['PURCHASE_RETURN', 'SALES_RETURN'], true))
-            @php($operation = $move->type === 'PURCHASE_RETURN' ? '-' : ($move->type === 'SALES_RETURN' ? '+' : '---'))
+            @php($stockCountAdjustment = $move->type === 'STOCK_COUNT_ADJUSTMENT')
+            @php($delta = $stockCountAdjustment ? (float) $move->new_stock - (float) $move->previous_stock : null)
+            @php($operation = $stockCountAdjustment ? ($delta < 0 ? '-' : '+') : ($move->type === 'PURCHASE_RETURN' ? '-' : ($move->type === 'SALES_RETURN' ? '+' : '---')))
             <tr>
                 <td><x-date-time :value="$move->movement_date ?? $move->created_at" /></td>
                 <td>{{ $move->product?->name ?? 'Deleted Product' }}</td>
-                <td>{{ $move->type === 'PURCHASE_RETURN' ? 'Purchase Return' : ($move->type === 'SALES_RETURN' ? 'Sales Return' : str_replace('_', ' ', $move->type)) }}</td>
+                <td>{{ $stockCountAdjustment ? 'Stock Count Adjustment' : ($move->type === 'PURCHASE_RETURN' ? 'Purchase Return' : ($move->type === 'SALES_RETURN' ? 'Sales Return' : str_replace('_', ' ', $move->type))) }}</td>
                 <td><x-quantity :value="$move->previous_stock" /></td>
-                <td><x-quantity :value="abs((float) $move->quantity)" /></td>
+                <td><x-quantity :value="$stockCountAdjustment ? abs($delta) : abs((float) $move->quantity)" /></td>
                 <td>{{ $operation }}</td>
                 <td><x-quantity :value="$move->new_stock" /></td>
-                <td>{{ $isReturn ? $move->note : '---' }}</td>
+                <td>{{ ($isReturn || $stockCountAdjustment) ? $move->note : '---' }}</td>
                 <td>{{ $move->creator?->name ?? 'System' }}</td>
             </tr>
         @empty

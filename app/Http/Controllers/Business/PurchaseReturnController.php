@@ -49,7 +49,7 @@ class PurchaseReturnController extends Controller
 
         $purchase = null;
         if ($request->filled('purchase_id')) {
-            $purchase = Purchase::with(['supplier', 'items.product', 'returns.items'])
+            $purchase = Purchase::with(['supplier', 'items.product', 'items.goodsReceiptItems', 'returns.items'])
                 ->where('business_id', $businessId)
                 ->whereNotIn('status', ['Ordered', 'Returned'])
                 ->findOrFail($request->integer('purchase_id'));
@@ -63,7 +63,7 @@ class PurchaseReturnController extends Controller
         $data = $request->validate(['purchase_id' => ['required', 'integer']]);
         $purchase = Purchase::where('business_id', $request->user()->business_id)->findOrFail($data['purchase_id']);
 
-        $purchase = Purchase::with(['supplier', 'items.product', 'returns.items'])
+        $purchase = Purchase::with(['supplier', 'items.product', 'items.goodsReceiptItems', 'returns.items'])
             ->where('business_id', $request->user()->business_id)
             ->whereNotIn('status', ['Ordered', 'Returned'])
             ->findOrFail($purchase->id);

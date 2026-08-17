@@ -13,6 +13,7 @@ use App\Models\Purchase;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
 use App\Models\Supplier;
+use App\Services\ProfitabilityBreakdownService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -22,6 +23,8 @@ use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
+    public function __construct(private ProfitabilityBreakdownService $profitability) {}
+
     public function index(Request $request)
     {
         $businessId = (int) $request->user()->business_id;
@@ -38,16 +41,15 @@ class ReportController extends Controller
             ->whereNotIn('status', ['Draft', 'Cancelled'])
             ->whereBetween('purchase_date', [$filters['from']->copy()->startOfDay(), $filters['to']->copy()->endOfDay()]);
 
-        $grossSales = round((float) (clone $validOrders)->sum('subtotal'), 2);
-        $salesDiscounts = round((float) (clone $validOrders)->sum('discount_amount'), 2);
-        $salesReturns = round((float) (clone $returns)->sum('refund_amount'), 2);
-        $netSales = round($grossSales - $salesDiscounts - $salesReturns, 2);
-        $soldCost = round((float) $this->cogsQuery($businessId, $filters)->sum(DB::raw('order_items.quantity * COALESCE(order_items.purchase_cost_snapshot, 0)')), 2);
-        $returnedCost = round((float) $this->returnedCogsQuery($businessId, $filters)->sum(DB::raw('sales_return_items.quantity * COALESCE(order_items.purchase_cost_snapshot, 0)')), 2);
-        $cogs = round(max(0, $soldCost - $returnedCost), 2);
-        $grossProfit = round($netSales - $cogs, 2);
-        $operatingExpenses = round((float) (clone $expenses)->sum('amount'), 2);
-        $netProfit = round($grossProfit - $operatingExpenses, 2);
+        $profitability = $this->profitability->forPeriod($businessId, $filters);
+        $grossSales = $profitability['gross_sales'];
+        $salesDiscounts = $profitability['invoice_discounts'];
+        $salesReturns = $profitability['sales_returns'];
+        $netSales = $profitability['net_sales'];
+        $cogs = $profitability['cogs'];
+        $grossProfit = $profitability['gross_profit'];
+        $operatingExpenses = $profitability['expenses'];
+        $netProfit = $profitability['net_profit'];
         $revenueReceived = round((float) $this->paymentQuery($businessId, $filters)->sum('amount'), 2);
         $outstandingReceivables = round((float) (clone $validOrders)->sum('balance'), 2);
         $today = now(config('app.timezone'))->startOfDay();
@@ -95,6 +97,7 @@ class ReportController extends Controller
             'highestSupplierBalances' => $supplierBalances,
             'oldestOutstandingPurchases' => (clone $payables)->with('supplier')->orderBy('due_date')->orderBy('purchase_date')->take(5)->get(),
             'chartSeries' => $this->chartSeries($businessId, $filters),
+            'profitability' => $profitability,
             'hasSalesData' => $grossSales > 0 || $salesReturns > 0,
             'customers' => Customer::where('business_id', $businessId)->orderBy('name')->get(),
             'products' => Product::where('business_id', $businessId)->orderBy('name')->get(),
@@ -127,16 +130,15 @@ class ReportController extends Controller
             ->orderBy('purchase_date')
             ->get();
 
-        $grossSales = round((float) (clone $validOrders)->sum('subtotal'), 2);
-        $salesDiscounts = round((float) (clone $validOrders)->sum('discount_amount'), 2);
-        $salesReturns = round((float) (clone $returns)->sum('refund_amount'), 2);
-        $netSales = round($grossSales - $salesDiscounts - $salesReturns, 2);
-        $soldCost = round((float) $this->cogsQuery($businessId, $filters)->sum(DB::raw('order_items.quantity * COALESCE(order_items.purchase_cost_snapshot, 0)')), 2);
-        $returnedCost = round((float) $this->returnedCogsQuery($businessId, $filters)->sum(DB::raw('sales_return_items.quantity * COALESCE(order_items.purchase_cost_snapshot, 0)')), 2);
-        $cogs = round(max(0, $soldCost - $returnedCost), 2);
-        $grossProfit = round($netSales - $cogs, 2);
-        $operatingExpenses = round((float) (clone $expenses)->sum('amount'), 2);
-        $netProfit = round($grossProfit - $operatingExpenses, 2);
+        $profitability = $this->profitability->forPeriod($businessId, $filters);
+        $grossSales = $profitability['gross_sales'];
+        $salesDiscounts = $profitability['invoice_discounts'];
+        $salesReturns = $profitability['sales_returns'];
+        $netSales = $profitability['net_sales'];
+        $cogs = $profitability['cogs'];
+        $grossProfit = $profitability['gross_profit'];
+        $operatingExpenses = $profitability['expenses'];
+        $netProfit = $profitability['net_profit'];
         $today = now(config('app.timezone'))->startOfDay();
 
         $data = [
@@ -171,6 +173,7 @@ class ReportController extends Controller
             'customers' => Customer::where('business_id', $businessId)->when($filters['customer_id'], fn ($query) => $query->whereKey($filters['customer_id']))->get(),
             'expenses' => (clone $expenses)->latest()->get(),
             'payables' => $payables,
+            'profitability' => $profitability,
         ];
 
         return Pdf::loadView('business.reports.pdf', $data)->stream('tradeflow-'.$type.'-report.pdf');

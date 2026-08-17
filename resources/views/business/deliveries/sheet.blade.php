@@ -59,16 +59,7 @@
     <table><thead><tr><th style="width:47%">Product</th><th class="qty" style="width:12%">Qty</th><th class="unit" style="width:11%">Unit</th><th class="amount" style="width:15%">Rate</th><th class="amount" style="width:15%">Total</th></tr></thead><tbody>@forelse($items as $item)<tr><td>{{ $item->product_name_snapshot ?: $item->product?->name ?: 'Product' }}</td><td class="qty">{{ $quantity($item->quantity) }}</td><td class="unit">{{ $item->unit ?: $item->product?->unit ?: '—' }}</td><td class="amount">Rs {{ number_format($item->unit_price ?: $item->price ?: 0) }}</td><td class="amount">Rs {{ number_format($item->line_total ?: $item->total ?: 0) }}</td></tr>@empty<tr><td colspan="5" style="color:#60708a;text-align:center;padding:16px">No delivery items available.</td></tr>@endforelse</tbody></table>
     <table class="summary"><tr><td>Subtotal</td><td>Rs {{ number_format($total) }}</td></tr><tr class="total"><td>Total</td><td>Rs {{ number_format($total) }}</td></tr></table>
     <section class="confirmation"><h2>Delivery Confirmation</h2><div class="signature-grid"><div class="signature"><span>Delivered By</span><b></b></div><div class="signature"><span>Received By</span><b></b></div></div><div class="signature" style="padding:18px 0 0"><span>Customer Signature</span><b></b></div><div class="signature-grid" style="margin-top:18px"><div class="signature"><span>Date / Time</span><b></b></div><div class="signature"><span>Remarks</span><b></b></div></div></section>
-    <footer class="footer">
-        <strong>{{ $business?->business_name }}</strong>
-        @if($footer?->show_footer_title && $footer?->footer_title)
-            {{ $footer->footer_title }}<br>
-        @endif
-        @if($footer?->show_footer_message && $footer?->footer_message)
-            {{ $footer->footer_message }}<br>
-        @endif
-        Powered by Profit Point
-    </footer>
+    <div class="footer"><x-document-footer :business="$business" :footer="$footer" /></div>
 </main>
 </body>
 </html>

@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\Business;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\JournalEntryLine;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Supplier;
@@ -115,7 +116,10 @@ class BusinessDashboardController extends Controller
             'todaySales' => $dashboardPermissions['sales'] ? (clone $saleBase)->whereDate('order_date', today())->sum('grand_total') : 0,
             // Receivables is the single authoritative outstanding-customer metric.
             'receivables' => $dashboardPermissions['receivables'] ? (clone $saleBase)->where('balance', '>', 0)->sum('balance') : 0,
-            'payables' => $dashboardPermissions['payables'] ? Purchase::where('business_id', $businessId)->sum('balance') + Supplier::where('business_id', $businessId)->sum('opening_balance') : 0,
+            // AP is the supplier balance source of truth, including opening
+            // balances and later ADJ corrections. Purchase balances remain
+            // document-level detail and must not be added on top of the GL.
+            'payables' => $dashboardPermissions['payables'] ? max(0, (float) JournalEntryLine::query()->whereHas('journalEntry', fn ($query) => $query->where('business_id', $businessId)->where('status', 'posted'))->whereHas('account', fn ($query) => $query->where('name', 'Accounts Payable'))->sum('credit') - (float) JournalEntryLine::query()->whereHas('journalEntry', fn ($query) => $query->where('business_id', $businessId)->where('status', 'posted'))->whereHas('account', fn ($query) => $query->where('name', 'Accounts Payable'))->sum('debit')) : 0,
             'inventoryValue' => $inventoryValue,
             'suppliersCount' => $dashboardPermissions['suppliers'] ? Supplier::where('business_id', $businessId)->count() : 0,
             'pendingDeliveries' => $dashboardPermissions['deliveries'] ? Delivery::where('business_id', $businessId)->whereIn('status', ['Pending', 'Assigned', 'Out For Delivery'])->count() : 0,

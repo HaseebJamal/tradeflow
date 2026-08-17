@@ -27,6 +27,7 @@ class PurchaseReceivingService
         private ProductPurchaseCostService $productCosts,
         private DocumentNumberService $numbers,
         private PurchaseFinancialSummaryService $financialSummary,
+        private ProductBatchService $batches,
     ) {}
 
     /**
@@ -69,6 +70,7 @@ class PurchaseReceivingService
                     'accepted' => $this->quantity($line['accepted_quantity'] ?? 0),
                     'damaged' => $this->quantity($line['damaged_quantity'] ?? 0),
                     'rejected' => $this->quantity($line['rejected_quantity'] ?? 0),
+                    'batches' => $line['batches'] ?? [],
                 ];
             })->filter(fn (array $line): bool => $line['accepted'] > 0 || $line['damaged'] > 0 || $line['rejected'] > 0);
             if ($lines->isEmpty()) throw ValidationException::withMessages(['items' => 'Enter an accepted, damaged, or rejected quantity for at least one item.']);
@@ -94,20 +96,40 @@ class PurchaseReceivingService
                 $damaged = $line['damaged'];
                 $rejected = $line['rejected'];
                 $processed = round($accepted + $damaged + $rejected, 3);
-                $remaining = max(0, round((float) $item->quantity - (float) $item->received_quantity - (float) $item->damaged_quantity - (float) $item->rejected_quantity, 3));
+                $totalExpected = round((float) $item->quantity + (float) ($item->free_quantity ?? 0), 3);
+                $remaining = max(0, round($totalExpected - (float) $item->received_quantity - (float) $item->damaged_quantity - (float) $item->rejected_quantity, 3));
                 if ($processed <= 0 || $processed > $remaining + 0.0001) {
                     throw ValidationException::withMessages(["items.$index" => 'Total processed quantity cannot exceed the remaining quantity ('.$remaining.') for '.$item->product_name_snapshot.'.']);
                 }
 
+                // Receipt outcomes are entered in their actual sequence. Use
+                // the already persisted paid allocations rather than
+                // reconstructing all earlier receipts by outcome type; a
+                // damaged receipt followed by an accepted receipt must never
+                // move a previously recorded paid unit into bonus stock.
+                $previousPaidProcessed = (float) $item->goodsReceiptItems()
+                    ->whereNotNull('paid_accepted_quantity')
+                    ->selectRaw('COALESCE(SUM(paid_accepted_quantity + paid_damaged_quantity + paid_rejected_quantity), 0) AS quantity')
+                    ->value('quantity');
+                if ($previousPaidProcessed <= 0) {
+                    $previousPaidProcessed = min((float) $item->quantity, (float) $item->received_quantity + (float) $item->damaged_quantity + (float) $item->rejected_quantity);
+                }
+                $allocation = $this->allocationFor(max(0, (float) $item->quantity - $previousPaidProcessed), $accepted, $damaged, $rejected);
                 $lineRate = round((float) $item->line_total / max(0.001, (float) $item->quantity), 2);
-                $acceptedLine = round($accepted * $lineRate, 2);
-                $rejectedLine = round(($damaged + $rejected) * $lineRate, 2);
-                $receipt->items()->create([
+                $acceptedLine = round($allocation['paid_accepted'] * $lineRate, 2);
+                $rejectedLine = round(($allocation['paid_damaged'] + $allocation['paid_rejected']) * $lineRate, 2);
+                $receiptItem = $receipt->items()->create([
                     'purchase_item_id' => $item->id,
                     'product_id' => $item->product_id,
                     'accepted_quantity' => $accepted,
                     'damaged_quantity' => $damaged,
                     'rejected_quantity' => $rejected,
+                    'paid_accepted_quantity' => $allocation['paid_accepted'],
+                    'free_accepted_quantity' => $allocation['free_accepted'],
+                    'paid_damaged_quantity' => $allocation['paid_damaged'],
+                    'free_damaged_quantity' => $allocation['free_damaged'],
+                    'paid_rejected_quantity' => $allocation['paid_rejected'],
+                    'free_rejected_quantity' => $allocation['free_rejected'],
                     'unit_cost' => $item->unit_cost,
                     'line_total' => $acceptedLine,
                 ]);
@@ -119,12 +141,15 @@ class PurchaseReceivingService
 
                 if ($accepted > 0) {
                     $product = Product::where('business_id', $locked->business_id)->lockForUpdate()->findOrFail($item->product_id);
+                    $batchLines = $this->batches->validateReceiptBatches($product, $line['batches'], $accepted, $index);
                     $before = (float) $product->stock_quantity;
                     $after = round($before + $accepted, 3);
                     $product->update(['stock_quantity' => $after, 'current_stock' => $after]);
                     Inventory::updateOrCreate(['business_id' => $locked->business_id, 'product_id' => $product->id], ['available_stock' => $after, 'low_stock_alert' => $product->low_stock_alert_qty ?? 10]);
-                    StockMovement::create(['business_id' => $locked->business_id, 'product_id' => $product->id, 'goods_receipt_id' => $receipt->id, 'type' => 'purchased', 'quantity' => $accepted, 'reason' => 'Goods receipt '.$receipt->grn_number, 'user_id' => $user->id, 'created_by' => $user->id]);
-                    InventoryMovement::create(['business_id' => $locked->business_id, 'product_id' => $product->id, 'goods_receipt_id' => $receipt->id, 'type' => 'PURCHASED', 'quantity' => $accepted, 'previous_stock' => $before, 'new_stock' => $after, 'note' => 'Accepted on '.$receipt->grn_number, 'created_by' => $user->id, 'movement_date' => $receipt->received_at]);
+                    $batchNote = $batchLines === [] ? '' : ' · Batches: '.collect($batchLines)->map(fn ($batch) => $batch['batch_number'].' ('.rtrim(rtrim(number_format($batch['quantity'], 3, '.', ''), '0'), '.').')')->implode(', ');
+                    StockMovement::create(['business_id' => $locked->business_id, 'product_id' => $product->id, 'goods_receipt_id' => $receipt->id, 'type' => 'purchased', 'quantity' => $accepted, 'reason' => 'Goods receipt '.$receipt->grn_number.$batchNote, 'user_id' => $user->id, 'created_by' => $user->id]);
+                    InventoryMovement::create(['business_id' => $locked->business_id, 'product_id' => $product->id, 'goods_receipt_id' => $receipt->id, 'type' => 'PURCHASED', 'quantity' => $accepted, 'previous_stock' => $before, 'new_stock' => $after, 'note' => 'Accepted on '.$receipt->grn_number.$batchNote, 'created_by' => $user->id, 'movement_date' => $receipt->received_at]);
+                    $this->batches->receive($product, $locked, $receipt, $receiptItem, $batchLines);
                     $products->push($product);
                 }
                 $acceptedValue += $acceptedLine;
@@ -182,7 +207,7 @@ class PurchaseReceivingService
     {
         $purchase->loadMissing('items');
 
-        $ordered = round((float) $purchase->items->sum('quantity'), 3);
+        $ordered = round((float) $purchase->items->sum(fn (PurchaseItem $item) => (float) $item->quantity + (float) ($item->free_quantity ?? 0)), 3);
         $accepted = round((float) $purchase->items->sum('received_quantity'), 3);
         $damaged = round((float) $purchase->items->sum('damaged_quantity'), 3);
         $rejected = round((float) $purchase->items->sum('rejected_quantity'), 3);
@@ -191,7 +216,7 @@ class PurchaseReceivingService
         // ordered - processed for valid records, while also keeping a legacy
         // over-received line from hiding another line that is still pending.
         $pending = round($purchase->items->sum(function (PurchaseItem $item): float {
-            return max(0, (float) $item->quantity
+            return max(0, (float) $item->quantity + (float) ($item->free_quantity ?? 0)
                 - (float) $item->received_quantity
                 - (float) $item->damaged_quantity
                 - (float) $item->rejected_quantity);
@@ -265,5 +290,29 @@ class PurchaseReceivingService
         }
 
         return (float) $value;
+    }
+
+    /**
+     * Splits a receipt's outcomes between paid and free stock. Paid units are
+     * fulfilled first; bonus units receive the remaining outcome quantities.
+     * This preserves the existing single Accepted/Damaged/Rejected GRN UI
+     * while ensuring bonus damage/rejection can never alter supplier value.
+     *
+     * @return array{paid_accepted:float,free_accepted:float,paid_damaged:float,free_damaged:float,paid_rejected:float,free_rejected:float}
+     */
+    private function allocationFor(float $paidRemaining, float $accepted, float $damaged, float $rejected): array
+    {
+        $paidRemaining = max(0, $paidRemaining);
+        $paidAccepted = min($paidRemaining, $accepted);
+        $paidRemaining -= $paidAccepted;
+        $paidDamaged = min($paidRemaining, $damaged);
+        $paidRemaining -= $paidDamaged;
+        $paidRejected = min($paidRemaining, $rejected);
+
+        return [
+            'paid_accepted' => round($paidAccepted, 3), 'free_accepted' => round(max(0, $accepted - $paidAccepted), 3),
+            'paid_damaged' => round($paidDamaged, 3), 'free_damaged' => round(max(0, $damaged - $paidDamaged), 3),
+            'paid_rejected' => round($paidRejected, 3), 'free_rejected' => round(max(0, $rejected - $paidRejected), 3),
+        ];
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\ActivityLog;
 use App\Models\AuditLog;
 use App\Services\AuditIpResolver;
+use App\Services\AuditDescriptionService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -36,6 +37,7 @@ class TrackActivity
         $user->forceFill(['last_seen_at' => now(), 'last_activity_at' => now()])->save();
 
         if (!$recent && (str_starts_with((string) $routeName, 'admin.') || str_starts_with((string) $routeName, 'business.') || str_starts_with((string) $routeName, 'staff.'))) {
+            $friendlyDescription = app(AuditDescriptionService::class)->routeVisit($user, $routeName, $request);
             ActivityLog::create([
                 'actor_id' => $user->id,
                 'actor_role' => $user->role,
@@ -47,7 +49,7 @@ class TrackActivity
                 'action' => 'module_visit',
                 'route_name' => $routeName,
                 'method' => $request->method(),
-                'description' => $user->name.' opened '.$routeName,
+                'description' => $friendlyDescription,
                 'ip_address' => app(AuditIpResolver::class)->capture($request),
                 'user_agent' => substr((string) $request->userAgent(), 0, 1000),
                 'session_id' => $sessionId,
@@ -62,7 +64,7 @@ class TrackActivity
                     'role' => $user->role,
                     'module' => str($routeName)->replace(['business.', 'staff.'], '')->before('.')->replace('-', ' ')->title()->toString(),
                     'action' => 'page_visit',
-                    'description' => $user->name.' opened '.$routeName,
+                    'description' => $friendlyDescription,
                     'route' => $routeName,
                     'ip_address' => app(AuditIpResolver::class)->capture($request),
                     'user_agent' => substr((string) $request->userAgent(), 0, 1000),

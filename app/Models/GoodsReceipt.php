@@ -13,4 +13,5 @@ class GoodsReceipt extends Model
     public function supplier() { return $this->belongsTo(Supplier::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
     public function items() { return $this->hasMany(GoodsReceiptItem::class); }
+    public function batches() { return $this->hasMany(ProductBatch::class); }
 }

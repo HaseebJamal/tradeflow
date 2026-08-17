@@ -27,6 +27,7 @@ use App\Services\PurchaseReceivingService;
 use App\Services\PurchaseFinancialSummaryService;
 use App\Services\PurchaseRefundStatusService;
 use App\Services\ThermalDocumentService;
+use App\Services\ProductBatchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -43,6 +44,7 @@ class PurchaseController extends Controller
         private PurchaseReceivingService $receiving,
         private PurchaseFinancialSummaryService $financialSummary,
         private PurchaseRefundStatusService $refundStatus,
+        private ProductBatchService $batches,
     ) {}
 
     public function index(Request $request)
@@ -128,6 +130,50 @@ class PurchaseController extends Controller
     public function create()
     {
         return redirect()->route('business.purchases.index', ['create' => 1]);
+    }
+
+    /**
+     * Starts the existing purchase workflow with explicitly selected reorder
+     * suggestions. This does not create a draft or choose a supplier: the user
+     * still reviews every commercial field before the normal purchase store
+     * action can run.
+     */
+    public function fromSuggestions(Request $request)
+    {
+        $businessId = $this->businessId();
+        $this->ensureActionPermission('suppliers.view');
+        $this->ensureActionPermission('purchases.create');
+        $raw = $request->validate(['suggestions' => ['required', 'array', 'min:1']])['suggestions'];
+        $quantities = collect($raw)->mapWithKeys(function ($quantity, $productId): array {
+            if (! ctype_digit((string) $productId) || ! is_numeric($quantity) || (float) $quantity <= 0 || (float) $quantity > 1000000) {
+                throw ValidationException::withMessages(['suggestions' => 'Select valid product quantities before creating a purchase.']);
+            }
+
+            return [(int) $productId => round((float) $quantity, 3)];
+        });
+        $products = Product::query()->where('business_id', $businessId)->where('status', 'Active')->whereKey($quantities->keys())->orderBy('name')->get();
+        if ($products->count() !== $quantities->count()) {
+            throw ValidationException::withMessages(['suggestions' => 'One or more selected products are unavailable for this business.']);
+        }
+
+        return view('business.purchases.create', [
+            'suppliers' => Supplier::where('business_id', $businessId)->where('status', 'Active')->orderBy('supplier_name')->get(),
+            'canViewSuppliers' => true,
+            'products' => Product::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(),
+            'accounts' => Account::where('business_id', $businessId)->where('status', 'Active')->orderBy('name')->get(),
+            'purchasePrefillItems' => $products->map(fn (Product $product) => [
+                'product_id' => $product->id,
+                // Current purchase entry validation accepts whole quantities.
+                // Round a fractional stock suggestion up only in this optional
+                // prefill, leaving the calculated suggestion untouched and
+                // still requiring the buyer's review before confirmation.
+                'quantity' => (int) ceil($quantities[$product->id]),
+                'free_quantity' => 0,
+                'unit_cost' => round((float) ($product->currentPurchasePrice() ?: $product->purchase_cost ?: 0), 2),
+                'discount_type' => 'fixed', 'discount_value' => 0,
+                'tax_type' => 'fixed', 'tax_value' => 0,
+            ])->all(),
+        ]);
     }
 
     /** Resolve an internal purchase or supplier record for scanner input. */
@@ -317,9 +363,10 @@ class PurchaseController extends Controller
             'purchase_order_reference' => ['nullable', 'string', 'max:255'],
             'payment_terms' => ['nullable', Rule::in(['Cash', 'Due on Receipt', 'Net 7', 'Net 15', 'Net 30', 'Custom'])],
             'due_date' => ['nullable', 'date'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'integer'],
+            'items' => ['required', 'array', 'min:1', 'max:100'],
+            'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.free_quantity' => ['nullable', 'integer', 'min:0'],
             'items.*.unit_cost' => ['required', 'integer', 'min:0'],
             'items.*.discount_type' => ['nullable', Rule::in(['percentage', 'fixed'])],
             'items.*.discount_value' => ['nullable', 'integer', 'min:0'],
@@ -454,6 +501,7 @@ class PurchaseController extends Controller
                 'product_name_snapshot' => $line['product']->name,
                 'unit_snapshot' => $line['product']->unit,
                 'quantity' => $line['quantity'],
+                'free_quantity' => $line['free_quantity'],
                 'unit_cost' => $line['unit_cost'],
                 'discount_type' => $line['discount_type'],
                 'discount_value' => $line['discount_value'],
@@ -497,6 +545,7 @@ class PurchaseController extends Controller
             $line = [
                 'product_id' => (int) $productId,
                 'quantity' => round((float) $items->sum('quantity'), 3),
+                'free_quantity' => round((float) $items->sum(fn (array $item) => $item['free_quantity'] ?? 0), 3),
                 'unit_cost' => round((float) $last['unit_cost'], 2),
                 'discount_type' => $last['discount_type'] ?? 'fixed',
                 'discount_value' => round((float) ($last['discount_value'] ?? 0), 2),
@@ -731,7 +780,7 @@ class PurchaseController extends Controller
     public function processReturn(Request $request, Purchase $purchase)
     {
         $purchase = $this->scoped($purchase);
-        $data = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'items' => ['required', 'array', 'min:1'], 'items.*.purchase_item_id' => ['required', 'integer'], 'items.*.quantity' => ['required', 'integer', 'min:1']]);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'items' => ['required', 'array', 'min:1', 'max:100'], 'items.*.purchase_item_id' => ['required', 'integer', 'distinct'], 'items.*.quantity' => ['required', 'integer', 'min:1'], 'items.*.free_quantity' => ['nullable', 'integer', 'min:0']]);
         try {
             $purchaseReturn = DB::transaction(function () use ($purchase, $data) {
             // Capture the open liability before this return's line items are
@@ -744,12 +793,19 @@ class PurchaseController extends Controller
                 $item = $purchase->items()->lockForUpdate()->findOrFail($line['purchase_item_id']);
                 $alreadyReturned = PurchaseReturnItem::where('purchase_item_id', $item->id)->sum('quantity');
                 $quantity = round((float) $line['quantity'], 3);
+                $freeQuantity = round((float) ($line['free_quantity'] ?? 0), 3);
+                if ($freeQuantity > $quantity) throw ValidationException::withMessages(['items' => 'Free return quantity cannot exceed the total return quantity.']);
                 if ($quantity > ($item->received_quantity - $alreadyReturned)) throw ValidationException::withMessages(['items' => 'Return quantity exceeds received stock for '.$item->product_name_snapshot.'.']);
+                $freeReceived = (float) $item->goodsReceiptItems()->sum('free_accepted_quantity');
+                $freeReturned = (float) PurchaseReturnItem::where('purchase_item_id', $item->id)->sum('free_quantity');
+                if ($freeQuantity > max(0, $freeReceived - $freeReturned) + 0.0001) throw ValidationException::withMessages(['items' => 'Free return quantity exceeds the accepted bonus stock for '.$item->product_name_snapshot.'.']);
+                $paidQuantity = round($quantity - $freeQuantity, 3);
                 $product = Product::where('business_id', $purchase->business_id)->lockForUpdate()->findOrFail($item->product_id);
                 if ($product->stock_quantity < $quantity) throw ValidationException::withMessages(['items' => 'Return quantity cannot exceed available stock. Only '.$product->stock_quantity.' units are available.']);
+                $this->batches->allocatePurchaseReturn($product, $purchase, $quantity);
                 // Return the same proportion of the saved line value so item
                 // discount and tax are not lost when goods are sent back.
-                $lineTotal = round(((float) $item->line_total / max(0.001, (float) $item->quantity)) * $quantity, 2);
+                $lineTotal = round(((float) $item->line_total / max(0.001, (float) $item->quantity)) * $paidQuantity, 2);
                 $previous = (float) $product->stock_quantity;
                 $newStock = $previous - $quantity;
                 $product->update(['stock_quantity' => $newStock, 'current_stock' => $newStock]);
@@ -764,10 +820,10 @@ class PurchaseController extends Controller
                 ]);
                 StockMovement::create(['business_id' => $purchase->business_id, 'product_id' => $product->id, 'type' => 'purchase_return', 'quantity' => -$quantity, 'reason' => 'Purchase return '.$return->return_number, 'user_id' => auth()->id()]);
                 InventoryMovement::create(['business_id' => $purchase->business_id, 'product_id' => $product->id, 'type' => 'PURCHASE_RETURN', 'quantity' => $quantity, 'previous_stock' => $previous, 'new_stock' => $newStock, 'note' => 'Purchase return '.$return->return_number, 'created_by' => auth()->id(), 'movement_date' => now()]);
-                $return->items()->create(['purchase_item_id' => $item->id, 'product_id' => $product->id, 'quantity' => $quantity, 'unit_cost' => $item->unit_cost, 'line_total' => $lineTotal]); $total += $lineTotal;
+                $return->items()->create(['purchase_item_id' => $item->id, 'product_id' => $product->id, 'quantity' => $quantity, 'paid_quantity' => $paidQuantity, 'free_quantity' => $freeQuantity, 'unit_cost' => $item->unit_cost, 'line_total' => $lineTotal]); $total += $lineTotal;
                 $returnedProducts->push($product);
             }
-            if ($total <= 0) throw ValidationException::withMessages(['items' => 'Select at least one item to return.']);
+            if ($returnedProducts->isEmpty()) throw ValidationException::withMessages(['items' => 'Select at least one item to return.']);
             $return->update(['total_amount' => $total]);
             $refund = max(0, round($total - $summaryBeforeReturn['balance'], 2));
             $returnedProducts->unique('id')->each(fn (Product $product) => $this->productCosts->refresh($product));

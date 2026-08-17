@@ -11,6 +11,7 @@ use App\Models\JournalEntryLine;
 use App\Models\Order;
 use App\Models\Supplier;
 use App\Services\AccountingService;
+use App\Services\ProfitabilityBreakdownService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -18,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 
 class KhataController extends Controller
 {
-    public function index(Request $request, AccountingService $accounting)
+    public function index(Request $request, AccountingService $accounting, ProfitabilityBreakdownService $profitabilityBreakdown)
     {
         $filters = $request->validate([
             'customer_id' => ['nullable', 'integer'],
@@ -37,6 +38,24 @@ class KhataController extends Controller
 
         $businessId = auth()->user()->business_id;
         $accounting->ensureDefaultAccounts($businessId);
+
+        // The Profit & Loss tab deliberately shares the Reports profitability
+        // source. Accounting journals remain untouched; this is a read-only
+        // presentation of the recorded sales, returns, historical COGS, and
+        // expenses for the requested period.
+        $profitFrom = ! empty($filters['date_from'])
+            ? now(config('app.timezone'))->parse($filters['date_from'])->startOfDay()
+            : now(config('app.timezone'))->startOfMonth();
+        $profitTo = ! empty($filters['date_to'])
+            ? now(config('app.timezone'))->parse($filters['date_to'])->endOfDay()
+            : now(config('app.timezone'))->endOfDay();
+        $profitability = $profitabilityBreakdown->forPeriod($businessId, [
+            'from' => $profitFrom,
+            'to' => $profitTo,
+            'status' => null,
+            'customer_id' => null,
+            'product_id' => null,
+        ]);
 
         $lineQuery = JournalEntryLine::query()
             ->with(['journalEntry', 'account', 'customer', 'supplier'])
@@ -185,6 +204,9 @@ class KhataController extends Controller
             'cashReceived' => $cashReceived,
             'totalExpenses' => $totalExpenses,
             'netProfit' => $sales - $totalExpenses,
+            'profitability' => $profitability,
+            'profitFrom' => $profitFrom,
+            'profitTo' => $profitTo,
         ]);
     }
 

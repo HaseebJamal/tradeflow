@@ -50,6 +50,37 @@ class FinanceCalculator
         ];
     }
 
+    public function calculatePosLineAmounts(int $quantity, float $price, string $discountType = 'none', float $discountValue = 0, int $taxRate = 0): array
+    {
+        $subtotal = round($quantity * $price, 2);
+        $discountType = in_array($discountType, ['none', 'percentage', 'fixed'], true) ? $discountType : 'none';
+        if ($discountValue < 0 || ! is_finite($discountValue)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Line discount must be a valid non-negative value.']);
+        }
+        if ($discountType === 'percentage' && $discountValue > 100) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Percentage line discount cannot exceed 100%.']);
+        }
+        $discountAmount = $discountType === 'percentage'
+            ? round($subtotal * ($discountValue / 100), 2)
+            : ($discountType === 'fixed' ? round($discountValue, 2) : 0.0);
+        if ($discountAmount > $subtotal + 0.0001) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Fixed line discount cannot exceed the gross line total.']);
+        }
+        $taxRate = max(0, min(100, $taxRate));
+        $taxAmount = round(($subtotal - $discountAmount) * ($taxRate / 100), 2);
+
+        return [
+            'lineSubtotal' => $subtotal,
+            'discountType' => $discountType,
+            'discountValue' => $discountValue,
+            'discountRate' => $discountType === 'percentage' ? $discountValue : 0,
+            'discountAmount' => $discountAmount,
+            'taxRate' => $taxRate,
+            'taxAmount' => $taxAmount,
+            'lineTotal' => round($subtotal - $discountAmount + $taxAmount, 2),
+        ];
+    }
+
     public function salesAmountsFromLines(iterable $lines, float $discountPercentage = 0, float $taxRate = 0): array
     {
         $subtotal = round(collect($lines)->sum(function ($line) {

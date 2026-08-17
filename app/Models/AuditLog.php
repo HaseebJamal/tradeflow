@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\AuditIpResolver;
+use App\Services\AuditDescriptionService;
 use Illuminate\Database\Eloquent\Model;
 
 class AuditLog extends Model
@@ -34,23 +35,9 @@ class AuditLog extends Model
                 ?? AuditIpResolver::normalize($log->ip_address);
             $log->user_agent ??= substr((string) request()?->userAgent(), 0, 1000);
             $log->occurred_at ??= now();
-            $log->old_values = self::withoutSensitiveValues($log->old_values);
-            $log->new_values = self::withoutSensitiveValues($log->new_values);
+            $log->old_values = AuditDescriptionService::sanitizeValues($log->old_values);
+            $log->new_values = AuditDescriptionService::sanitizeValues($log->new_values);
+            $log->description = app(AuditDescriptionService::class)->describe($log);
         });
-    }
-
-    private static function withoutSensitiveValues(mixed $values): mixed
-    {
-        if (!is_array($values)) return $values;
-
-        foreach ($values as $key => $value) {
-            if (preg_match('/password|token|proof|image|file/i', (string) $key)) {
-                unset($values[$key]);
-            } elseif (is_array($value)) {
-                $values[$key] = self::withoutSensitiveValues($value);
-            }
-        }
-
-        return $values;
     }
 }

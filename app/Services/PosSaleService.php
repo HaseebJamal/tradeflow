@@ -13,7 +13,9 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\PosRegister;
+use App\Models\PosRegisterCashMovement;
 use App\Models\Product;
+use App\Models\SalesReturn;
 use App\Models\StockMovement;
 use App\Models\KhataLedger;
 use Illuminate\Database\QueryException;
@@ -32,6 +34,8 @@ class PosSaleService
         private CompanyPermissionService $permissions,
         private DocumentNumberService $numbers,
         private SubscriptionLimitService $limits,
+        private ProductBatchService $batches,
+        private PosPaymentBreakdown $paymentBreakdown,
     ) {}
 
     public function openRegister(int $businessId, int $userId, array $data): PosRegister
@@ -50,7 +54,7 @@ class PosSaleService
                 'status' => 'Open',
                 'opened_at' => now(),
             ]);
-            $this->activity->record($businessId, 'POS', 'POS register opened', $register->id);
+            $this->activity->record($businessId, 'POS', 'POS register opened', $register->id, null, ['opening_cash' => $register->opening_cash]);
 
             return $register;
         });
@@ -64,14 +68,15 @@ class PosSaleService
                 throw ValidationException::withMessages(['register' => 'This register is already closed.']);
             }
 
-            $cashSales = Payment::where('business_id', $businessId)
-                ->where('method', 'Cash')
-                ->where('created_at', '>=', $register->opened_at)
-                ->sum('amount');
-            $expected = (int) $register->opening_cash + (int) round($cashSales, 0, PHP_ROUND_HALF_UP);
+            $summary = $this->reconciliationFor($register, $businessId);
+            $expected = $summary['expected_cash'];
             $actual = (int) ($data['closing_cash'] ?? 0);
             $register->update([
                 'status' => 'Closed',
+                'cash_sales' => $summary['cash_sales'],
+                'cash_refunds' => $summary['cash_refunds'],
+                'cash_in' => $summary['cash_in'],
+                'cash_out' => $summary['cash_out'],
                 'expected_cash' => $expected,
                 'closing_cash' => $actual,
                 'variance' => $actual - $expected,
@@ -81,6 +86,48 @@ class PosSaleService
             $this->activity->record($businessId, 'POS', 'POS register closed', $register->id, null, ['variance' => $register->variance]);
 
             return $register->fresh();
+        });
+    }
+
+    /** @return array{opening_cash:int,cash_sales:int,cash_refunds:int,cash_in:int,cash_out:int,expected_cash:int} */
+    public function reconciliation(PosRegister $register, int $businessId, int $userId): array
+    {
+        $register = PosRegister::query()
+            ->where('business_id', $businessId)
+            ->where('user_id', $userId)
+            ->findOrFail($register->id);
+
+        return $this->reconciliationFor($register, $businessId);
+    }
+
+    public function recordCashMovement(PosRegister $register, int $businessId, int $userId, array $data): PosRegisterCashMovement
+    {
+        return DB::transaction(function () use ($register, $businessId, $userId, $data): PosRegisterCashMovement {
+            $register = PosRegister::query()
+                ->where('business_id', $businessId)
+                ->where('user_id', $userId)
+                ->where('status', 'Open')
+                ->lockForUpdate()
+                ->findOrFail($register->id);
+
+            $movement = PosRegisterCashMovement::create([
+                'business_id' => $businessId,
+                'pos_register_id' => $register->id,
+                'recorded_by' => $userId,
+                'type' => $data['type'],
+                'amount' => $data['amount'],
+                'reason' => $data['reason'],
+                'reference' => $data['reference'] ?? null,
+                'occurred_at' => now(),
+            ]);
+
+            $this->activity->record($businessId, 'POS', 'POS register '.$data['type'].' recorded', $register->id, null, [
+                'amount' => (float) $data['amount'],
+                'reason' => $data['reason'],
+                'reference' => $data['reference'] ?? null,
+            ]);
+
+            return $movement;
         });
     }
 
@@ -133,7 +180,7 @@ class PosSaleService
                     $this->activity->record($businessId, 'POS', 'POS sale held again', $held->id, null, ['hold_number' => $holdNumber]);
                 } else {
                     $held = HeldPosSale::create($attributes);
-                    $this->activity->record($businessId, 'POS', 'POS sale held', $held->id);
+                    $this->activity->record($businessId, 'POS', 'POS sale held', $held->id, null, ['hold_number' => $holdNumber]);
                 }
 
                 return $held;
@@ -198,7 +245,7 @@ class PosSaleService
 
             if ($held->status === 'Held') {
                 $held->update(['status' => 'Resumed', 'resumed_at' => now()]);
-                $this->activity->record($businessId, 'POS', 'POS sale resumed', $held->id);
+                $this->activity->record($businessId, 'POS', 'POS sale resumed', $held->id, null, ['hold_number' => $held->hold_number]);
             } else {
                 $this->activity->record($businessId, 'POS', 'POS sale restored', $held->id);
             }
@@ -223,7 +270,7 @@ class PosSaleService
             }
 
             $paymentType = (string) $data['payment_type'];
-            if (($data['discount'] ?? 0) > 0 || collect($data['items'])->contains(fn (array $line) => (int) ($line['discount_rate'] ?? 0) > 0)) {
+            if (($data['discount'] ?? 0) > 0 || collect($data['items'])->contains(fn (array $line) => (float) ($line['discount_value'] ?? $line['discount_rate'] ?? 0) > 0)) {
                 $this->requirePermission('pos.apply_discount');
             }
             if ($paymentType === 'Credit') {
@@ -233,9 +280,6 @@ class PosSaleService
                 $this->requirePermission('pos.split_payment');
             }
             $customer = $this->resolveCustomer($businessId, $data['customer_id'] ?? null, $data['quick_customer'] ?? null, $userId);
-            if (in_array($paymentType, ['Credit', 'Split'], true) && ! $customer) {
-                throw ValidationException::withMessages(['customer_id' => 'A registered customer is required for credit or split sales.']);
-            }
             $deliveryRequired = filter_var($data['delivery_required'] ?? false, FILTER_VALIDATE_BOOLEAN);
             $deliveryAddress = trim((string) ($data['delivery_address'] ?? ''));
             if ($deliveryRequired && ! $customer) {
@@ -255,6 +299,7 @@ class PosSaleService
                 if ((int) $product->stock_quantity < (int) $line['quantity']) {
                     throw ValidationException::withMessages(['items' => 'Insufficient stock for '.$product->name.'. Only '.$product->stock_quantity.' units are available.']);
                 }
+                $this->batches->assertSellable($product, (float) $line['quantity']);
             }
 
             $discount = (int) ($data['discount'] ?? 0);
@@ -264,43 +309,51 @@ class PosSaleService
                 $product = $products->get((int) $productId);
                 $defaultPrice = (int) ($product->retail_price ?: $product->wholesale_price ?: 0);
                 $price = $defaultPrice;
+                if ($defaultPrice <= 0 && (!isset($line['unit_price']) || (int) $line['unit_price'] <= 0)) {
+                    throw ValidationException::withMessages(['items' => $product->name.' has no valid selling price. Set an approved unit price before completing the sale.']);
+                }
                 if ($defaultPrice > 0 && isset($line['unit_price']) && (int) $line['unit_price'] === 0) {
                     throw ValidationException::withMessages(['items' => 'A product with a selling price cannot be completed with a zero unit price.']);
                 }
-                if (isset($line['unit_price']) && (int) $line['unit_price'] !== $defaultPrice) {
-                    if (! $this->permissions->allowsUser(auth()->user(), 'pos.custom_price')) {
-                        throw ValidationException::withMessages(['items' => 'You do not have permission to use a custom price.']);
+                $isOverride = isset($line['unit_price']) && (int) $line['unit_price'] !== $defaultPrice;
+                $overrideReason = trim((string) ($line['price_override_reason'] ?? ''));
+                if ($isOverride) {
+                    if (! $this->permissions->allowsUser(auth()->user(), 'pos.override_price')) {
+                        throw ValidationException::withMessages(['items' => 'You do not have permission to override a POS price.']);
                     }
                     $price = (int) $line['unit_price'];
+                    $purchasePrice = (float) ($product->latest_purchase_price ?: $product->average_purchase_price ?: $product->purchase_cost ?: 0);
+                    if ($price <= 0 || ($purchasePrice > 0 && $price <= $purchasePrice)) {
+                        throw ValidationException::withMessages(['items' => 'An overridden sale price must be greater than the current purchase price.']);
+                    }
+                    if ($overrideReason === '') {
+                        throw ValidationException::withMessages(['items' => 'Provide a reason for each overridden sale price.']);
+                    }
                 }
-                $amounts = $this->finance->calculateLineAmounts((int) $line['quantity'], $price, (int) ($line['discount_rate'] ?? 0), (int) ($line['tax_rate'] ?? 0));
-                $preparedLines->push(compact('product', 'line', 'price', 'amounts'));
+                $discountType = (string) ($line['discount_type'] ?? ((int) ($line['discount_rate'] ?? 0) > 0 ? 'percentage' : 'none'));
+                $discountValue = (float) ($line['discount_value'] ?? $line['discount_rate'] ?? 0);
+                $amounts = $this->finance->calculatePosLineAmounts((int) $line['quantity'], $price, $discountType, $discountValue, (int) ($line['tax_rate'] ?? 0));
+                $preparedLines->push(compact('product', 'line', 'price', 'amounts', 'defaultPrice', 'isOverride', 'overrideReason'));
             }
 
             ['subtotal' => $subtotal, 'discountAmount' => $discountAmount, 'taxAmount' => $taxAmount, 'grandTotal' => $grandTotal] = $this->finance->salesAmountsFromLines($preparedLines->map(fn ($line) => ['line_total' => $line['amounts']['lineTotal']]), $discount, $tax);
             $grandTotal = (int) round($grandTotal, 0, PHP_ROUND_HALF_UP);
-            if ($paymentType !== (string) $data['payment_method']) {
-                throw ValidationException::withMessages(['payment_method' => 'The selected payment method does not match the payment type.']);
-            }
-
-            $cashReceived = $this->roundCash((float) ($data['cash_received'] ?? 0));
-            $paid = $paymentType === 'Credit' ? 0 : min($cashReceived, $grandTotal);
-            if ($paymentType === 'Credit' && $customer) {
+            $payment = $this->paymentBreakdown->calculate($data, $grandTotal);
+            $paymentType = $payment['type'];
+            $paid = $payment['paid'];
+            if ($payment['balance'] > 0) {
+                if ($paymentType !== 'Credit') {
+                    $this->requirePermission('pos.credit_sale');
+                }
+                if (! $customer) {
+                    throw ValidationException::withMessages(['customer_id' => 'A registered customer is required when a sale has an outstanding balance.']);
+                }
                 $availableCredit = max(0, (int) $customer->credit_limit - (int) $customer->current_balance);
-                if ($grandTotal > $availableCredit) {
+                if ($payment['balance'] > $availableCredit) {
                     throw ValidationException::withMessages([
                         'customer_id' => 'This customer does not have sufficient credit available for this sale.',
                     ]);
                 }
-            }
-            if ($paymentType === 'Cash' && $cashReceived < $grandTotal) {
-                throw ValidationException::withMessages(['cash_received' => 'Insufficient cash received. Required amount is Rs '.$grandTotal.'.']);
-            }
-            if ($paymentType !== 'Cash' && $paymentType !== 'Credit' && $paid <= 0) {
-                throw ValidationException::withMessages(['cash_received' => 'Enter the received amount for this payment type.']);
-            }
-            if ($paymentType !== 'Cash' && $paymentType !== 'Credit' && $cashReceived > $grandTotal) {
-                throw ValidationException::withMessages(['cash_received' => 'Payment amount cannot exceed the amount due for this payment method.']);
             }
 
             $number = $this->numbers->next($businessId, 'sales');
@@ -319,9 +372,9 @@ class PosSaleService
                 'total' => $grandTotal,
                 'grand_total' => $grandTotal,
                 'paid_amount' => $paid,
-                'cash_received' => $paymentType === 'Cash' ? $cashReceived : null,
-                'change_amount' => $paymentType === 'Cash' ? max(0, $cashReceived - $grandTotal) : 0,
-                'balance' => max(0, $grandTotal - $paid),
+                'cash_received' => $payment['cash_received'],
+                'change_amount' => $payment['change'],
+                'balance' => $payment['balance'],
                 'payment_type' => $paymentType,
                 'payment_status' => $paid >= $grandTotal ? 'Paid' : ($paid > 0 ? 'Partial' : 'Pending'),
                 'sale_channel' => 'pos',
@@ -335,15 +388,21 @@ class PosSaleService
                 $line = $prepared['line'];
                 $amounts = $prepared['amounts'];
                 $before = (int) $product->stock_quantity;
-                OrderItem::create([
+                $orderItem = OrderItem::create([
                     'order_id' => $order->id, 'product_id' => $product->id, 'product_name_snapshot' => $product->name,
-                    'quantity' => (int) $line['quantity'], 'unit' => $product->unit, 'unit_price' => $prepared['price'],
+                    'quantity' => (int) $line['quantity'], 'unit' => $product->unit, 'unit_price' => $prepared['price'], 'standard_unit_price' => $prepared['defaultPrice'], 'is_price_overridden' => $prepared['isOverride'], 'price_override_reason' => $prepared['isOverride'] ? $prepared['overrideReason'] : null,
                     'purchase_cost_snapshot' => (int) ($product->latest_purchase_price ?: $product->purchase_cost ?: 0),
-                    'line_subtotal' => (int) round($amounts['lineSubtotal']), 'discount_rate' => $amounts['discountRate'],
+                    'line_subtotal' => (int) round($amounts['lineSubtotal']), 'discount_type' => $amounts['discountType'], 'discount_value' => $amounts['discountValue'], 'discount_rate' => $amounts['discountRate'],
                     'discount_amount' => (int) round($amounts['discountAmount']), 'tax_rate' => $amounts['taxRate'],
                     'tax_amount' => (int) round($amounts['taxAmount']), 'line_total' => (int) round($amounts['lineTotal']),
                     'price' => $prepared['price'], 'total' => (int) round($amounts['lineTotal']),
                 ]);
+                if ($prepared['isOverride']) {
+                    $this->activity->record($businessId, 'POS', 'POS price overridden for '.$product->name, $orderItem->id, null, [
+                        'sale' => $number, 'standard_price' => $prepared['defaultPrice'], 'override_price' => $prepared['price'], 'difference' => $prepared['price'] - $prepared['defaultPrice'], 'reason' => $prepared['overrideReason'],
+                    ]);
+                }
+                $this->batches->allocateSale($product, $order, $orderItem, (float) $line['quantity'], $userId);
                 $product->decrement('stock_quantity', (int) $line['quantity']);
                 $after = $before - (int) $line['quantity'];
                 $inventory = Inventory::firstOrCreate(['business_id' => $businessId, 'product_id' => $product->id], ['available_stock' => $before]);
@@ -353,8 +412,19 @@ class PosSaleService
                 InventoryMovement::create(['business_id' => $businessId, 'product_id' => $product->id, 'type' => 'SOLD', 'quantity' => (int) $line['quantity'], 'previous_stock' => $before, 'new_stock' => $after, 'note' => 'POS sale '.$number, 'created_by' => $userId, 'movement_date' => now()]);
             }
 
-            if ($paid > 0) {
-                Payment::create(['business_id' => $businessId, 'order_id' => $order->id, 'customer_id' => $customer?->id, 'method' => $data['payment_method'], 'amount' => $paid, 'transaction_reference' => $data['reference'] ?? null, 'reference_number' => $this->numbers->next($businessId, 'payment'), 'payment_date' => now()->toDateString(), 'status' => $order->payment_status]);
+            foreach ($payment['lines'] as $line) {
+                Payment::create([
+                    'business_id' => $businessId,
+                    'order_id' => $order->id,
+                    'pos_register_id' => $line['method'] === 'Cash' ? $register->id : null,
+                    'customer_id' => $customer?->id,
+                    'method' => $line['method'],
+                    'amount' => $line['amount'],
+                    'transaction_reference' => $line['reference'],
+                    'reference_number' => $this->numbers->next($businessId, 'payment'),
+                    'payment_date' => now()->toDateString(),
+                    'status' => $order->payment_status,
+                ]);
             }
             if ($customer && $order->balance > 0) {
                 $customer->increment('current_balance', $order->balance);
@@ -380,15 +450,69 @@ class PosSaleService
                 ]);
             }
 
-            $this->postAccounting($order->fresh(['items']), $paid, $customer?->id);
+            $this->postAccounting($order->fresh(['items']), $payment['lines'], $customer?->id);
             if ($resumedHeldSale) {
                 $resumedHeldSale->update(['status' => 'Completed']);
                 $this->activity->record($businessId, 'POS', 'Held sale completed', $resumedHeldSale->id, null, ['hold_number' => $resumedHeldSale->hold_number, 'order_id' => $order->id]);
             }
-            $this->activity->record($businessId, 'POS', 'Completed POS sale '.$number, $order->id, null, ['grand_total' => $grandTotal, 'paid_amount' => $paid, 'delivery_required' => $deliveryRequired]);
+            $this->activity->record($businessId, 'POS', 'Completed POS sale '.$number, $order->id, null, [
+                'grand_total' => $grandTotal,
+                'paid_amount' => $paid,
+                'payment_split' => collect($payment['lines'])->map(fn (array $line) => $line['method'].' Rs '.$line['amount'])->implode('; '),
+                'delivery_required' => $deliveryRequired,
+            ]);
 
             return $order->fresh(['customer', 'items.product', 'invoice', 'payments']);
         });
+    }
+
+    /** @return array{opening_cash:int,cash_sales:int,cash_refunds:int,cash_in:int,cash_out:int,expected_cash:int} */
+    private function reconciliationFor(PosRegister $register, int $businessId): array
+    {
+        $cashSales = Payment::query()
+            ->where('business_id', $businessId)
+            ->where('method', 'Cash')
+            ->where(function ($query) use ($register): void {
+                $query->where('pos_register_id', $register->id)
+                    // Retain a sensible result for an open register created
+                    // before shift linkage was introduced. New POS sales are
+                    // always linked directly to their register.
+                    ->orWhere(function ($legacy) use ($register): void {
+                        $legacy->whereNull('pos_register_id')->where('created_at', '>=', $register->opened_at);
+                    });
+            })
+            ->sum('amount');
+        $cashRefunds = SalesReturn::query()
+            ->where('business_id', $businessId)
+            ->where('refund_method', 'Cash')
+            ->where(function ($query) use ($register): void {
+                $query->where('pos_register_id', $register->id)
+                    ->orWhere(function ($legacy) use ($register): void {
+                        $legacy->whereNull('pos_register_id')->where('returned_at', '>=', $register->opened_at);
+                    });
+            })
+            ->sum('refund_amount');
+        $movementTotals = PosRegisterCashMovement::query()
+            ->where('business_id', $businessId)
+            ->where('pos_register_id', $register->id)
+            ->selectRaw("COALESCE(SUM(CASE WHEN type = 'Cash In' THEN amount ELSE 0 END), 0) as cash_in")
+            ->selectRaw("COALESCE(SUM(CASE WHEN type = 'Cash Out' THEN amount ELSE 0 END), 0) as cash_out")
+            ->first();
+
+        $opening = (int) round((float) $register->opening_cash, 0, PHP_ROUND_HALF_UP);
+        $sales = (int) round((float) $cashSales, 0, PHP_ROUND_HALF_UP);
+        $refunds = (int) round((float) $cashRefunds, 0, PHP_ROUND_HALF_UP);
+        $cashIn = (int) round((float) ($movementTotals?->cash_in ?? 0), 0, PHP_ROUND_HALF_UP);
+        $cashOut = (int) round((float) ($movementTotals?->cash_out ?? 0), 0, PHP_ROUND_HALF_UP);
+
+        return [
+            'opening_cash' => $opening,
+            'cash_sales' => $sales,
+            'cash_refunds' => $refunds,
+            'cash_in' => $cashIn,
+            'cash_out' => $cashOut,
+            'expected_cash' => $opening + $sales + $cashIn - $refunds - $cashOut,
+        ];
     }
 
     private function resolveCustomer(int $businessId, mixed $customerId, ?array $quickCustomer = null, ?int $userId = null): ?Customer
@@ -454,15 +578,28 @@ class PosSaleService
         }
     }
 
-    private function postAccounting(Order $order, int $paid, ?int $customerId): void
+    /** @param array<int, array{method:string,amount:int,reference:?string}> $payments */
+    private function postAccounting(Order $order, array $payments, ?int $customerId): void
     {
         $this->accounting->ensureDefaultAccounts($order->business_id);
         $cash = Account::where('business_id', $order->business_id)->where('name', 'Cash')->first();
+        $bank = Account::where('business_id', $order->business_id)->where('name', 'Bank')->first();
         $receivable = Account::where('business_id', $order->business_id)->where('name', 'Accounts Receivable')->first();
         $sales = Account::where('business_id', $order->business_id)->where('name', 'Sales Revenue')->first();
-        if (! $sales || (! $cash && $paid > 0) || (! $receivable && $order->balance > 0)) return;
+        $cashPaid = collect($payments)->where('method', 'Cash')->sum('amount');
+        $nonCashPaid = collect($payments)->where('method', '!=', 'Cash')->sum('amount');
+        if (! $sales || (! $cash && $cashPaid > 0) || (! $bank && $nonCashPaid > 0) || (! $receivable && $order->balance > 0)) return;
         $lines = [];
-        if ($paid > 0) $lines[] = ['account_id' => $cash->id, 'customer_id' => $customerId, 'debit' => $paid, 'credit' => 0, 'description' => $order->order_number];
+        foreach ($payments as $payment) {
+            $account = $payment['method'] === 'Cash' ? $cash : $bank;
+            $lines[] = [
+                'account_id' => $account->id,
+                'customer_id' => $customerId,
+                'debit' => $payment['amount'],
+                'credit' => 0,
+                'description' => $order->order_number.' · '.$payment['method'],
+            ];
+        }
         if ($order->balance > 0) $lines[] = ['account_id' => $receivable->id, 'customer_id' => $customerId, 'debit' => $order->balance, 'credit' => 0, 'description' => $order->order_number];
         $lines[] = ['account_id' => $sales->id, 'customer_id' => $customerId, 'debit' => 0, 'credit' => $order->grand_total, 'description' => $order->order_number];
         $this->accounting->post($order->business_id, ['voucher_number' => 'POS-JV-'.$order->id, 'entry_date' => now()->toDateString(), 'reference_type' => 'order', 'reference_id' => $order->id, 'description' => 'POS sale '.$order->order_number], $lines);

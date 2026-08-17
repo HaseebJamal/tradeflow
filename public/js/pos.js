@@ -15,8 +15,6 @@
     const cart = new Map();
     let activeProduct = -1;
     let selectedCartId = null;
-    let editingId = null;
-    let editSnapshot = null;
     let searchTimer = null;
     let searchVersion = 0;
     let resumingHeldSale = false;
@@ -37,6 +35,7 @@
     let draftClearError = null;
     let clearingCart = false;
     let keyboardProductSelection = false;
+    let splitPayments = [];
     let finishCompletedSale = () => {};
 
     const barcode = $('[data-pos-barcode]');
@@ -55,7 +54,16 @@
     const discount = $('[data-pos-discount]');
     const tax = $('[data-pos-tax]');
     const paymentType = $('[data-pos-payment-type]');
+    const paymentMode = $('[data-pos-payment-mode]');
     const paymentMethod = $('[data-pos-payment-method]');
+    const singlePaymentPanel = $('[data-pos-single-payment]');
+    const splitPaymentPanel = $('[data-pos-split-payment]');
+    const splitPaymentRows = $('[data-pos-split-payment-rows]');
+    const addSplitPayment = $('[data-pos-add-split-payment]');
+    const splitEntered = $('[data-pos-split-entered]');
+    const splitRemaining = $('[data-pos-split-remaining]');
+    const splitChangeRow = $('[data-pos-split-change-row]');
+    const splitChange = $('[data-pos-split-change]');
     const cash = $('[data-pos-cash]');
     const tenderLabel = $('[data-pos-tender-label]');
     const changeRow = $('[data-pos-change-row]');
@@ -68,6 +76,7 @@
     const registerLabel = $('[data-pos-register-label]');
     const openingCash = $('[data-pos-opening-cash]');
     const registerAction = $('[data-pos-register-action]');
+    const cashActions = $('[data-pos-cash-actions]');
     const registerRequired = $('[data-pos-register-required]');
     const holdInput = $('[data-pos-hold-input]');
     const resumeInput = $('[data-pos-resume-input]');
@@ -299,30 +308,97 @@
         '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;',
     }[character]));
 
+    const lineDiscountAmount = (line) => {
+        const base = line.quantity * line.price;
+        const type = line.discountType || (whole(line.discount) > 0 ? 'percentage' : 'none');
+        const value = Number(line.discountValue ?? line.discount ?? 0) || 0;
+        return type === 'percentage' ? base * Math.min(100, Math.max(0, value)) / 100 : (type === 'fixed' ? Math.min(base, Math.max(0, value)) : 0);
+    };
     const lineTotal = (line) => {
         const base = line.quantity * line.price;
-        const lineDiscount = base * (line.discount / 100);
+        const lineDiscount = lineDiscountAmount(line);
         const lineTax = (base - lineDiscount) * (line.tax / 100);
         return base - lineDiscount + lineTax;
     };
+    const isSplitPayment = () => paymentMode?.value === 'split';
+    const isWholePositive = (value) => /^\d+$/.test(rawMoney(value)) && whole(value) > 0;
+    const splitPaymentSummary = (grand) => {
+        const methods = new Set();
+        let entered = 0;
+        let cashTendered = 0;
+        let valid = splitPayments.length > 0;
+        splitPayments.forEach((payment) => {
+            const amount = whole(payment.amount);
+            const method = String(payment.method || '');
+            if (!method || methods.has(method) || !isWholePositive(payment.amount)) valid = false;
+            methods.add(method);
+            entered += amount;
+            if (method === 'Cash') cashTendered += amount;
+        });
+        const nonCash = entered - cashTendered;
+        if (nonCash > grand) valid = false;
+        const cashApplied = Math.min(cashTendered, Math.max(0, grand - nonCash));
+        const paid = Math.min(grand, nonCash + cashApplied);
+        return { entered, cashTendered, nonCash, paid, remaining: Math.max(0, grand - paid), change: Math.max(0, cashTendered - cashApplied), valid };
+    };
+    const splitMethodOptions = (selected) => (config.splitPaymentMethods || []).map((method) => `<option value="${escapeHtml(method)}" ${method === selected ? 'selected' : ''} ${method !== selected && splitPayments.some((payment) => payment.method === method) ? 'disabled' : ''}>${escapeHtml(method)}</option>`).join('');
+    const renderSplitPayments = () => {
+        if (!splitPaymentRows) return;
+        splitPaymentRows.innerHTML = splitPayments.map((payment, index) => `<div class="row g-2 align-items-end mb-2" data-pos-split-row="${index}">
+            <div class="col-5"><label class="form-label small mb-1">Method</label><select class="form-select form-select-sm" data-pos-split-method>${splitMethodOptions(payment.method)}</select></div>
+            <div class="col-4"><label class="form-label small mb-1">Amount</label><input class="form-control form-control-sm js-whole-number" data-pos-split-amount type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(payment.amount)}"></div>
+            <div class="col-3 d-flex justify-content-end"><button type="button" class="btn btn-sm btn-outline-danger" data-pos-remove-split-payment aria-label="Remove ${escapeHtml(payment.method)} payment"><i class="bi bi-x-lg"></i></button></div>
+            <div class="col-12 ${payment.method === 'Cash' ? 'd-none' : ''}" data-pos-split-reference-wrap><input class="form-control form-control-sm" data-pos-split-reference maxlength="255" value="${escapeHtml(payment.reference || '')}" placeholder="Reference (optional)"></div>
+        </div>`).join('');
+        if (addSplitPayment) addSplitPayment.disabled = splitPayments.length >= (config.splitPaymentMethods || []).length;
+    };
+    const addSplitPaymentRow = () => {
+        const method = (config.splitPaymentMethods || []).find((candidate) => !splitPayments.some((payment) => payment.method === candidate));
+        if (!method) return;
+        splitPayments.push({ method, amount: '', reference: '' });
+        renderSplitPayments();
+        updateTotals();
+        focusElement($$('[data-pos-split-amount]').at(-1), true);
+    };
+    const setPaymentMode = (mode, { preserve = false } = {}) => {
+        const split = mode === 'split' && config.canUseSplitPayment === true;
+        if (paymentMode) paymentMode.value = split ? 'split' : 'single';
+        paymentType.value = split ? 'Split' : paymentMethod.value;
+        singlePaymentPanel?.classList.toggle('d-none', split);
+        splitPaymentPanel?.classList.toggle('d-none', !split);
+        if (split && !splitPayments.length) {
+            splitPayments = [{ method: (config.splitPaymentMethods || ['Cash'])[0], amount: '', reference: '' }];
+        }
+        if (!preserve && !split) splitPayments = [];
+        renderSplitPayments();
+    };
     const totals = () => {
+        let grossSubtotal = 0;
+        let lineDiscounts = 0;
         let subtotal = 0;
         cart.forEach((line) => {
             line.lineTotal = lineTotal(line);
+            grossSubtotal += line.quantity * line.price;
+            lineDiscounts += lineDiscountAmount(line);
             subtotal += line.lineTotal;
         });
         const orderDiscount = subtotal * (whole(discount.value) / 100);
         const taxAmount = (subtotal - orderDiscount) * (whole(tax.value) / 100);
         const grand = Math.round(subtotal - orderDiscount + taxAmount);
         const roundedCash = roundCash(cash.value);
+        const split = splitPaymentSummary(grand);
+        const singleCredit = !isSplitPayment() && paymentMethod.value === 'Credit';
         return {
+            grossSubtotal,
+            lineDiscounts,
             subtotal,
             discount: orderDiscount,
             tax: taxAmount,
             grand,
-            paid: paymentType.value === 'Credit' ? 0 : Math.min(roundedCash, grand),
-            due: Math.max(0, grand - (paymentType.value === 'Credit' ? 0 : Math.min(roundedCash, grand))),
-            change: Math.max(0, roundedCash - grand),
+            paid: isSplitPayment() ? split.paid : (singleCredit ? 0 : Math.min(roundedCash, grand)),
+            due: isSplitPayment() ? split.remaining : Math.max(0, grand - (singleCredit ? 0 : Math.min(roundedCash, grand))),
+            change: isSplitPayment() ? split.change : Math.max(0, roundedCash - grand),
+            split,
         };
     };
     const isQuickCustomer = () => customer.value === '__new__';
@@ -332,7 +408,14 @@
         const values = totals();
         const payable = $('[data-total="grand"]');
         if (payable) payable.textContent = currency(values.grand);
-        const isCash = paymentType.value === 'Cash';
+        $('[data-total="gross"]') && ($('[data-total="gross"]').textContent = currency(values.grossSubtotal));
+        $('[data-total="line-discounts"]') && ($('[data-total="line-discounts"]').textContent = `- ${currency(values.lineDiscounts)}`);
+        $('[data-total="net-subtotal"]') && ($('[data-total="net-subtotal"]').textContent = currency(values.subtotal));
+        $('[data-total="invoice-discount"]') && ($('[data-total="invoice-discount"]').textContent = `- ${currency(values.discount)}`);
+        $('[data-total="tax"]') && ($('[data-total="tax"]').textContent = currency(values.tax));
+        const splitMode = isSplitPayment();
+        paymentType.value = splitMode ? 'Split' : paymentMethod.value;
+        const isCash = !splitMode && paymentMethod.value === 'Cash';
         if (tenderLabel) tenderLabel.textContent = isCash ? 'Cash Received' : 'Payment Amount';
         if (changeRow) changeRow.classList.toggle('d-none', !isCash);
         if (changeReturn) changeReturn.value = currency(isCash ? values.change : 0);
@@ -342,10 +425,15 @@
         cash.setCustomValidity(tenderInvalid
             ? 'Enter a whole-number payment amount.'
             : (nonCashOverpayment ? `Payment amount cannot exceed ${currency(values.grand)} for this payment method.` : ''));
-        const customerAllowed = !['Credit', 'Split'].includes(paymentType.value)
-            || (Boolean(customer.value) && quickCustomerIsValid());
+        if (splitEntered) splitEntered.textContent = currency(values.split.entered);
+        if (splitRemaining) splitRemaining.textContent = currency(values.split.remaining);
+        if (splitChangeRow) splitChangeRow.classList.toggle('d-none', !splitMode || values.split.change <= 0);
+        if (splitChange) splitChange.textContent = currency(values.split.change);
+        const customerAllowed = values.due === 0 || (Boolean(customer.value) && !isQuickCustomer() && quickCustomerIsValid());
         const roundedCash = roundCash(cash.value);
-        const paymentAllowed = paymentType.value === 'Credit'
+        const paymentAllowed = splitMode
+            ? values.split.valid
+            : paymentMethod.value === 'Credit'
             || (paymentType.value === 'Cash'
                 ? cashIsValid() && roundedCash >= values.grand
                 : cashIsValid() && roundedCash > 0 && roundedCash <= values.grand);
@@ -457,24 +545,26 @@
         }));
     }, true);
     const cartRow = (line, index) => {
-        const isEditing = editingId === line.id;
-        const numericField = (field, value, min = 0, max = '') => `<input class="form-control form-control-sm" type="number" min="${min}"${max !== '' ? ` max="${max}"` : ''} step="1" inputmode="numeric" value="${value}" data-cart-field="${field}">`;
-        const quantity = isEditing ? numericField('quantity', line.quantity, 1, line.stock) : line.quantity;
-        const price = isEditing && config.canUseCustomPrice ? numericField('price', line.price, 0) : `Rs ${numberWithCommas(line.price)}`;
-        const actions = isEditing
-            ? '<button type="button" class="btn btn-sm btn-outline-success" data-cart-action="save">Save</button><button type="button" class="btn btn-sm btn-outline-secondary" data-cart-action="cancel">Cancel</button>'
-            : '<button type="button" class="btn btn-sm btn-outline-primary" data-cart-action="edit">Edit</button><button type="button" class="btn btn-sm btn-outline-danger" data-cart-action="remove">Delete</button>';
+        const standardPrice = whole(line.standardPrice ?? line.price);
+        const hasPriceOverride = whole(line.price) !== standardPrice;
+        const quantity = `<input class="form-control form-control-sm tf-pos-cart-quantity-input" type="number" min="1" max="${line.stock}" step="1" inputmode="numeric" value="${whole(line.quantity)}" data-cart-field="quantity">`;
+        const priceInput = `<input class="form-control form-control-sm tf-pos-cart-price-input" type="number" min="0" step="1" inputmode="numeric" value="${whole(line.price)}" data-cart-field="price" ${config.canUseCustomPrice ? '' : 'readonly aria-readonly="true" tabindex="-1"'}>`;
+        const priceContext = `<small class="d-block tf-pos-price-context ${hasPriceOverride ? 'is-overridden' : ''}" data-cart-price-context>Std: ${currency(standardPrice)}${hasPriceOverride ? ' · Override' : ''}</small>`;
+        const overrideReason = config.canUseCustomPrice
+            ? `<div class="tf-pos-price-reason" data-cart-override-wrap ${hasPriceOverride ? '' : 'hidden'}><input class="form-control form-control-sm" type="text" maxlength="500" value="${escapeHtml(line.priceOverrideReason || '')}" placeholder="Override reason" data-cart-override-reason ${hasPriceOverride ? 'required' : ''}><button type="button" class="btn btn-sm btn-link" data-cart-action="reset-price">Standard</button></div>`
+            : '';
+        const price = `Rs ${numberWithCommas(line.price)}${hasPriceOverride ? `<small class="d-block text-warning">Standard: Rs ${numberWithCommas(standardPrice)} · Override</small>` : ''}`;
+        const actions = '<button type="button" class="btn btn-sm btn-outline-danger" data-cart-action="remove">Delete</button>';
         return `<tr data-cart-id="${line.id}" tabindex="0" class="${selectedCartId === line.id ? 'is-selected' : ''}">
             <td>${index + 1}</td><td class="tf-pos-product-cell"><strong>${escapeHtml(line.name)}</strong><small class="d-block text-muted">${escapeHtml(line.barcode || '')} | Stock ${line.stock}</small></td>
-            <td>${quantity}</td><td>${price}</td>
-            <td class="tf-pos-line-total"><strong data-cart-line-total>${currency(line.lineTotal)}</strong></td><td class="tf-pos-cart-actions-cell"><div class="tf-pos-cart-actions">${actions}</div>${isEditing ? '<small class="d-block text-danger mt-1" data-cart-error aria-live="polite"></small>' : ''}</td>
+            <td>${quantity}</td><td>${priceInput}${priceContext}${overrideReason}</td>
+            <td class="tf-pos-line-total"><strong data-cart-line-total>${currency(line.lineTotal)}</strong></td><td class="tf-pos-cart-actions-cell"><div class="tf-pos-cart-actions">${actions}</div></td>
         </tr>`;
     };
     const numberWithCommas = (value) => whole(value).toLocaleString();
     const renderCart = ({ syncDraft = true } = {}) => {
         totals();
         if (selectedCartId !== null && !cart.has(selectedCartId)) selectedCartId = null;
-        if (editingId !== null && !cart.has(editingId)) editingId = null;
         if (selectedCartId === null && cart.size) selectedCartId = [...cart.keys()][0];
         cartBody.innerHTML = cart.size
             ? [...cart.values()].map(cartRow).join('')
@@ -484,12 +574,11 @@
         if (syncDraft) scheduleDraftSync();
         return values;
     };
-    const refreshEditedRow = (row, line) => {
+    const refreshInlineRow = (row, line) => {
         const lineTotalCell = $('[data-cart-line-total]', row);
         if (lineTotalCell) lineTotalCell.textContent = currency(lineTotal(line));
         updateTotals();
     };
-    const focusEditedRow = () => focusElement($('[data-cart-id].is-selected [data-cart-field]'), true);
     const addProduct = (product) => {
         const id = Number(product.id);
         const stock = Number(product.stock_quantity ?? product.stock ?? 0);
@@ -506,7 +595,10 @@
                 stock,
                 quantity: 1,
                 price: sellingPrice(product),
+                standardPrice: sellingPrice(product),
                 discount: 0,
+                discountType: 'none',
+                discountValue: 0,
                 tax: 0,
                 unit: product.unit || '',
             });
@@ -514,10 +606,10 @@
         selectedCartId = id;
         keyboardProductSelection = false;
         barcode.value = '';
-        // Adding to the cart only changes cart state. Keep the same product
-        // DOM node, search term, category, focus context, and scroll offset
-        // so a cashier can continue selecting nearby products uninterrupted.
-        beginEdit(cart.get(id));
+        // This is an intentional add/scan action, so make its quantity ready
+        // for immediate replacement without changing any other navigation flow.
+        renderCart();
+        focusElement($(`[data-cart-id="${id}"] [data-cart-field="quantity"]`), true);
     };
     const parseProduct = (card) => {
         try { return JSON.parse(card.dataset.product); } catch (_) { return null; }
@@ -573,7 +665,6 @@
 
         clearingCart = true;
         cart.clear();
-        editingId = null;
         selectedCartId = null;
         renderCart({ syncDraft: false });
         search.value = '';
@@ -624,8 +715,9 @@
         deliveryDetails?.classList.add('d-none');
         discount.value = 0;
         tax.value = 0;
-        paymentType.value = 'Cash';
         paymentMethod.value = 'Cash';
+        splitPayments = [];
+        setPaymentMode('single');
         cash.value = '';
         reference.value = '';
         $('[data-pos-invoice]').textContent = 'New sale';
@@ -645,16 +737,20 @@
         delivery_address: deliveryAddress?.value.trim() || (isQuickCustomer() ? quickCustomerAddress?.value.trim() || null : null),
         discount: whole(discount.value),
         tax_rate: whole(tax.value),
-        payment_type: paymentType.value,
-        payment_method: paymentMethod.value,
-        cash_received: cash.value === '' ? 0 : whole(cash.value),
-        reference: reference.value.trim() || null,
+        payment_type: isSplitPayment() ? 'Split' : paymentMethod.value,
+        payment_method: isSplitPayment() ? 'Split' : paymentMethod.value,
+        cash_received: isSplitPayment() ? splitPaymentSummary(totals().grand).cashTendered : (cash.value === '' ? 0 : whole(cash.value)),
+        reference: isSplitPayment() ? null : (reference.value.trim() || null),
+        split_payments: isSplitPayment() ? splitPayments.map((payment) => ({ method: payment.method, amount: whole(payment.amount), reference: payment.reference?.trim() || null })) : [],
         ...(includeHeldSale ? { held_sale_id: currentHeldSale?.id || null } : {}),
         items: [...cart.values()].map((line) => ({
             product_id: line.id,
             quantity: whole(line.quantity),
             unit_price: whole(line.price),
-            discount_rate: whole(line.discount),
+            price_override_reason: line.priceOverrideReason || null,
+            discount_type: line.discountType || 'none',
+            discount_value: Number(line.discountValue ?? line.discount ?? 0),
+            discount_rate: line.discountType === 'percentage' ? whole(line.discountValue) : 0,
             tax_rate: whole(line.tax),
         })),
     });
@@ -717,9 +813,30 @@
             return;
         }
         if (!cart.size || submitting) return;
+        const invalidPrice = [...cart.values()].find((line) => whole(line.price) <= 0);
+        if (invalidPrice) {
+            flash('warning', 'Valid price required', `${invalidPrice.name} needs a valid unit price before checkout.`);
+            focusElement($(`[data-cart-id="${invalidPrice.id}"] [data-cart-field="price"]`), true);
+            return;
+        }
+        const missingOverrideReason = [...cart.values()].find((line) => (
+            whole(line.price) !== whole(line.standardPrice ?? line.price)
+            && !String(line.priceOverrideReason || '').trim()
+        ));
+        if (missingOverrideReason) {
+            flash('warning', 'Override reason required', 'Provide a reason for each overridden unit price.');
+            focusElement($(`[data-cart-id="${missingOverrideReason.id}"] [data-cart-override-reason]`), true);
+            return;
+        }
         const values = totals();
-        if (['Credit', 'Split'].includes(paymentType.value) && !customer.value) {
-            flash('warning', 'Customer required', 'Select a registered customer for this payment type.');
+        const splitMode = isSplitPayment();
+        if (splitMode && !values.split.valid) {
+            flash('warning', 'Check split payments', values.split.nonCash > values.grand ? 'Non-cash payment amounts cannot exceed the amount due.' : 'Add each payment method once with a whole amount greater than Rs 0.');
+            focusElement($('[data-pos-split-amount]'), true);
+            return;
+        }
+        if (values.due > 0 && (!customer.value || isQuickCustomer())) {
+            flash('warning', 'Customer required', 'Select a registered customer before leaving a balance due.');
             focusElement(customer);
             return;
         }
@@ -738,22 +855,22 @@
             focusElement(quickCustomerName);
             return;
         }
-        if (paymentType.value !== 'Credit' && !cashIsValid()) {
+        if (!splitMode && paymentMethod.value !== 'Credit' && !cashIsValid()) {
             flash('warning', 'Invalid received amount', 'Enter a valid received amount.');
             focusElement(cash, true);
             return;
         }
-        if (paymentType.value === 'Cash' && roundCash(cash.value) < values.grand) {
+        if (!splitMode && paymentMethod.value === 'Cash' && roundCash(cash.value) < values.grand) {
             flash('warning', 'Insufficient cash received', `Required amount is ${currency(values.grand)}.`);
             focusElement(cash, true);
             return;
         }
-        if (paymentType.value !== 'Cash' && paymentType.value !== 'Credit' && roundCash(cash.value) < 1) {
+        if (!splitMode && paymentMethod.value !== 'Cash' && paymentMethod.value !== 'Credit' && roundCash(cash.value) < 1) {
             flash('warning', 'Invalid received amount', 'Enter a valid received amount.');
             focusElement(cash, true);
             return;
         }
-        if (paymentType.value !== 'Cash' && paymentType.value !== 'Credit' && roundCash(cash.value) > values.grand) {
+        if (!splitMode && paymentMethod.value !== 'Cash' && paymentMethod.value !== 'Credit' && roundCash(cash.value) > values.grand) {
             flash('warning', 'Payment exceeds amount due', `Payment amount cannot exceed ${currency(values.grand)} for this payment method.`);
             focusElement(cash, true);
             return;
@@ -847,8 +964,9 @@
             customer.value = checkout.quick_customer ? '__new__' : checkout.customer_id || '';
             discount.value = checkout.discount || 0;
             tax.value = checkout.tax_rate || 0;
-            paymentType.value = checkout.payment_type || 'Cash';
-            paymentMethod.value = checkout.payment_method || 'Cash';
+            paymentMethod.value = checkout.payment_method && checkout.payment_method !== 'Split' ? checkout.payment_method : 'Cash';
+            splitPayments = Array.isArray(checkout.split_payments) ? checkout.split_payments.map((payment) => ({ method: payment.method, amount: payment.amount ?? '', reference: payment.reference || '' })) : [];
+            setPaymentMode(checkout.payment_type === 'Split' ? 'split' : 'single', { preserve: true });
             cash.value = checkout.cash_received || '';
             reference.value = checkout.reference || '';
             if (deliveryRequired) deliveryRequired.value = checkout.delivery_required ? '1' : '0';
@@ -1026,6 +1144,7 @@
             if (openingCash) openingCash.textContent = currency(register.opening_cash);
             holdInput?.removeAttribute('disabled');
             registerRequired?.classList.add('d-none');
+            cashActions?.removeAttribute('hidden');
 
             if (registerAction) {
                 registerAction.innerHTML = '<button type="button" class="btn btn-outline-danger" data-pos-close-register><i class="bi bi-lock"></i><span>Close Register</span></button>';
@@ -1042,10 +1161,29 @@
     const closeRegister = async () => {
         if (!config.registerId) return;
 
+        let reconciliation;
+        try {
+            const payload = await request(`${config.registerBaseUrl}/${config.registerId}/reconciliation`);
+            reconciliation = payload.reconciliation;
+        } catch (error) {
+            flash('error', 'Unable to load reconciliation', error.message);
+            return;
+        }
+
+        const reconciliationRow = (label, amount, tone = '') => `<div class="tf-pos-reconciliation-row ${tone}"><span>${label}</span><strong>${currency(amount)}</strong></div>`;
+
         const result = await Swal.fire({
-            title: 'Close register?',
-            html: `<p class="tf-pos-register-confirmation-copy">Are you sure you want to close the current POS register?</p><div class="tf-pos-register-dialog">
+            title: 'Close Register & Reconcile',
+            html: `<p class="tf-pos-register-confirmation-copy">Review the expected cash before confirming this shift.</p><div class="tf-pos-reconciliation-summary">
+                ${reconciliationRow('Opening Cash', reconciliation.opening_cash)}
+                ${reconciliationRow('Cash Sales', reconciliation.cash_sales)}
+                ${reconciliationRow('Cash Refunds', -reconciliation.cash_refunds, 'is-negative')}
+                ${reconciliationRow('Cash In', reconciliation.cash_in)}
+                ${reconciliationRow('Cash Out', -reconciliation.cash_out, 'is-negative')}
+                ${reconciliationRow('Expected Closing Cash', reconciliation.expected_cash, 'is-total')}
+            </div><div class="tf-pos-register-dialog">
                 <div><label for="pos-closing-cash">Actual Closing Cash</label><input id="pos-closing-cash" class="swal2-input" type="number" min="0" step="1" inputmode="numeric" value="0"></div>
+                <div class="tf-pos-reconciliation-row is-variance"><span data-pos-variance-label>Cash Shortage</span><strong data-pos-variance>Rs 0</strong></div>
                 <div><label for="pos-closing-note">Closing Note <span>Optional</span></label><textarea id="pos-closing-note" class="swal2-textarea" rows="3" maxlength="500"></textarea></div>
             </div>`,
             showCancelButton: true,
@@ -1058,7 +1196,19 @@
             allowEscapeKey: () => !Swal.isLoading(),
             didOpen: (popup) => {
                 submitRegisterDialogOnEnter(popup);
-                focusElement(document.getElementById('pos-closing-cash'), true, true);
+                const actualCash = document.getElementById('pos-closing-cash');
+                const variance = popup.querySelector('[data-pos-variance]');
+                const varianceLabel = popup.querySelector('[data-pos-variance-label]');
+                const renderVariance = () => {
+                    const difference = whole(actualCash.value) - whole(reconciliation.expected_cash);
+                    variance.textContent = currency(Math.abs(difference));
+                    varianceLabel.textContent = difference > 0 ? 'Cash Excess' : difference < 0 ? 'Cash Shortage' : 'Balanced';
+                    variance.closest('.tf-pos-reconciliation-row').classList.toggle('is-positive', difference > 0);
+                    variance.closest('.tf-pos-reconciliation-row').classList.toggle('is-negative', difference < 0);
+                };
+                actualCash.addEventListener('input', renderVariance);
+                renderVariance();
+                focusElement(actualCash, true, true);
             },
             customClass: {
                 popup: 'tf-pos-register-modal',
@@ -1089,65 +1239,125 @@
         await showRegisterFeedback('closed');
         window.location.reload();
     };
-    const beginEdit = (line) => {
-        editingId = line.id;
-        selectedCartId = line.id;
-        editSnapshot = { ...line };
-        renderCart();
-        focusEditedRow();
+    const recordCashMovement = async (type) => {
+        if (!config.registerId) return;
+
+        const result = await Swal.fire({
+            title: type,
+            html: `<div class="tf-pos-register-dialog"><div><label for="pos-cash-movement-amount">Amount</label><input id="pos-cash-movement-amount" class="swal2-input" type="number" min="1" step="1" inputmode="numeric"></div><div><label for="pos-cash-movement-reason">Reason</label><textarea id="pos-cash-movement-reason" class="swal2-textarea" rows="3" maxlength="500"></textarea></div><div><label for="pos-cash-movement-reference">Reference <span>Optional</span></label><input id="pos-cash-movement-reference" class="swal2-input" maxlength="120"></div></div>`,
+            showCancelButton: true,
+            confirmButtonText: `Record ${type}`,
+            cancelButtonText: 'Cancel',
+            buttonsStyling: false,
+            focusConfirm: false,
+            showLoaderOnConfirm: true,
+            allowOutsideClick: () => !Swal.isLoading(),
+            customClass: { popup: 'tf-pos-register-modal', actions: 'tf-pos-register-actions', confirmButton: type === 'Cash In' ? 'btn btn-success' : 'btn btn-warning', cancelButton: 'btn btn-outline-secondary' },
+            didOpen: (popup) => { submitRegisterDialogOnEnter(popup); focusElement(document.getElementById('pos-cash-movement-amount'), true, true); },
+            preConfirm: async () => {
+                const amount = document.getElementById('pos-cash-movement-amount').value.trim();
+                const reason = document.getElementById('pos-cash-movement-reason').value.trim();
+                if (!/^\d+$/.test(amount) || whole(amount) < 1) { Swal.showValidationMessage('Enter a whole amount greater than Rs 0.'); return false; }
+                if (!reason) { Swal.showValidationMessage('A reason is required.'); return false; }
+                try {
+                    return await request(`${config.registerBaseUrl}/${config.registerId}/cash-movements`, 'POST', { type, amount: whole(amount), reason, reference: document.getElementById('pos-cash-movement-reference').value.trim() });
+                } catch (error) {
+                    Swal.showValidationMessage(error.message || `Unable to record ${type}.`);
+                    return false;
+                }
+            },
+        });
+        if (result.isConfirmed) flash('success', `${type} recorded`);
     };
-    const cancelEdit = () => {
-        if (editingId !== null && editSnapshot) cart.set(editingId, editSnapshot);
-        editingId = null;
-        editSnapshot = null;
+    /* Legacy modal cart editing intentionally disabled. Inline cart fields below are the only editor.
+    const editLine = async (line) => {
+        if (!window.Swal) return beginEdit(line);
+        const canDiscount = Boolean(config.canApplyDiscount);
+        const currentType = line.discountType || (whole(line.discount) > 0 ? 'percentage' : 'none');
+        const standardPrice = whole(line.standardPrice ?? line.price);
+        const hasPriceOverride = whole(line.price) !== standardPrice;
+        const result = await Swal.fire({
+            title: 'Edit cart item',
+            html: `<div class="row g-2 text-start">
+                <div class="col-6"><label class="form-label">Quantity</label><input id="pos-line-qty" class="swal2-input m-0 w-100" type="number" min="1" max="${line.stock}" step="1" value="${line.quantity}"></div>
+                <div class="col-6"><label class="form-label">Unit price</label><input id="pos-line-price" class="swal2-input m-0 w-100" type="number" min="0" step="1" value="${line.price}" ${config.canUseCustomPrice ? '' : 'readonly'}></div>
+                <div class="col-12"><small class="text-muted">Standard price: <strong>Rs ${numberWithCommas(standardPrice)}</strong>${config.canUseCustomPrice ? ' · Any different price requires a reason.' : ''}</small></div>
+                ${config.canUseCustomPrice ? `<div id="pos-line-override-reason-wrap" class="col-12 ${hasPriceOverride ? '' : 'd-none'}"><label class="form-label">Override reason <span class="text-danger">*</span></label><div class="input-group"><input id="pos-line-override-reason" class="swal2-input m-0 flex-grow-1" maxlength="500" value="${escapeHtml(line.priceOverrideReason || '')}" placeholder="Why is this price being changed?"><button type="button" id="pos-line-reset-price" class="btn btn-outline-secondary">Use standard</button></div></div>` : ''}
+                ${canDiscount ? `<div class="col-6"><label class="form-label">Discount type</label><select id="pos-line-discount-type" class="swal2-select m-0 w-100"><option value="none">None</option><option value="percentage">Percentage</option><option value="fixed">Fixed Amount</option></select></div><div class="col-6"><label class="form-label" id="pos-line-discount-label">Discount value</label><input id="pos-line-discount-value" class="swal2-input m-0 w-100" type="number" min="0" step="0.01" value="${Number(line.discountValue ?? line.discount ?? 0)}"></div>` : '<div class="col-12"><small class="text-muted">You are not permitted to apply line discounts.</small></div>'}
+                <div class="col-12 small border-top pt-2 mt-2"><div class="d-flex justify-content-between"><span>Gross total</span><strong id="pos-line-gross"></strong></div><div class="d-flex justify-content-between"><span>Discount</span><strong id="pos-line-discount-amount"></strong></div><div class="d-flex justify-content-between"><span>Net total</span><strong id="pos-line-net"></strong></div></div>
+            </div>`,
+            showCancelButton: true, confirmButtonText: 'Update Item', focusConfirm: false,
+            didOpen: () => {
+                const type = document.querySelector('#pos-line-discount-type');
+                const value = document.querySelector('#pos-line-discount-value');
+                const qtyInput = document.querySelector('#pos-line-qty'); const priceInput = document.querySelector('#pos-line-price');
+                const overrideReason = document.querySelector('#pos-line-override-reason'); const overrideReasonWrap = document.querySelector('#pos-line-override-reason-wrap');
+                const resetPrice = document.querySelector('#pos-line-reset-price');
+                if (type) type.value = currentType;
+                const preview = () => { const qtyValue = whole(qtyInput.value), priceValue = whole(priceInput.value), kind = type?.value || 'none', amount = Number(value?.value || 0) || 0, gross = qtyValue * priceValue, applied = kind === 'percentage' ? gross * amount / 100 : (kind === 'fixed' ? amount : 0); if (overrideReasonWrap) overrideReasonWrap.classList.toggle('d-none', priceValue === standardPrice); const discountLabel = document.querySelector('#pos-line-discount-label'); if (discountLabel) discountLabel.textContent = kind === 'percentage' ? 'Discount %' : 'Discount amount'; document.querySelector('#pos-line-gross').textContent = currency(gross); document.querySelector('#pos-line-discount-amount').textContent = `- ${currency(applied)}`; document.querySelector('#pos-line-net').textContent = currency(Math.max(0, gross - applied)); };
+                [type, value, qtyInput, priceInput].filter(Boolean).forEach(input => { input.addEventListener('input', preview); input.addEventListener('change', preview); }); preview(); qtyInput.focus(); qtyInput.select();
+                resetPrice?.addEventListener('click', () => { priceInput.value = standardPrice; if (overrideReason) overrideReason.value = ''; preview(); priceInput.focus(); });
+            },
+            preConfirm: () => {
+                const quantity = whole(document.querySelector('#pos-line-qty').value); const price = whole(document.querySelector('#pos-line-price').value);
+                const type = document.querySelector('#pos-line-discount-type')?.value || 'none'; const value = Number(document.querySelector('#pos-line-discount-value')?.value || 0);
+                const priceOverrideReason = (document.querySelector('#pos-line-override-reason')?.value || '').trim();
+                const gross = quantity * price;
+                if (quantity < 1 || quantity > line.stock) return Swal.showValidationMessage(`Quantity must be between 1 and ${line.stock}.`);
+                if (price !== standardPrice && !config.canUseCustomPrice) return Swal.showValidationMessage('You are not permitted to override the standard POS price.');
+                if (price !== standardPrice && !priceOverrideReason) return Swal.showValidationMessage('Provide a reason for the price override.');
+                if (!Number.isFinite(value) || value < 0 || (type === 'percentage' && value > 100) || (type === 'fixed' && value > gross)) return Swal.showValidationMessage('Enter a valid line discount.');
+                return { quantity, price, priceOverrideReason: price === standardPrice ? null : priceOverrideReason, discountType: type, discountValue: type === 'none' ? 0 : value };
+            },
+        });
+        if (!result.isConfirmed) return;
+        Object.assign(line, result.value, { standardPrice, discount: result.value.discountType === 'percentage' ? result.value.discountValue : 0 });
         renderCart();
-    };
-    const saveEdit = () => {
-        const invalidField = $(`[data-cart-id="${editingId}"] [data-cart-field]:invalid`);
-        if (invalidField) {
-            const line = cart.get(editingId);
-            const message = $('[data-cart-error]', invalidField.closest('[data-cart-id]'))?.textContent || invalidField.validationMessage;
-            flash('warning', invalidField.dataset.cartField === 'quantity' ? 'Insufficient stock' : 'Invalid cart value', message || `Only ${line?.stock ?? 0} units are available.`);
-            invalidField.reportValidity();
-            invalidField.focus();
-            return;
-        }
-        editingId = null;
-        editSnapshot = null;
-        renderCart();
-        search.value = '';
-        barcode.value = '';
         focusElement(search);
     };
-    const syncEditedRowValidation = (row) => {
-        const fields = $$('[data-cart-field]', row);
-        fields.forEach((field) => field.classList.toggle('is-invalid', !field.validity.valid));
-        const invalidField = fields.find((field) => !field.validity.valid);
-        const error = $('[data-cart-error]', row);
-        const save = $('[data-cart-action="save"]', row);
-        if (error) error.textContent = invalidField?.validationMessage || '';
-        if (save) save.disabled = Boolean(invalidField);
-        return !invalidField;
+    */
+    const syncInlinePriceState = (row, line) => {
+        const standardPrice = whole(line.standardPrice ?? line.price);
+        const isOverride = whole(line.price) !== standardPrice;
+        const context = $('[data-cart-price-context]', row);
+        const wrap = $('[data-cart-override-wrap]', row);
+        const reason = $('[data-cart-override-reason]', row);
+
+        if (context) {
+            context.textContent = `Std: ${currency(standardPrice)}${isOverride ? ' · Override' : ''}`;
+            context.classList.toggle('is-overridden', isOverride);
+        }
+        if (wrap) wrap.hidden = !isOverride;
+        if (reason) {
+            reason.required = isOverride;
+            if (!isOverride) {
+                line.priceOverrideReason = null;
+                reason.value = '';
+            }
+        }
     };
     const setWholeCartField = (input, line, row) => {
         const field = input.dataset.cartField;
-        const max = field === 'quantity' ? line.stock : field === 'discount' || field === 'tax' ? 100 : null;
         let message = '';
         const rawValue = rawMoney(input.value);
-        if (!/^\d+$/.test(rawValue)) {
+        if (field === 'price' && !config.canUseCustomPrice) {
+            message = 'You do not have permission to override the standard POS price.';
+        } else if (!/^\d+$/.test(rawValue)) {
             message = 'Only whole numbers are allowed.';
         } else {
             const value = whole(rawValue);
             if (value < (field === 'quantity' ? 1 : 0)) {
-                message = field === 'quantity' ? 'Quantity must be at least 1.' : `Enter a value between 0 and ${max}.`;
-            } else if (max !== null && value > max) {
-                message = field === 'quantity' ? `Insufficient stock. Only ${line.stock} units are available.` : `Enter a value between 0 and ${max}.`;
+                message = field === 'quantity' ? 'Quantity must be at least 1.' : 'Unit price cannot be negative.';
+            } else if (field === 'quantity' && value > line.stock) {
+                message = `Insufficient stock. Only ${line.stock} units are available.`;
             } else {
                 line[field] = value;
             }
         }
         input.setCustomValidity(message);
-        return syncEditedRowValidation(row);
+        input.classList.toggle('is-invalid', Boolean(message));
+        if (!message && field === 'price') syncInlinePriceState(row, line);
+        return !message;
     };
     const selectCartRow = (id) => {
         if (!cart.has(id)) return;
@@ -1162,9 +1372,8 @@
         ...(deliveryRequired?.value === '1' ? [deliveryAddress].filter(Boolean) : []),
         discount,
         tax,
-        cash,
-        paymentMethod,
-        reference,
+        paymentMode,
+        ...(isSplitPayment() ? $$('[data-pos-split-method], [data-pos-split-amount], [data-pos-split-reference]') : [cash, paymentMethod, reference]),
         completeButton,
     ];
     const visibleCheckoutFields = () => checkoutFields().filter((field) => field
@@ -1262,23 +1471,42 @@
         selectCartRow(line.id);
         const action = event.target.closest('[data-cart-action]')?.dataset.cartAction;
         if (!action) return;
-        if (action === 'edit') beginEdit(line);
-        if (action === 'cancel') cancelEdit();
-        if (action === 'save') saveEdit();
+        if (action === 'reset-price') {
+            line.price = whole(line.standardPrice ?? line.price);
+            line.priceOverrideReason = null;
+            const priceInput = $('[data-cart-field="price"]', row);
+            if (priceInput) priceInput.value = line.price;
+            syncInlinePriceState(row, line);
+            refreshInlineRow(row, line);
+            scheduleDraftSync();
+            return;
+        }
         if (action === 'remove') {
             cart.delete(line.id);
-            if (editingId === line.id) { editingId = null; editSnapshot = null; }
             renderCart();
             focusElement(search);
         }
     });
-    cartBody.addEventListener('input', (event) => {
+    const applyInlineCartField = (event) => {
         const input = event.target.closest('[data-cart-field]');
         const row = event.target.closest('[data-cart-id]');
         if (!input || !row) return;
         const line = cart.get(Number(row.dataset.cartId));
         if (!line || !setWholeCartField(input, line, row)) return;
-        refreshEditedRow(row, line);
+        refreshInlineRow(row, line);
+        scheduleDraftSync();
+    };
+    cartBody.addEventListener('input', applyInlineCartField);
+    cartBody.addEventListener('change', applyInlineCartField);
+    cartBody.addEventListener('input', (event) => {
+        const input = event.target.closest('[data-cart-override-reason]');
+        const row = event.target.closest('[data-cart-id]');
+        if (!input || !row) return;
+        const line = cart.get(Number(row.dataset.cartId));
+        if (!line) return;
+        line.priceOverrideReason = input.value.trim() || null;
+        input.setCustomValidity(input.required && !line.priceOverrideReason ? 'Provide a reason for the price override.' : '');
+        scheduleDraftSync();
     });
     cartBody.addEventListener('keydown', (event) => {
         const row = event.target.closest('[data-cart-id]');
@@ -1287,17 +1515,33 @@
             event.preventDefault();
             return;
         }
-        if (event.key === 'Enter' && editingId === Number(row.dataset.cartId)) {
+        if (event.key === 'Tab' && !event.shiftKey && event.target.matches('[data-cart-field], [data-cart-override-reason]')) {
+            const priceInput = $('[data-cart-field="price"]', row);
+            const overrideReason = $('[data-cart-override-reason]', row);
             event.preventDefault();
-            const fields = cartFields(row);
+
+            if (event.target.matches('[data-cart-field="quantity"]') && priceInput && !priceInput.readOnly) {
+                focusElement(priceInput, true);
+            } else if (event.target === priceInput && overrideReason && !overrideReason.closest('[hidden]')) {
+                focusElement(overrideReason, true);
+            } else {
+                // End cart editing at product search, not Checkout. This lets
+                // a cashier immediately add the next item to the same sale.
+                focusElement(search, true);
+            }
+            return;
+        }
+        if (event.key === 'Enter' && event.target.matches('[data-cart-field], [data-cart-override-reason]')) {
+            event.preventDefault();
+            const fields = [...cartFields(row), $('[data-cart-override-reason]', row)]
+                .filter((field) => field && !field.readOnly && !field.disabled && !field.closest('[hidden]'));
             const currentIndex = fields.indexOf(event.target);
             if (event.target.validity.valid && currentIndex !== -1 && currentIndex < fields.length - 1) {
                 focusElement(fields[currentIndex + 1], true);
             } else {
-                saveEdit();
+                focusElement(search, true);
             }
         }
-        if (editingId === Number(row.dataset.cartId)) focusPreviousIfEmpty(event, cartFields(row));
     });
     [discount, tax].forEach((input) => {
         input.addEventListener('input', updateTotals);
@@ -1317,14 +1561,42 @@
     [quickCustomerName, quickCustomerPhone, quickCustomerCity, quickCustomerAddress]
         .filter(Boolean)
         .forEach((input) => input.addEventListener('input', () => updateTotals()));
-    paymentType.addEventListener('change', () => {
-        paymentMethod.value = paymentType.value === 'Cash' ? 'Cash' : paymentType.value;
+    paymentMode?.addEventListener('change', () => {
+        setPaymentMode(paymentMode.value);
         updateTotals();
     });
     paymentMethod.addEventListener('change', () => {
         paymentType.value = paymentMethod.value;
         updateTotals();
     });
+    addSplitPayment?.addEventListener('click', addSplitPaymentRow);
+    splitPaymentRows?.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-pos-remove-split-payment]');
+        if (!button) return;
+        const row = button.closest('[data-pos-split-row]');
+        splitPayments.splice(Number(row?.dataset.posSplitRow), 1);
+        renderSplitPayments();
+        updateTotals();
+    });
+    splitPaymentRows?.addEventListener('input', (event) => {
+        const row = event.target.closest('[data-pos-split-row]');
+        const payment = splitPayments[Number(row?.dataset.posSplitRow)];
+        if (!payment) return;
+        if (event.target.matches('[data-pos-split-amount]')) payment.amount = event.target.value;
+        if (event.target.matches('[data-pos-split-reference]')) payment.reference = event.target.value;
+        updateTotals();
+    });
+    splitPaymentRows?.addEventListener('change', (event) => {
+        if (!event.target.matches('[data-pos-split-method]')) return;
+        const row = event.target.closest('[data-pos-split-row]');
+        const payment = splitPayments[Number(row?.dataset.posSplitRow)];
+        if (!payment) return;
+        payment.method = event.target.value;
+        if (payment.method === 'Cash') payment.reference = '';
+        renderSplitPayments();
+        updateTotals();
+    });
+    setPaymentMode('single', { preserve: true });
     search.addEventListener('input', () => {
         keyboardProductSelection = false;
         clearTimeout(searchTimer);
@@ -1391,6 +1663,8 @@
     });
     $('[data-pos-open-register]')?.addEventListener('click', openRegister);
     $('[data-pos-close-register]')?.addEventListener('click', closeRegister);
+    $('[data-pos-cash-in]')?.addEventListener('click', () => recordCashMovement('Cash In'));
+    $('[data-pos-cash-out]')?.addEventListener('click', () => recordCashMovement('Cash Out'));
     const bindTopSearch = (input, suggestions, error, getMatches, getActive, setActive, render, search, submit) => {
         if (!input) return;
         input.addEventListener('input', () => {

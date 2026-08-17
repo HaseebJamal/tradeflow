@@ -4,6 +4,7 @@ use App\Models\Order;
 use App\Services\FinanceCalculator;
 use App\Services\SubscriptionLifecycleService;
 use App\Services\RenewalInvoiceService;
+use App\Services\OperationalAlertService;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
@@ -33,5 +34,15 @@ Artisan::command('tradeflow:generate-renewal-invoices', function (RenewalInvoice
 Schedule::command('tradeflow:sync-subscription-lifecycle')->daily();
 Schedule::command('tradeflow:generate-renewal-invoices')
     ->dailyAt('00:05')
+    ->timezone(config('app.timezone'))
+    ->withoutOverlapping();
+
+Artisan::command('tradeflow:sync-operational-alerts', function (OperationalAlertService $alerts) {
+    $alerts->synchronizeAll();
+    $this->info('Low-stock and batch-expiry alerts synchronized.');
+})->purpose('Create idempotent actionable inventory alerts.');
+
+Schedule::command('tradeflow:sync-operational-alerts')
+    ->dailyAt('00:10')
     ->timezone(config('app.timezone'))
     ->withoutOverlapping();

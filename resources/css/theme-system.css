@@ -616,6 +616,9 @@ input:-webkit-autofill:focus {
 .tf-access-expiry-alert strong { color: var(--heading); display: block; font-family: var(--font-heading); font-size: 0.9rem; margin-bottom: 0.15rem; }
 .tf-access-expiry-alert p { color: var(--text); font-size: 0.875rem; line-height: 1.45; }
 .tf-access-expiry-alert__actions { align-items: center; display: flex; flex: 0 0 auto; gap: 0.5rem; }
+.tf-access-expiry-alert__contact { border-color: var(--warning); color: var(--warning); }
+.tf-access-expiry-alert__contact:hover,
+.tf-access-expiry-alert__contact:focus { background: var(--warning); border-color: var(--warning); color: #fff; }
 .tf-access-expiry-alert__actions .btn-link { color: var(--text); font-size: 0.8125rem; text-decoration: none; }
 .tf-access-expiry-alert__actions .btn-link:hover,
 .tf-access-expiry-alert__actions .btn-link:focus { color: var(--heading); text-decoration: underline; }
@@ -1350,15 +1353,22 @@ body.pp-landing-page .pp-final-card h2 { color: #ffffff !important; }
 .tf-pos-cart-table td { border-color: var(--border) !important; color: var(--text) !important; }
 .tf-pos-cart-col-index { width: 34px !important; }
 .tf-pos-cart-col-product { width: auto !important; }
-.tf-pos-cart-col-quantity { width: 64px !important; }
-.tf-pos-cart-col-price { width: 90px !important; }
+.tf-pos-cart-col-quantity { width: 78px !important; }
+.tf-pos-cart-col-price { width: 126px !important; }
 .tf-pos-cart-col-total { width: 90px !important; }
-.tf-pos-cart-col-actions { width: 140px !important; }
+.tf-pos-cart-col-actions { width: 78px !important; }
 .tf-pos-cart-table :is(th:nth-child(1), th:nth-child(3), th:nth-child(4), th:nth-child(5), th:nth-child(6), td:nth-child(1), td:nth-child(3), td:nth-child(4), td:nth-child(5), td:nth-child(6)) { text-align: center; white-space: nowrap; }
 .tf-pos-cart-table :is(th, td) { padding-inline: 0.25rem !important; }
-.tf-pos-cart-actions-cell { width: 140px !important; min-width: 140px !important; white-space: nowrap !important; }
+.tf-pos-cart-actions-cell { width: 78px !important; min-width: 78px !important; white-space: nowrap !important; }
 .tf-pos-cart-actions { width: 100%; gap: 0.35rem !important; justify-content: center; flex-wrap: nowrap !important; }
 .tf-pos-cart-actions .btn { flex: 1 1 0; font-size: 0.8125rem !important; min-height: 34px !important; padding-inline: 0.4rem !important; }
+.tf-pos-cart-quantity-input { min-width: 70px !important; }
+.tf-pos-cart-price-input { min-width: 110px !important; }
+.tf-pos-price-context { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; }
+.tf-pos-price-context.is-overridden { color: var(--warning, #b7791f); }
+.tf-pos-price-reason { display: flex; gap: 0.2rem; align-items: center; margin-top: 0.25rem; }
+.tf-pos-price-reason .form-control { min-width: 0; font-size: 0.72rem; }
+.tf-pos-price-reason .btn { flex: 0 0 auto; min-height: 0 !important; padding: 0.1rem 0.2rem !important; font-size: 0.68rem !important; }
 .tf-pos-checkout-scroll { padding-inline: 1rem; }
 .tf-pos-checkout-scroll .form-control,
 .tf-pos-checkout-scroll .form-select { min-height: 43px !important; }
@@ -1804,7 +1814,7 @@ body.pp-landing-page .pp-final-card h2 { color: #ffffff !important; }
 .tf-report-mini-card small { color: var(--muted); font-family: var(--font-body); font-size: .7rem; line-height: 1.35; }
 .tf-report-metric-groups { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1rem; }
 .tf-report-metric-group { padding: 1rem; }
-.tf-report-metric-group header { margin-bottom: .8rem; }
+.tf-report-metric-group header { align-items: flex-start; display: flex; gap: .75rem; justify-content: space-between; margin-bottom: .8rem; }
 .tf-report-mini-grid { display: grid; gap: .5rem; grid-template-columns: repeat(var(--tf-report-columns, 2), minmax(0, 1fr)); }
 .tf-report-mini-grid--3 { --tf-report-columns: 3; }
 .tf-report-mini-grid--4 { --tf-report-columns: 2; }
@@ -1814,6 +1824,17 @@ body.pp-landing-page .pp-final-card h2 { color: #ffffff !important; }
 .tf-report-mini-card strong { color: var(--heading); font-family: var(--font-heading); font-size: .95rem; line-height: 1.35; margin: .08rem 0; }
 .tf-report-mini-card__icon { align-items: center; background: var(--surface-soft); border-radius: 8px; color: var(--primary); display: inline-flex; flex: 0 0 28px; height: 28px; justify-content: center; }
 .tf-report-mini-card__icon.is-green { color: #0f9c78; }.tf-report-mini-card__icon.is-amber { color: #c98200; }.tf-report-mini-card__icon.is-orange { color: #d95d17; }.tf-report-mini-card__icon.is-red { color: #d63f55; }.tf-report-mini-card__icon.is-slate { color: #64748b; }
+.tf-profitability-waterfall { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.tf-profitability-waterfall__row { align-items: center; color: var(--text); display: flex; font-family: var(--font-body); font-size: .8rem; gap: 1rem; justify-content: space-between; padding: .5rem .7rem; }
+.tf-profitability-waterfall__row + .tf-profitability-waterfall__row { border-top: 1px solid var(--border); }
+.tf-profitability-waterfall__row strong { color: var(--heading); font-family: var(--font-heading); font-size: .84rem; white-space: nowrap; }
+.tf-profitability-waterfall__row.is-deduction { color: var(--muted); }
+.tf-profitability-waterfall__row.is-total { background: var(--surface-soft); font-weight: 800; }
+.tf-profitability-waterfall__row.is-result { background: color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--heading); font-weight: 800; }
+.tf-profitability-waterfall__row.is-result strong { color: var(--success); font-size: .92rem; }
+.tf-profitability-waterfall__row.is-result.is-loss { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+.tf-profitability-waterfall__row.is-result.is-loss strong { color: var(--danger); }
+.tf-profitability-waterfall__note { color: var(--muted); font-family: var(--font-body); font-size: .72rem; line-height: 1.4; margin-top: .55rem; }
 .tf-report-chart-grid { display: grid; gap: 1rem; grid-template-columns: 2fr 1fr 1fr; }
 .tf-report-chart-card { min-height: 258px; padding: 1rem; }
 .tf-report-chart-card header { align-items: flex-start; display: flex; gap: .5rem; justify-content: space-between; }
@@ -2494,6 +2515,17 @@ table.tf-has-actions-column:not(.tf-pos-cart-table) > :is(thead, tbody) > tr > .
     margin: 0 0 1rem;
     text-align: left;
 }
+.tf-pos-cash-actions { align-items: center; display: flex; gap: .35rem; padding-top: 1rem; white-space: nowrap; }
+.tf-pos-cash-actions .btn { align-items: center; display: inline-flex; font-size: .75rem; gap: .3rem; min-height: 40px; padding-inline: .55rem; }
+.tf-pos-reconciliation-summary { border: 1px solid var(--border); border-radius: 11px; display: grid; margin: 0 0 .9rem; overflow: hidden; }
+.tf-pos-reconciliation-row { align-items: center; border-top: 1px solid var(--border); color: var(--text); display: flex; font-family: var(--font-body); font-size: .8rem; justify-content: space-between; padding: .48rem .65rem; text-align: left; }
+.tf-pos-reconciliation-row:first-child { border-top: 0; }
+.tf-pos-reconciliation-row.is-total { background: var(--surface-soft); color: var(--heading); font-weight: 800; }
+.tf-pos-reconciliation-row.is-negative strong { color: var(--danger); }
+.tf-pos-reconciliation-row.is-positive strong { color: var(--success); }
+.tf-pos-reconciliation-row.is-variance { border: 1px solid var(--border); border-radius: 9px; margin: -.1rem 0 .8rem; }
+@media (min-width: 1200px) { .tf-pos-top-inputs { grid-template-columns: repeat(3, minmax(0, 1fr)) max-content 142px; } }
+@media (max-width: 1199.98px) { .tf-pos-cash-actions { padding-top: 0; } }
 
 /* Dropdown actions receive the same semantic language as their matching
  * buttons.  The JavaScript annotator applies these classes from labels only;
@@ -3300,3 +3332,178 @@ body.sidebar-collapsed .tf-sidebar .tf-sidebar-brand .tf-brand-mark {
 @media (max-width: 1199.98px) { .tf-business-kpi-grid, .tf-business-secondary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.tf-business-kpi-grid--1, .tf-business-secondary-grid--1 { grid-template-columns: minmax(0, 360px); } }
 @media (max-width: 991.98px) { .tf-business-command-header, .tf-business-insights, .tf-business-lower-grid { align-items: stretch; grid-template-columns: 1fr; }.tf-business-command-header { flex-direction: column; }.tf-business-command-actions { justify-content: flex-start; } }
 @media (max-width: 575.98px) { .tf-business-kpi-grid, .tf-business-secondary-grid { grid-template-columns: 1fr; }.tf-business-command-actions .btn { flex: 1 1 calc(50% - .5rem); justify-content: center; }.tf-business-kpi { min-height: 134px; }.tf-business-panel { padding: 1rem; }.tf-business-chart { gap: .35rem; padding-inline: .55rem; }.tf-business-chart__value { font-size: .6rem; }.tf-business-chart__bar { max-width: 27px; } }
+
+/* Payments & Billing: renewal invoices have a dedicated compact table layout.
+ * This keeps the existing lifecycle data and actions intact without forcing a
+ * desktop horizontal scrollbar. */
+.tf-renewal-invoices-card { overflow: visible !important; }
+.tf-renewal-invoices-heading { border-bottom: 1px solid var(--border); padding: 1rem 1.1rem; }
+.tf-renewal-invoices-heading h2 { color: var(--heading); font-family: var(--font-heading); font-size: 1.05rem; font-weight: 800; letter-spacing: -.025em; margin: 0 0 .2rem; }
+.tf-renewal-invoices-heading p { color: var(--muted); font-size: .78rem; line-height: 1.45; margin: 0; max-width: 920px; }
+.tf-renewal-invoice-table { table-layout: fixed; width: 100%; }
+.tf-renewal-invoice-table .tf-renewal-col-invoice { width: 13%; }
+.tf-renewal-invoice-table .tf-renewal-col-business { width: 17%; }
+.tf-renewal-invoice-table .tf-renewal-col-amount { width: 10%; }
+.tf-renewal-invoice-table .tf-renewal-col-access-end,
+.tf-renewal-invoice-table .tf-renewal-col-due { width: 9%; }
+.tf-renewal-invoice-table .tf-renewal-col-status { width: 10.5%; }
+.tf-renewal-invoice-table .tf-renewal-col-delivery { width: 9.5%; }
+.tf-renewal-invoice-table .tf-renewal-col-created { width: 12%; }
+.tf-renewal-invoice-table .tf-renewal-col-actions { width: 10%; }
+.tf-renewal-invoice-table > :is(thead, tbody) > tr > :is(th, td) { border-color: var(--border); padding: .7rem .55rem; vertical-align: middle; }
+.tf-renewal-invoice-table thead th { background: var(--surface-soft); color: var(--muted); font-size: .665rem; font-weight: 800; letter-spacing: .035em; line-height: 1.25; text-transform: uppercase; white-space: nowrap; }
+.tf-renewal-invoice-table tbody td { color: var(--text); font-size: .77rem; line-height: 1.35; }
+.tf-renewal-invoice-table .tf-renewal-invoice-id { color: var(--heading); font-size: .76rem; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-renewal-business-cell { min-width: 0; }
+.tf-renewal-business-name { -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: var(--heading); display: -webkit-box; font-size: .79rem; font-weight: 750; line-height: 1.3; overflow: hidden; }
+.tf-renewal-owner { color: var(--muted); display: block; font-size: .7rem; line-height: 1.3; margin-top: .15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-renewal-amount,
+.tf-renewal-date { color: var(--heading); font-weight: 650; white-space: nowrap; }
+.tf-renewal-status .tf-badge { font-size: .64rem; line-height: 1.2; max-width: 100%; padding: .3rem .45rem; white-space: nowrap; }
+.tf-renewal-delivery { color: var(--muted) !important; font-size: .72rem !important; }
+.tf-renewal-delivery > span { -webkit-box-orient: vertical; -webkit-line-clamp: 2; display: -webkit-box; line-height: 1.3; overflow: hidden; }
+.tf-renewal-created { color: var(--muted) !important; font-size: .71rem !important; line-height: 1.35 !important; }
+table.tf-renewal-invoice-table.tf-has-actions-column:not(.tf-pos-cart-table) > :is(thead, tbody) > tr > .tf-table-action-cell.tf-renewal-col-actions { min-width: 98px !important; padding-left: .35rem !important; padding-right: .55rem !important; width: 10% !important; }
+.tf-renewal-invoice-table .tf-table-action-group { gap: .3rem; min-width: 0; }
+.tf-renewal-invoice-table .tf-billing-table-button { min-width: 48px; padding-inline: .55rem; }
+.tf-renewal-invoice-table .tf-billing-more-button,
+.tf-renewal-invoice-table .tf-table-action-group .dropdown-toggle[aria-label] { min-width: 32px; width: 32px; }
+.tf-renewal-invoice-table .dropdown-menu { z-index: 1085; }
+
+@media (max-width: 1100px) {
+    .tf-renewal-invoice-table { min-width: 980px; }
+}
+
+@media (max-width: 767.98px) {
+    .tf-renewal-invoices-heading { padding: .9rem 1rem; }
+    .tf-renewal-invoice-table { min-width: 940px; }
+}
+
+:root[data-theme='dark'] .tf-renewal-invoice-table thead th { background: var(--surface-soft); color: var(--muted); }
+:root[data-theme='dark'] .tf-renewal-invoice-table tbody td { color: var(--text); }
+:root[data-theme='dark'] .tf-renewal-invoice-table .tf-renewal-invoice-id,
+:root[data-theme='dark'] .tf-renewal-invoice-table .tf-renewal-business-name,
+:root[data-theme='dark'] .tf-renewal-invoice-table .tf-renewal-amount,
+:root[data-theme='dark'] .tf-renewal-invoice-table .tf-renewal-date { color: var(--text); }
+
+/* Product barcode labels -------------------------------------------------- */
+.tf-label-select-column { text-align: center; width: 40px; }
+.product-list-table .tf-label-select-column .form-check-input { cursor: pointer; margin: 0; }
+.tf-label-config-dialog { max-width: 880px; }
+.tf-label-config-dialog .modal-content { border: 0; box-shadow: 0 18px 48px rgba(15, 23, 42, .18); }
+.tf-label-format-options { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.tf-label-format-options .btn { min-width: 112px; }
+.tf-label-selection-table { font-size: .82rem; }
+.tf-label-selection-table thead th { background: var(--surface-soft); color: var(--muted); font-size: .7rem; letter-spacing: .02em; text-transform: uppercase; vertical-align: middle; white-space: nowrap; }
+.tf-label-selection-table td { vertical-align: middle; }
+.tf-label-quantity-heading { min-width: 96px; }
+.tf-label-quantity-input { min-width: 76px; width: 84px; }
+
+.tf-label-preview-page { margin: 0 auto; max-width: 1120px; padding: 1.5rem; }
+.tf-label-sheet { background: var(--surface); border: 1px solid var(--border); border-radius: .85rem; padding: 1.25rem; }
+.tf-label-sheet--a4 { display: grid; gap: 8mm 5mm; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tf-label-sheet--thermal { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); justify-items: center; }
+.tf-print-label { align-content: center; background: #fff; border: 1px dashed #9ca3af; color: #000; display: grid; justify-items: center; min-height: 38mm; overflow: hidden; padding: 3mm; text-align: center; width: 100%; }
+.tf-label-sheet--a4 .tf-print-label { min-height: 38mm; }
+.tf-label-sheet--thermal .tf-print-label { min-height: 40mm; width: 58mm; }
+.tf-print-label-business { font-size: 8pt; font-weight: 700; line-height: 1.15; margin-bottom: 1mm; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-print-label-product { font-size: 8.5pt; font-weight: 700; line-height: 1.2; max-height: 2.4em; overflow: hidden; }
+.tf-print-label-sku { font-size: 7pt; line-height: 1.15; }
+.tf-print-label-barcode { line-height: 0; margin: 1.5mm 0 .4mm; max-width: 100%; }
+.tf-print-label-barcode svg { display: block; height: 13mm; max-width: 100%; width: 100%; }
+.tf-print-label-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8pt; letter-spacing: .04em; line-height: 1.1; }
+.tf-print-label-price { font-size: 8.5pt; font-weight: 700; line-height: 1.2; margin-top: 1mm; }
+
+@media (max-width: 767.98px) {
+    .tf-label-config-dialog { margin: .75rem; }
+    .tf-label-selection-table { min-width: 650px; }
+    .tf-label-sheet--a4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tf-label-preview-page { padding: 1rem; }
+}
+
+@media print {
+    html, body { background: #fff !important; height: auto !important; overflow: visible !important; }
+    .tf-sidebar, .sidebar-overlay, .tf-dashboard-topbar, .tf-company-preview-banner, .tf-label-preview-toolbar, .tf-application-footer, .dashboard-footer { display: none !important; }
+    .tf-dashboard-shell, .tf-dashboard-main, .dashboard-page { background: #fff !important; display: block !important; margin: 0 !important; min-height: 0 !important; padding: 0 !important; width: auto !important; }
+    .tf-label-preview-page { margin: 0 !important; max-width: none !important; padding: 0 !important; }
+    .tf-label-sheet { background: #fff !important; border: 0 !important; border-radius: 0 !important; padding: 0 !important; }
+    .tf-print-label { border-color: #d1d5db; break-inside: avoid; page-break-inside: avoid; }
+    .tf-label-sheet--a4 { gap: 8mm 5mm; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .tf-label-sheet--thermal { display: block; }
+    .tf-label-sheet--thermal .tf-print-label { break-after: page; margin: 0; page-break-after: always; }
+    .tf-label-sheet--thermal .tf-print-label:last-child { break-after: auto; page-break-after: auto; }
+}
+
+/* Phase 21: final shared workspace polish. These are intentionally shared
+ * primitives so that new and permission-filtered views reflow consistently
+ * without page-specific overrides. */
+:root {
+    --tf-layer-dropdown: 1030;
+    --tf-layer-modal-backdrop: 1040;
+    --tf-layer-modal: 1055;
+    --tf-layer-confirmation: 1065;
+}
+
+.dropdown-menu { z-index: var(--tf-layer-dropdown); }
+.modal-backdrop { z-index: var(--tf-layer-modal-backdrop); }
+.modal { z-index: var(--tf-layer-modal); }
+.swal2-container { z-index: var(--tf-layer-confirmation) !important; }
+body > .ts-dropdown { z-index: var(--tf-layer-dropdown) !important; }
+
+/* Keep the common secondary and destructive treatments consistent in every
+ * authenticated surface, including modal and dropdown actions. */
+:is(.dashboard-page, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-outline-primary, .btn-outline-secondary) {
+    background: var(--surface) !important;
+    border-color: var(--primary) !important;
+    color: var(--primary) !important;
+}
+:is(.dashboard-page, .tf-dashboard-topbar, .modal, .offcanvas) :is(.btn-outline-primary, .btn-outline-secondary):not(:disabled):not(.disabled):hover {
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+    color: #fff !important;
+}
+:is(.dashboard-page, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-danger {
+    background: var(--surface) !important;
+    border-color: var(--danger) !important;
+    color: var(--danger) !important;
+}
+:is(.dashboard-page, .tf-dashboard-topbar, .modal, .offcanvas) .btn-outline-danger:not(:disabled):not(.disabled):hover {
+    background: var(--danger) !important;
+    border-color: var(--danger) !important;
+    color: #fff !important;
+}
+
+:is(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary) 74%, #fff) !important;
+    outline-offset: 2px;
+}
+
+.dashboard-page :is(.form-control, .form-select, textarea.form-control).is-invalid,
+.dashboard-page .was-validated :invalid {
+    border-color: var(--danger) !important;
+    box-shadow: 0 0 0 0.16rem color-mix(in srgb, var(--danger) 13%, transparent) !important;
+}
+.dashboard-page .invalid-feedback { color: var(--danger) !important; font-size: .75rem; line-height: 1.35; margin-top: .3rem; }
+.dashboard-page .form-text { color: var(--muted) !important; font-size: .75rem; line-height: 1.4; margin-top: .3rem; }
+.dashboard-page :is(input, textarea, select)[readonly] { background: var(--surface-soft) !important; cursor: default; opacity: 1; }
+
+.dashboard-page .table-responsive { max-width: 100%; overscroll-behavior-inline: contain; }
+.dashboard-page :is(.table, .tf-business-data-table) > :is(thead, tbody) > tr > :is(th, td) { border-color: var(--border); vertical-align: middle; }
+.dashboard-page :is(.table, .tf-business-data-table) > thead > tr > th { color: var(--muted); font-size: .7rem; font-weight: 750; letter-spacing: .025em; line-height: 1.25; white-space: nowrap; }
+.dashboard-page .tf-table-action-cell { text-align: right; white-space: nowrap; }
+.dashboard-page .tf-table-action-group { align-items: center; justify-content: flex-end; }
+.dashboard-page .tf-table-action-group .dropdown-menu { z-index: var(--tf-layer-dropdown); }
+
+.btn.is-loading { align-items: center; cursor: wait; display: inline-flex; gap: .45rem; justify-content: center; }
+.btn.is-loading .spinner-border { height: .8rem; width: .8rem; }
+
+@media (max-width: 767.98px) {
+    .modal-dialog:not(.modal-fullscreen) { margin: .75rem auto; width: min(96vw, calc(100vw - 1rem)); }
+    .modal-content { max-height: calc(100dvh - 1.5rem) !important; }
+    .modal-body { max-height: calc(100dvh - 9rem) !important; }
+    .dashboard-page .tf-table-action-cell { min-width: 94px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

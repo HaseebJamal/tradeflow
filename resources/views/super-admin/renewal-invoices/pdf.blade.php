@@ -47,6 +47,8 @@
 </head>
 <body>
 @php
+    $isRenewalSecured = (bool) ($renewalSecured ?? false);
+    $nextPaidCycle = $upcomingPaidCycle ?? null;
     $statusClass = match ($invoice->status) {
         'Paid' => 'status-paid',
         'Pending Payment' => 'status-pending',
@@ -56,7 +58,7 @@
         default => 'status-generated',
     };
     $daysRemaining = $invoice->access_ends_at
-        ? max(0, now(config('app.timezone'))->diffInDays($invoice->access_ends_at, false))
+        ? max(0, (int) now(config('app.timezone'))->diffInDays($invoice->access_ends_at->copy()->endOfDay(), false))
         : null;
 @endphp
 <div class="header">
@@ -84,9 +86,14 @@
 </div>
 
 <div class="notice">
-    <div class="notice-title">Access Renewal Notice</div>
-    Your {{ $platformName }} workspace access expires on <strong>{{ $invoice->access_ends_at?->format('d M Y') ?: 'the configured access end date' }}</strong>.
-    Please renew before the due date to avoid interruption.
+    @if($isRenewalSecured)
+        <div class="notice-title">Renewal Payment Received</div>
+        Your current {{ $platformName }} access remains active through <strong>{{ $invoice->access_ends_at?->format('d M Y') ?: 'the current access end date' }}</strong>, and the next paid access period is scheduled from <strong>{{ $nextPaidCycle?->period_starts_at?->format('d M Y') ?: 'the scheduled start date' }}</strong> to <strong>{{ $nextPaidCycle?->period_ends_at?->format('d M Y') ?: 'the scheduled end date' }}</strong> without interruption.
+    @else
+        <div class="notice-title">Access Renewal Notice</div>
+        Your {{ $platformName }} workspace access expires on <strong>{{ $invoice->access_ends_at?->format('d M Y') ?: 'the configured access end date' }}</strong>.
+        Please renew before the due date to avoid interruption.
+    @endif
 </div>
 
 <table class="columns">
@@ -107,6 +114,10 @@
                 <div class="detail-row"><span class="detail-label">Days remaining</span><span class="detail-value">{{ $daysRemaining === null ? '—' : $daysRemaining.' day'.($daysRemaining === 1 ? '' : 's') }}</span></div>
                 <div class="detail-row"><span class="detail-label">Renewal due</span><span class="detail-value">{{ $invoice->due_date?->format('d M Y') ?: '—' }}</span></div>
                 <div class="detail-row"><span class="detail-label">Last payment</span><span class="detail-value">{{ $invoice->last_payment_method ?: '—' }}</span></div>
+                @if($isRenewalSecured)
+                    <div class="detail-row"><span class="detail-label">Renewal status</span><span class="detail-value">Paid / Secured</span></div>
+                    <div class="detail-row"><span class="detail-label">Upcoming access</span><span class="detail-value">{{ $nextPaidCycle?->period_starts_at?->format('d M Y') ?: '—' }} &ndash; {{ $nextPaidCycle?->period_ends_at?->format('d M Y') ?: '—' }}</span></div>
+                @endif
             </div>
             <div class="amount-card">
                 <div class="amount-label">Renewal Amount</div>

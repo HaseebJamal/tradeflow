@@ -13,7 +13,7 @@ class DocumentNumberServiceTest extends TestCase
     private array $documentTables = [
         'document_number_counters', 'orders', 'invoices', 'held_pos_sales',
         'purchases', 'purchase_invoices', 'sales_returns', 'purchase_returns',
-        'goods_receipts', 'payments',
+        'goods_receipts', 'payments', 'stock_counts',
     ];
 
     protected function setUp(): void
@@ -38,7 +38,7 @@ class DocumentNumberServiceTest extends TestCase
             'orders' => 'order_number', 'invoices' => 'invoice_number', 'held_pos_sales' => 'hold_number',
             'purchases' => 'purchase_number', 'purchase_invoices' => 'invoice_number',
             'sales_returns' => 'return_number', 'purchase_returns' => 'return_number',
-            'goods_receipts' => 'grn_number', 'payments' => 'reference_number',
+            'goods_receipts' => 'grn_number', 'payments' => 'reference_number', 'stock_counts' => 'reference',
         ] as $tableName => $column) {
             Schema::create($tableName, function (Blueprint $table) use ($column): void {
                 $table->id();
@@ -70,6 +70,7 @@ class DocumentNumberServiceTest extends TestCase
         $this->assertSame('HOLD-000001', $numbers->next(10, 'pos_hold'));
         $this->assertSame('GRN-000001', $numbers->next(10, 'goods_receipt'));
         $this->assertSame('RCPT-000001', $numbers->next(10, 'payment'));
+        $this->assertSame('STK-000001', $numbers->next(10, 'stock_count'));
     }
 
     public function test_existing_standard_numbers_are_not_reused(): void

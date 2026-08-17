@@ -10,6 +10,11 @@
         <p class="tf-muted mb-0">Search, filter, and manage your product master data.</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
+        @companyCan('products.view')
+        <button type="button" class="btn btn-outline-primary" data-label-print-selected>
+            <i class="bi bi-upc-scan me-1"></i>Print Labels <span class="d-none" data-label-selected-count></span>
+        </button>
+        @endcompanyCan
         @companyCan('products.edit')<a class="btn btn-outline-primary" href="{{ route('business.products.bulk-pricing') }}"><i class="bi bi-tags me-1"></i>Bulk Pricing</a>@endcompanyCan
         @companyCan('products.create')<a class="btn btn-tf-primary" href="{{ route('business.products.create') }}">+ Add Product</a>@endcompanyCan
     </div>
@@ -62,6 +67,7 @@
 <x-table class="product-list-table tf-business-data-table">
     <thead>
         <tr>
+            <th class="tf-label-select-column"><input class="form-check-input" type="checkbox" data-label-select-all aria-label="Select all products on this page"></th>
             <th>Image</th>
             <th>Product</th>
             <th>Category</th>
@@ -80,6 +86,16 @@
     <tbody>
         @forelse($products ?? [] as $product)
         <tr>
+            <td class="tf-label-select-column">
+                <input class="form-check-input" type="checkbox" data-label-select
+                    data-label-product-id="{{ $product->id }}"
+                    data-label-product-name="{{ $product->name }}"
+                    data-label-product-barcode="{{ $product->barcode }}"
+                    data-label-product-sku="{{ $product->sku }}"
+                    data-label-product-retail="{{ $product->retail_price }}"
+                    data-label-product-wholesale="{{ $product->wholesale_price }}"
+                    aria-label="Select {{ $product->name }} for label printing">
+            </td>
             <td>@if($product->image_url)<img src="{{ $product->image_url }}" alt="{{ $product->name }}"
             class="rounded border" style="height:38px;width:38px;object-fit:cover">@else<span
                         class="tf-icon-tile bg-light text-primary" style="height:38px;width:38px"><i
@@ -110,6 +126,7 @@
                     <div class="dropdown-menu dropdown-menu-end shadow-sm">
                         <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#product-details-{{ $product->id }}"><i
                                 class="bi bi-eye me-2"></i>View</button>
+                        @companyCan('products.view')<button type="button" class="dropdown-item" data-label-print-row data-label-product-id="{{ $product->id }}"><i class="bi bi-upc-scan me-2"></i>Print Label</button>@endcompanyCan
                         @companyCan('products.restore')
                         <form method="POST" action="{{ route('business.products.restore', $product->id) }}">@csrf
                             @method('PATCH')<button class="dropdown-item text-success" type="submit"><i
@@ -128,6 +145,7 @@
                     <div class="dropdown-menu dropdown-menu-end shadow-sm">
                         <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#product-details-{{ $product->id }}"><i
                                 class="bi bi-eye me-2"></i>View</button>
+                        @companyCan('products.view')<button type="button" class="dropdown-item" data-label-print-row data-label-product-id="{{ $product->id }}"><i class="bi bi-upc-scan me-2"></i>Print Label</button>@endcompanyCan
                         @companyCan('products.edit')
                         <a class="dropdown-item" href="{{ route('business.products.edit', $product) }}"><i
                                 class="bi bi-pencil me-2"></i>Edit</a>
@@ -150,7 +168,7 @@
         </tr>
         @empty
         <tr>
-            <td colspan="13" class="text-center tf-muted py-4">No products yet.</td>
+            <td colspan="14" class="text-center tf-muted py-4">No products yet.</td>
         </tr>
         @endforelse
     </tbody>
@@ -158,7 +176,14 @@
 @foreach($products ?? [] as $product)
     @include('business.products._quick-view-modal', ['product' => $product])
 @endforeach
+@companyCan('products.view')
+    @include('business.products._label-print-modal')
+@endcompanyCan
 @if(isset($products) && method_exists($products, 'links'))
     <div class="mt-3"><x-table-result-summary :paginator="$products" />{{ $products->links('pagination::bootstrap-5') }}
 </div>@endif
 @endsection
+
+@push('scripts')
+    <script src="{{ asset('js/product-labels.js') }}?v={{ filemtime(public_path('js/product-labels.js')) }}"></script>
+@endpush

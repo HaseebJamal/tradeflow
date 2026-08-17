@@ -8,11 +8,22 @@
         'rate' => $amount($item->unit_price ?? $item->price),
         'amount' => $amount($item->line_total ?? $item->total),
     ]);
+    $isSplitPayment = $order->payment_type === 'Split';
+    $paymentTotals = $order->payments
+        ->groupBy('method')
+        ->map(fn ($payments, $method) => [
+            'label' => $isSplitPayment ? 'Payment · '.$method : 'Payment',
+            'amount' => $amount($payments->sum('amount')),
+            'show' => (float) $payments->sum('amount') > 0,
+        ])
+        ->values()
+        ->all();
     $totals = [
         ['label' => 'Subtotal', 'amount' => $amount($order->subtotal)],
         ['label' => 'Discount', 'amount' => $amount($order->discount_amount ?? 0), 'show' => (float) ($order->discount_amount ?? 0) !== 0.0],
         ['label' => 'Tax', 'amount' => $amount($order->tax_amount ?? 0), 'show' => (float) ($order->tax_amount ?? 0) !== 0.0],
-        ['label' => 'Paid', 'amount' => $amount($invoice->paid_amount), 'show' => (float) $invoice->paid_amount > 0],
+        ...$paymentTotals,
+        ['label' => 'Paid', 'amount' => $amount($invoice->paid_amount), 'show' => (float) $invoice->paid_amount > 0 && empty($paymentTotals)],
         ['label' => 'Due', 'amount' => $amount($invoice->balance), 'show' => (float) $invoice->balance > 0],
         ['label' => 'Grand total', 'amount' => $amount($order->grand_total ?: $order->total), 'emphasis' => true],
     ];
@@ -26,7 +37,7 @@
     party-label="Customer"
     :party-name="$order->customer?->display_name ?? $order->customer?->name ?? 'Walk-in Customer'"
     :party-details="$order->customer?->address"
-    :metadata="['Status' => $invoice->status, 'Payment status' => $invoice->payment_status]"
+    :metadata="['Status' => $invoice->status, 'Payment status' => $invoice->payment_status, 'Payment method' => $isSplitPayment ? 'Split payment' : ($order->payment_type ?: '—')]"
     :items="$items"
     :totals="$totals"
     :footer="$order->business?->documentFooter"

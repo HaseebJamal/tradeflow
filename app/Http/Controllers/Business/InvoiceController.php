@@ -32,7 +32,7 @@ class InvoiceController extends Controller
         abort_unless($order->business_id === auth()->user()->business_id || auth()->user()->role === 'retailer', 403);
         $order = $this->finance->syncOrderTotals($order);
         $invoice = $this->syncInvoice($order);
-        return view('business.invoices.show', ['invoice' => $invoice->load('order.customer', 'order.business.documentFooter', 'order.business.owner:id,email', 'order.items.product', 'items', 'creditNotes'), 'order' => $order->load(['customer', 'business.documentFooter', 'business.owner:id,email', 'items.product'])]);
+        return view('business.invoices.show', ['invoice' => $invoice->load('order.customer', 'order.business.documentFooter', 'order.business.owner:id,email', 'order.items.product', 'items', 'creditNotes'), 'order' => $order->load(['customer', 'business.documentFooter', 'business.owner:id,email', 'items.product', 'payments'])]);
     }
 
     public function pdf(Order $order)
@@ -41,7 +41,7 @@ class InvoiceController extends Controller
         $order = $this->finance->syncOrderTotals($order);
         $invoice = $this->syncInvoice($order);
         $paper = $this->thermal->width(request());
-        $pdf = $this->thermal->loadPdf('business.invoices.pdf', ['invoice' => $invoice->load('items'), 'order' => $order->load(['customer', 'business.documentFooter', 'business.owner:id,email', 'items.product']), 'paper' => $paper], $paper);
+        $pdf = $this->thermal->loadPdf('business.invoices.pdf', ['invoice' => $invoice->load('items'), 'order' => $order->load(['customer', 'business.documentFooter', 'business.owner:id,email', 'items.product', 'payments']), 'paper' => $paper], $paper);
 
         return $pdf->stream($invoice->invoice_number.'.pdf');
     }
@@ -56,7 +56,7 @@ class InvoiceController extends Controller
 
         return $this->thermal->loadPdf('business.invoices.pdf', [
             'invoice' => $invoice->load('items'),
-            'order' => $order->load(['customer', 'business.documentFooter', 'business.owner:id,email', 'items.product']),
+            'order' => $order->load(['customer', 'business.documentFooter', 'business.owner:id,email', 'items.product', 'payments']),
             'paper' => $paper,
         ], $paper)->download($invoice->invoice_number.'.pdf');
     }

@@ -11,6 +11,7 @@ use App\Models\StockMovement;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\BusinessActivityService;
+use App\Services\InventorySummaryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -18,17 +19,38 @@ use Illuminate\Validation\ValidationException;
 
 class InventoryController extends Controller
 {
-    public function __construct(private BusinessActivityService $activity) {}
+    public function __construct(
+        private BusinessActivityService $activity,
+        private InventorySummaryService $inventorySummaries,
+    ) {}
 
     public function index()
     {
         $businessId = auth()->user()->business_id;
+        $summaryProducts = Product::where('business_id', $businessId)
+            ->get(['id', 'business_id', 'stock_quantity', 'low_stock_alert_qty', 'has_batch_tracking']);
+        $summaries = $this->inventorySummaries->summaries($businessId, $summaryProducts);
+        $inventories = Inventory::with('product')->where('business_id', $businessId)->whereHas('product')->latest()->paginate(10)->withQueryString();
+        $inventories->getCollection()->each(function (Inventory $inventory) use ($summaries): void {
+            $inventory->setAttribute('inventory_summary', $summaries->get($inventory->product_id, [
+                'available' => 0,
+                'sold' => 0,
+                'damaged' => 0,
+                'sales_returned' => 0,
+                'purchase_returned' => 0,
+                'expired' => 0,
+                'alert_qty' => 0,
+            ]));
+        });
+
+        $lowStockProducts = $summaryProducts
+            ->filter(fn (Product $product) => (float) ($summaries->get($product->id)['available'] ?? 0) <= (float) $product->low_stock_alert_qty)
+            ->each(fn (Product $product) => $product->setAttribute('inventory_available', (float) ($summaries->get($product->id)['available'] ?? 0)));
+
         return view('business.inventory.index', [
-            'inventories' => Inventory::with('product')->where('business_id', $businessId)->whereHas('product')->latest()->paginate(10)->withQueryString(),
+            'inventories' => $inventories,
             'inventoryProducts' => Product::where('business_id', $businessId)->orderBy('name')->get(['id', 'name']),
-            'lowStockProducts' => Product::where('business_id', $businessId)
-                ->whereColumn('stock_quantity', '<=', 'low_stock_alert_qty')
-                ->get(),
+            'lowStockProducts' => $lowStockProducts,
             'categories' => Category::where('business_id', $businessId)->where('type', 'Product')->where('status', 'Active')->orderBy('name')->get(),
             'units' => Unit::where('business_id', $businessId)->where('status', 'Active')->orderBy('unit_name')->get(),
         ]);
@@ -91,7 +113,7 @@ class InventoryController extends Controller
             'type' => ['required', 'in:added,reduced,returned,damaged,adjustment'],
             'quantity' => ['required', 'integer', 'min:1'],
             'note' => ['nullable', 'string', 'max:255'],
-            'reason' => ['nullable', 'string', 'max:255'],
+            'reason' => ['required', 'string', 'max:255'],
         ], ['product_id.required' => 'Please select a product.', 'product_id.exists' => 'Please select a valid product.']);
 
         $this->recordMovement($data);
@@ -104,7 +126,13 @@ class InventoryController extends Controller
         abort_unless($inventory->business_id === auth()->user()->business_id, 403);
         $data = $request->validate(['low_stock_alert' => ['required', 'integer', 'min:0']]);
         $inventory->update($data);
-        $inventory->product?->update(['low_stock_alert_qty' => $data['low_stock_alert']]);
+        $product = $inventory->product;
+        if ($product) {
+            $product->update([
+                'low_stock_alert_qty' => $data['low_stock_alert'],
+                'target_stock_level' => max((float) $product->target_stock_level, (float) $data['low_stock_alert']),
+            ]);
+        }
 
         return back()->with('success', 'Low stock alert updated.');
     }
@@ -117,6 +145,11 @@ class InventoryController extends Controller
             $product = Product::where('business_id', $businessId)
                 ->lockForUpdate()
                 ->findOrFail($data['product_id']);
+            if ($product->has_batch_tracking) {
+                throw ValidationException::withMessages([
+                    'product_id' => 'Use goods receiving, a batch-aware return, or Stock Count for this batch-tracked product so batch quantities remain auditable.',
+                ]);
+            }
             $type = $data['type'];
             $quantity = (int) $data['quantity'];
             $previousStock = (int) $product->stock_quantity;
@@ -154,7 +187,7 @@ class InventoryController extends Controller
                 'low_stock_alert' => $product->low_stock_alert_qty ?? 10,
             ]);
 
-            $note = $data['note'] ?? $data['reason'] ?? null;
+            $note = $data['note'] ?? $data['reason'];
             InventoryMovement::create([
                 'business_id' => $businessId,
                 'product_id' => $product->id,

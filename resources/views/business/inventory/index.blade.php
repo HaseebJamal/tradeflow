@@ -5,31 +5,36 @@
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 <div class="row g-3 mb-4">
     @forelse($lowStockProducts ?? [] as $product)
-    <div class="col-md-4"><div class="tf-card p-3 border-danger"><i class="bi bi-exclamation-triangle text-danger me-2"></i>{{ $product->name }} - <x-quantity :value="$product->stock_quantity" /> left. Alert at <x-quantity :value="$product->low_stock_alert_qty" />.</div></div>
+    <div class="col-md-4"><div class="tf-card p-3 border-danger"><i class="bi bi-exclamation-triangle text-danger me-2"></i>{{ $product->name }} - <x-quantity :value="$product->inventory_available" /> sellable. Alert at <x-quantity :value="$product->low_stock_alert_qty" />.</div></div>
     @empty
     <div class="col-12"><div class="tf-card p-3">No low stock alerts.</div></div>
     @endforelse
 </div>
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <div><h2 class="h5 mb-1">Inventory Control</h2><p class="tf-muted mb-0">Manage available stock and stock movement history.</p></div>
-    <div class="d-flex flex-wrap gap-2"><a href="{{ route('business.inventory.history') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard-data me-1"></i>Stock History</a>@companyCan('products.create')<button type="button" class="btn btn-sm btn-tf-primary" data-bs-toggle="modal" data-bs-target="#inventoryProductCreateModal"><i class="bi bi-plus-lg me-1"></i>Add Product</button>@endcompanyCan</div>
+    <div><h2 class="h5 mb-1">Inventory Control</h2><p class="tf-muted mb-0">Manage sellable stock and stock movement history.</p></div>
+    <div class="d-flex flex-wrap gap-2"><a href="{{ route('business.inventory.history') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard-data me-1"></i>Stock History</a><a href="{{ route('business.inventory.purchase-suggestions.index') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-cart-plus me-1"></i>Purchase Suggestions</a><a href="{{ route('business.inventory.batches.index') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-box-seam me-1"></i>Batches & Expiry</a>@companyCan('inventory.adjust_stock')<a href="{{ route('business.inventory.stock-counts.index') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard-check me-1"></i>Stock Count</a>@endcompanyCan @companyCan('products.create')<button type="button" class="btn btn-sm btn-tf-primary" data-bs-toggle="modal" data-bs-target="#inventoryProductCreateModal"><i class="bi bi-plus-lg me-1"></i>Add Product</button>@endcompanyCan</div>
 </div>
 @companyCan('inventory.adjust_stock')<div class="tf-card tf-inventory-adjustment-card p-4 mb-4">
     <h2 class="h5">Stock Adjustment</h2>
     <form method="POST" action="{{ route('business.inventory.adjust') }}" class="row g-3" data-inventory-product-form>@csrf
         <div class="col-md-4"><label class="form-label">Product</label><select name="product_id" class="form-select" required><option value="">Select Product</option>@foreach($inventoryProducts ?? collect() as $product)<option value="{{ $product->id }}" @selected(old('product_id') == $product->id)>{{ $product->name }}</option>@endforeach</select></div>
         <div class="col-md-2"><label class="form-label">Adjustment Type</label><select name="type" class="form-select"><option value="added">Add Stock</option><option value="reduced">Reduce Stock</option><option value="adjustment">Set Stock Qty</option><option value="returned">Returned</option><option value="damaged">Damaged</option></select></div>
-        <div class="col-md-2"><label class="form-label">Quantity</label><input name="quantity" type="number" min="1" step="1" value="0" class="form-control js-whole-number" placeholder="Qty"></div>
+        <div class="col-md-2"><label class="form-label">Quantity</label><input name="quantity" type="number" min="1" step="1" value="0" class="form-control js-whole-number" placeholder="Qty" required></div>
+        <div class="col-md-2"><label class="form-label">Reason</label><input name="reason" type="text" maxlength="255" value="{{ old('reason') }}" class="form-control" placeholder="Why this adjustment?" required></div>
         <div class="col-md-2"><label class="form-label d-none d-md-block">&nbsp;</label><button class="btn btn-tf-primary w-100">Apply</button></div>
     </form>
 </div>@endcompanyCan
 <x-table class="tf-business-data-table">
-    <thead><tr><th>Product</th><th>Available</th><th>Sold</th><th>Damaged</th><th>Sales Returned</th><th>Purchase Returned</th><th>Alert Qty</th><th>Last Updated</th><th>Actions</th></tr></thead>
+    <thead><tr><th>Product</th><th title="Current sellable stock">Available <i class="bi bi-info-circle" aria-hidden="true"></i></th><th title="Gross completed sale quantity">Sold <i class="bi bi-info-circle" aria-hidden="true"></i></th><th title="Non-sellable damaged stock retained by the business">Damaged <i class="bi bi-info-circle" aria-hidden="true"></i></th><th title="Quantity returned by customers">Sales Returned <i class="bi bi-info-circle" aria-hidden="true"></i></th><th title="Quantity returned to suppliers">Purchase Returned <i class="bi bi-info-circle" aria-hidden="true"></i></th><th title="Expired physical batch stock, excluded from Available">Expired <i class="bi bi-info-circle" aria-hidden="true"></i></th><th>Alert Qty</th><th>Last Updated</th><th>Actions</th></tr></thead>
     <tbody>
     @forelse($inventories ?? [] as $inventory)
+        @php($summary = $inventory->inventory_summary)
         <tr>
-            <td>{{ $inventory->product?->name }}</td><td><x-quantity :value="$inventory->product?->stock_quantity ?? $inventory->available_stock" /></td><td><x-quantity :value="$inventory->sold_stock" /></td><td><x-quantity :value="$inventory->damaged_stock" /></td><td><x-quantity :value="$inventory->sales_returned_stock ?? 0" /></td><td><x-quantity :value="$inventory->purchase_returned_stock ?? 0" /></td><td><x-quantity :value="$inventory->product?->low_stock_alert_qty ?? $inventory->low_stock_alert" /></td><td><x-date-time :value="$inventory->updated_at" /></td>
+            <td>{{ $inventory->product?->name }}</td><td><x-quantity :value="$summary['available']" /></td><td><x-quantity :value="$summary['sold']" /></td><td><x-quantity :value="$summary['damaged']" /></td><td><x-quantity :value="$summary['sales_returned']" /></td><td><x-quantity :value="$summary['purchase_returned']" /></td><td><x-quantity :value="$summary['expired']" /></td><td><x-quantity :value="$summary['alert_qty']" /></td><td><x-date-time :value="$inventory->updated_at" /></td>
             <td>
+                @if($inventory->product?->has_batch_tracking)
+                    <a href="{{ route('business.inventory.batches.index', ['product_id' => $inventory->product->id]) }}" class="btn btn-sm btn-outline-primary mb-1">View Batches</a>
+                @endif
                 @companyCan('inventory.low_stock_alerts')
                     @if($inventory->product)
                         <div class="d-flex align-items-center gap-2 tf-inventory-row-actions">
@@ -54,7 +59,7 @@
             </td>
         </tr>
     @empty
-        <tr><td colspan="9" class="text-center tf-muted py-4">No inventory records.</td></tr>
+        <tr><td colspan="10" class="text-center tf-muted py-4">No inventory records.</td></tr>
     @endforelse
     </tbody>
 </x-table>

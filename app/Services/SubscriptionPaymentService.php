@@ -117,6 +117,11 @@ class SubscriptionPaymentService
             // next cycle and SubscriptionLifecycleService promotes it on its
             // start date.
             if (! $isFutureRenewal) {
+                if ($subscription->exists && $subscription->payment_status !== 'Received') {
+                    app(SubscriptionAccessHistoryService::class)
+                        ->recordTrialConvertedToPaid($subscription, $payment, $admin);
+                }
+
                 $subscription->fill([
                     'subscription_plan_id' => $plan->id,
                     'billing_cycle' => $payment->billing_cycle ?: 'Monthly',
@@ -127,8 +132,12 @@ class SubscriptionPaymentService
                     'starts_at' => $starts,
                     'ends_at' => $ends,
                     'access_ended_at' => null,
-                    'trial_start_at' => $isCustomAccess ? $subscription->trial_start_at : null,
-                    'trial_end_at' => $isCustomAccess ? $subscription->trial_end_at : null,
+                    // The current entitlement becomes paid, but the original
+                    // trial dates are historical facts. Keep them available
+                    // for the lifecycle history snapshot and never erase them
+                    // during a first paid conversion.
+                    'trial_start_at' => $subscription->trial_start_at,
+                    'trial_end_at' => $subscription->trial_end_at,
                     'status' => 'Active',
                     'renewed_at' => now(),
                     'cancellation_scheduled_at' => null,
@@ -154,6 +163,14 @@ class SubscriptionPaymentService
                 ->first();
             if ($renewalInvoice && app(RenewalInvoiceService::class)->canRecordPayment($renewalInvoice)) {
                 app(RenewalInvoiceService::class)->markPaid($renewalInvoice, $payment);
+            }
+
+            // The payment itself is the future entitlement. Once it is
+            // confirmed and forms a continuous next cycle, resolve only the
+            // old paid-expiry reminders for this workspace; do not touch any
+            // historical or trial notifications.
+            if ($isFutureRenewal && $lifecycle->hasSecuredUpcomingPaidRenewal($subscription)) {
+                $lifecycle->resolveSecuredPaidRenewalNotifications($subscription);
             }
 
             $message = $isFutureRenewal

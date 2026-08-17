@@ -133,6 +133,62 @@ class SubscriptionLifecycleService
     }
 
     /**
+     * A paid future PlatformPayment is the canonical scheduled next
+     * entitlement. It only secures the current cycle when it begins no later
+     * than the day after the current effective end, so a stray future payment
+     * can never hide a genuine expiry warning.
+     */
+    public function hasSecuredUpcomingPaidRenewal(Subscription $subscription): bool
+    {
+        $currentEnd = $subscription->effectivePaidAccessEnd();
+        $upcoming = $currentEnd ? $this->upcomingPaidCycle($subscription) : null;
+        if (! $currentEnd || $upcoming?->status !== 'Received' || ! $upcoming->period_starts_at || ! $upcoming->period_ends_at) {
+            return false;
+        }
+
+        $nextStart = Carbon::parse($upcoming->period_starts_at->toDateString(), config('app.timezone'))->startOfDay();
+        $nextEnd = Carbon::parse($upcoming->period_ends_at->toDateString(), config('app.timezone'))->startOfDay();
+        $continuationDeadline = Carbon::parse($currentEnd->toDateString(), config('app.timezone'))->addDay()->startOfDay();
+
+        return $nextEnd->gte($nextStart) && $nextStart->lte($continuationDeadline);
+    }
+
+    /**
+     * A confirmed continuous renewal makes the previous paid-expiry reminder
+     * obsolete. Mark only that cycle's unread business notifications as read;
+     * notification history and all trial notifications remain intact.
+     */
+    public function resolveSecuredPaidRenewalNotifications(Subscription $subscription): void
+    {
+        if (! $this->hasSecuredUpcomingPaidRenewal($subscription)) {
+            return;
+        }
+
+        $subscription->loadMissing('business');
+        $business = $subscription->business;
+        $currentEnd = $subscription->effectivePaidAccessEnd();
+        if (! $business || ! $currentEnd) {
+            return;
+        }
+
+        $expiryDate = $currentEnd->toDateString();
+        User::query()
+            ->where('business_id', $business->id)
+            ->whereIn('role', ['business_owner', 'custom_staff'])
+            ->whereIn('status', ['active', 'Active'])
+            ->get()
+            ->filter(fn (User $user) => $user->role === 'business_owner'
+                || $this->permissions->allowsUser($user, 'subscriptions.view', $business))
+            ->each(function (User $user) use ($subscription, $expiryDate): void {
+                $user->unreadNotifications()
+                    ->where('data->subscription_id', $subscription->id)
+                    ->where('data->expiry_date', $expiryDate)
+                    ->where('data->lifecycle_key', 'like', 'business-subscription-lifecycle:%')
+                    ->update(['read_at' => now(config('app.timezone'))]);
+            });
+    }
+
+    /**
      * Switch to a paid cycle only on/after its scheduled calendar date.  This
      * runs before state resolution, so middleware never observes the expired
      * old cycle between an early payment and the automatic switch.
@@ -352,11 +408,21 @@ class SubscriptionLifecycleService
                     ? 'Expired'
                     : ($isTrial ? 'Trial' : ($hasPaidPeriod ? 'Active' : $subscription?->status))));
         $warningDays = $isTrial ? self::TRIAL_EXPIRING_SOON_DAYS : self::PAID_EXPIRING_SOON_DAYS;
-        $isExpiringSoon = ! $isExpired
+        $isWithinExpiryWarningWindow = ! $isExpired
             && $daysRemaining !== null
             && $daysRemaining >= 0
             && $daysRemaining <= $warningDays
             && in_array($effectiveStatus, ['Trial', 'Active', 'Expiring'], true);
+        // A received, continuous next paid cycle means there is no action to
+        // take for the current paid end. Keep the current period's dates and
+        // remaining days intact, but resolve its warning state centrally so
+        // Trial & Access, its sidebar badge, and the business dashboard agree.
+        $hasSecuredUpcomingPaidRenewal = (bool) $hasPaidPeriod
+            && ! $isScheduled
+            && ! $isExpired
+            && $this->hasSecuredUpcomingPaidRenewal($subscription);
+        $isExpiringSoon = $isWithinExpiryWarningWindow
+            && ($isTrial || ! $hasSecuredUpcomingPaidRenewal);
 
         $usage = null;
         if ($includeUsage && $subscription?->business_id) {
@@ -377,6 +443,7 @@ class SubscriptionLifecycleService
             'effective_access_type' => $hasPaidPeriod ? 'paid' : ($hasTrialPeriod ? 'trial' : null),
             'is_paid_access_active' => (bool) $hasPaidPeriod && ! $isScheduled && ! $isExpired,
             'is_paid_access_scheduled' => (bool) $hasPaidPeriod && $isScheduled,
+            'has_secured_upcoming_paid_renewal' => $hasSecuredUpcomingPaidRenewal,
             'paid_access_start' => $hasPaidPeriod ? $subscription?->starts_at : null,
             'paid_access_end' => $hasPaidPeriod ? $subscription?->ends_at : null,
             'paid_duration_days' => $paidDurationDays,
@@ -424,6 +491,11 @@ class SubscriptionLifecycleService
             return null;
         }
 
+        $subscription = $state['subscription'] ?? null;
+        if (! $state['is_trial'] && ($state['has_secured_upcoming_paid_renewal'] ?? false)) {
+            return null;
+        }
+
         $isTrial = (bool) $state['is_trial'];
         $kind = $isTrial ? 'free trial' : 'paid access';
         $days = max(0, (int) $state['days_remaining']);
@@ -449,6 +521,13 @@ class SubscriptionLifecycleService
     /** @param array<string, mixed> $state */
     private function dispatchLifecycleNotifications(Subscription $subscription, array $state): void
     {
+        // Do not create more stale paid-expiry reminders after a confirmed,
+        // continuous next paid cycle has already been recorded. Trial
+        // reminders intentionally remain independent of this rule.
+        if (! $state['is_trial'] && ($state['has_secured_upcoming_paid_renewal'] ?? false)) {
+            return;
+        }
+
         $days = $state['days_remaining'];
         $milestones = $state['is_trial'] ? [7, 5, 3, 1] : [5, 4, 3, 2, 1];
         $milestone = $state['is_expired'] ? 'expired' : (in_array($days, $milestones, true) ? $days.'_days' : null);

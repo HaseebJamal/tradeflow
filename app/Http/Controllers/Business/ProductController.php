@@ -22,6 +22,8 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Picqer\Barcode\BarcodeGeneratorSVG;
 use Throwable;
 
 class ProductController extends Controller
@@ -179,6 +181,71 @@ class ProductController extends Controller
         ]);
     }
 
+    /** Render a read-only, printable label preview from existing product data. */
+    public function labelPreview(Request $request)
+    {
+        $data = $request->validate([
+            'format' => ['required', 'in:thermal,a4'],
+            'price_type' => ['required', 'in:retail,wholesale,none'],
+            'show_business_name' => ['nullable', 'boolean'],
+            'show_product_name' => ['nullable', 'boolean'],
+            'show_sku' => ['nullable', 'boolean'],
+            'products' => ['required', 'array', 'min:1', 'max:100'],
+            'products.*.id' => ['required', 'integer', 'distinct'],
+            'products.*.quantity' => ['required', 'integer', 'min:1', 'max:500'],
+        ]);
+        $businessId = (int) $request->user()->business_id;
+        $requested = collect($data['products'])->keyBy(fn (array $row) => (int) $row['id']);
+        $products = Product::withTrashed()
+            ->where('business_id', $businessId)
+            ->whereIn('id', $requested->keys())
+            ->orderBy('name')
+            ->get();
+
+        if ($products->count() !== $requested->count()) {
+            abort(403);
+        }
+
+        $totalLabels = $requested->sum(fn (array $row) => (int) $row['quantity']);
+        if ($totalLabels > 2000) {
+            throw ValidationException::withMessages(['products' => 'A maximum of 2,000 labels can be generated in one request.']);
+        }
+
+        $priceField = $data['price_type'] === 'retail' ? 'retail_price' : 'wholesale_price';
+        $unavailable = $products->filter(function (Product $product) use ($data, $priceField): bool {
+            return blank($product->barcode)
+                || ($data['price_type'] !== 'none' && (float) $product->{$priceField} <= 0);
+        });
+        if ($unavailable->isNotEmpty()) {
+            $messages = $unavailable->map(function (Product $product) use ($data, $priceField): string {
+                if (blank($product->barcode)) return $product->name.': Barcode not available.';
+                return $product->name.': '.ucfirst($data['price_type']).' price not set.';
+            })->all();
+            throw ValidationException::withMessages(['products' => $messages]);
+        }
+
+        $generator = new BarcodeGeneratorSVG();
+        $labels = $products->map(function (Product $product) use ($requested, $generator, $data, $priceField): array {
+            return [
+                'product' => $product,
+                'quantity' => (int) $requested->get($product->id)['quantity'],
+                'price' => $data['price_type'] === 'none' ? null : (float) $product->{$priceField},
+                'barcode_svg' => $generator->getBarcode($product->barcode, $generator::TYPE_CODE_128, 1.6, 42),
+            ];
+        });
+
+        return view('business.products.label-preview', [
+            'business' => $request->user()->business,
+            'labels' => $labels,
+            'totalLabels' => $totalLabels,
+            'format' => $data['format'],
+            'priceType' => $data['price_type'],
+            'showBusinessName' => $request->boolean('show_business_name'),
+            'showProductName' => $request->boolean('show_product_name'),
+            'showSku' => $request->boolean('show_sku'),
+        ]);
+    }
+
     public function create()
     {
         $permissions = app(CompanyPermissionService::class);
@@ -252,6 +319,7 @@ class ProductController extends Controller
                             'stock_quantity' => 0,
                             'minimum_order_quantity' => 1,
                             'low_stock_alert_qty' => 10,
+                            'target_stock_level' => 10,
                             'created_by' => $request->user()->id,
                             'added_date' => now(),
                         ];
@@ -381,7 +449,11 @@ class ProductController extends Controller
         if ($image) {
             $data['image'] = $image->store('products', 'public');
         }
-        $product->update($data);
+        // Product edits no longer expose the operational reorder threshold.
+        // Keep the existing threshold when that optional field is absent,
+        // rather than indexing a missing validated key.
+        $lowStockAlertQty = (float) ($data['low_stock_alert_qty'] ?? $product->low_stock_alert_qty ?? 0);
+        $product->update($data + ['target_stock_level' => max((float) $product->target_stock_level, $lowStockAlertQty)]);
         return redirect()->route('business.products.index')->with('success', 'Product updated successfully.');
     }
 
@@ -503,6 +575,7 @@ class ProductController extends Controller
                     'has_batch_tracking' => (bool) ($row['has_batch_tracking'] ?? false),
                     'minimum_order_quantity' => 1,
                     'low_stock_alert_qty' => $row['low_stock_alert_qty'] ?? 10,
+                    'target_stock_level' => $row['low_stock_alert_qty'] ?? 10,
                     'status' => 'Active',
                     'created_by' => auth()->id(),
                     'added_date' => now(),

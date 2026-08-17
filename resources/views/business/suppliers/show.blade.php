@@ -15,7 +15,7 @@
             <h2 class="h5 mb-1">{{ $supplier->supplier_name }}</h2>
             <div class="tf-muted">{{ $supplier->company_name ?: 'Independent supplier' }}</div>
         </div>
-        @companyCan('suppliers.edit')<a href="{{ route('business.suppliers.edit', $supplier) }}" class="btn btn-sm btn-outline-primary">Edit Supplier</a>@endcompanyCan
+        <div class="d-flex gap-2">@companyCan('suppliers.adjust_balance')<button type="button" class="btn btn-sm btn-tf-primary" data-bs-toggle="modal" data-bs-target="#supplier-balance-adjustment">Adjust Balance</button>@endcompanyCan @companyCan('suppliers.edit')<a href="{{ route('business.suppliers.edit', $supplier) }}" class="btn btn-sm btn-outline-primary">Edit Supplier</a>@endcompanyCan</div>
     </div>
     <div class="row g-3 mt-3">
         <div class="col-md-3"><strong>Phone</strong><div>{{ $supplier->phone ?: '-' }}</div></div>
@@ -49,4 +49,13 @@
         </tbody>
     </x-table>
 </div>
+
+<div class="tf-card p-4 mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3"><div><span class="tf-dashboard-eyebrow">Adjustment history</span><h2 class="h5 mb-1">Balance Adjustments</h2><p class="tf-muted small mb-0">Posted corrections are immutable; reverse an entry instead of editing it.</p></div></div>
+    <x-table><thead><tr><th>Reference</th><th>Date</th><th class="text-end">Previous</th><th class="text-end">Adjustment</th><th class="text-end">New</th><th>Reason</th><th>User</th><th></th></tr></thead><tbody>@forelse($adjustments as $adjustment)<tr><td class="fw-semibold">{{ $adjustment->reference }}</td><td>{{ $adjustment->created_at?->format('n/j/Y, g:i A') }}</td><td class="text-end">Rs {{ number_format($adjustment->previous_balance, 2) }}</td><td class="text-end {{ str_starts_with($adjustment->adjustment_type, 'increase') ? 'text-success' : 'text-danger' }}">{{ str_starts_with($adjustment->adjustment_type, 'increase') ? '+' : '−' }}Rs {{ number_format($adjustment->amount, 2) }}</td><td class="text-end">Rs {{ number_format($adjustment->new_balance, 2) }}</td><td>{{ $adjustment->reason }}</td><td>{{ $adjustment->creator?->name ?: '—' }}</td><td>@companyCan('suppliers.adjust_balance')@if(! $adjustment->reversed_at && ! $adjustment->reversal)<form method="POST" action="{{ route('business.suppliers.balance-adjustments.reverse', [$supplier, $adjustment]) }}" data-tf-confirm-message="Reverse {{ $adjustment->reference }}? A new opposite ledger entry will be posted." data-tf-confirm-title="Reverse balance adjustment" data-tf-confirm-button="Reverse Adjustment" data-tf-confirm-color="#dc3545">@csrf<input type="hidden" name="submission_token" value="{{ (string) \Illuminate\Support\Str::uuid() }}"><button class="btn btn-sm btn-outline-danger">Reverse</button></form>@else<span class="tf-badge tf-badge-secondary">Reversed</span>@endif
+    @endcompanyCan</td></tr>@empty<tr><td colspan="8" class="text-center tf-muted py-4">No balance adjustments recorded.</td></tr>@endforelse</tbody></x-table>
+</div>
+@companyCan('suppliers.adjust_balance')
+    @include('business.partials.balance-adjustment-modal', ['party' => $supplier, 'partyType' => 'supplier', 'currentBalance' => $remainingPayable])
+@endcompanyCan
 @endsection

@@ -43,6 +43,7 @@
 @endforelse
 </tbody></x-table>
 @foreach($logs as $log)
+    @php($valueChanges = \App\Services\AuditDescriptionService::valueChanges($log->old_values, $log->new_values))
     @php($auditTarget = $log->record_type ? class_basename($log->record_type).($log->record_id ? ' #'.$log->record_id : '') : '—')
     <div class="modal fade" id="auditDetailsModal{{ $log->id }}" tabindex="-1" aria-labelledby="auditDetailsModalLabel{{ $log->id }}" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5" id="auditDetailsModalLabel{{ $log->id }}">Audit log details</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><dl class="row mb-0 small"><dt class="col-sm-4">Date &amp; time</dt><dd class="col-sm-8"><x-date-time :value="$log->occurred_at ?? $log->created_at" /></dd><dt class="col-sm-4">Actor</dt><dd class="col-sm-8">{{ $log->user_name ?: $log->user?->name ?: 'System' }}</dd><dt class="col-sm-4">Role</dt><dd class="col-sm-8">{{ $log->role ?: $log->actor_role ?: 'system' }}</dd><dt class="col-sm-4">Module</dt><dd class="col-sm-8"><x-activity-label :activity="$log" field="module" /></dd><dt class="col-sm-4">Action</dt><dd class="col-sm-8"><x-activity-label :activity="$log" /></dd><dt class="col-sm-4">Target</dt><dd class="col-sm-8">{{ $auditTarget }}</dd><dt class="col-sm-4">Description</dt><dd class="col-sm-8 text-break">{{ $log->description ?: '—' }}</dd><dt class="col-sm-4">Route</dt><dd class="col-sm-8 text-break">{{ $log->route ?: '—' }}</dd><dt class="col-sm-4">IP address</dt><dd class="col-sm-8">{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</dd></dl></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div></div></div></div>
 @endforeach
@@ -73,6 +74,42 @@ document.querySelectorAll('[data-audit-period-filter]').forEach((form) => {
         dates.forEach((date) => { date.value = ''; });
         syncing = false;
     }));
+});
+</script>
+@endpush
+
+@php($auditChangesById = $logs->mapWithKeys(fn ($log) => [$log->id => \App\Services\AuditDescriptionService::valueChanges($log->old_values, $log->new_values)])->all())
+@push('scripts')
+<script>
+const auditChangesById = @json($auditChangesById);
+Object.entries(auditChangesById).forEach(([id, changes]) => {
+    const body = document.querySelector(`#auditDetailsModal${id} .modal-body`);
+    if (!body || !changes.length) return;
+
+    body.closest('.modal-dialog')?.classList.add('modal-lg');
+
+    const section = document.createElement('section');
+    section.className = 'border-top mt-3 pt-3';
+    const heading = document.createElement('h3');
+    heading.className = 'h6 mb-2';
+    heading.textContent = 'Changed values';
+    const table = document.createElement('table');
+    table.className = 'table table-sm align-middle mb-0';
+    table.innerHTML = '<thead><tr><th>Field</th><th>Previous</th><th>New</th></tr></thead>';
+    const tableBody = document.createElement('tbody');
+    changes.forEach((change) => {
+        const row = document.createElement('tr');
+        [change.label, change.old, change.new].forEach((value) => {
+            const cell = document.createElement('td');
+            cell.className = 'text-break';
+            cell.textContent = value;
+            row.appendChild(cell);
+        });
+        tableBody.appendChild(row);
+    });
+    table.appendChild(tableBody);
+    section.append(heading, table);
+    body.appendChild(section);
 });
 </script>
 @endpush

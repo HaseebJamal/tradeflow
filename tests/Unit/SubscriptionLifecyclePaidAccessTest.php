@@ -2,7 +2,9 @@
 
 namespace Tests\Unit;
 
+use App\Models\PlatformPayment;
 use App\Models\Subscription;
+use App\Services\CompanyPermissionService;
 use App\Services\SubscriptionLifecycleService;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -111,6 +113,107 @@ class SubscriptionLifecyclePaidAccessTest extends TestCase
             $this->assertTrue($state['can_access_business']);
             $this->assertSame(4, $state['paid_days_remaining']);
             $this->assertSame('2026-08-17', $state['paid_access_end']?->toDateString());
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_paid_expiry_alert_is_hidden_when_a_continuous_paid_renewal_is_secured(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-15 12:00:00', config('app.timezone')));
+
+        try {
+            $subscription = new class extends Subscription {
+                public function extraAccessDays(): int
+                {
+                    return 0;
+                }
+
+                public function effectivePaidAccessEnd(): ?Carbon
+                {
+                    return $this->ends_at?->copy();
+                }
+            };
+            $subscription->forceFill([
+                'status' => 'Active',
+                'payment_status' => 'Received',
+                'starts_at' => '2026-08-15',
+                'ends_at' => '2026-08-19',
+            ]);
+            $upcoming = new PlatformPayment();
+            $upcoming->forceFill([
+                'status' => 'Received',
+                'period_starts_at' => '2026-08-20',
+                'period_ends_at' => '2026-09-19',
+            ]);
+            $lifecycle = new class(app(CompanyPermissionService::class), $upcoming) extends SubscriptionLifecycleService {
+                public function __construct(CompanyPermissionService $permissions, private readonly ?PlatformPayment $upcoming)
+                {
+                    parent::__construct($permissions);
+                }
+
+                public function upcomingPaidCycle(Subscription $subscription): ?PlatformPayment
+                {
+                    return $this->upcoming;
+                }
+            };
+
+            $state = $lifecycle->state($subscription);
+
+            $this->assertTrue($state['has_secured_upcoming_paid_renewal']);
+            $this->assertFalse($state['is_paid_access_expiring']);
+            $this->assertFalse($state['is_expiring_soon']);
+            $this->assertTrue($lifecycle->hasSecuredUpcomingPaidRenewal($subscription));
+            $this->assertNull($lifecycle->dashboardExpiryAlert($state));
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_pending_future_payment_does_not_hide_paid_expiry_alert(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-15 12:00:00', config('app.timezone')));
+
+        try {
+            $subscription = new class extends Subscription {
+                public function extraAccessDays(): int
+                {
+                    return 0;
+                }
+
+                public function effectivePaidAccessEnd(): ?Carbon
+                {
+                    return $this->ends_at?->copy();
+                }
+            };
+            $subscription->forceFill([
+                'status' => 'Active',
+                'payment_status' => 'Received',
+                'starts_at' => '2026-08-15',
+                'ends_at' => '2026-08-19',
+            ]);
+            $upcoming = new PlatformPayment();
+            $upcoming->forceFill([
+                'status' => 'Pending',
+                'period_starts_at' => '2026-08-20',
+                'period_ends_at' => '2026-09-19',
+            ]);
+            $lifecycle = new class(app(CompanyPermissionService::class), $upcoming) extends SubscriptionLifecycleService {
+                public function __construct(CompanyPermissionService $permissions, private readonly ?PlatformPayment $upcoming)
+                {
+                    parent::__construct($permissions);
+                }
+
+                public function upcomingPaidCycle(Subscription $subscription): ?PlatformPayment
+                {
+                    return $this->upcoming;
+                }
+            };
+
+            $state = $lifecycle->state($subscription);
+
+            $this->assertFalse($lifecycle->hasSecuredUpcomingPaidRenewal($subscription));
+            $this->assertNotNull($lifecycle->dashboardExpiryAlert($state));
         } finally {
             Carbon::setTestNow();
         }

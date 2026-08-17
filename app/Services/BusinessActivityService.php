@@ -4,17 +4,16 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\Business;
-use App\Models\User;
-use App\Notifications\BusinessActivityNotification;
-use App\Services\CompanyPermissionService;
 
 class BusinessActivityService
 {
+    public function __construct(private readonly BusinessNotificationPolicy $notificationPolicy) {}
+
     /**
      * Persist one authoritative audit record after a successful business
-     * transaction, then notify only users inside that business who have
-     * notification access. Platform administrators receive their own platform
-     * alerts through the dedicated platform notification workflows.
+     * transaction. A record of activity is not automatically a bell alert;
+     * the narrow notification policy handles only unresolved conditions that
+     * require attention.
      *
      * @param array<string, mixed>|null $oldValues
      * @param array<string, mixed>|null $newValues
@@ -41,13 +40,6 @@ class BusinessActivityService
             'user_agent' => substr((string) request()->userAgent(), 0, 1000),
         ]);
 
-        $permissions = app(CompanyPermissionService::class);
-        User::query()
-            ->where('business_id', $business->id)
-            ->whereIn('role', ['business_owner', 'custom_staff'])
-            ->where('status', 'active')
-            ->get()
-            ->filter(fn (User $recipient) => $permissions->allowsUser($recipient, 'notifications.view', $business))
-            ->each(fn (User $recipient) => $recipient->notify(new BusinessActivityNotification($business, $module, $action, $recordId, $newValues ?? [])));
+        $this->notificationPolicy->handleBusinessActivity($business, $module, $action, $recordId, $newValues ?? []);
     }
 }

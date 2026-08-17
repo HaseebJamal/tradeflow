@@ -64,8 +64,9 @@ class PurchaseFinancialSummaryService
         // not remain payable. Use the saved line total so discounts/tax are
         // retained rather than recomputing from a display-only unit cost.
         $receiptAdjustments = $this->money(PurchaseItem::query()
-            ->where('purchase_id', $purchase->id)
-            ->selectRaw('COALESCE(SUM(CASE WHEN quantity > 0 THEN (line_total / quantity) * (COALESCE(damaged_quantity, 0) + COALESCE(rejected_quantity, 0)) ELSE 0 END), 0) AS amount')
+            ->leftJoin('goods_receipt_items as receipt_item', 'receipt_item.purchase_item_id', '=', 'purchase_items.id')
+            ->where('purchase_items.purchase_id', $purchase->id)
+            ->selectRaw('COALESCE(SUM(CASE WHEN purchase_items.quantity > 0 THEN (purchase_items.line_total / purchase_items.quantity) * (CASE WHEN receipt_item.paid_damaged_quantity IS NULL AND receipt_item.paid_rejected_quantity IS NULL THEN (COALESCE(receipt_item.damaged_quantity, 0) + COALESCE(receipt_item.rejected_quantity, 0)) ELSE (COALESCE(receipt_item.paid_damaged_quantity, 0) + COALESCE(receipt_item.paid_rejected_quantity, 0)) END) ELSE 0 END), 0) AS amount')
             ->value('amount'));
 
         // A purchase return is a later reversal of stock that was accepted.
