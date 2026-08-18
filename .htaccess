@@ -1,0 +1,14 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Serve only assets that exist under Laravel's public web root. The rest
+    # of the application is handled by the root front controller below.
+    RewriteRule ^index\.php$ - [L]
+    RewriteCond %{DOCUMENT_ROOT}/tradeflow/public/$1 -f [OR]
+    RewriteCond %{DOCUMENT_ROOT}/tradeflow/public/$1 -d
+    RewriteRule ^(.+)$ public/$1 [L]
+
+    # Keep /tradeflow/public out of the URL while preserving Laravel's
+    # correct base path for routes such as /tradeflow/login.
+    RewriteRule ^ index.php [L]
+</IfModule>
