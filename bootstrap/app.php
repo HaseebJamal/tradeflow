@@ -49,5 +49,20 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // PHP rejects files larger than its server-level upload configuration
+        // before the controller can inspect the upload. Give the bilingual demo
+        // uploader a helpful, actionable response without adding an app limit.
+        $exceptions->render(function (\Illuminate\Http\Exceptions\PostTooLargeException $exception, \Illuminate\Http\Request $request) {
+            if (! $request->is('admin/settings/demo-video')) {
+                return null;
+            }
+
+            $message = 'The upload exceeded the server configuration limit. Increase the server upload settings and try again.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 413);
+            }
+
+            return back()->withInput()->withErrors(['demo_video_file' => $message]);
+        });
     })->create();

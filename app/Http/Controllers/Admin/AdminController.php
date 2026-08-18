@@ -2666,18 +2666,26 @@ class AdminController extends Controller
         $prefix = 'demo_'.$locale.'_';
         $videoField = $prefix.'video_file';
         $posterField = $prefix.'poster_file';
+        $videoFile = $request->file($videoField);
+        if ($videoFile?->getError() === UPLOAD_ERR_INI_SIZE) {
+            throw ValidationException::withMessages([
+                $videoField => 'The upload exceeded the server configuration limit. Increase the server upload settings and try again.',
+            ]);
+        }
         $data = $request->validate([
             'demo_language' => ['required', Rule::in(['en', 'ur'])],
             $prefix.'title' => ['nullable', 'string', 'max:120'],
             $prefix.'subtitle' => ['nullable', 'string', 'max:500'],
             $prefix.'video_type' => ['required', Rule::in(['external', 'upload'])],
             $prefix.'video_url' => ['nullable', 'string', 'max:2048'],
-            $videoField => ['nullable', 'file', 'max:524288'],
+            // Demo video uploads are constrained by the web server/PHP, not by
+            // an application-level file-size limit. Type validation remains
+            // below so the public landing page only receives supported videos.
+            $videoField => ['nullable', 'file'],
             $posterField => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             $prefix.'remove_poster' => ['nullable', 'boolean'],
             $prefix.'is_active' => ['nullable', 'boolean'],
         ]);
-        $videoFile = $request->file($videoField);
         if ($videoFile && (! $videoFile->isValid()
             || ! in_array(strtolower($videoFile->getClientOriginalExtension()), ['mp4', 'webm', 'ogv'], true)
             || ! in_array($videoFile->getMimeType(), ['video/mp4', 'video/webm', 'video/ogg', 'application/ogg'], true))) {
@@ -2701,7 +2709,7 @@ class AdminController extends Controller
             } elseif ($oldVideoType === 'upload' && filled($oldVideo)) {
                 $videoUrl = $oldVideo;
             } else {
-                throw ValidationException::withMessages([$videoField => 'The video could not be uploaded. Please check the server upload configuration or try again.']);
+                throw ValidationException::withMessages([$videoField => 'Upload a demo video before using the uploaded video option.']);
             }
             if ($request->hasFile($posterField)) {
                 $newPoster = $request->file($posterField)->store('platform/demo-posters/'.$locale, 'public');

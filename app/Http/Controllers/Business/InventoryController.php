@@ -28,7 +28,7 @@ class InventoryController extends Controller
     {
         $businessId = auth()->user()->business_id;
         $summaryProducts = Product::where('business_id', $businessId)
-            ->get(['id', 'business_id', 'stock_quantity', 'low_stock_alert_qty', 'has_batch_tracking']);
+            ->get(['id', 'business_id', 'name', 'stock_quantity', 'low_stock_alert_qty', 'has_batch_tracking']);
         $summaries = $this->inventorySummaries->summaries($businessId, $summaryProducts);
         $inventories = Inventory::with('product')->where('business_id', $businessId)->whereHas('product')->latest()->paginate(10)->withQueryString();
         $inventories->getCollection()->each(function (Inventory $inventory) use ($summaries): void {

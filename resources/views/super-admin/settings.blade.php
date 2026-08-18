@@ -93,10 +93,10 @@
         </section>
     </div>
 </form>
-@if($settings->whatsapp_number)<form id="removeWhatsAppContactForm" method="POST" action="{{ route('admin.settings.whatsapp.destroy') }}" class="d-none" data-tf-confirm-message="This removes the WhatsApp contact and hides the floating landing-page button." data-tf-confirm-title="Remove WhatsApp contact?" data-tf-confirm-button="Remove contact" data-tf-confirm-color="#dc3545">@csrf @method('DELETE')</form>@endif
+@if($settings->whatsapp_number)<form id="removeWhatsAppContactForm" method="POST" action="{{ route('admin.settings.whatsapp.destroy') }}" class="d-none" data-tf-confirm-message="This removes the WhatsApp contact and hides the floating landing-page button." data-tf-confirm-title="Remove WhatsApp contact?" data-tf-confirm-button="Remove contact" data-tf-confirm-color="#dc3545" data-tf-confirm-saving-text="Removing...">@csrf @method('DELETE')</form>@endif
 <section class="tf-card tf-settings-feature-card tf-platform-demo-card p-4 mt-4">
     <div class="tf-platform-demo-card__header mb-4">
-        <div class="tf-platform-demo-card__header-copy"><span class="tf-settings-feature-icon is-blue"><i class="bi bi-translate"></i></span><h2 class="h5 mt-3 mb-1">Landing page demo videos</h2><p class="tf-muted small mb-0">Manage English and Urdu demos independently. Large video uploads are supported; server upload limits remain infrastructure settings.</p></div>
+        <div class="tf-platform-demo-card__header-copy"><span class="tf-settings-feature-icon is-blue"><i class="bi bi-translate"></i></span><h2 class="h5 mt-3 mb-1">Landing page demo videos</h2><p class="tf-muted small mb-0">Large video uploads are supported. Maximum size depends on server infrastructure.</p></div>
         <div class="tf-platform-demo-card__status d-inline-flex flex-column align-items-end gap-1" data-demo-header-switches>
             @foreach(['en' => 'English', 'ur' => 'Urdu'] as $locale => $languageName)
                 @php
@@ -136,7 +136,7 @@
             $isDemoActive = (bool) old($prefix.'is_active', $settings->getAttribute($prefix.'is_active'));
         @endphp
         <div class="tab-pane fade {{ $locale === 'en' ? 'show active' : '' }}" id="demo-language-{{ $locale }}">
-            <form id="demoLanguageForm-{{ $locale }}" method="POST" action="{{ route('admin.settings.demo-video.update') }}" enctype="multipart/form-data" class="row g-3" data-demo-language-form data-demo-stored-video="{{ filled($storedVideo) ? 'true' : 'false' }}" data-demo-stored-video-type="{{ $storedVideoType }}">
+            <form id="demoLanguageForm-{{ $locale }}" method="POST" action="{{ route('admin.settings.demo-video.update') }}" enctype="multipart/form-data" class="row g-3" data-demo-language-form data-demo-stored-video="{{ filled($storedVideo) ? 'true' : 'false' }}" data-demo-stored-video-type="{{ $storedVideoType }}" data-tf-confirm-message="Save the {{ $languageName }} demo video settings?" data-tf-confirm-title="Save {{ $languageName }} demo?" data-tf-confirm-button="Save" data-tf-confirm-icon="question" data-tf-confirm-color="#2563eb" data-tf-confirm-saving-text="Saving...">
                 @csrf @method('PUT')<input type="hidden" name="demo_language" value="{{ $locale }}">
                 <input type="hidden" name="{{ $prefix }}is_active" value="0"><input class="visually-hidden" type="checkbox" id="{{ $prefix }}active" name="{{ $prefix }}is_active" value="1" @checked($isDemoActive) data-demo-active-input>
                 <div class="col-12"><h3 class="h6 mb-0">{{ $languageName }} demo <span lang="{{ $locale === 'ur' ? 'ur' : 'en' }}" @if($locale === 'ur') dir="rtl" @endif>({{ $languageLabel }})</span></h3></div>
@@ -144,7 +144,7 @@
                 <div class="col-md-6"><label class="form-label">Supporting text</label><input name="{{ $prefix }}subtitle" class="form-control" maxlength="500" value="{{ old($prefix.'subtitle', $settings->getAttribute($prefix.'subtitle')) }}"></div>
                 <div class="col-md-4"><label class="form-label">Video source</label><select name="{{ $prefix }}video_type" class="form-select" data-demo-language-source><option value="external" @selected(old($prefix.'video_type', $settings->getAttribute($prefix.'video_type') ?: 'external') === 'external')>Secure video URL</option><option value="upload" @selected(old($prefix.'video_type', $settings->getAttribute($prefix.'video_type')) === 'upload')>Upload video</option></select></div>
                 <div class="col-md-8" data-demo-language-panel="external"><label class="form-label">Direct HTTPS video URL</label><input name="{{ $prefix }}video_url" type="url" class="form-control" placeholder="https://example.com/demo.mp4" value="{{ old($prefix.'video_url', $settings->getAttribute($prefix.'video_type') === 'external' ? $storedVideo : '') }}"><small class="tf-muted">MP4 or WebM supported.</small></div>
-                <div class="col-md-8 d-none" data-demo-language-panel="upload"><label class="form-label">Replace {{ $languageName }} video</label><input name="{{ $prefix }}video_file" type="file" class="form-control" accept="video/mp4,video/webm,video/ogg,.mp4,.webm,.ogv" data-demo-upload-limit-bytes="536870912"><small class="tf-muted">MP4 or WebM supported. Maximum upload size depends on server configuration.</small></div>
+                <div class="col-md-8 d-none" data-demo-language-panel="upload"><label class="form-label">Replace {{ $languageName }} video</label><input name="{{ $prefix }}video_file" type="file" class="form-control" accept="video/mp4,video/webm,video/ogg,.mp4,.webm,.ogv"><small class="tf-muted">Large video uploads are supported. Maximum size depends on server infrastructure.</small></div>
                 @if($hasStoredVideo)
                     <div class="col-12"><div class="tf-setting-current-file justify-content-between flex-wrap gap-2"><span><i class="bi bi-check-circle-fill"></i> <strong>Current video:</strong> {{ $storedVideoName }} <span class="badge text-bg-success ms-1">Configured</span></span><button class="btn btn-sm btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#demoPreview-{{ $locale }}"><i class="bi bi-play-circle me-1"></i>Preview</button></div></div>
                 @elseif(filled($storedVideo))
@@ -154,7 +154,7 @@
                 <div class="col-12 d-flex flex-wrap align-items-center gap-2 border-top pt-3"><button class="btn btn-sm btn-tf-primary" type="submit" data-demo-language-save>Save</button>@if(filled($storedVideo) || filled($storedPoster))<button class="btn btn-sm btn-outline-danger" type="submit" form="removeDemoLanguage-{{ $locale }}">Delete</button>@endif</div>
                 <div class="col-12 d-none small tf-muted" data-demo-upload-progress aria-live="polite"></div>
             </form>
-            @if(filled($storedVideo) || filled($storedPoster))<form id="removeDemoLanguage-{{ $locale }}" method="POST" action="{{ route('admin.settings.demo-video.destroy') }}" class="d-none" data-tf-confirm-message="This removes only the {{ $languageName }} demo." data-tf-confirm-title="Remove {{ $languageName }} demo?" data-tf-confirm-button="Remove demo" data-tf-confirm-color="#dc3545">@csrf @method('DELETE')<input type="hidden" name="demo_language" value="{{ $locale }}"></form>@endif
+            @if(filled($storedVideo) || filled($storedPoster))<form id="removeDemoLanguage-{{ $locale }}" method="POST" action="{{ route('admin.settings.demo-video.destroy') }}" class="d-none" data-tf-confirm-message="This removes only the {{ $languageName }} demo." data-tf-confirm-title="Remove {{ $languageName }} demo?" data-tf-confirm-button="Remove demo" data-tf-confirm-color="#dc3545" data-tf-confirm-saving-text="Removing...">@csrf @method('DELETE')<input type="hidden" name="demo_language" value="{{ $locale }}"></form>@endif
             @if($hasStoredVideo)
                 <div class="modal fade tf-demo-preview-modal" id="demoPreview-{{ $locale }}" tabindex="-1" aria-hidden="true" aria-labelledby="demoPreviewTitle-{{ $locale }}" data-demo-preview-modal>
                     <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
@@ -302,17 +302,6 @@ document.addEventListener('DOMContentLoaded', () => {
         form.addEventListener('submit', event => {
             const file = form.querySelector('input[type="file"][name$="_video_file"]')?.files[0];
             if (!file || !window.XMLHttpRequest) return;
-            const maxBytes = Number(form.querySelector('[data-demo-upload-limit-bytes]')?.dataset.demoUploadLimitBytes || 0);
-            if (maxBytes && file.size > maxBytes) {
-                event.preventDefault();
-                const maxMegabytes = Math.round(maxBytes / 1024 / 1024);
-                const progressNode = form.querySelector('[data-demo-upload-progress]');
-                file.setCustomValidity('The selected video exceeds the ' + maxMegabytes + ' MB upload limit.');
-                file.reportValidity();
-                progressNode.classList.remove('d-none');
-                progressNode.textContent = 'The selected video exceeds the ' + maxMegabytes + ' MB upload limit.';
-                return;
-            }
             file.setCustomValidity('');
             event.preventDefault();
             const save = form.querySelector('[data-demo-language-save]');
@@ -327,9 +316,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 save.disabled = false;
+                delete form.dataset.tfConfirmApproved;
                 const response = xhr.responseText || '';
                 if (xhr.status === 413 || /POST data is too large|exceeds the limit/i.test(response)) {
-                    progress.textContent = 'The selected video exceeds the server upload limit.';
+                    progress.textContent = 'The upload exceeded the server configuration limit. Increase the server upload settings and try again.';
                 } else if (xhr.status === 419) {
                     progress.textContent = 'Your session expired. Refresh the page and try again.';
                 } else {

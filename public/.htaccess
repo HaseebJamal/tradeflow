@@ -1,3 +1,8 @@
+# The Apache 2.4 default body limit is applied after Laravel's URL rewrite.
+# Keep uploads for this local application governed by available infrastructure,
+# not by Apache's default request-size cap.
+LimitRequestBody 0
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

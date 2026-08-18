@@ -40,13 +40,14 @@ use App\Http\Controllers\Retailer\RetailerController;
 use App\Http\Controllers\ThemePreferenceController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\Request;
 use App\Models\SubscriptionPlan;
 use App\Models\Subscription;
 
 // Some Windows/XAMPP installations leave public/storage as a plain directory
 // instead of Laravel's symbolic link. Serve public-disk files through a
 // separate application path, avoiding Laravel's reserved /storage route.
-Route::get('/media/{path}', function (string $path) {
+Route::match(['get', 'head'], '/media/{path}', function (Request $request, string $path) {
     $path = ltrim($path, '/');
     abort_if(
         $path === '' || collect(explode('/', $path))->contains(fn (string $segment) => $segment === '.' || $segment === '..'),
@@ -56,9 +57,88 @@ Route::get('/media/{path}', function (string $path) {
     $disk = Storage::disk('public');
     abort_unless($disk->exists($path), 404);
 
-    return $disk->response($path, null, [
+    // FilesystemAdapter::response() reads the entire file into memory.  That
+    // breaks large demo videos and also prevents the browser from requesting
+    // the MP4 metadata / seek ranges it needs for playback.  Stream the file
+    // in small chunks and honour a single RFC 7233 byte range instead.
+    $file = $disk->path($path);
+    $size = filesize($file);
+    abort_unless($size !== false, 404);
+
+    $start = 0;
+    $end = $size - 1;
+    $status = 200;
+    $range = $request->header('Range');
+
+    if ($range !== null && preg_match('/^bytes=(\d*)-(\d*)$/i', trim($range), $matches)) {
+        if ($matches[1] === '' && $matches[2] === '') {
+            return response('', 416, ['Content-Range' => "bytes */{$size}"]);
+        }
+
+        if ($matches[1] === '') {
+            $length = (int) $matches[2];
+            $start = max(0, $size - $length);
+        } else {
+            $start = (int) $matches[1];
+        }
+
+        if ($matches[2] !== '') {
+            $end = min((int) $matches[2], $size - 1);
+        }
+
+        if ($start > $end || $start >= $size) {
+            return response('', 416, ['Content-Range' => "bytes */{$size}"]);
+        }
+
+        $status = 206;
+    }
+
+    $length = $end - $start + 1;
+    $headers = [
         'Cache-Control' => 'public, max-age=86400',
-    ]);
+        'Content-Type' => $disk->mimeType($path) ?: 'application/octet-stream',
+        'Content-Length' => (string) $length,
+        'Accept-Ranges' => 'bytes',
+        'Content-Disposition' => 'inline; filename="'.str_replace('"', '', basename($path)).'"',
+    ];
+
+    if ($status === 206) {
+        $headers['Content-Range'] = "bytes {$start}-{$end}/{$size}";
+    }
+
+    if ($request->isMethod('HEAD')) {
+        return response('', $status, $headers);
+    }
+
+    return response()->stream(function () use ($file, $start, $length): void {
+        $handle = fopen($file, 'rb');
+
+        if ($handle === false) {
+            return;
+        }
+
+        try {
+            fseek($handle, $start);
+            $remaining = $length;
+
+            while ($remaining > 0 && !feof($handle)) {
+                $chunk = fread($handle, min(8 * 1024 * 1024, $remaining));
+
+                if ($chunk === false || $chunk === '') {
+                    break;
+                }
+
+                echo $chunk;
+                $remaining -= strlen($chunk);
+
+                if (function_exists('flush')) {
+                    flush();
+                }
+            }
+        } finally {
+            fclose($handle);
+        }
+    }, $status, $headers);
 })->where('path', '.*')->name('media.public');
 
 Route::get('/', fn() => view('public.home', [
@@ -257,7 +337,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'record.context', 'r
     Route::get('/audit-logs/export/pdf', [AdminController::class, 'exportAuditLogsPdf'])->name('audit-logs.export.pdf');
     Route::get('/settings', [AdminController::class, 'settings'])->name('settings');
     Route::put('/settings', [AdminController::class, 'updateSettings'])->name('settings.update');
-    Route::put('/settings/demo-video', [AdminController::class, 'updateDemoVideoSettings'])->name('settings.demo-video.update');
+    // Browser multipart uploads are transported as POST and may not retain the
+    // hidden PUT override when infrastructure rejects an oversized body. Accept
+    // both transports for this authenticated Super Admin upload endpoint.
+    Route::match(['put', 'post'], '/settings/demo-video', [AdminController::class, 'updateDemoVideoSettings'])->name('settings.demo-video.update');
     Route::put('/settings/whatsapp-contact', [AdminController::class, 'updateWhatsAppContact'])->name('settings.whatsapp.update');
     Route::patch('/settings/demo-video/active', [AdminController::class, 'toggleDemoVideoActive'])->name('settings.demo-video.active');
     Route::patch('/settings/whatsapp-contact/active', [AdminController::class, 'toggleWhatsAppActive'])->name('settings.whatsapp.active');
