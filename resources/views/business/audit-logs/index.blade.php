@@ -42,11 +42,13 @@
     <tr><td colspan="{{ $canViewDetails ? 8 : 7 }}" class="text-center tf-muted py-4">No audit activity has been recorded yet.</td></tr>
 @endforelse
 </tbody></x-table>
-@if($canViewDetails)@foreach($logs as $log)
+@if($canViewDetails)
+@foreach($logs as $log)
     @php($valueChanges = \App\Services\AuditDescriptionService::valueChanges($log->old_values, $log->new_values))
     @php($auditTarget = $log->record_type ? class_basename($log->record_type).($log->record_id ? ' #'.$log->record_id : '') : '—')
     <div class="modal fade" id="auditDetailsModal{{ $log->id }}" tabindex="-1" aria-labelledby="auditDetailsModalLabel{{ $log->id }}" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5" id="auditDetailsModalLabel{{ $log->id }}">Audit log details</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><dl class="row mb-0 small"><dt class="col-sm-4">Date &amp; time</dt><dd class="col-sm-8"><x-date-time :value="$log->occurred_at ?? $log->created_at" /></dd><dt class="col-sm-4">Actor</dt><dd class="col-sm-8">{{ $log->user_name ?: $log->user?->name ?: 'System' }}</dd><dt class="col-sm-4">Role</dt><dd class="col-sm-8">{{ $log->role ?: $log->actor_role ?: 'system' }}</dd><dt class="col-sm-4">Module</dt><dd class="col-sm-8"><x-activity-label :activity="$log" field="module" /></dd><dt class="col-sm-4">Action</dt><dd class="col-sm-8"><x-activity-label :activity="$log" /></dd><dt class="col-sm-4">Target</dt><dd class="col-sm-8">{{ $auditTarget }}</dd><dt class="col-sm-4">Description</dt><dd class="col-sm-8 text-break">{{ $log->description ?: '—' }}</dd><dt class="col-sm-4">Route</dt><dd class="col-sm-8 text-break">{{ $log->route ?: '—' }}</dd><dt class="col-sm-4">IP address</dt><dd class="col-sm-8">{{ \App\Services\AuditIpResolver::display($log->ip_address) }}</dd></dl></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div></div></div></div>
-@endforeach@endif
+@endforeach
+@endif
 <div class="mt-3 audit-log-pagination"><x-table-result-summary :paginator="$logs" />{{ $logs->links('pagination::bootstrap-5') }}</div>
 @endsection
 @push('scripts')
