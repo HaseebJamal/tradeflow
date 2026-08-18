@@ -21,15 +21,12 @@
 @endphp
 
 <div data-tf-super-admin-dashboard>
-<section class="mb-4" data-tf-motion-item>
-    <span class="tf-dashboard-eyebrow"><i class="bi bi-activity"></i> Platform overview</span>
-    <h2 class="h3 mb-1">Good {{ $platformGreeting }}, {{ $platformUserName }}.</h2>
-    <p class="tf-muted mb-0">Here’s what’s happening across Profit Point today.</p>
-</section>
-
 <section class="tf-dashboard-intro" data-tf-motion-item>
-    <canvas class="tf-dashboard-orbit" data-tf-dashboard-orbit aria-hidden="true"></canvas>
-    <div class="tf-dashboard-intro-copy"><span class="tf-dashboard-eyebrow"><i class="bi bi-activity"></i> Platform pulse</span><h2>Everything is running in one place.</h2><p>Monitor business onboarding and platform operations with live data.</p></div>
+    <div class="tf-dashboard-intro-copy">
+        <span class="tf-dashboard-eyebrow"><i class="bi bi-activity"></i> Platform overview</span>
+        <h2>Good {{ $platformGreeting }}, {{ $platformUserName }}.</h2>
+        <p>Monitor businesses, approvals, billing, support, and platform activity from one place.</p>
+    </div>
 </section>
 
 <section class="dashboard-cards tf-dashboard-kpis" aria-label="Platform statistics">
@@ -87,6 +84,5 @@
 @endsection
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.min.js" defer></script>
 <script src="{{ asset('js/super-admin-dashboard-motion.js') }}?v={{ filemtime(public_path('js/super-admin-dashboard-motion.js')) }}" defer></script>
 @endpush

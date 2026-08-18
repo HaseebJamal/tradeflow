@@ -12,11 +12,19 @@
 
     <section class="pp-contact-page">
         <div class="container">
-            <div class="row g-4 g-xl-5 align-items-start pp-contact-layout">
-                <div class="col-lg-6 col-xl-6">
-                    <div class="pp-contact-intro">
-                        <span class="pp-contact-eyebrow">GET IN TOUCH</span>
-                        <!-- <h1>Let's talk about your business.</h1> -->
+            <div class="pp-contact-shell">
+                <header class="pp-contact-hero">
+                    <span class="pp-contact-eyebrow">GET IN TOUCH</span>
+                    <h1>Let&rsquo;s talk about your business.</h1>
+                </header>
+
+            <div class="row g-4 g-xl-5 align-items-stretch pp-contact-layout">
+                <div class="col-lg-5 col-xl-5">
+                    <aside class="pp-contact-intro">
+                        <div class="pp-contact-info-heading">
+                            <h2>Contact information</h2>
+                            <p>Reach our team through the channel that works best for you.</p>
+                        </div>
 
                         <div class="pp-contact-details" aria-label="Contact details">
                             <div class="pp-contact-detail">
@@ -51,10 +59,10 @@
                                 <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
                             </a>
                         @endif
-                    </div>
+                    </aside>
                 </div>
 
-                <div class="col-lg-6 col-xl-6">
+                <div class="col-lg-7 col-xl-7">
                     <article class="pp-contact-card">
                         <header class="pp-contact-card__header">
                             <div>
@@ -113,6 +121,7 @@
                         </form>
                     </article>
                 </div>
+            </div>
             </div>
         </div>
     </section>

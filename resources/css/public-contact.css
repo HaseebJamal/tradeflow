@@ -1,56 +1,72 @@
 body:has(.pp-contact-page) { background: var(--bg); }
 
 .pp-contact-page {
-    background: radial-gradient(circle at 88% 15%, color-mix(in srgb, var(--primary) 11%, transparent), transparent 26%), radial-gradient(circle at 11% 33%, color-mix(in srgb, var(--secondary) 7%, transparent), transparent 25%), var(--bg);
+    background: radial-gradient(circle at 82% 8%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 30%), radial-gradient(circle at 8% 42%, color-mix(in srgb, var(--secondary) 8%, transparent), transparent 27%), var(--bg);
     min-height: calc(100vh - 100px);
-    padding: 148px 0 84px;
+    padding: 46px 0 76px;
 }
 
-.pp-contact-layout { margin: 0 auto; max-width: 1120px; }
-.pp-contact-intro { padding: 1.25rem 0.35rem; }
-.pp-contact-eyebrow { color: var(--primary); display: inline-block; font-size: 0.65rem; font-weight: 750; letter-spacing: 0.12em; margin-bottom: 0.85rem; }
-.pp-contact-intro h1,.pp-contact-card h2 { color: var(--heading); font-family: var(--font-heading); font-weight: 800; letter-spacing: -0.045em; }
-.pp-contact-intro h1 { font-size: clamp(2.25rem, 3vw, 2.5rem); line-height: 1.12; margin: 0; white-space: nowrap; }
+.pp-contact-shell {
+    background: color-mix(in srgb, var(--surface) 91%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    border-radius: 28px;
+    box-shadow: 0 20px 46px rgba(15, 23, 42, 0.055);
+    margin: 0 auto;
+    max-width: 1160px;
+    padding: clamp(1.5rem, 4vw, 2.7rem);
+}
 
-.pp-contact-details { background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05); display: grid; gap: 0.2rem; margin-top: 1.35rem; padding: 0.7rem; }
-.pp-contact-detail { align-items: center; display: flex; gap: 0.85rem; padding: 0.75rem; }
-.pp-contact-detail__icon { align-items: center; background: var(--info-soft); border-radius: 10px; color: var(--primary); display: inline-flex; flex: 0 0 38px; height: 38px; justify-content: center; }
-.pp-contact-detail div { display: grid; gap: 0.12rem; min-width: 0; }
-.pp-contact-detail small { color: var(--muted); font-size: 0.68rem; font-weight: 600; }
-.pp-contact-detail :is(a, span) { color: var(--heading); font-size: 0.84rem; font-weight: 600; overflow-wrap: anywhere; }
-.pp-contact-detail a:hover { color: var(--primary); }
+.pp-contact-hero { margin: 0 auto clamp(1.45rem, 3vw, 2.2rem); max-width: 660px; text-align: center; }
+.pp-contact-eyebrow { color: var(--primary); display: inline-block; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.13em; margin-bottom: 0.58rem; }
+.pp-contact-hero h1,.pp-contact-info-heading h2,.pp-contact-card h2 { font-family: var(--font-heading); font-weight: 800; letter-spacing: -0.045em; }
+.pp-contact-hero h1 { color: var(--heading); font-size: clamp(2.15rem, 3.2vw, 2.7rem); line-height: 1.12; margin: 0; }
+.pp-contact-layout { margin: 0 auto; }
 
-.pp-contact-whatsapp { align-items: center; background: color-mix(in srgb, var(--success-soft) 68%, var(--surface)); border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border)); border-radius: 14px; color: var(--heading); display: flex; gap: 0.75rem; margin-top: 1rem; padding: 0.85rem; transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
-.pp-contact-whatsapp:hover { border-color: var(--success); box-shadow: 0 10px 22px color-mix(in srgb, var(--success) 16%, transparent); color: var(--heading); transform: translateY(-1px); }
-.pp-contact-whatsapp > span { align-items: center; background: #22c55e; border-radius: 10px; color: #fff; display: inline-flex; flex: 0 0 38px; height: 38px; justify-content: center; }
-.pp-contact-whatsapp div { display: grid; gap: 0.1rem; }
-.pp-contact-whatsapp strong { font-size: 0.8rem; font-weight: 650; }
-.pp-contact-whatsapp small { color: var(--muted); font-size: 0.7rem; }
+.pp-contact-intro { background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 92%, #15255a), color-mix(in srgb, var(--secondary) 90%, #312e81)); border-radius: 18px; color: #fff; display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: clamp(1.45rem, 3vw, 2rem); position: relative; }
+.pp-contact-intro::after { background: radial-gradient(circle, color-mix(in srgb, #fff 26%, transparent) 0, color-mix(in srgb, #fff 8%, transparent) 40%, transparent 69%); border-radius: 50%; bottom: -115px; content: ''; height: 245px; position: absolute; right: -110px; width: 245px; }
+.pp-contact-info-heading,.pp-contact-details,.pp-contact-whatsapp { position: relative; z-index: 1; }
+.pp-contact-info-heading h2 { color: #fff !important; font-size: 1.46rem; margin: 0 0 0.38rem; }
+.pp-contact-info-heading p { color: color-mix(in srgb, #fff 78%, transparent); font-size: 0.84rem; line-height: 1.62; margin: 0; max-width: 28rem; }
+.pp-contact-details { display: grid; gap: 0.1rem; margin-top: 1.35rem; }
+.pp-contact-detail { align-items: center; display: flex; gap: 0.9rem; padding: 0.88rem 0; }
+.pp-contact-detail + .pp-contact-detail { border-top: 1px solid color-mix(in srgb, #fff 18%, transparent); }
+.pp-contact-detail__icon { align-items: center; background: color-mix(in srgb, #fff 16%, transparent); border: 1px solid color-mix(in srgb, #fff 12%, transparent); border-radius: 11px; color: #fff; display: inline-flex; flex: 0 0 40px; height: 40px; justify-content: center; }
+.pp-contact-detail div { display: grid; gap: 0.14rem; min-width: 0; }
+.pp-contact-detail small { color: color-mix(in srgb, #fff 68%, transparent); font-size: 0.7rem; font-weight: 700; }
+.pp-contact-detail :is(a, span) { color: #fff; font-size: 0.86rem; font-weight: 650; overflow-wrap: anywhere; }
+.pp-contact-detail a:hover { color: #fff; opacity: 0.8; }
+
+.pp-contact-whatsapp { align-items: center; background: color-mix(in srgb, var(--success-soft) 78%, var(--surface)); border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border)); border-radius: 14px; color: var(--heading); display: flex; gap: 0.8rem; margin-top: auto; padding: 0.82rem 0.9rem; transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.pp-contact-whatsapp:hover { border-color: var(--success); box-shadow: 0 10px 20px color-mix(in srgb, var(--success) 14%, transparent); color: var(--heading); transform: translateY(-1px); }
+.pp-contact-whatsapp > span { align-items: center; background: #22c55e; border-radius: 10px; color: #fff; display: inline-flex; flex: 0 0 40px; height: 40px; justify-content: center; }
+.pp-contact-whatsapp div { display: grid; gap: 0.12rem; }
+.pp-contact-whatsapp strong { font-size: 0.82rem; font-weight: 750; }
+.pp-contact-whatsapp small { color: var(--muted); font-size: 0.72rem; }
 .pp-contact-whatsapp > i:last-child { color: var(--success); margin-left: auto; }
 
-.pp-contact-card { background: color-mix(in srgb, var(--surface) 95%, transparent); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow); padding: clamp(1.3rem, 3.3vw, 2.25rem); }
-.pp-contact-card__header { align-items: flex-start; display: flex; gap: 1rem; justify-content: space-between; margin-bottom: 1.5rem; }
-.pp-contact-card h2 { font-size: 1.35rem; margin: 0 0 0.3rem; }
+.pp-contact-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05); height: 100%; padding: clamp(1.55rem, 3vw, 2rem); }
+.pp-contact-card__header { align-items: flex-start; display: flex; gap: 1rem; justify-content: space-between; margin-bottom: 1.35rem; }
+.pp-contact-card h2 { color: var(--heading); font-size: 1.42rem; margin: 0 0 0.26rem; }
 .pp-contact-card__header p { color: var(--muted); font-size: 0.86rem; margin: 0; }
-.pp-contact-card__mark { align-items: center; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 11px; color: #fff; display: inline-flex; flex: 0 0 42px; height: 42px; justify-content: center; }
+.pp-contact-card__mark { align-items: center; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 11px; box-shadow: 0 8px 18px color-mix(in srgb, var(--primary) 18%, transparent); color: #fff; display: inline-flex; flex: 0 0 42px; height: 42px; justify-content: center; }
 
-.pp-contact-card .form-label { color: var(--heading); font-size: 0.82rem; font-weight: 700; margin-bottom: 0.42rem; }
+.pp-contact-card .form-label { color: var(--heading); font-size: 0.79rem; font-weight: 750; margin-bottom: 0.42rem; }
 .pp-contact-card .form-label span { color: var(--danger); }
-.pp-contact-card :is(.form-control, .form-select) { background: var(--surface); border-color: var(--border); border-radius: 10px; color: var(--heading); font-size: 0.9rem; min-height: 44px; padding: 0.62rem 0.8rem; }
-.pp-contact-card textarea.form-control { min-height: 128px; resize: vertical; }
+.pp-contact-card :is(.form-control, .form-select) { background: var(--surface); border-color: var(--border); border-radius: 10px; color: var(--heading); font-size: 0.9rem; height: 46px; padding: 0.62rem 0.84rem; }
+.pp-contact-card textarea.form-control { height: auto; min-height: 132px; resize: vertical; }
 .pp-contact-card :is(.form-control, .form-select):focus { background: var(--surface); border-color: var(--primary); box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--primary) 16%, transparent); }
+.pp-contact-card .form-select { appearance: auto; cursor: pointer; }
 .pp-contact-card .iti { display: block; }
 .pp-contact-card .iti input { width: 100%; }
 
 .pp-contact-feedback { align-items: center; border: 1px solid; border-radius: 10px; display: flex; font-size: 0.86rem; gap: 0.55rem; margin-bottom: 1.1rem; padding: 0.75rem 0.85rem; }
 .pp-contact-feedback.is-success { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 34%, var(--border)); color: var(--success); }
 .pp-contact-feedback.is-error { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); color: var(--danger); }
-.pp-contact-submit-row { align-items: center; display: flex; flex-wrap: wrap; gap: 0.85rem 1rem; margin-top: 0.15rem; }
-.pp-contact-submit { background: linear-gradient(110deg, var(--primary), var(--secondary)); border: 0; border-radius: 10px; box-shadow: 0 10px 20px color-mix(in srgb, var(--primary) 23%, transparent); color: #fff; font-size: 0.88rem; font-weight: 750; min-height: 44px; padding: 0.65rem 1rem; transition: box-shadow 180ms ease, transform 180ms ease; }
-.pp-contact-submit:hover,.pp-contact-submit:focus-visible { box-shadow: 0 14px 25px color-mix(in srgb, var(--primary) 31%, transparent); color: #fff; transform: translateY(-1px); }
+.pp-contact-submit-row { align-items: center; display: flex; flex-wrap: wrap; gap: 0.7rem 1rem; margin-top: 0.1rem; }
+.pp-contact-submit { background: linear-gradient(110deg, var(--primary), var(--secondary)); border: 0; border-radius: 10px; box-shadow: 0 9px 18px color-mix(in srgb, var(--primary) 21%, transparent); color: #fff; font-size: 0.86rem; font-weight: 750; min-height: 42px; padding: 0.58rem 0.95rem; transition: box-shadow 180ms ease, transform 180ms ease; }
+.pp-contact-submit:hover,.pp-contact-submit:focus-visible { box-shadow: 0 12px 23px color-mix(in srgb, var(--primary) 28%, transparent); color: #fff; transform: translateY(-1px); }
 .pp-contact-submit:disabled { cursor: wait; opacity: 0.76; transform: none; }
-.pp-contact-submit-row p { color: var(--muted); font-size: 0.78rem; margin: 0; }
+.pp-contact-submit-row p { color: var(--muted); font-size: 0.76rem; margin: 0; }
 
-@media (max-width: 1199.98px) { .pp-contact-intro h1 { white-space: normal; } }
-@media (max-width: 991.98px) { .pp-contact-page { padding-top: 130px; } .pp-contact-intro { padding-top: 0; } }
-@media (max-width: 575.98px) { .pp-contact-page { padding: 114px 0 64px; } .pp-contact-intro h1 { font-size: 2.1rem; } .pp-contact-card { border-radius: 16px; padding: 1.1rem; } .pp-contact-submit-row { align-items: stretch; flex-direction: column; } .pp-contact-submit { width: 100%; } }
+@media (max-width: 991.98px) { .pp-contact-page { padding: 42px 0 62px; } .pp-contact-shell { border-radius: 22px; } .pp-contact-intro { min-height: 405px; } .pp-contact-whatsapp { margin-top: 1rem; } }
+@media (max-width: 575.98px) { .pp-contact-page { padding: 28px 0 50px; } .pp-contact-shell { border-radius: 18px; padding: 1.15rem; } .pp-contact-hero { margin-bottom: 1.25rem; } .pp-contact-hero h1 { font-size: 2rem; } .pp-contact-intro { border-radius: 15px; min-height: 0; padding: 1.35rem; } .pp-contact-card { border-radius: 15px; padding: 1.35rem; } .pp-contact-submit-row { align-items: stretch; flex-direction: column; } .pp-contact-submit { width: 100%; } }
