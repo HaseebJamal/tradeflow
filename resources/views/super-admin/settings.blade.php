@@ -4,7 +4,7 @@
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if(session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif
 <div class="tf-card p-4">
-    <form id="platformSettingsForm" method="POST" action="{{ route('admin.settings.update') }}" enctype="multipart/form-data" class="row g-3" data-platform-settings-form>
+    <form id="platformSettingsForm" method="POST" action="{{ route('admin.settings.update') }}" enctype="multipart/form-data" class="row g-3" data-platform-settings-form data-tf-confirm-message="Save the current platform branding, support details, and access defaults?" data-tf-confirm-title="Save platform settings?" data-tf-confirm-button="Save Settings" data-tf-confirm-icon="question" data-tf-confirm-color="#2563eb" data-tf-confirm-saving-text="Saving...">
         @csrf
         @method('PUT')
         <div class="col-12"><div class="tf-settings-section-heading tf-settings-section-heading-first"><span class="tf-dashboard-eyebrow">General</span><h2>Platform identity</h2><p>Control the name and logo used across Profit Point.</p></div></div>

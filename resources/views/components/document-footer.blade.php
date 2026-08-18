@@ -2,6 +2,7 @@
     'business',
     'footer' => null,
     'thermal' => false,
+    'compact' => false,
     'additionalLines' => [],
 ])
 @php
@@ -23,12 +24,13 @@
     $address = trim(implode(', ', array_filter([data_get($business, 'address'), data_get($business, 'city')])));
     $email = data_get($business, 'email') ?: data_get($business, 'owner.email');
     $website = data_get($business, 'website');
+    $companyName = trim((string) (data_get($business, 'business_name') ?: data_get($business, 'name')));
     $footerTitle = trim((string) $footer->footer_title);
     $showFooterTitle = ($footer->show_footer_title ?? true) && filled($footerTitle);
     $showFooterMessage = ($footer->show_footer_message ?? true) && filled($footer->footer_message);
     $poweredByText = app(\App\Services\BusinessDocumentFooterService::class)->displayedPoweredByText($footer);
 @endphp
-<footer class="tf-document-footer {{ $thermal ? 'tf-document-footer--thermal' : '' }}" style="margin-top: 1rem; text-align: center; color: #4b5563; font-size: {{ $thermal ? '9px' : '.875rem' }}; line-height: 1.45;">
+<footer class="tf-document-footer {{ $thermal ? 'tf-document-footer--thermal' : '' }}" style="margin-top: {{ $thermal ? '1rem' : ($compact ? '5px' : '1rem') }}; text-align: center; color: #4b5563; font-size: {{ $thermal ? '9px' : ($compact ? '10px' : '.875rem') }}; line-height: {{ $compact ? '1.3' : '1.45' }};">
     @if($showFooterTitle)<div class="tf-document-footer__title" style="font-weight: 700; color: #111827;">{{ $footerTitle }}</div>@endif
     @if($showFooterMessage)<div>{{ $footer->footer_message }}</div>@endif
     @if($footer->show_address && filled($address))<div>{{ $address }}</div>@endif
@@ -38,6 +40,5 @@
     @foreach($additionalLines as $line)
         @if(filled($line))<div>{{ $line }}</div>@endif
     @endforeach
-    <div>&copy; {{ now()->year }}</div>
-    <div>{{ $poweredByText }}</div>
+    <div class="tf-document-footer__attribution" style="border-top: 1px solid #d1d5db; color: #6b7280; font-size: {{ $thermal ? '8px' : ($compact ? '8px' : '.75rem') }}; margin-top: {{ $compact ? '.3rem' : '.5rem' }}; padding-top: {{ $compact ? '.25rem' : '.4rem' }};">&copy; {{ now()->year }} {{ $companyName }} <span aria-hidden="true">&middot;</span> {{ $poweredByText }}</div>
 </footer>

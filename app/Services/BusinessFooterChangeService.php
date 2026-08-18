@@ -72,7 +72,7 @@ class BusinessFooterChangeService
                 $footer->update(['show_powered_by' => true]);
                 break;
             case 'powered_by_text':
-                $footer->update(['powered_by_text' => app(BusinessDocumentFooterService::class)->platformPoweredByText(), 'show_powered_by' => true]);
+                $footer->update(['powered_by_text' => null, 'show_powered_by' => true]);
                 break;
             default:
                 $business->update([$field => $value]);

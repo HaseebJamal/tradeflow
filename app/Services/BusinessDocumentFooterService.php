@@ -10,9 +10,7 @@ class BusinessDocumentFooterService
 {
     public function platformPoweredByText(): string
     {
-        $platformName = trim((string) app(PlatformSettingsService::class)->current()->company_name);
-
-        return 'Powered by '.($platformName !== '' ? $platformName : config('app.name', 'Profit Point'));
+        return 'Powered by '.app(PlatformSettingsService::class)->name();
     }
 
     public function displayedPoweredByText(?BusinessDocumentFooter $footer): string
@@ -53,14 +51,18 @@ class BusinessDocumentFooterService
             'show_email' => true,
             'show_website' => true,
             'show_powered_by' => true,
-            'powered_by_text' => $this->platformPoweredByText(),
         ];
     }
 
     public function reset(Business $business): BusinessDocumentFooter
     {
         $footer = $this->for($business);
-        $footer->fill($this->defaults($business))->save();
+        $footer->fill([
+            ...$this->defaults($business),
+            // Platform wording belongs to central Platform Settings, never
+            // to an individual company footer.
+            'powered_by_text' => null,
+        ])->save();
         $business->setRelation('documentFooter', $footer);
 
         return $footer;

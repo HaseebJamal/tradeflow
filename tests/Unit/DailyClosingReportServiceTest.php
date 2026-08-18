@@ -63,6 +63,7 @@ class DailyClosingReportServiceTest extends TestCase
 
         $pdf = Pdf::loadHtml($html)->setPaper('a4')->output();
         $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertSame(1, preg_match_all('/\\/Type\\s*\\/Page\\b/', $pdf));
     }
 
     public function test_daily_closing_composes_the_existing_profitability_service_without_writes(): void

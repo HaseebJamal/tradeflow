@@ -19,10 +19,10 @@
     $footerPreviewAddress = trim(implode(', ', array_filter([$business->address, $business->city])));
     $footerPreviewTitle = trim((string) old('footer_title', $footer->footer_title));
     $footerPreviewMessage = trim((string) old('footer_message', $footer->footer_message));
+    $footerPreviewCompanyName = trim((string) old('business_name', $business->business_name));
     $footerPreviewVisibility = collect(['show_footer_title', 'show_footer_message', 'show_phone', 'show_email', 'show_address', 'show_website'])
         ->mapWithKeys(fn (string $field) => [$field => (bool) old("footer_visibility.{$field}", old($field, $footer->{$field}))])
         ->all();
-    $footerPreviewVisibility['show_powered_by'] = true;
     $footerPreviewShowsTitle = $footerPreviewVisibility['show_footer_title']
         && filled($footerPreviewTitle);
 @endphp
@@ -43,7 +43,7 @@
                     <div class="col-md-6"><label class="form-label">Phone</label><x-phone-input name="phone" :value="old('phone', $business->phone)" :error="$errors->first('phone')" /></div>
                     <div class="col-md-6"><label class="form-label" for="footerWebsite">Website</label><input id="footerWebsite" name="website" type="url" class="form-control @error('website') is-invalid @enderror" maxlength="255" value="{{ old('website', $business->website) }}" placeholder="https://example.com">@error('website')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                     <div class="col-12"><label class="form-label" for="footerAddress">Address</label><input id="footerAddress" name="address" class="form-control @error('address') is-invalid @enderror" maxlength="1000" value="{{ old('address', $business->address) }}">@error('address')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
-                    <div class="col-md-6"><label class="form-label" for="poweredByText">Platform Footer Text</label><input id="poweredByText" name="powered_by_text" class="form-control @error('powered_by_text') is-invalid @enderror" maxlength="100" value="{{ old('powered_by_text', $platformPoweredByText) }}">@error('powered_by_text')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+                    <div class="col-12"><label class="form-label">Platform Attribution</label><input class="form-control tf-footer-profile-field" value="{{ $platformPoweredByText }}" readonly aria-readonly="true"><small class="tf-muted"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Platform-managed and always shown on documents.</small></div>
                 @else
                     <div class="col-12"><h2 class="h6 mb-0">Company Details Used by Footer</h2></div>
                     <div class="col-md-6"><label class="form-label">Company Name</label><input class="form-control tf-footer-profile-field" value="{{ $business->business_name }}" readonly aria-readonly="true"><small class="tf-muted"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Managed from company profile.</small></div>
@@ -51,7 +51,7 @@
                     <div class="col-md-6"><label class="form-label">Phone</label><x-phone-input name="phone" :value="old('phone', $business->phone)" :error="$errors->first('phone')" /></div>
                     <div class="col-md-6"><label class="form-label" for="footerWebsite">Website</label><input id="footerWebsite" name="website" type="url" class="form-control @error('website') is-invalid @enderror" maxlength="255" value="{{ old('website', $business->website) }}" placeholder="https://example.com">@error('website')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                     <div class="col-12"><label class="form-label" for="footerAddress">Address</label><input id="footerAddress" name="address" class="form-control @error('address') is-invalid @enderror" maxlength="1000" value="{{ old('address', $business->address) }}">@error('address')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
-                    <div class="col-12"><label class="form-label">{{ $platformPoweredByText }}</label><input class="form-control tf-footer-profile-field" value="{{ $platformPoweredByText }}" readonly aria-readonly="true"><small class="tf-muted"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Managed by platform branding.</small></div>
+                    <div class="col-12"><label class="form-label">Platform Attribution</label><input class="form-control tf-footer-profile-field" value="{{ $platformPoweredByText }}" readonly aria-readonly="true"><small class="tf-muted"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i>Platform-managed and always shown on documents.</small></div>
                 @endif
 
                 <div class="col-12"><h2 class="h6 mb-0">Document Footer</h2></div>
@@ -70,50 +70,44 @@
                     @endforeach
                     <div class="col-md-6">
                         <div class="form-check tf-footer-visibility-option p-2 h-100 d-flex align-items-center">
-                            <input id="footer_visibility_show_powered_by" class="form-check-input flex-shrink-0 m-0 me-2" type="checkbox" checked disabled aria-describedby="footerPoweredByLock">
+                            <input id="footer_visibility_show_powered_by" class="form-check-input flex-shrink-0 m-0 me-2" type="checkbox" checked disabled>
                             <label class="form-check-label flex-grow-1" for="footer_visibility_show_powered_by">{{ $platformPoweredByText }}</label>
                         </div>
-                        <small id="footerPoweredByLock" class="tf-muted d-block mt-1">Always shown on documents.</small>
                     </div>
                 </div></div>
-                <div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-tf-primary">Save Settings</button><a class="btn btn-outline-secondary" href="{{ $backRoute }}">Back</a></div>
+                <div class="col-12 tf-footer-actions"><button class="btn btn-tf-primary">Save Settings</button><a class="btn btn-outline-secondary" href="{{ $backRoute }}">Back</a></div>
             </form>
 
             @if($adminMode && $resetAction)
-                <form method="POST" action="{{ $resetAction }}" class="mt-3" onsubmit="return confirm('Reset this company footer to its default values?')">@csrf @method('PATCH')<button class="btn btn-outline-warning btn-sm">Reset to Company Defaults</button></form>
+                <form method="POST" action="{{ $resetAction }}" class="tf-footer-reset" onsubmit="return confirm('Reset this company footer to its default values?')">@csrf @method('PATCH')<button class="btn btn-outline-warning btn-sm">Reset to Default</button></form>
             @endif
 
         </div>
         <div @class(['col-lg-5', 'tf-footer-preview-column' => $isBusinessFooterPage])>
-            @if($isBusinessFooterPage)
-                <aside class="tf-footer-preview-card" data-footer-preview>
-                    <h2 class="h6 mb-3">Footer Preview</h2>
-                    <div class="tf-footer-preview-sheet">
-                        <div class="tf-footer-preview-content">
-                            <div data-footer-preview-field="show_footer_title" @if(! $footerPreviewShowsTitle) hidden @endif data-footer-preview-title class="tf-footer-preview-title">{{ $footerPreviewTitle }}</div>
-                            <div data-footer-preview-field="show_footer_message" @if(! $footerPreviewVisibility['show_footer_message'] || blank($footerPreviewMessage)) hidden @endif data-footer-preview-message>{{ $footerPreviewMessage }}</div>
-                            <div data-footer-preview-field="show_address" data-footer-preview-city="{{ $business->city }}" @if(! $footerPreviewVisibility['show_address'] || blank($footerPreviewAddress)) hidden @endif>{{ $footerPreviewAddress }}</div>
-                            <div data-footer-preview-field="show_phone" @if(! $footerPreviewVisibility['show_phone'] || blank($business->phone)) hidden @endif>{{ $business->phone }}</div>
-                            <div data-footer-preview-field="show_email" @if(! $footerPreviewVisibility['show_email'] || blank($business->owner?->email)) hidden @endif>{{ $business->owner?->email }}</div>
-                            <div data-footer-preview-field="show_website" @if(! $footerPreviewVisibility['show_website'] || blank($business->website)) hidden @endif>{{ $business->website }}</div>
-                            <div data-footer-preview-field="show_powered_by" class="tf-footer-preview-powered">{{ $platformPoweredByText }}</div>
-                        </div>
+            <aside class="tf-footer-preview-card" data-footer-preview>
+                <h2 class="h6 mb-3">Footer Preview</h2>
+                <div class="tf-footer-preview-sheet">
+                    <div class="tf-footer-preview-content">
+                        <div data-footer-preview-field="show_footer_title" @if(! $footerPreviewShowsTitle) hidden @endif data-footer-preview-title class="tf-footer-preview-title">{{ $footerPreviewTitle }}</div>
+                        <div data-footer-preview-field="show_footer_message" @if(! $footerPreviewVisibility['show_footer_message'] || blank($footerPreviewMessage)) hidden @endif data-footer-preview-message>{{ $footerPreviewMessage }}</div>
+                        <div data-footer-preview-field="show_address" data-footer-preview-city="{{ $business->city }}" @if(! $footerPreviewVisibility['show_address'] || blank($footerPreviewAddress)) hidden @endif>{{ $footerPreviewAddress }}</div>
+                        <div data-footer-preview-field="show_phone" @if(! $footerPreviewVisibility['show_phone'] || blank($business->phone)) hidden @endif>{{ $business->phone }}</div>
+                        <div data-footer-preview-field="show_email" @if(! $footerPreviewVisibility['show_email'] || blank($business->owner?->email)) hidden @endif>{{ $business->owner?->email }}</div>
+                        <div data-footer-preview-field="show_website" @if(! $footerPreviewVisibility['show_website'] || blank($business->website)) hidden @endif>{{ $business->website }}</div>
                     </div>
-                </aside>
-            @else
-                <div class="border rounded p-3 bg-light"><h2 class="h6 mb-3">Footer Preview</h2><x-document-footer :business="$business" :footer="$footer" /></div>
-            @endif
+                    <div class="tf-footer-preview-attribution">&copy; {{ now()->year }} <span data-footer-preview-company>{{ $footerPreviewCompanyName }}</span> <span aria-hidden="true">&middot;</span> {{ $platformPoweredByText }}</div>
+                </div>
+            </aside>
         </div>
     </div>
 </div>
 
-@if($isBusinessFooterPage)
-    @push('scripts')
+@push('scripts')
     <script>
     (() => {
         const initFooterPreview = (form) => {
             if (!form || form.dataset.footerPreviewReady === '1') return;
-            const preview = form.closest('.tf-business-receipt-footer')?.querySelector('[data-footer-preview]');
+            const preview = form.closest('.tf-card')?.querySelector('[data-footer-preview]');
             if (!preview) return;
             form.dataset.footerPreviewReady = '1';
 
@@ -122,6 +116,7 @@
             const phone = form.querySelector('[name="phone"]');
             const website = form.querySelector('[name="website"]');
             const address = form.querySelector('[name="address"]');
+            const businessName = form.querySelector('[name="business_name"]');
             const field = (name) => preview.querySelector(`[data-footer-preview-field="${name}"]`);
             // Every visibility field has a hidden `0` fallback for form
             // submission. Preview state must always come from the actual
@@ -147,6 +142,8 @@
                 if (phoneTarget) phoneTarget.textContent = phone?.value.trim() || '';
                 const websiteTarget = field('show_website');
                 if (websiteTarget) websiteTarget.textContent = website?.value.trim() || '';
+                const companyTarget = preview.querySelector('[data-footer-preview-company]');
+                if (companyTarget && businessName) companyTarget.textContent = businessName.value.trim();
 
                 setVisible('show_footer_title', isEnabled('show_footer_title') && titleValue !== '');
                 setVisible('show_footer_message', isEnabled('show_footer_message') && messageValue !== '');
@@ -154,11 +151,10 @@
                     const target = field(name);
                     setVisible(name, isEnabled(name) && Boolean(target?.textContent.trim()));
                 });
-                setVisible('show_powered_by', true);
             };
 
             form.addEventListener('input', (event) => {
-                if (event.target === title || event.target === message || event.target === website || event.target === address || event.target.closest?.('[data-tf-phone-field]')) sync();
+                if (event.target === title || event.target === message || event.target === website || event.target === address || event.target === businessName || event.target.closest?.('[data-tf-phone-field]')) sync();
             });
             form.addEventListener('change', (event) => {
                 if (event.target.matches('[data-footer-visibility-toggle]')) sync();
@@ -166,8 +162,7 @@
             sync();
         };
 
-        document.querySelectorAll('.tf-business-receipt-footer form').forEach(initFooterPreview);
+        document.querySelectorAll('[data-footer-preview]').forEach((preview) => initFooterPreview(preview.closest('.tf-card')?.querySelector('form')));
     })();
     </script>
-    @endpush
-@endif
+@endpush

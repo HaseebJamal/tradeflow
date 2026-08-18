@@ -3,6 +3,8 @@
 namespace Tests\Unit;
 
 use App\Models\BusinessDocumentFooter;
+use App\Services\BusinessDocumentFooterService;
+use App\Services\PlatformSettingsService;
 use App\Services\ThermalDocumentService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -11,6 +13,19 @@ use Tests\TestCase;
 
 class ThermalDocumentServiceTest extends TestCase
 {
+    public function test_platform_attribution_uses_the_current_central_platform_name(): void
+    {
+        $this->app->instance(PlatformSettingsService::class, new class extends PlatformSettingsService
+        {
+            public function name(): string
+            {
+                return 'BizCore';
+            }
+        });
+
+        $this->assertSame('Powered by BizCore', app(BusinessDocumentFooterService::class)->platformPoweredByText());
+    }
+
     public function test_it_defaults_to_80mm_and_supports_a_58mm_override(): void
     {
         $service = new ThermalDocumentService;
@@ -145,7 +160,7 @@ class ThermalDocumentServiceTest extends TestCase
         );
     }
 
-    public function test_document_footer_does_not_render_the_real_business_name(): void
+    public function test_document_footer_renders_the_canonical_business_name_in_the_locked_attribution_line(): void
     {
         $footer = new BusinessDocumentFooter([
             'footer_title' => 'Custom receipt footer',
@@ -171,7 +186,8 @@ class ThermalDocumentServiceTest extends TestCase
         ]);
 
         $this->assertStringContainsString('Custom receipt footer', $html);
-        $this->assertStringNotContainsString('Rent a Car', $html);
+        $this->assertStringContainsString('&copy; '.now()->year.' Rent a Car', $html);
+        $this->assertStringContainsString(app(BusinessDocumentFooterService::class)->platformPoweredByText(), $html);
     }
 
 }

@@ -16,7 +16,7 @@
                 <div class="col-lg-6 col-xl-6">
                     <div class="pp-contact-intro">
                         <span class="pp-contact-eyebrow">GET IN TOUCH</span>
-                        <h1>Let's talk about your business.</h1>
+                        <!-- <h1>Let's talk about your business.</h1> -->
 
                         <div class="pp-contact-details" aria-label="Contact details">
                             <div class="pp-contact-detail">

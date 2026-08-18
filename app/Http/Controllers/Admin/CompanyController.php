@@ -418,7 +418,6 @@ class CompanyController extends Controller
             'website' => ['nullable', 'url', 'max:255'],
             'footer_title' => ['nullable', 'string', 'max:255'],
             'footer_message' => ['nullable', 'string', 'max:500'],
-            'powered_by_text' => ['nullable', 'string', 'max:100'],
             'footer_visibility' => ['nullable', 'array'],
             'footer_visibility.*' => ['nullable', 'boolean'],
             'show_footer_title' => ['nullable', 'boolean'],
@@ -447,7 +446,6 @@ class CompanyController extends Controller
             $footer->fill([
                 'footer_title' => $data['footer_title'] ?: $lockedCompany->business_name,
                 'footer_message' => $data['footer_message'] ?: null,
-                'powered_by_text' => $data['powered_by_text'] ?: app(BusinessDocumentFooterService::class)->platformPoweredByText(),
                 ...app(BusinessDocumentFooterService::class)->visibilityFromRequest($request),
                 'show_powered_by' => true,
             ])->save();

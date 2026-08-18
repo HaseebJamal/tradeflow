@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Services\BusinessDocumentFooterService;
 use Illuminate\Support\Facades\Blade;
 use Tests\TestCase;
 
@@ -19,7 +20,7 @@ class BusinessApplicationFooterTest extends TestCase
         ]);
 
         $this->assertStringContainsString('&copy; '.now()->year.' Gabimaru Limited', $html);
-        $this->assertStringContainsString('Powered by TradeFlow', $html);
+        $this->assertStringContainsString(app(BusinessDocumentFooterService::class)->platformPoweredByText(), $html);
         $this->assertStringNotContainsString('gabimaru@example.test', $html);
         $this->assertStringNotContainsString('+923456789452', $html);
         $this->assertStringNotContainsString('Thank you for your business!', $html);

@@ -6,6 +6,7 @@
     'date' => null,
     'status' => null,
     'subtitle' => null,
+    'compact' => false,
 ])
 @php
     $businessName = data_get($business, 'business_name') ?: data_get($business, 'name') ?: 'Profit Point';
@@ -17,7 +18,7 @@
 <head>
     <meta charset="utf-8">
     <style>
-        @page { margin: 18mm 14mm 20mm; }
+        @page { margin: {{ $compact ? '13mm 14mm 13mm' : '18mm 14mm 20mm' }}; }
         * { box-sizing: border-box; }
         body { color: #172033; font-family: DejaVu Sans, Arial, sans-serif; font-size: 9px; line-height: 1.45; margin: 0; }
         .tf-a4-document { width: 100%; }
@@ -45,10 +46,17 @@
         .tf-a4-document__positive { color: #177245; }
         .tf-a4-document__warning { color: #9a5c00; }
         .tf-a4-document__footer { border-top: 1px solid #dce4ef; margin-top: 16px; padding-top: 5px; page-break-inside: avoid; }
+        .tf-a4-document--compact .tf-a4-document__header { margin-bottom: 9px; padding-bottom: 7px; }
+        .tf-a4-document--compact .tf-a4-document__summary { border-spacing: 3px; margin: 0 -3px 9px; width: calc(100% + 6px); }
+        .tf-a4-document--compact .tf-a4-document__summary td { padding: 5px; }
+        .tf-a4-document--compact h2 { margin-bottom: 4px !important; margin-top: 10px !important; }
+        .tf-a4-document--compact .tf-a4-document__table th,
+        .tf-a4-document--compact .tf-a4-document__table td { padding-bottom: 4px; padding-top: 4px; }
+        .tf-a4-document--compact .tf-a4-document__footer { margin-top: 8px; padding-top: 3px; }
     </style>
 </head>
 <body>
-<main class="tf-a4-document">
+<main class="tf-a4-document {{ $compact ? 'tf-a4-document--compact' : '' }}">
     <header class="tf-a4-document__header">
         <table class="tf-a4-document__header-table"><tr>
             <td>
@@ -74,7 +82,7 @@
     {{ $slot }}
 
     <div class="tf-a4-document__footer">
-        <x-document-footer :business="$business" :footer="$footer" />
+        <x-document-footer :business="$business" :footer="$footer" :compact="$compact" />
     </div>
 </main>
 </body>
