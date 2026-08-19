@@ -44,13 +44,9 @@ class BusinessAccessInitializationService
                 return $subscription;
             }
 
-            $settings = app(PlatformSettingsService::class)->current();
-            $trialDays = (int) $settings->trial_days;
-            if ($trialDays < 1 || $trialDays > 365) {
-                throw ValidationException::withMessages([
-                    'trial' => 'Configure a valid global trial duration before approving a new company.',
-                ]);
-            }
+            $settingsService = app(PlatformSettingsService::class);
+            $settings = $settingsService->current();
+            $trialDays = $settingsService->registrationTrialDays();
 
             $plan = $subscription?->plan
                 ?? SubscriptionPlan::query()->whereKey($business->selected_plan_id)->first()

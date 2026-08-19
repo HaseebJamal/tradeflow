@@ -29,12 +29,7 @@ class BusinessOnboardingController extends Controller
         // trial is assigned server-side when the business is created.
         $request->session()->forget('registration_pricing_selection');
 
-        $trialDays = (int) PlatformSetting::current()->trial_days;
-        if ($trialDays < 1 || $trialDays > 365) {
-            throw ValidationException::withMessages([
-                'trial' => 'Free trial registration is temporarily unavailable. Please contact support.',
-            ]);
-        }
+        $trialDays = app(\App\Services\PlatformSettingsService::class)->registrationTrialDays();
 
         return view('onboarding.register-business', compact('trialDays'));
     }
@@ -43,12 +38,7 @@ class BusinessOnboardingController extends Controller
     {
         $data = $request->validated();
         $settings = PlatformSetting::current();
-        $trialDays = (int) $settings->trial_days;
-        if ($trialDays < 1 || $trialDays > 365) {
-            throw ValidationException::withMessages([
-                'trial' => 'Free trial registration is temporarily unavailable. Please contact support.',
-            ]);
-        }
+        $trialDays = app(\App\Services\PlatformSettingsService::class)->registrationTrialDays();
 
         // A plan relation is retained only for legacy data compatibility. It
         // is never selected by a registering business and has no trial limits.
@@ -56,7 +46,12 @@ class BusinessOnboardingController extends Controller
             ->whereKey($settings->default_plan_id)
             ->whereNull('archived_at')
             ->first()
-            ?? SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->orderBy('sort_order')->firstOrFail();
+            ?? SubscriptionPlan::query()->where('status', 'Active')->whereNull('archived_at')->orderBy('sort_order')->first();
+        if (! $plan) {
+            throw ValidationException::withMessages([
+                'trial' => 'Registration setup is incomplete. Please contact support.',
+            ]);
+        }
         $trialStart = now(config('app.timezone'));
         $trialEnd = $trialStart->copy()->addDays($trialDays);
 

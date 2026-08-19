@@ -12,7 +12,7 @@ return [
     |
     */
     'platform' => [
-        'name' => env('TRADEFLOW_PLATFORM_NAME', 'TradeFlow'),
+        'name' => env('TRADEFLOW_PLATFORM_NAME', 'Profit Point'),
         'logo' => null,
         'support_email' => env('TRADEFLOW_SUPPORT_EMAIL'),
         'support_phone' => env('TRADEFLOW_SUPPORT_PHONE'),

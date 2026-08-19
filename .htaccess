@@ -1,14 +1,13 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Serve only assets that exist under Laravel's public web root. The rest
-    # of the application is handled by the root front controller below.
+    # This project may be served one level above Laravel's public web root.
+    # Map the public asset directories without relying on a local XAMPP path.
+    # The remaining requests are handled by the root front controller below.
     RewriteRule ^index\.php$ - [L]
-    RewriteCond %{DOCUMENT_ROOT}/tradeflow/public/$1 -f [OR]
-    RewriteCond %{DOCUMENT_ROOT}/tradeflow/public/$1 -d
-    RewriteRule ^(.+)$ public/$1 [L]
+    RewriteRule ^(build|css|images|js|storage)/(.*)$ public/$1/$2 [L,NC]
 
-    # Keep /tradeflow/public out of the URL while preserving Laravel's
-    # correct base path for routes such as /tradeflow/login.
+    # Keep /public out of the URL while preserving the correct base path for
+    # routes such as /register-business.
     RewriteRule ^ index.php [L]
 </IfModule>

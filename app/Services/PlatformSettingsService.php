@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Schema;
 class PlatformSettingsService
 {
     private const CACHE_KEY = 'tradeflow.platform-settings';
+    public const DEFAULT_TRIAL_DAYS = 14;
 
     /**
      * Return the only set of values used when platform branding is restored.
@@ -16,10 +17,11 @@ class PlatformSettingsService
     public function defaultBranding(): array
     {
         return [
-            'company_name' => config('tradeflow.platform.name', 'TradeFlow'),
+            'company_name' => config('tradeflow.platform.name', 'Profit Point'),
             'logo' => config('tradeflow.platform.logo'),
             'support_email' => config('tradeflow.platform.support_email'),
             'support_phone' => config('tradeflow.platform.support_phone'),
+            'trial_days' => self::DEFAULT_TRIAL_DAYS,
             'default_paid_access_days' => 30,
             'demo_title' => null,
             'demo_subtitle' => null,
@@ -44,14 +46,48 @@ class PlatformSettingsService
             return new PlatformSetting($defaults + ['max_upload_size' => 2048]);
         }
 
-        return Cache::rememberForever(self::CACHE_KEY, fn () => PlatformSetting::query()->firstOrCreate([], $defaults + [
+        return Cache::rememberForever($this->cacheKey(), fn () => PlatformSetting::query()->firstOrCreate([], $defaults + [
             'max_upload_size' => 2048,
         ]));
     }
 
     public function forget(): void
     {
-        Cache::forget(self::CACHE_KEY);
+        Cache::forget($this->cacheKey());
+    }
+
+    /**
+     * A zero-day trial is not a supported state: settings UI validation also
+     * requires at least one day. Repair legacy/imported settings rather than
+     * making public registration unreachable.
+     */
+    public function registrationTrialDays(): int
+    {
+        $settings = $this->current();
+        $days = (int) $settings->trial_days;
+
+        if ($days >= 1 && $days <= 365) {
+            return $days;
+        }
+
+        if (Schema::hasTable('platform_settings') && $settings->exists) {
+            $settings->forceFill(['trial_days' => self::DEFAULT_TRIAL_DAYS])->save();
+            $this->forget();
+        }
+
+        return self::DEFAULT_TRIAL_DAYS;
+    }
+
+    /**
+     * Cache settings per database. This prevents a cache entry from a prior
+     * TradeFlow database from being reused after a production DB switch.
+     */
+    private function cacheKey(): string
+    {
+        $connection = (string) config('database.default');
+        $database = (string) config("database.connections.{$connection}.database");
+
+        return self::CACHE_KEY.'.'.sha1($connection.'|'.$database);
     }
 
     public function name(): string

@@ -56,17 +56,11 @@ class InitializeProduction extends Command
         }
 
         DB::transaction(function () use ($data, $existingAdmin): void {
-            $plan = SubscriptionPlan::query()
-                ->where('status', 'Active')
-                ->whereNull('archived_at')
-                ->orderBy('sort_order')
-                ->first();
-
-            if (! $plan) {
-                $plan = SubscriptionPlan::create([
-                    'name' => 'Starter',
-                    'slug' => 'starter',
-                    'short_description' => 'Default plan for new workspaces.',
+            $plan = SubscriptionPlan::query()->firstOrCreate(
+                ['slug' => 'custom-access'],
+                [
+                    'name' => 'Custom Access',
+                    'short_description' => 'Internal record for individually negotiated access.',
                     'price' => 0,
                     'monthly_price' => 0,
                     'yearly_price' => 0,
@@ -76,12 +70,12 @@ class InitializeProduction extends Command
                     'order_limit' => 500,
                     'included_modules' => [],
                     'features' => [],
-                    'is_public' => true,
-                    'is_recommended' => true,
+                    'is_public' => false,
+                    'is_recommended' => false,
                     'sort_order' => 1,
                     'status' => 'Active',
-                ]);
-            }
+                ],
+            );
 
             $settings = PlatformSetting::query()->firstOrNew();
             $settings->fill([
