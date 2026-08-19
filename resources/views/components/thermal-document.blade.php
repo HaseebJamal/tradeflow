@@ -53,6 +53,14 @@
     .tf-thermal-document__value { padding: 0; text-align: right; width: 60%; }
     .tf-thermal-document__label-content { display: block; margin-right: 3mm; min-width: 0; overflow-wrap: anywhere; }
     .tf-thermal-document__value-content { display: block; max-width: 100%; min-width: 0; overflow-wrap: anywhere; text-align: right; }
+    /* Customer and supplier names need the full paper width. Keeping a long
+       party name in the regular 60% value column makes it wrap into a tall,
+       hard-to-read right-aligned stack on receipts and invoices. */
+    .tf-thermal-document__party { display: block; }
+    .tf-thermal-document__party .tf-thermal-document__label,
+    .tf-thermal-document__party .tf-thermal-document__value { display: block; text-align: left; width: 100%; }
+    .tf-thermal-document__party .tf-thermal-document__label-content { margin: 0 0 .75mm; }
+    .tf-thermal-document__party .tf-thermal-document__value-content { text-align: left; }
     .tf-thermal-document__items { box-sizing: border-box; max-width: 100%; min-width: 0; width: 100%; }
     .tf-thermal-document__item { border-bottom: 1px dashed #9ca3af; overflow: visible !important; page-break-inside: avoid; padding: 1.5mm 0; }
     .tf-thermal-document__item-name { font-weight: 700; overflow-wrap: anywhere; white-space: normal; word-break: break-word; }
@@ -118,7 +126,7 @@
 
     @if($partyLabel || $partyName || filled($metadata))
         <hr class="tf-thermal-document__rule">
-        @if($partyLabel || $partyName)<div class="tf-thermal-document__row"><span class="tf-thermal-document__label"><span class="tf-thermal-document__label-content">{{ $partyLabel }}</span></span><strong class="tf-thermal-document__value"><span class="tf-thermal-document__value-content">{{ $partyName }}</span></strong></div>@endif
+        @if($partyLabel || $partyName)<div class="tf-thermal-document__row tf-thermal-document__party"><span class="tf-thermal-document__label"><span class="tf-thermal-document__label-content">{{ $partyLabel }}</span></span><strong class="tf-thermal-document__value"><span class="tf-thermal-document__value-content">{{ $partyName }}</span></strong></div>@endif
         @if($partyDetails)<div class="tf-thermal-document__muted">{{ $partyDetails }}</div>@endif
         @foreach($metadata as $label => $value)
             @if(filled($value))<div class="tf-thermal-document__row"><span class="tf-thermal-document__label"><span class="tf-thermal-document__label-content">{{ $label }}</span></span><span class="tf-thermal-document__value"><span class="tf-thermal-document__value-content">{{ $value }}</span></span></div>@endif

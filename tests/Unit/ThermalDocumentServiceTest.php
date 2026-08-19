@@ -94,6 +94,8 @@ class ThermalDocumentServiceTest extends TestCase
         $this->assertStringContainsString('max-width: 80mm', $html);
         $this->assertStringContainsString('tf-thermal-document__content { box-sizing: border-box; margin: 3mm 3.5mm 4mm;', $html);
         $this->assertStringContainsString('tf-thermal-document__label-content', $html);
+        $this->assertStringContainsString('tf-thermal-document__row tf-thermal-document__party', $html);
+        $this->assertStringContainsString('.tf-thermal-document__party .tf-thermal-document__value { display: block; text-align: left; width: 100%; }', $html);
         $this->assertStringContainsString('tf-thermal-document__item-amount-content', $html);
         $this->assertStringContainsString('tf-thermal-document__value { padding: 0; text-align: right; width: 60%; }', $html);
         $this->assertStringContainsString('tf-thermal-document__item-amount { padding: 0; text-align: right; width: 42%;', $html);
