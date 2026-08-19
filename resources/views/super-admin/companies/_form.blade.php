@@ -12,7 +12,7 @@
     $initialPermissions = ! $editing && is_array($oldPermissions) ? array_values($oldPermissions) : [];
 @endphp
 
-<form method="POST" action="{{ $editing ? route('admin.companies.update', $company) : route('admin.companies.store') }}" enctype="multipart/form-data" class="row g-3" @if(!$editing) data-company-create-form data-company-permission-form data-permission-initial-selection="{{ json_encode($initialPermissions) }}" autocomplete="off" @endif>
+<form method="POST" action="{{ $editing ? route('admin.companies.update', $company) : route('admin.companies.store') }}" enctype="multipart/form-data" class="row g-3" @if(!$editing) data-company-create-form data-company-permission-form data-permission-initial-selection="{{ json_encode($initialPermissions) }}" autocomplete="off" data-tf-confirm-message="Create this company and its owner account? The selected permissions will be applied immediately." data-tf-confirm-title="Create company?" data-tf-confirm-button="Create Company" data-tf-confirm-icon="question" data-tf-confirm-color="#2563eb" data-tf-confirm-saving-text="Creating..." @endif>
     @csrf
     @if($editing) @method('PUT') @endif
 

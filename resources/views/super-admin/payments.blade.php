@@ -36,7 +36,7 @@
         </div>
 
         @if($showPaymentForm)
-            <form method="POST" action="{{ route('admin.payments.store') }}" class="tf-billing-payment-form">
+            <form method="POST" action="{{ route('admin.payments.store') }}" class="tf-billing-payment-form" data-payment-record-form>
                 @csrf
                 @if($recordRenewal)<input type="hidden" name="renewal_invoice_id" value="{{ $recordRenewal->id }}">@endif
                 <fieldset>
@@ -227,9 +227,59 @@ document.querySelectorAll('[data-payment-delete-form]').forEach(function (form) 
 });
 
 (function () {
+    var form = document.querySelector('[data-payment-record-form]');
     var business = document.getElementById('paymentBusiness');
     var start = document.getElementById('paymentAccessStart');
     var end = document.getElementById('paymentAccessEnd');
+    var amount = form?.querySelector('[name="amount"]');
+    var submit = form?.querySelector('button[type="submit"]');
+
+    if (form && form.dataset.paymentConfirmationReady !== '1') {
+        form.dataset.paymentConfirmationReady = '1';
+        form.addEventListener('submit', function (event) {
+            if (form.dataset.paymentConfirmed === '1') return;
+
+            event.preventDefault();
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+
+            var selectedBusiness = business?.options[business.selectedIndex]?.textContent?.trim() || 'Selected business';
+            var rawAmount = amount?.value?.trim() || '';
+            var numericAmount = Number(rawAmount.replace(/,/g, ''));
+            var agreedAmount = Number.isFinite(numericAmount) && numericAmount > 0
+                ? 'Rs ' + numericAmount.toLocaleString()
+                : (rawAmount || 'Not entered');
+            var accessEndDate = end?.value || 'Not selected';
+            var proceed = function () {
+                form.dataset.paymentConfirmed = '1';
+                if (submit) {
+                    submit.disabled = true;
+                    submit.textContent = 'Saving...';
+                }
+                form.requestSubmit();
+            };
+
+            if (!window.Swal) {
+                proceed();
+                return;
+            }
+
+            Swal.fire({
+                icon: 'question',
+                title: 'Save payment record?',
+                text: 'Business: ' + selectedBusiness + ' · Agreed amount: ' + agreedAmount + ' · Access ends: ' + accessEndDate,
+                showCancelButton: true,
+                confirmButtonText: 'Save Payment',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#2563eb',
+                reverseButtons: true,
+            }).then(function (result) {
+                if (result.isConfirmed) proceed();
+            });
+        });
+    }
 
     if (!business || !start || !end) return;
 

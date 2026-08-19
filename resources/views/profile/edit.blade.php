@@ -14,7 +14,13 @@
                 <p class="tf-muted">Your Business Owner must approve and apply profile-detail changes. Your current details stay unchanged until then.</p>
                 @if($pendingProfileRequest)<div class="alert alert-warning py-2">A profile-change request is already pending owner review. Submitting this form updates that request.</div>@endif
             @endif
-            <form method="POST" action="{{ route('profile.update') }}" enctype="multipart/form-data" class="row g-3">@csrf @method('PUT')
+            <form method="POST" action="{{ route('profile.update') }}" enctype="multipart/form-data" class="row g-3"
+                data-tf-confirm-message="{{ $requiresOwnerApproval ? 'Submit this profile-change request to your Business Owner?' : 'Save these changes to your profile?' }}"
+                data-tf-confirm-title="{{ $requiresOwnerApproval ? 'Submit profile change request?' : 'Save profile changes?' }}"
+                data-tf-confirm-button="{{ $requiresOwnerApproval ? 'Submit Request' : 'Save Changes' }}"
+                data-tf-confirm-icon="question"
+                data-tf-confirm-color="#2563eb"
+                data-tf-confirm-saving-text="{{ $requiresOwnerApproval ? 'Submitting...' : 'Saving...' }}">@csrf @method('PUT')
                 <div class="col-12 text-center">
                     <div class="d-inline-flex flex-column align-items-center gap-2" data-tf-profile-image-controls>
                         <button type="button" class="tf-profile-image-button" data-tf-profile-editor-trigger aria-label="Edit profile image" title="Edit profile image">
@@ -49,12 +55,12 @@
                 @if($requiresOwnerApproval)
                     <div class="col-12"><label class="form-label">Reason for Change</label><textarea name="reason" class="form-control" rows="3" minlength="10" maxlength="2000" placeholder="Required only when changing your name or phone.">{{ old('reason', $pendingProfileRequest?->reason) }}</textarea></div>
                 @endif
-                <div class="col-12"><button class="btn btn-tf-primary" @if($requiresOwnerApproval) data-tf-confirm-message="Submit this profile-change request to your Business Owner?" @endif>{{ $requiresOwnerApproval ? 'Submit Change Request' : 'Save Profile Changes' }}</button></div>
+                <div class="col-12"><button class="btn btn-tf-primary">{{ $requiresOwnerApproval ? 'Submit Change Request' : 'Save Profile Changes' }}</button></div>
             </form>
         </div>
     </div>
     <div class="col-lg-5">
-        <div class="tf-card p-4"><h2 class="h5">Change Password</h2><form method="POST" action="{{ route('profile.password') }}" class="d-grid gap-3">@csrf @method('PUT')
+        <div class="tf-card p-4"><h2 class="h5">Change Password</h2><form method="POST" action="{{ route('profile.password') }}" class="d-grid gap-3" data-tf-confirm-message="Change your password now? You will use the new password the next time you sign in." data-tf-confirm-title="Change password?" data-tf-confirm-button="Change Password" data-tf-confirm-icon="question" data-tf-confirm-color="#2563eb" data-tf-confirm-saving-text="Changing...">@csrf @method('PUT')
                 <div><div class="input-group"><input id="profileCurrentPassword" name="current_password" type="password" class="form-control @error('current_password') is-invalid @enderror" placeholder="Current password" autocomplete="current-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileCurrentPassword" data-tf-password-icon="#profileCurrentPasswordIcon"><i id="profileCurrentPasswordIcon" class="bi bi-eye"></i></button></div>@error('current_password')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>
                 <div><div class="input-group"><input id="profileNewPassword" name="password" type="password" class="form-control @error('password') is-invalid @enderror" placeholder="New password" autocomplete="new-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileNewPassword" data-tf-password-icon="#profileNewPasswordIcon"><i id="profileNewPasswordIcon" class="bi bi-eye"></i></button></div>@error('password')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>
                 <div><div class="input-group"><input id="profileConfirmPassword" name="password_confirmation" type="password" class="form-control" placeholder="Confirm password" autocomplete="new-password" required><button class="btn btn-outline-secondary tf-password-toggle" type="button" data-tf-password-toggle="#profileConfirmPassword" data-tf-password-icon="#profileConfirmPasswordIcon"><i id="profileConfirmPasswordIcon" class="bi bi-eye"></i></button></div>@error('password_confirmation')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror</div>
